@@ -1,0 +1,12 @@
+[package]
+name = "luisa-compute"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+luisa-compute-sys = { path = "luisa-compute-sys" }
+
+[workspace]
+members = [
+    "luisa-compute-sys"
+]

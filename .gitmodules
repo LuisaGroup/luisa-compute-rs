@@ -1,4 +1,0 @@
-[submodule "ext/LuisaCompute"]
-	path = ext/LuisaCompute
-	url = git@github.com:LuisaGroup/LuisaCompute.git
-	branch = dev-c-api

@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 luisa-compute-sys = { path = "luisa-compute-sys" }
+serde_json = "1.0"
 
 [workspace]
 members = [

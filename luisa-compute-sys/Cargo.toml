@@ -16,6 +16,8 @@ cmake = "0.1.48"
 default = []
 cuda = []
 dx = []
+vk = []
 llvm = []
 ispc = []
+python = []
 

@@ -15,5 +15,7 @@ members = [
 default = []
 cuda = []
 dx = []
+vk = []
 llvm = []
 ispc = []
+python = []

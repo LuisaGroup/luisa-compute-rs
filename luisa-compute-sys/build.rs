@@ -17,30 +17,35 @@ fn cmake_build() -> PathBuf {
     let enabled_cuda = cfg!(feature = "cuda");
     let enabled_dx = cfg!(feature = "dx");
     let enabled_ispc = cfg!(feature = "ispc");
-    // let enabled_vk = cfg!(feature = "vk");
+    let enabled_vk = cfg!(feature = "vk");
     // let enabled_metal = cfg!(feature = "metal");
     let enabled_llvm = cfg!(feature = "llvm");
+    let enable_python = cfg!(feature = "python");
     let mut config = cmake::Config::new("./LuisaCompute");
     let map_bool_to_str = |b: bool| if b { "ON" } else { "OFF" };
-    config.define("-DLUISA_COMPUTE_ENABLE_DX", map_bool_to_str(enabled_dx));
-    config.define("-DLUISA_COMPUTE_ENABLE_CUDA", map_bool_to_str(enabled_cuda));
-    config.define("-DLUISA_COMPUTE_ENABLE_LLVM", map_bool_to_str(enabled_llvm));
-    config.define("-DLUISA_COMPUTE_ENABLE_ISPC", map_bool_to_str(enabled_ispc));
-    config.define("-DLUISA_COMPUTE_ENABLE_GUI", "OFF");
-    config.define("-DLUISA_COMPUTE_BUILD_TESTS", "OFF");
+    config.define("LUISA_COMPUTE_ENABLE_DX", map_bool_to_str(enabled_dx));
+    config.define("LUISA_COMPUTE_ENABLE_CUDA", map_bool_to_str(enabled_cuda));
+    config.define("LUISA_COMPUTE_ENABLE_LLVM", map_bool_to_str(enabled_llvm));
+    config.define("LUISA_COMPUTE_ENABLE_ISPC", map_bool_to_str(enabled_ispc));
+    config.define("LUISA_COMPUTE_ENABLE_VULKAN", map_bool_to_str(enabled_vk));
+    config.define("LUISA_COMPUTE_ENABLE_PYTHON", map_bool_to_str(enable_python));
+    config.define("LUISA_COMPUTE_ENABLE_GUI", "OFF");
+    config.define("LUISA_COMPUTE_BUILD_TESTS", "OFF");
     config.define("CMAKE_BUILD_TYPE", "Release");
+    config.profile("Release");
     config.generator("Ninja");
+    config.no_build_target(true);
     // if cfg!(target_os="windows") {
     //     config.build_arg("--config");
     //     config.build_arg("Release");
     // }
-    
+
     config.build()
 }
 fn copy_dlls(out_dir: &PathBuf) {
     let mut out_dir = out_dir.clone();
-    out_dir.push(&"/bin");
-
+    out_dir.push(&"build/bin");
+    dbg!(&out_dir);
     for entry in std::fs::read_dir(out_dir).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
@@ -61,5 +66,6 @@ fn copy_dlls(out_dir: &PathBuf) {
 fn main() {
     generate_bindings();
     let out_dir = cmake_build();
+    dbg!(&out_dir);
     copy_dlls(&out_dir);
 }

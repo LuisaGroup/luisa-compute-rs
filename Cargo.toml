@@ -10,3 +10,10 @@ luisa-compute-sys = { path = "luisa-compute-sys" }
 members = [
     "luisa-compute-sys"
 ]
+
+[features]
+default = []
+cuda = []
+dx = []
+llvm = []
+ispc = []

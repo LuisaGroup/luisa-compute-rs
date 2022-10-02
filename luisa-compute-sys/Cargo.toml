@@ -9,10 +9,13 @@ edition = "2021"
 
 [build-dependencies]
 bindgen = "0.60"
+cmake = "0.1.48"
 
 
 [features]
-default = ["cuda", "dx", "llvm"]
+default = []
 cuda = []
 dx = []
 llvm = []
+ispc = []
+

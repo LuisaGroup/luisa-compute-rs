@@ -1,4 +1,4 @@
 [submodule "luisa-compute-sys/LuisaCompute"]
 	path = luisa-compute-sys/LuisaCompute
 	url = git@github.com:LuisaGroup/LuisaCompute.git
-	branch=autodiff
+	branch = autodiff

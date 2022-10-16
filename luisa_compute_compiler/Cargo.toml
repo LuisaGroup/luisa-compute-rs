@@ -1,5 +1,5 @@
 [package]
-name = "luisa-compute-compiler"
+name = "luisa_compute_compiler"
 version = "0.1.0"
 edition = "2021"
 

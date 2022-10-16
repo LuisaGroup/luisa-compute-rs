@@ -23,8 +23,4 @@ fn dot(u: BufferVar<Vec2>, v:  BufferVar<Vec2>, out:BufferVar<f32>) {
     out.write(tid, u.read(tid).dot(v.read(tid)))
 }
 
-fn main() {
-    let ctx = luisa::Context::new();
-    let device = ctx.create_device("cuda", json!({}));
-}
 ```

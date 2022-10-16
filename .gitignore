@@ -1,3 +1,3 @@
 /target
 /Cargo.lock
-luisa-compute-sys/src/binding.rs
+luisa_compute_sys/src/binding.rs

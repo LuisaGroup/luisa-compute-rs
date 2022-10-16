@@ -1,1 +1,4 @@
 
+[submodule "luisa_compute_sys/LuisaCompute"]
+	path = luisa_compute_sys/LuisaCompute
+	url = git@github.com:LuisaGroup/LuisaCompute.git

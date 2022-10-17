@@ -2,6 +2,7 @@ pub use luisa_compute_sys as sys;
 pub mod lang;
 pub mod resource;
 pub mod runtime;
+pub mod backend;
 use libc;
 pub(crate) fn _signal_handler(signal: libc::c_int) {
     if signal == libc::SIGABRT {

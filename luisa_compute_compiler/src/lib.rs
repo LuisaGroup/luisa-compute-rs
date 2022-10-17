@@ -1,14 +1,18 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+use proc_macro2::TokenStream;
+use syn::{ItemFn, ItemStruct};
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+pub struct Compiler {}
+impl Compiler {
+    pub fn new() -> Self {
+        Self {}
+    }
+    pub fn compile_fn(&self, func: &ItemFn) -> TokenStream {
+        todo!()
+    }
+    pub fn compile_kernel(&self, func: &ItemFn) -> TokenStream {
+        todo!()
+    }
+    pub fn derive_value(&self, struct_: &ItemStruct) -> TokenStream {
+        todo!()
     }
 }

@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use syn::{ItemFn, ItemStruct};
+use syn::{ItemFn, ItemStruct, Item};
 
 pub struct Compiler {}
 impl Compiler {
@@ -13,6 +13,9 @@ impl Compiler {
         todo!()
     }
     pub fn derive_value(&self, struct_: &ItemStruct) -> TokenStream {
+        todo!()
+    }
+    pub fn derive_struct_of_nodes(&self, item: &Item) -> TokenStream {
         todo!()
     }
 }

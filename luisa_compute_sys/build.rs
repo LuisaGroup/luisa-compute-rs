@@ -105,6 +105,7 @@ fn cmake_build() -> PathBuf {
 
     config.define("LUISA_COMPUTE_ENABLE_GUI", "OFF");
     config.define("LUISA_COMPUTE_BUILD_TESTS", "OFF");
+    config.define("LUISA_COMPUTE_RUST", "ON");
     config.define("CMAKE_BUILD_TYPE", "Release");
     config.profile("Release");
     config.generator("Ninja");
@@ -149,9 +150,8 @@ fn copy_dlls(out_dir: &PathBuf) {
     }
 }
 fn main() {
-   
     let out_dir = cmake_build();
-    // generate_bindings();
+    generate_bindings();
     // dbg!(&out_dir);
     println!(
         "cargo:rustc-link-search=native={}/build/bin/",

@@ -10,6 +10,7 @@ edition = "2021"
 [build-dependencies]
 bindgen = "0.60"
 cmake = "0.1.48"
+luisa_compute_api_types = {path = "LuisaCompute/src/api/luisa_compute_api_types"}
 
 
 [features]

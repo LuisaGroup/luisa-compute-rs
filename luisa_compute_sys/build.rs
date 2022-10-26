@@ -149,8 +149,9 @@ fn copy_dlls(out_dir: &PathBuf) {
     }
 }
 fn main() {
-    generate_bindings();
+   
     let out_dir = cmake_build();
+    // generate_bindings();
     // dbg!(&out_dir);
     println!(
         "cargo:rustc-link-search=native={}/build/bin/",

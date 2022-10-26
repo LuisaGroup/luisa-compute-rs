@@ -5,3 +5,6 @@ members = [
     "luisa_compute_compiler",
     "luisa_compute_derive",
 ]
+# exclude  = [
+#     "luisa_compute_sys/LuisaCompute/src/api/luisa_compute_api_types",
+# ]

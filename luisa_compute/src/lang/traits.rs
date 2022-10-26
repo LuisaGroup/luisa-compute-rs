@@ -1,11 +1,12 @@
-use crate::lang::*;
-use ir::{ir::Func, ir::Type, TypeOf};
+use crate::ir::{ir::Func, ir::Type, TypeOf};
+use crate::prelude::*;
+use std::any::Any;
 use std::ops::*;
 pub trait VarTrait: Copy + Clone + 'static {
     type Scalar: Value;
     fn from_node(node: NodeRef) -> Self;
     fn node(&self) -> NodeRef;
-    fn type_() -> &'static Type {
+    fn type_() -> Gc<Type> {
         <Self::Scalar as TypeOf>::type_()
     }
 }
@@ -58,24 +59,24 @@ pub trait CommonVarOp: VarTrait {
         let node = current_scope(|s| s.bitcast(self.node(), ty));
         A::from_node(node)
     }
-    fn uint32(&self) -> Var<u32> {
+    fn uint(&self) -> Var<u32> {
         self.cast()
     }
-    fn int32(&self) -> Var<i32> {
+    fn int(&self) -> Var<i32> {
         self.cast()
     }
-    fn uint64(&self) -> Var<u64> {
+    fn ulong(&self) -> Var<u64> {
         self.cast()
     }
-    fn int64(&self) -> Var<i64> {
+    fn long(&self) -> Var<i64> {
         self.cast()
     }
     fn float(&self) -> Var<f32> {
         self.cast()
     }
-    fn double(&self) -> Var<f64> {
-        self.cast()
-    }
+    // fn double(&self) -> Var<f64> {
+    //     self.cast()
+    // }
     fn bool_(&self) -> Var<bool> {
         self.cast()
     }
@@ -166,7 +167,7 @@ pub trait IntVarTrait:
     fn zero() -> Self {
         Self::from_i64(0)
     }
-    fn rotate_right(&self, n: Uint32) -> Self {
+    fn rotate_right(&self, n: Uint) -> Self {
         let lhs = self.node();
         let rhs = n.node();
         current_scope(|s| {
@@ -174,7 +175,7 @@ pub trait IntVarTrait:
             Self::from_node(ret)
         })
     }
-    fn rotate_left(&self, n: Uint32) -> Self {
+    fn rotate_left(&self, n: Uint) -> Self {
         let lhs = self.node();
         let rhs = n.node();
         current_scope(|s| {
@@ -359,12 +360,10 @@ pub trait FloatVarTrait:
     fn is_nan(&self) -> Mask {
         let any = self as &dyn Any;
         if let Some(a) = any.downcast_ref::<Float>() {
-            let u: Uint32 = a.bitcast();
+            let u: Uint = a.bitcast();
             (&u & 0x7f800000u32).eq(0x7f800000u32) & (&u & 0x007fffffu32).ne(0u32)
-        } else if let Some(_) = any.downcast_ref::<Double>() {
-            panic!("who use double?")
         } else {
-            panic!("what is this?")
+            panic!("expect float")
         }
     }
     fn ln(&self) -> Self {
@@ -558,7 +557,7 @@ impl Not for Var<bool> {
     }
 }
 impl_common_binop!(f32);
-impl_common_binop!(f64);
+// impl_common_binop!(f64);
 impl_common_binop!(i32);
 impl_common_binop!(i64);
 impl_common_binop!(u32);
@@ -583,20 +582,19 @@ impl_neg!(u32);
 impl_neg!(u64);
 
 impl_fneg!(f32);
-impl_fneg!(f64);
+// impl_fneg!(f64);
 impl VarCmp for Float {}
-impl VarCmp for Double {}
 impl VarCmp for Int {}
-impl VarCmp for Int64 {}
+impl VarCmp for Long {}
 impl VarCmp for Uint {}
-impl VarCmp for Uint64 {}
+impl VarCmp for Ulong {}
 impl VarCmp for Bool {}
 impl CommonVarOp for Float {}
-impl CommonVarOp for Double {}
+// impl CommonVarOp for Double {}
 impl CommonVarOp for Int {}
-impl CommonVarOp for Int64 {}
+impl CommonVarOp for Long {}
 impl CommonVarOp for Uint {}
-impl CommonVarOp for Uint64 {}
+impl CommonVarOp for Ulong {}
 impl CommonVarOp for Bool {}
 
 impl From<f64> for Float {
@@ -604,27 +602,19 @@ impl From<f64> for Float {
         (x as f32).into()
     }
 }
-impl From<f32> for Double {
-    fn from(x: f32) -> Self {
-        (x as f64).into()
-    }
-}
-impl FloatVarTrait for Float {
-    fn from_f64(x: f64) -> Self {
-        const_(x as f32)
-    }
-}
-impl FloatVarTrait for Double {
-    fn from_f64(x: f64) -> Self {
-        const_(x)
-    }
-}
+
+// impl FloatVarTrait for Float {
+//     fn from_f64(x: f64) -> Self {
+//         const_(x as f32)
+//     }
+// }
+
 impl IntVarTrait for Int {
     fn from_i64(x: i64) -> Self {
         const_(x as i32)
     }
 }
-impl IntVarTrait for Int64 {
+impl IntVarTrait for Long {
     fn from_i64(x: i64) -> Self {
         const_(x)
     }
@@ -632,10 +622,5 @@ impl IntVarTrait for Int64 {
 impl IntVarTrait for Uint {
     fn from_i64(x: i64) -> Self {
         const_(x as u32)
-    }
-}
-impl IntVarTrait for Uint64 {
-    fn from_i64(x: i64) -> Self {
-        const_(x as u64)
     }
 }

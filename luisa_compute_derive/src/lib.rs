@@ -12,3 +12,10 @@ pub fn derive_struct_of_nodes(item: TokenStream) -> TokenStream {
     let compiler = luisa_compute_compiler::Compiler::new();
     compiler.derive_struct_of_nodes(&item).into()
 }
+
+#[proc_macro_attribute]
+pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let item: syn::ItemFn = syn::parse(item).unwrap();
+    let compiler = luisa_compute_compiler::Compiler::new();
+    compiler.compile_fn(&item).into()
+}

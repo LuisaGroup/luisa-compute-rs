@@ -9,6 +9,9 @@ use ir::{
 use luisa_compute_ir as ir;
 use std::cell::RefCell;
 pub mod traits;
+pub mod math;
+pub mod traits_impl;
+pub mod math_impl;
 
 pub trait Value: Copy + ir::TypeOf {
     type Proxy: VarProxy<Self>;
@@ -21,7 +24,9 @@ pub trait Value: Copy + ir::TypeOf {
 /* Struct of Nodes
 *  Similar to how enoki, Dr.Jit handles structs
 *  Makes every field of the struct a node
-*  Most concise way to manipulate structs
+*  Best used for types that cannot be represented using LuisaCompute's type system
+*  but that can be represented at tracing time using Rust types
+*  Such as Rust enums, dyn Trait, etc.
 */
 pub trait StructOfNodes: Sized {
     fn to_vec_nodes(&self) -> Vec<NodeRef> {
@@ -52,7 +57,7 @@ pub struct Var<T: Value> {
 pub type Mask = Var<bool>;
 
 impl<T: Value> Var<T> {
-    pub fn set(&self, value: Self) {
+    pub fn store(&self, value: Self) {
         unimplemented!()
     }
     pub fn expand(&self) -> T::SoN {
@@ -137,17 +142,14 @@ impl_prim!(u64);
 impl_prim!(i32);
 impl_prim!(i64);
 impl_prim!(f32);
-impl_prim!(f64);
+// impl_prim!(f64);
 
 pub type Bool = Var<bool>;
 pub type Float = Var<f32>;
-pub type Double = Var<f64>;
 pub type Int = Var<i32>;
-pub type Int32 = Var<i32>;
-pub type Int64 = Var<i64>;
 pub type Uint = Var<u32>;
-pub type Uint32 = Var<u32>;
-pub type Uint64 = Var<u64>;
+pub type Long = Var<i64>;
+pub type Ulong = Var<u64>;
 
 pub(crate) struct Recorder {
     scopes: Vec<IrBuilder>,
@@ -159,7 +161,8 @@ thread_local! {
     });
 }
 
-pub(crate) fn current_scope<F: FnOnce(&mut IrBuilder) -> R, R>(f: F) -> R {
+// Don't call this function directly unless you know what you are doing
+pub fn current_scope<F: FnOnce(&mut IrBuilder) -> R, R>(f: F) -> R {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
         let s = &mut r.scopes;
@@ -169,7 +172,8 @@ pub(crate) fn current_scope<F: FnOnce(&mut IrBuilder) -> R, R>(f: F) -> R {
         f(s.last_mut().unwrap())
     })
 }
-pub(crate) fn pop_scope() -> &'static BasicBlock {
+// Don't call this function directly unless you know what you are doing
+pub fn pop_scope() -> Gc<BasicBlock> {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
         let s = &mut r.scopes;

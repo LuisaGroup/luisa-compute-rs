@@ -1,8 +1,18 @@
-pub use luisa_compute_sys as sys;
+pub(crate) use luisa_compute_sys as sys;
+pub mod backend;
 pub mod lang;
 pub mod resource;
 pub mod runtime;
-pub mod backend;
+pub use luisa_compute_ir::Gc;
+pub mod prelude {
+    pub use crate::*;
+    pub use luisa_compute_derive::*;
+    pub use lang::traits::*;
+    pub use lang::traits_impl::*;
+    pub use lang::math::*;
+    pub use lang::math_impl::*;
+    pub use lang::*;
+}
 use libc;
 pub(crate) fn _signal_handler(signal: libc::c_int) {
     if signal == libc::SIGABRT {

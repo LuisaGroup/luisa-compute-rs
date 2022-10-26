@@ -15,8 +15,20 @@ for i in range(8):
     s += '        ({},)\n'.format(', '.join(['v'+str(k) for k in range(i+1)]))
     s += '    }\n'
     s += '}\n'
-
-
+    
 
 with open('src/lang/traits_impl.rs', 'w') as f:
+    f.write(s)
+
+s = 'use crate::prelude::*;\n'
+types = ['float','int','bool','uint']
+rust_type = ['f32','i32','bool','u32']
+comps = 'xyzw'
+for t in types:
+    for l in [2,3,4]:
+        s += '#[function]\n'
+        s += 'pub fn make_{}{}({}) -> {}{} {{\n'.format(t, l,', '.join(['{}: {}'.format(comps[i],rust_type[i]) for i in range(l)]), t, l)
+        s += '    {}{} {{ {} }}\n'.format(t, l, ', '.join(comps[:l]),)
+        s += '}\n'
+with open('src/lang/math_impl.rs', 'w') as f:
     f.write(s)

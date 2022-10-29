@@ -31,6 +31,6 @@ jobs:
         chmod +x llvm.sh
         sudo ./llvm.sh 14
     - name: Build
-      run: cargo build --verbose
+      run: CC=gcc-11 CXX=g++-11 cargo build --verbose
     - name: Run tests
-      run: cargo test --verbose
+      run: CC=gcc-11 CXX=g++-11 cargo test --verbose

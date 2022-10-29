@@ -1,6 +1,9 @@
-use std::{any::Any, ops::Deref};
+use std::{any::Any, ops::Deref, sync::Arc};
 
-use crate::*;
+use crate::{
+    resource::{Buffer, BufferHandle},
+    *,
+};
 pub use ir::ir::NodeRef;
 use ir::{
     ir::{BasicBlock, Const, IrBuilder},
@@ -8,10 +11,10 @@ use ir::{
 };
 use luisa_compute_ir as ir;
 use std::cell::RefCell;
-pub mod traits;
 pub mod math;
-pub mod traits_impl;
 pub mod math_impl;
+pub mod traits;
+pub mod traits_impl;
 
 pub trait Value: Copy + ir::TypeOf {
     type Proxy: VarProxy<Self>;
@@ -210,4 +213,26 @@ pub fn const_<T: Value + Copy + 'static>(value: T) -> Var<T> {
         }
     });
     Var::from_node(node)
+}
+
+pub struct BufferVar<T: Value> {
+    marker: std::marker::PhantomData<T>,
+    handle: Arc<BufferHandle>,
+}
+impl<T: Value> BufferVar<T> {
+    pub fn new(buffer: &Buffer<T>) -> Self {
+        Self {
+            marker: std::marker::PhantomData,
+            handle: buffer.handle.clone(),
+        }
+    }
+    pub fn read<I: Into<Uint>>(&self, i: I) -> Var<T> {
+        todo!()
+    }
+    pub fn write<I: Into<Uint>, V: Into<Var<T>>>(&self, i: I, v: V) {
+        todo!()
+    }
+    pub fn atomic_exchange<I: Into<Uint>, V: Into<Var<T>>>(&self, i: I, v: V) -> Var<T> {
+        todo!()
+    }
 }

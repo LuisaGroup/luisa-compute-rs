@@ -1,5 +1,5 @@
-use crate::ir::{ir::Func, ir::Type, TypeOf};
 use crate::prelude::*;
+use luisa_compute_ir::{ir::Func, ir::Type, TypeOf};
 use std::any::Any;
 use std::ops::*;
 pub trait VarTrait: Copy + Clone + 'static {

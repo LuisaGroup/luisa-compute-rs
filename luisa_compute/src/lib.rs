@@ -1,3 +1,4 @@
+#![allow(unused_unsafe)]
 pub(crate) use luisa_compute_sys as sys;
 pub mod backend;
 pub mod lang;

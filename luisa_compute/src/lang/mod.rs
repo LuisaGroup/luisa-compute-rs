@@ -1,15 +1,16 @@
 use std::{any::Any, ops::Deref, sync::Arc};
 
 use crate::{
-    resource::{Buffer, BufferHandle},
+    resource::{BindlessArrayHandle, Buffer, BufferHandle, TextureHandle},
     *,
 };
 pub use ir::ir::NodeRef;
 use ir::{
-    ir::{BasicBlock, Const, IrBuilder},
+    ir::{BasicBlock, Const, Func, IrBuilder, Type},
     CBoxedSlice,
 };
 use luisa_compute_ir as ir;
+use luisa_compute_ir::TypeOf;
 use std::cell::RefCell;
 pub mod math;
 pub mod math_impl;
@@ -217,7 +218,48 @@ pub fn const_<T: Value + Copy + 'static>(value: T) -> Var<T> {
 
 pub struct BufferVar<T: Value> {
     marker: std::marker::PhantomData<T>,
+    #[allow(dead_code)]
     handle: Arc<BufferHandle>,
+    node: NodeRef,
+}
+
+impl<T: Value> Drop for BufferVar<T> {
+    fn drop(&mut self) {
+        todo!()
+    }
+}
+pub struct BindlessArrayVar {
+    #[allow(dead_code)]
+    handle: Arc<BindlessArrayHandle>,
+    node: NodeRef,
+}
+impl BindlessArrayVar {
+    pub fn buffer_read<T: Value, BI: Into<Uint>, EI: Into<Uint>>(
+        &self,
+        buffer_index: BI,
+        element_index: EI,
+    ) -> Var<T> {
+        Var::from_node(current_scope(|b| {
+            b.call(
+                Func::BindlessBufferRead,
+                &[
+                    self.node,
+                    buffer_index.into().node(),
+                    element_index.into().node(),
+                ],
+                T::type_(),
+            )
+        }))
+    }
+    pub fn buffer_length<I: Into<Uint>>(&self, buffer_index: I) -> Uint {
+        Uint::from_node(current_scope(|b| {
+            b.call(
+                Func::BindlessBufferSize,
+                &[self.node, buffer_index.into().node()],
+                u32::type_(),
+            )
+        }))
+    }
 }
 impl<T: Value> BufferVar<T> {
     pub fn new(buffer: &Buffer<T>) -> Self {
@@ -226,13 +268,38 @@ impl<T: Value> BufferVar<T> {
             handle: buffer.handle.clone(),
         }
     }
+    pub fn len(&self) -> Uint {
+        unimplemented!()
+    }
     pub fn read<I: Into<Uint>>(&self, i: I) -> Var<T> {
-        todo!()
+        current_scope(|b| {
+            Var::from_node(b.call(Func::BufferRead, &[self.node, i.into().node()], T::type_()))
+        })
     }
     pub fn write<I: Into<Uint>, V: Into<Var<T>>>(&self, i: I, v: V) {
-        todo!()
+        current_scope(|b| {
+            b.call(
+                Func::BufferWrite,
+                &[self.node, i.into().node(), v.into().node()],
+                Type::void(),
+            )
+        });
     }
     pub fn atomic_exchange<I: Into<Uint>, V: Into<Var<T>>>(&self, i: I, v: V) -> Var<T> {
         todo!()
     }
 }
+
+pub struct ImageVar<T: Value> {
+    #[allow(dead_code)]
+    handle: Arc<TextureHandle>,
+    _marker: std::marker::PhantomData<T>,
+}
+
+pub struct VolumeVar<T: Value> {
+    #[allow(dead_code)]
+    handle: Arc<TextureHandle>,
+    _marker: std::marker::PhantomData<T>,
+}
+pub type Tex2DVar<T> = ImageVar<T>;
+pub type Tex3DVar<T> = VolumeVar<T>;

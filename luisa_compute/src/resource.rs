@@ -7,8 +7,7 @@ use api::BufferDownloadCommand;
 use api::BufferUploadCommand;
 use lang::Value;
 use runtime::*;
-pub use sys::LCPixelFormat as PixelFormat;
-pub use sys::LCPixelStorage as PixelStorage;
+use sys::{LCPixelFormat, LCPixelStorage};
 pub struct Buffer<T: Value> {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BufferHandle>,
@@ -138,7 +137,12 @@ impl BindlessArray {
             );
         }}
     }
-    pub unsafe fn set_tex2d_async(&self, index: usize, texture: &Texture, sampler: Sampler) {
+    pub unsafe fn set_tex2d_async<T: Texel>(
+        &self,
+        index: usize,
+        texture: &Tex2D<T>,
+        sampler: Sampler,
+    ) {
         catch_abort! {{
             sys::luisa_compute_bindless_array_emplace_tex2d(
                 self.device.handle(),
@@ -149,7 +153,12 @@ impl BindlessArray {
             );
         }}
     }
-    pub unsafe fn set_tex3d_async(&self, index: usize, texture: &Texture, sampler: Sampler) {
+    pub unsafe fn set_tex3d_async<T: Texel>(
+        &self,
+        index: usize,
+        texture: &Tex3D<T>,
+        sampler: Sampler,
+    ) {
         catch_abort! {{
             sys::luisa_compute_bindless_array_emplace_tex3d(
                 self.device.handle(),
@@ -193,13 +202,13 @@ impl BindlessArray {
             submit_default_stream_and_sync(&self.device, [self.update_async()]);
         }
     }
-    pub fn set_tex2d(&self, index: usize, texture: &Texture, sampler: Sampler) {
+    pub fn set_tex2d<T: Texel>(&self, index: usize, texture: &Tex2D<T>, sampler: Sampler) {
         unsafe {
             self.set_tex2d_async(index, texture, sampler);
             submit_default_stream_and_sync(&self.device, [self.update_async()]);
         }
     }
-    pub fn set_tex3d(&self, index: usize, texture: &Texture, sampler: Sampler) {
+    pub fn set_tex3d<T: Texel>(&self, index: usize, texture: &Tex3D<T>, sampler: Sampler) {
         unsafe {
             self.set_tex3d_async(index, texture, sampler);
             submit_default_stream_and_sync(&self.device, [self.update_async()]);
@@ -233,19 +242,38 @@ impl BindlessArray {
         }}
     }
 }
-pub use api::{Sampler, SamplerAddress, SamplerFilter};
-pub struct Texture {
+pub use api::{PixelFormat, PixelStorage, Sampler, SamplerAddress, SamplerFilter};
+pub(crate) struct TextureHandle {
     pub(crate) device: Device,
     pub(crate) handle: sys::LCTexture,
     pub(crate) format: PixelFormat,
 }
 
-impl Texture {
+pub trait Texel: Value {
+    // acceptable pixel format
+    fn pixel_formats() -> &'static [api::PixelFormat];
+}
+pub struct Image<T: Texel> {
+    pub(crate) handle: Arc<TextureHandle>,
+    pub(crate) marker: std::marker::PhantomData<T>,
+}
+pub struct Volume<T: Texel> {
+    pub(crate) handle: Arc<TextureHandle>,
+    pub(crate) marker: std::marker::PhantomData<T>,
+}
+impl<T: Texel> Image<T> {
     pub(crate) fn handle(&self) -> sys::LCTexture {
-        self.handle
+        self.handle.handle
     }
 }
-impl Drop for Texture {
+impl<T: Texel> Volume<T> {
+    pub(crate) fn handle(&self) -> sys::LCTexture {
+        self.handle.handle
+    }
+}
+pub type Tex2D<T> = Image<T>;
+pub type Tex3D<T> = Volume<T>;
+impl Drop for TextureHandle {
     fn drop(&mut self) {
         catch_abort! {{
             sys::luisa_compute_texture_destroy(self.device.handle(), self.handle);

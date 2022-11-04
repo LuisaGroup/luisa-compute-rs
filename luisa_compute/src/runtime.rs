@@ -110,29 +110,62 @@ impl Device {
             }
         }}
     }
-    pub fn create_texture(
+    pub fn create_tex2d<T: Texel>(
         &self,
         format: PixelFormat,
-        dim: u32,
+        width: u32,
+        height: u32,
+        mips: u32,
+    ) -> Tex2D<T> {
+        assert!(T::pixel_formats().contains(&format));
+        catch_abort! {{
+            let texture = sys::luisa_compute_texture_create(
+                self.handle(),
+                unsafe{std::mem::transmute(format)},
+                2,
+                width,
+                height,
+                1,
+                mips,
+            );
+            let handle = Arc::new(TextureHandle {
+                device: self.clone(),
+                handle: texture,
+                format,
+            });
+            Tex2D {
+                handle,
+                marker: std::marker::PhantomData {},
+            }
+        }}
+    }
+    pub fn create_tex3d<T: Texel>(
+        &self,
+        format: PixelFormat,
         width: u32,
         height: u32,
         depth: u32,
         mips: u32,
-    ) -> Texture {
+    ) -> Tex3D<T> {
+        assert!(T::pixel_formats().contains(&format));
         catch_abort! {{
             let texture = sys::luisa_compute_texture_create(
                 self.handle(),
-                format.0 as u32,
-                dim,
+                unsafe{std::mem::transmute(format)},
+                3,
                 width,
                 height,
                 depth,
                 mips,
             );
-            Texture {
+            let handle = Arc::new(TextureHandle {
                 device: self.clone(),
                 handle: texture,
                 format,
+            });
+            Tex3D {
+                handle,
+                marker: std::marker::PhantomData {},
             }
         }}
     }
@@ -254,8 +287,10 @@ pub fn submit_default_stream_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
     default_stream.synchronize();
 }
 pub struct Command<'a> {
+    #[allow(dead_code)]
     pub(crate) inner: api::Command,
     pub(crate) marker: std::marker::PhantomData<&'a ()>,
+    #[allow(dead_code)]
     pub(crate) resource_tracker: Vec<Box<dyn Any>>,
 }
 

@@ -267,7 +267,7 @@ impl<T: Value> BufferVar<T> {
     pub fn new(buffer: &Buffer<T>) -> Self {
         let node = RECORDER.with(|r| {
             let mut r = r.borrow_mut();
-            let handle: u64 = buffer.handle()._0;
+            let handle: u64 = buffer.handle().0;
             if let Some(node) = r.buffer_to_node.get(&handle) {
                 *node
             } else {

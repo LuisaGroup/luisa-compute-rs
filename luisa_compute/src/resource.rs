@@ -17,14 +17,12 @@ pub struct Buffer<T: Value> {
 }
 pub(crate) struct BufferHandle {
     pub(crate) device: Device,
-    pub(crate) handle: sys::LCBuffer,
+    pub(crate) handle: api::Buffer,
 }
 
 impl Drop for BufferHandle {
     fn drop(&mut self) {
-        catch_abort! {{
-            sys::luisa_compute_buffer_destroy(self.device.handle(), self.handle);
-        }}
+        self.device.inner.destroy_buffer(self.handle);
     }
 }
 pub struct BufferView<'a, T: Value> {
@@ -37,7 +35,7 @@ impl<'a, T: Value> BufferView<'a, T> {
         assert_eq!(data.len(), self.len);
         Command {
             inner: api::Command::BufferDownload(BufferDownloadCommand {
-                buffer: api::Buffer(self.buffer.handle.handle._0),
+                buffer: self.buffer.handle.handle,
                 offset: self.offset * std::mem::size_of::<T>(),
                 size: data.len() * std::mem::size_of::<T>(),
                 data: data.as_mut_ptr() as *mut u8,
@@ -56,7 +54,7 @@ impl<'a, T: Value> BufferView<'a, T> {
         assert_eq!(data.len(), self.len);
         Command {
             inner: api::Command::BufferUpload(BufferUploadCommand {
-                buffer: api::Buffer(self.buffer.handle.handle._0),
+                buffer: self.buffer.handle.handle,
                 offset: self.offset * std::mem::size_of::<T>(),
                 size: data.len() * std::mem::size_of::<T>(),
                 data: data.as_ptr() as *const u8,
@@ -72,7 +70,7 @@ impl<'a, T: Value> BufferView<'a, T> {
     }
 }
 impl<T: Value> Buffer<T> {
-    pub(crate) fn handle(&self) -> sys::LCBuffer {
+    pub(crate) fn handle(&self) -> api::Buffer {
         self.handle.handle
     }
 
@@ -114,13 +112,11 @@ impl<T: Value> Buffer<T> {
 }
 pub(crate) struct BindlessArrayHandle {
     pub(crate) device: Device,
-    pub(crate) handle: sys::LCBindlessArray,
+    pub(crate) handle: api::BindlessArray,
 }
 impl Drop for BindlessArrayHandle {
     fn drop(&mut self) {
-        catch_abort! {{
-            sys::luisa_compute_bindless_array_destroy(self.device.handle(), self.handle);
-        }}
+        self.device.inner.destroy_bindless_array(self.handle);
     }
 }
 pub struct BindlessArray {
@@ -133,11 +129,11 @@ impl BindlessArray {
     // }
     pub unsafe fn set_buffer_async<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
         catch_abort! {{
-            sys::luisa_compute_bindless_array_emplace_buffer(
-                self.device.handle(),
+            self.device.inner.emplace_buffer_in_bindless_array(
                 self.handle.handle,
-                index as u64,
+                index,
                 buffer.handle(),
+                0,
             );
         }}
     }
@@ -147,15 +143,12 @@ impl BindlessArray {
         texture: &Tex2D<T>,
         sampler: Sampler,
     ) {
-        catch_abort! {{
-            sys::luisa_compute_bindless_array_emplace_tex2d(
-                self.device.handle(),
-                self.handle.handle,
-                index as u64,
-                texture.handle(),
-                unsafe{std::mem::transmute(sampler)},
-            );
-        }}
+        self.device.inner.emplace_tex2d_in_bindless_array(
+            self.handle.handle,
+            index,
+            texture.handle(),
+            sampler,
+        );
     }
     pub unsafe fn set_tex3d_async<T: Texel>(
         &self,
@@ -163,42 +156,27 @@ impl BindlessArray {
         texture: &Tex3D<T>,
         sampler: Sampler,
     ) {
-        catch_abort! {{
-            sys::luisa_compute_bindless_array_emplace_tex3d(
-                self.device.handle(),
-                self.handle.handle,
-                index as u64,
-                texture.handle(),
-                unsafe{std::mem::transmute(sampler)},
-            );
-        }}
+        self.device.inner.emplace_tex3d_in_bindless_array(
+            self.handle.handle,
+            index,
+            texture.handle(),
+            sampler,
+        );
     }
     pub unsafe fn remove_buffer_async(&self, index: usize) {
-        catch_abort! {{
-            sys::luisa_compute_bindless_array_remove_buffer(
-                self.device.handle(),
-                self.handle.handle,
-                index as u64,
-            );
-        }}
+        self.device
+            .inner
+            .remove_buffer_from_bindless_array(self.handle.handle, index);
     }
     pub unsafe fn remove_tex2d_async(&self, index: usize) {
-        catch_abort! {{
-            sys::luisa_compute_bindless_array_remove_tex2d(
-                self.device.handle(),
-                self.handle.handle,
-                index as u64,
-            );
-        }}
+        self.device
+            .inner
+            .remove_tex2d_from_bindless_array(self.handle.handle, index);
     }
     pub unsafe fn remove_tex3d_async(&self, index: usize) {
-        catch_abort! {{
-            sys::luisa_compute_bindless_array_remove_tex3d(
-                self.device.handle(),
-                self.handle.handle,
-                index as u64,
-            );
-        }}
+        self.device
+            .inner
+            .remove_tex3d_from_bindless_array(self.handle.handle, index);
     }
     pub fn set_buffer<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
         unsafe {
@@ -239,7 +217,7 @@ impl BindlessArray {
     pub unsafe fn update_async<'a>(&'a self) -> Command<'a> {
         catch_abort! {{
             Command {
-                inner: api::Command::BindlessArrayUpdate(api::BindlessArray(self.handle.handle._0)),
+                inner: api::Command::BindlessArrayUpdate(self.handle.handle),
                 marker: std::marker::PhantomData,
                 resource_tracker: vec![Box::new(self.handle.clone())],
             }
@@ -249,7 +227,7 @@ impl BindlessArray {
 pub use api::{PixelFormat, PixelStorage, Sampler, SamplerAddress, SamplerFilter};
 pub(crate) struct TextureHandle {
     pub(crate) device: Device,
-    pub(crate) handle: sys::LCTexture,
+    pub(crate) handle: api::Texture,
     pub(crate) format: PixelFormat,
 }
 
@@ -266,12 +244,12 @@ pub struct Volume<T: Texel> {
     pub(crate) marker: std::marker::PhantomData<T>,
 }
 impl<T: Texel> Image<T> {
-    pub(crate) fn handle(&self) -> sys::LCTexture {
+    pub(crate) fn handle(&self) -> api::Texture {
         self.handle.handle
     }
 }
 impl<T: Texel> Volume<T> {
-    pub(crate) fn handle(&self) -> sys::LCTexture {
+    pub(crate) fn handle(&self) -> api::Texture {
         self.handle.handle
     }
 }
@@ -279,8 +257,6 @@ pub type Tex2D<T> = Image<T>;
 pub type Tex3D<T> = Volume<T>;
 impl Drop for TextureHandle {
     fn drop(&mut self) {
-        catch_abort! {{
-            sys::luisa_compute_texture_destroy(self.device.handle(), self.handle);
-        }}
+        self.device.inner.destroy_texture(self.handle);
     }
 }

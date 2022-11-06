@@ -63,47 +63,28 @@ fn generate_bindings() {
         .write_to_file("src/binding.rs")
         .expect("Couldn't write bindings!");
 }
-fn getenv_unwrap(v: &str) -> String {
-    match env::var(v) {
-        Ok(s) => s,
-        Err(..) => panic!("environment variable `{}` not defined", v),
-    }
-}
-fn getenv_option(v: &str) -> Option<String> {
-    match env::var(v) {
-        Ok(s) => match s.as_str() {
-            "ON" | "1" => Some("ON".to_string()),
-            "OFF" | "0" => Some("OFF".to_string()),
-            _ => None,
-        },
-        Err(..) => None,
-    }
-}
 fn cmake_build() -> PathBuf {
-    // let enabled_cuda = cfg!(feature = "cuda");
-    // let enabled_dx = cfg!(feature = "dx");
-    // let enabled_ispc = cfg!(feature = "ispc");
-    // let enabled_vk = cfg!(feature = "vk");
-    // // let enabled_metal = cfg!(feature = "metal");
-    // let enabled_llvm = cfg!(feature = "llvm");
-    // let enable_python = cfg!(feature = "python");
     let mut config = cmake::Config::new("./LuisaCompute");
     macro_rules! set_from_env {
-        ($opt:literal) => {
-            println!("cargo:rerun-if-env-changed={}", $opt);
-            if let Some(v) = getenv_option($opt) {
-                config.define($opt, v);
+        ($feature:literal, $opt:literal) => {
+            let var = format!("CARGO_FEATURE_{}", $feature);
+            println!("cargo:rerun-if-env-changed={}", var);
+            if let Ok(_) = env::var(var) {
+                config.define($opt, "ON");
+            } else {
+                config.define($opt, "OFF");
             }
         };
     }
-    set_from_env!("LUISA_COMPUTE_ENABLE_DX");
-    set_from_env!("LUISA_COMPUTE_ENABLE_CUDA");
-    set_from_env!("LUISA_COMPUTE_ENABLE_LLVM");
-    set_from_env!("LUISA_COMPUTE_ENABLE_ISPC");
-    set_from_env!("LUISA_COMPUTE_ENABLE_VULKAN");
-    set_from_env!("LUISA_COMPUTE_ENABLE_PYTHON");
-
-    config.define("LUISA_COMPUTE_ENABLE_GUI", "OFF");
+    set_from_env!("dx", "LUISA_COMPUTE_ENABLE_DX");
+    set_from_env!("cuda", "LUISA_COMPUTE_ENABLE_CUDA");
+    set_from_env!("llvm", "LUISA_COMPUTE_ENABLE_LLVM");
+    set_from_env!("ispc", "LUISA_COMPUTE_ENABLE_ISPC");
+    set_from_env!("vulkan", "LUISA_COMPUTE_ENABLE_VULKAN");
+    set_from_env!("metal", "LUISA_COMPUTE_ENABLE_METAL");
+    set_from_env!("python", "LUISA_COMPUTE_ENABLE_PYTHON");
+    set_from_env!("gui", "LUISA_COMPUTE_ENABLE_GUI");
+    config.define("LUISA_COMPUTE_CHECK_BACKEND_DEPENDENCIES", "OFF");
     config.define("LUISA_COMPUTE_BUILD_TESTS", "OFF");
     config.define("LUISA_COMPUTE_RUST", "ON");
     config.define("CMAKE_BUILD_TYPE", "Release");

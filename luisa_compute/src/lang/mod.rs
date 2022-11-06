@@ -1,4 +1,4 @@
-use std::{any::Any, ops::Deref, sync::Arc};
+use std::{any::Any, collections::HashMap, ops::Deref, sync::Arc};
 
 use crate::{
     resource::{BindlessArrayHandle, Buffer, BufferHandle, TextureHandle},
@@ -6,7 +6,7 @@ use crate::{
 };
 pub use ir::ir::NodeRef;
 use ir::{
-    ir::{BasicBlock, Const, Func, IrBuilder, Type},
+    ir::{new_node, BasicBlock, Const, Func, Instruction, IrBuilder, Node, Type},
     CBoxedSlice,
 };
 use luisa_compute_ir as ir;
@@ -157,11 +157,13 @@ pub type Ulong = Var<u64>;
 
 pub(crate) struct Recorder {
     scopes: Vec<IrBuilder>,
+    buffer_to_node: HashMap<u64, NodeRef>,
 }
 
 thread_local! {
     pub(crate) static RECORDER: RefCell<Recorder> = RefCell::new(Recorder {
         scopes: vec![],
+        buffer_to_node: HashMap::new(),
     });
 }
 
@@ -263,13 +265,27 @@ impl BindlessArrayVar {
 }
 impl<T: Value> BufferVar<T> {
     pub fn new(buffer: &Buffer<T>) -> Self {
+        let node = RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            let handle: u64 = buffer.handle()._0;
+            if let Some(node) = r.buffer_to_node.get(&handle) {
+                *node
+            } else {
+                let node = new_node(Node::new(Gc::new(Instruction::Buffer), T::type_()));
+                r.buffer_to_node.insert(handle, node);
+                node
+            }
+        });
         Self {
+            node,
             marker: std::marker::PhantomData,
             handle: buffer.handle.clone(),
         }
     }
     pub fn len(&self) -> Uint {
-        unimplemented!()
+        Var::from_node(
+            current_scope(|b| b.call(Func::BufferSize, &[self.node], u32::type_())).into(),
+        )
     }
     pub fn read<I: Into<Uint>>(&self, i: I) -> Var<T> {
         current_scope(|b| {

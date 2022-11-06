@@ -5,6 +5,7 @@ use std::sync::Arc;
 use crate::*;
 use api::BufferDownloadCommand;
 use api::BufferUploadCommand;
+use lang::BufferVar;
 use lang::Value;
 use runtime::*;
 use sys::{LCPixelFormat, LCPixelStorage};
@@ -106,6 +107,9 @@ impl<T: Value> Buffer<T> {
             offset: lower,
             len: (upper - lower) as usize,
         }
+    }
+    pub fn var(&self) -> BufferVar<T> {
+        BufferVar::new(self)
     }
 }
 pub(crate) struct BindlessArrayHandle {

@@ -19,20 +19,9 @@ pub mod traits_impl;
 
 pub trait Value: Copy + ir::TypeOf {
     type Proxy: VarProxy<Self>;
-    type SoN: StructOfNodes;
-
-    fn destruct(v: Var<Self>) -> Self::SoN;
-    fn construct(s: Self::SoN) -> Var<Self>;
 }
 
-/* Struct of Nodes
-*  Similar to how enoki, Dr.Jit handles structs
-*  Makes every field of the struct a node
-*  Best used for types that cannot be represented using LuisaCompute's type system
-*  but that can be represented at tracing time using Rust types
-*  Such as Rust enums, dyn Trait, etc.
-*/
-pub trait StructOfNodes: Sized {
+pub trait Aggregate: Sized {
     fn to_vec_nodes(&self) -> Vec<NodeRef> {
         let mut nodes = vec![];
         Self::to_nodes(&self, &mut nodes);
@@ -50,7 +39,7 @@ pub trait StructOfNodes: Sized {
 pub trait Selectable {
     fn select(mask: Mask, lhs: Self, rhs: Self) -> Self;
 }
-pub trait VarProxy<T>: Copy + From<T> {
+pub trait VarProxy<T>: Copy + From<T> + Aggregate {
     fn from_node(node: NodeRef) -> Self;
     fn node(&self) -> NodeRef;
 }
@@ -64,16 +53,20 @@ impl<T: Value> Var<T> {
     pub fn store(&self, value: Self) {
         unimplemented!()
     }
-    pub fn expand(&self) -> T::SoN {
-        unimplemented!()
+    pub(crate) fn expand(&self) -> Vec<NodeRef> {
+        self.proxy.to_vec_nodes()
     }
-    pub fn collect(value: T::SoN) -> Self {
-        unimplemented!()
+    pub(crate) fn collect(nodes: &[NodeRef]) -> Self {
+        let proxy = T::Proxy::from_nodes(&mut nodes.iter().cloned());
+        Self { proxy }
     }
-    pub fn from_node(node: NodeRef) -> Self {
+    pub(crate) fn from_node(node: NodeRef) -> Self {
         Self {
             proxy: T::Proxy::from_node(node),
         }
+    }
+    pub(crate) fn node(&self) -> NodeRef {
+        self.proxy.node()
     }
 }
 impl<T: Value> From<T> for Var<T> {
@@ -96,7 +89,7 @@ pub struct PrimProxy<T> {
     pub(crate) _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T> StructOfNodes for PrimProxy<T> {
+impl<T> Aggregate for PrimProxy<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
@@ -127,15 +120,6 @@ macro_rules! impl_prim {
         }
         impl Value for $t {
             type Proxy = PrimProxy<$t>;
-            type SoN = PrimProxy<$t>;
-
-            fn destruct(v: Var<Self>) -> Self::SoN {
-                v.proxy
-            }
-
-            fn construct(s: Self::SoN) -> Var<Self> {
-                Var { proxy: s }
-            }
         }
     };
 }
@@ -185,6 +169,16 @@ pub fn pop_scope() -> Gc<BasicBlock> {
         let s = &mut r.scopes;
         s.pop().unwrap().finish()
     })
+}
+pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
+    current_scope(|b| {
+        let i = b.const_(Const::Int32(index as i32));
+        let node = b.call(Func::ExtractElement, &[node, i], <T as TypeOf>::type_());
+        node
+    })
+}
+pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
+    current_scope(|b| b.call(Func::Struct, nodes, <T as TypeOf>::type_()))
 }
 pub fn const_<T: Value + Copy + 'static>(value: T) -> Var<T> {
     let node = current_scope(|s| -> NodeRef {

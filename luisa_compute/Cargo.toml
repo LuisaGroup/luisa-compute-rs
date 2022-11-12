@@ -10,6 +10,7 @@ libc = "0.2"
 luisa_compute_ir = { path = "../luisa_compute_sys/LuisaCompute/src/ir/luisa_compute_ir" }
 luisa_compute_api_types = { path = "../luisa_compute_sys/LuisaCompute/src/api/luisa_compute_api_types" }
 luisa_compute_derive = { path = "../luisa_compute_derive" }
+luisa_compute_compiler = { path = "../luisa_compute_compiler" }
 
 [features]
 default = []

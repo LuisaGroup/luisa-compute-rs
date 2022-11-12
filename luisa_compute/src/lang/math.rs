@@ -1,5 +1,4 @@
 #![allow(non_camel_case_types)]
-use crate::prelude::*;
 
 macro_rules! def_vec {
     ($t:ident, $el:ty, $align:literal, $($comps:ident), *) => {

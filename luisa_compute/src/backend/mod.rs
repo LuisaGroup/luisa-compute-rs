@@ -3,7 +3,7 @@ use api::PixelFormat;
 use libc::c_void;
 use luisa_compute_api_types as api;
 use luisa_compute_ir::ir::KernelModule;
-use sys::LCDeviceInterface;
+pub mod rust;
 #[derive(Debug)]
 pub struct BackendError {}
 pub type Result<T> = std::result::Result<T, BackendError>;

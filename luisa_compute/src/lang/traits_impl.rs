@@ -1,5 +1,5 @@
 use crate::lang::*;
-impl<T0: StructOfNodes> StructOfNodes for (T0,) {
+impl<T0: Aggregate> Aggregate for (T0,) {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         self.0.to_nodes(nodes);
     }
@@ -8,7 +8,7 @@ impl<T0: StructOfNodes> StructOfNodes for (T0,) {
         (v0,)
     }
 }
-impl<T0: StructOfNodes, T1: StructOfNodes> StructOfNodes for (T0,T1,) {
+impl<T0: Aggregate, T1: Aggregate> Aggregate for (T0,T1,) {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         self.0.to_nodes(nodes);
         self.1.to_nodes(nodes);
@@ -19,7 +19,7 @@ impl<T0: StructOfNodes, T1: StructOfNodes> StructOfNodes for (T0,T1,) {
         (v0, v1,)
     }
 }
-impl<T0: StructOfNodes, T1: StructOfNodes, T2: StructOfNodes> StructOfNodes for (T0,T1,T2,) {
+impl<T0: Aggregate, T1: Aggregate, T2: Aggregate> Aggregate for (T0,T1,T2,) {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         self.0.to_nodes(nodes);
         self.1.to_nodes(nodes);
@@ -32,7 +32,7 @@ impl<T0: StructOfNodes, T1: StructOfNodes, T2: StructOfNodes> StructOfNodes for 
         (v0, v1, v2,)
     }
 }
-impl<T0: StructOfNodes, T1: StructOfNodes, T2: StructOfNodes, T3: StructOfNodes> StructOfNodes for (T0,T1,T2,T3,) {
+impl<T0: Aggregate, T1: Aggregate, T2: Aggregate, T3: Aggregate> Aggregate for (T0,T1,T2,T3,) {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         self.0.to_nodes(nodes);
         self.1.to_nodes(nodes);
@@ -47,7 +47,7 @@ impl<T0: StructOfNodes, T1: StructOfNodes, T2: StructOfNodes, T3: StructOfNodes>
         (v0, v1, v2, v3,)
     }
 }
-impl<T0: StructOfNodes, T1: StructOfNodes, T2: StructOfNodes, T3: StructOfNodes, T4: StructOfNodes> StructOfNodes for (T0,T1,T2,T3,T4,) {
+impl<T0: Aggregate, T1: Aggregate, T2: Aggregate, T3: Aggregate, T4: Aggregate> Aggregate for (T0,T1,T2,T3,T4,) {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         self.0.to_nodes(nodes);
         self.1.to_nodes(nodes);
@@ -64,7 +64,7 @@ impl<T0: StructOfNodes, T1: StructOfNodes, T2: StructOfNodes, T3: StructOfNodes,
         (v0, v1, v2, v3, v4,)
     }
 }
-impl<T0: StructOfNodes, T1: StructOfNodes, T2: StructOfNodes, T3: StructOfNodes, T4: StructOfNodes, T5: StructOfNodes> StructOfNodes for (T0,T1,T2,T3,T4,T5,) {
+impl<T0: Aggregate, T1: Aggregate, T2: Aggregate, T3: Aggregate, T4: Aggregate, T5: Aggregate> Aggregate for (T0,T1,T2,T3,T4,T5,) {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         self.0.to_nodes(nodes);
         self.1.to_nodes(nodes);
@@ -83,7 +83,7 @@ impl<T0: StructOfNodes, T1: StructOfNodes, T2: StructOfNodes, T3: StructOfNodes,
         (v0, v1, v2, v3, v4, v5,)
     }
 }
-impl<T0: StructOfNodes, T1: StructOfNodes, T2: StructOfNodes, T3: StructOfNodes, T4: StructOfNodes, T5: StructOfNodes, T6: StructOfNodes> StructOfNodes for (T0,T1,T2,T3,T4,T5,T6,) {
+impl<T0: Aggregate, T1: Aggregate, T2: Aggregate, T3: Aggregate, T4: Aggregate, T5: Aggregate, T6: Aggregate> Aggregate for (T0,T1,T2,T3,T4,T5,T6,) {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         self.0.to_nodes(nodes);
         self.1.to_nodes(nodes);
@@ -104,7 +104,7 @@ impl<T0: StructOfNodes, T1: StructOfNodes, T2: StructOfNodes, T3: StructOfNodes,
         (v0, v1, v2, v3, v4, v5, v6,)
     }
 }
-impl<T0: StructOfNodes, T1: StructOfNodes, T2: StructOfNodes, T3: StructOfNodes, T4: StructOfNodes, T5: StructOfNodes, T6: StructOfNodes, T7: StructOfNodes> StructOfNodes for (T0,T1,T2,T3,T4,T5,T6,T7,) {
+impl<T0: Aggregate, T1: Aggregate, T2: Aggregate, T3: Aggregate, T4: Aggregate, T5: Aggregate, T6: Aggregate, T7: Aggregate> Aggregate for (T0,T1,T2,T3,T4,T5,T6,T7,) {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         self.0.to_nodes(nodes);
         self.1.to_nodes(nodes);

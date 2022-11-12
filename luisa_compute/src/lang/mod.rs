@@ -35,6 +35,16 @@ pub trait Aggregate: Sized {
     }
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>);
     fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self;
+    fn store(&self, value: &Self) {
+        let value_nodes = value.to_vec_nodes();
+        let self_nodes = self.to_vec_nodes();
+        assert_eq!(value_nodes.len(), self_nodes.len());
+        current_scope(|b| {
+            for (value_node, self_node) in value_nodes.into_iter().zip(self_nodes.into_iter()) {
+                b.store(self_node, value_node);
+            }
+        })
+    }
 }
 pub trait Selectable {
     fn select(mask: Mask, lhs: Self, rhs: Self) -> Self;
@@ -51,7 +61,7 @@ pub type Mask = Var<bool>;
 
 impl<T: Value> Var<T> {
     pub fn store(&self, value: Self) {
-        unimplemented!()
+        self.proxy.store(&value.proxy);
     }
     pub(crate) fn expand(&self) -> Vec<NodeRef> {
         self.proxy.to_vec_nodes()

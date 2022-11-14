@@ -2,7 +2,7 @@
 members = [
     "luisa_compute",
     "luisa_compute_sys",
-    "luisa_compute_compiler",
+    "luisa_compute_derive_impl",
     "luisa_compute_derive",
 ]
 # exclude  = [

@@ -7,12 +7,12 @@ pub mod runtime;
 pub use luisa_compute_ir::Gc;
 pub mod prelude {
     pub use crate::*;
-    pub use luisa_compute_derive::*;
-    pub use lang::traits::*;
-    pub use lang::traits_impl::*;
     pub use lang::math::*;
     pub use lang::math_impl::*;
+    pub use lang::traits::*;
+    pub use lang::traits_impl::*;
     pub use lang::*;
+    pub use luisa_compute_derive::*;
 }
 use libc;
 pub(crate) fn _signal_handler(signal: libc::c_int) {

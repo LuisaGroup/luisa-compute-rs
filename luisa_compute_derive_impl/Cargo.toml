@@ -10,3 +10,8 @@ syn = {version="1",features=["full"]}
 quote = "1.0"
 proc-macro2 = "1"
 prettyplease = "0.1.17"
+
+[[bin]]
+name="derive-debug"
+path="src/bin/derive-debug.rs"
+

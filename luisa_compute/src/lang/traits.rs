@@ -10,10 +10,10 @@ pub trait VarTrait: Copy + Clone + 'static {
         <Self::Scalar as TypeOf>::type_()
     }
 }
-impl<T: Value + 'static> VarTrait for Var<T> {
+impl<T: Value + 'static> VarTrait for Expr<T> {
     type Scalar = T;
     fn from_node(node: NodeRef) -> Self {
-        Var::from_node(node)
+        Expr::from_node(node)
     }
     fn node(&self) -> NodeRef {
         self.proxy.node()
@@ -59,25 +59,25 @@ pub trait CommonVarOp: VarTrait {
         let node = current_scope(|s| s.bitcast(self.node(), ty));
         A::from_node(node)
     }
-    fn uint(&self) -> Var<u32> {
+    fn uint(&self) -> Expr<u32> {
         self.cast()
     }
-    fn int(&self) -> Var<i32> {
+    fn int(&self) -> Expr<i32> {
         self.cast()
     }
-    fn ulong(&self) -> Var<u64> {
+    fn ulong(&self) -> Expr<u64> {
         self.cast()
     }
-    fn long(&self) -> Var<i64> {
+    fn long(&self) -> Expr<i64> {
         self.cast()
     }
-    fn float(&self) -> Var<f32> {
+    fn float(&self) -> Expr<f32> {
         self.cast()
     }
-    // fn double(&self) -> Var<f64> {
+    // fn double(&self) -> Expr<f64> {
     //     self.cast()
     // }
-    fn bool_(&self) -> Var<bool> {
+    fn bool_(&self) -> Expr<bool> {
         self.cast()
     }
 }
@@ -87,7 +87,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Lt, &[lhs, rhs], Bool::type_());
-            Var::<bool>::from_node(ret)
+            Expr::<bool>::from_node(ret)
         })
     }
     fn le<A: Into<Self>>(&self, other: A) -> Bool {
@@ -95,7 +95,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Le, &[lhs, rhs], Bool::type_());
-            Var::<bool>::from_node(ret)
+            Expr::<bool>::from_node(ret)
         })
     }
     fn gt<A: Into<Self>>(&self, other: A) -> Bool {
@@ -103,7 +103,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Gt, &[lhs, rhs], Bool::type_());
-            Var::<bool>::from_node(ret)
+            Expr::<bool>::from_node(ret)
         })
     }
     fn ge<A: Into<Self>>(&self, other: A) -> Bool {
@@ -111,7 +111,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Ge, &[lhs, rhs], Bool::type_());
-            Var::<bool>::from_node(ret)
+            Expr::<bool>::from_node(ret)
         })
     }
     fn eq<A: Into<Self>>(&self, other: A) -> Bool {
@@ -119,7 +119,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Eq, &[lhs, rhs], Bool::type_());
-            Var::<bool>::from_node(ret)
+            Expr::<bool>::from_node(ret)
         })
     }
     fn ne<A: Into<Self>>(&self, other: A) -> Bool {
@@ -127,7 +127,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Ne, &[lhs, rhs], Bool::type_());
-            Var::<bool>::from_node(ret)
+            Expr::<bool>::from_node(ret)
         })
     }
 }
@@ -416,71 +416,71 @@ pub trait FloatVarTrait:
 }
 macro_rules! impl_binop {
     ($t:ty, $tr_assign:ident, $method_assign:ident, $tr:ident, $method:ident) => {
-        impl $tr_assign for Var<$t> {
+        impl $tr_assign for Expr<$t> {
             fn $method_assign(&mut self, rhs: Self) {
                 *self = self.clone().$method(rhs);
             }
         }
-        impl $tr_assign<&Var<$t>> for Var<$t> {
+        impl $tr_assign<&Expr<$t>> for Expr<$t> {
             fn $method_assign(&mut self, rhs: &Self) {
                 *self = self.clone().$method(rhs);
             }
         }
-        impl $tr_assign<$t> for Var<$t> {
+        impl $tr_assign<$t> for Expr<$t> {
             fn $method_assign(&mut self, rhs: $t) {
                 *self = self.clone().$method(rhs);
             }
         }
-        impl $tr for &Var<$t> {
-            type Output = Var<$t>;
-            fn $method(self, rhs: &Var<$t>) -> Self::Output {
+        impl $tr for &Expr<$t> {
+            type Output = Expr<$t>;
+            fn $method(self, rhs: &Expr<$t>) -> Self::Output {
                 current_scope(|s| {
                     let lhs = self.node();
                     let rhs = rhs.node();
                     let ret = s.call(Func::$tr, &[lhs, rhs], Self::Output::type_());
-                    Var::<$t>::from_node(ret)
+                    Expr::<$t>::from_node(ret)
                 })
             }
         }
-        impl $tr<$t> for &Var<$t> {
-            type Output = Var<$t>;
+        impl $tr<$t> for &Expr<$t> {
+            type Output = Expr<$t>;
             fn $method(self, rhs: $t) -> Self::Output {
                 $tr::$method(self, &const_(rhs))
             }
         }
-        impl $tr<$t> for Var<$t> {
-            type Output = Var<$t>;
+        impl $tr<$t> for Expr<$t> {
+            type Output = Expr<$t>;
             fn $method(self, rhs: $t) -> Self::Output {
                 $tr::$method(&self, &const_(rhs))
             }
         }
-        impl $tr<&Var<$t>> for $t {
-            type Output = Var<$t>;
-            fn $method(self, rhs: &Var<$t>) -> Self::Output {
+        impl $tr<&Expr<$t>> for $t {
+            type Output = Expr<$t>;
+            fn $method(self, rhs: &Expr<$t>) -> Self::Output {
                 $tr::$method(&const_(self), rhs)
             }
         }
-        impl $tr<&Var<$t>> for Var<$t> {
-            type Output = Var<$t>;
-            fn $method(self, rhs: &Var<$t>) -> Self::Output {
+        impl $tr<&Expr<$t>> for Expr<$t> {
+            type Output = Expr<$t>;
+            fn $method(self, rhs: &Expr<$t>) -> Self::Output {
                 $tr::$method(&self, rhs)
             }
         }
-        impl $tr<Var<$t>> for &Var<$t> {
-            type Output = Var<$t>;
-            fn $method(self, rhs: Var<$t>) -> Self::Output {
+        impl $tr<Expr<$t>> for &Expr<$t> {
+            type Output = Expr<$t>;
+            fn $method(self, rhs: Expr<$t>) -> Self::Output {
                 $tr::$method(self, &rhs)
             }
         }
-        impl $tr<Var<$t>> for $t {
-            type Output = Var<$t>;
-            fn $method(self, rhs: Var<$t>) -> Self::Output {
+        impl $tr<Expr<$t>> for $t {
+            type Output = Expr<$t>;
+            fn $method(self, rhs: Expr<$t>) -> Self::Output {
                 $tr::$method(&const_(self), &rhs)
             }
         }
-        impl $tr for Var<$t> {
-            type Output = Var<$t>;
-            fn $method(self, rhs: Var<$t>) -> Self::Output {
+        impl $tr for Expr<$t> {
+            type Output = Expr<$t>;
+            fn $method(self, rhs: Expr<$t>) -> Self::Output {
                 $tr::$method(&self, &rhs)
             }
         }
@@ -507,14 +507,14 @@ macro_rules! impl_int_binop {
 
 macro_rules! impl_not {
     ($t:ty) => {
-        impl Not for Var<$t> {
-            type Output = Var<$t>;
+        impl Not for Expr<$t> {
+            type Output = Expr<$t>;
             fn not(self) -> Self::Output {
                 &self ^ &const_(!0)
             }
         }
-        impl Not for &Var<$t> {
-            type Output = Var<$t>;
+        impl Not for &Expr<$t> {
+            type Output = Expr<$t>;
             fn not(self) -> Self::Output {
                 self ^ &const_(!0)
             }
@@ -523,14 +523,14 @@ macro_rules! impl_not {
 }
 macro_rules! impl_neg {
     ($t:ty) => {
-        impl Neg for Var<$t> {
-            type Output = Var<$t>;
+        impl Neg for Expr<$t> {
+            type Output = Expr<$t>;
             fn neg(self) -> Self::Output {
                 const_(0) - &self
             }
         }
-        impl Neg for &Var<$t> {
-            type Output = Var<$t>;
+        impl Neg for &Expr<$t> {
+            type Output = Expr<$t>;
             fn neg(self) -> Self::Output {
                 const_(0) - self
             }
@@ -539,19 +539,19 @@ macro_rules! impl_neg {
 }
 macro_rules! impl_fneg {
     ($t:ty) => {
-        impl Neg for Var<$t> {
-            type Output = Var<$t>;
+        impl Neg for Expr<$t> {
+            type Output = Expr<$t>;
             fn neg(self) -> Self::Output {
                 current_scope(|s| {
                     let ret = s.call(Func::Neg, &[self.node()], Self::Output::type_());
-                    Var::<$t>::from_node(ret)
+                    Expr::<$t>::from_node(ret)
                 })
             }
         }
     };
 }
-impl Not for Var<bool> {
-    type Output = Var<bool>;
+impl Not for Expr<bool> {
+    type Output = Expr<bool>;
     fn not(self) -> Self::Output {
         &self ^ &const_(true)
     }

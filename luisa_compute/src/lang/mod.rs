@@ -1,16 +1,16 @@
 use std::{any::Any, collections::HashMap, ops::Deref, sync::Arc};
 
-use crate::{
-    resource::{BindlessArrayHandle, Buffer, BufferHandle, TextureHandle},
-    *,
-};
+use crate::resource::{BindlessArrayHandle, Buffer, BufferHandle, TextureHandle};
 pub use ir::ir::NodeRef;
-use ir::{
-    ir::{new_node, BasicBlock, Const, Func, Instruction, IrBuilder, Node, Type},
-    CBoxedSlice,
-};
+use ir::ir::{new_node, BasicBlock, Const, Func, Instruction, IrBuilder, Node};
 use luisa_compute_ir as ir;
-use luisa_compute_ir::TypeOf;
+
+pub use luisa_compute_ir::{
+    context::register_type,
+    ffi::CBoxedSlice,
+    ir::{StructType, Type},
+    Gc, TypeOf,
+};
 use std::cell::RefCell;
 pub mod math;
 pub mod math_impl;
@@ -18,7 +18,7 @@ pub mod traits;
 pub mod traits_impl;
 
 pub trait Value: Copy + ir::TypeOf {
-    type Proxy: VarProxy<Self>;
+    type Proxy: Proxy<Self>;
 }
 
 pub trait Aggregate: Sized {
@@ -35,34 +35,57 @@ pub trait Aggregate: Sized {
     }
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>);
     fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self;
-    fn store(&self, value: &Self) {
-        let value_nodes = value.to_vec_nodes();
-        let self_nodes = self.to_vec_nodes();
-        assert_eq!(value_nodes.len(), self_nodes.len());
-        current_scope(|b| {
-            for (value_node, self_node) in value_nodes.into_iter().zip(self_nodes.into_iter()) {
-                b.store(self_node, value_node);
-            }
-        })
-    }
+}
+fn _store<T: Aggregate>(var: &T, value: &T) {
+    let value_nodes = value.to_vec_nodes();
+    let self_nodes = var.to_vec_nodes();
+    assert_eq!(value_nodes.len(), self_nodes.len());
+    current_scope(|b| {
+        for (value_node, self_node) in value_nodes.into_iter().zip(self_nodes.into_iter()) {
+            b.store(self_node, value_node);
+        }
+    })
 }
 pub trait Selectable {
     fn select(mask: Mask, lhs: Self, rhs: Self) -> Self;
 }
-pub trait VarProxy<T>: Copy + From<T> + Aggregate {
+pub trait Proxy<T>: Copy + Aggregate {
     fn from_node(node: NodeRef) -> Self;
     fn node(&self) -> NodeRef;
+}
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Expr<T: Value> {
+    pub(crate) proxy: T::Proxy,
 }
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Var<T: Value> {
     pub(crate) proxy: T::Proxy,
 }
-pub type Mask = Var<bool>;
 
 impl<T: Value> Var<T> {
-    pub fn store(&self, value: Self) {
-        self.proxy.store(&value.proxy);
+    pub fn store(&self, value: &Expr<T>) {
+        _store(&self.proxy, &value.proxy);
     }
+    pub fn load(&self) -> Expr<T> {
+        Expr {
+            proxy: current_scope(|b| {
+                let nodes = self.proxy.to_vec_nodes();
+                let mut ret = vec![];
+                for node in nodes {
+                    ret.push(b.call(Func::Load, &[node], node.type_()));
+                }
+                T::Proxy::from_nodes(&mut ret.into_iter())
+            }),
+        }
+    }
+}
+pub type Mask = Expr<bool>;
+impl<T: Value + 'static> From<T> for Expr<T> {
+    fn from(value: T) -> Self {
+        const_(value)
+    }
+}
+impl<T: Value> Expr<T> {
     pub(crate) fn expand(&self) -> Vec<NodeRef> {
         self.proxy.to_vec_nodes()
     }
@@ -70,24 +93,20 @@ impl<T: Value> Var<T> {
         let proxy = T::Proxy::from_nodes(&mut nodes.iter().cloned());
         Self { proxy }
     }
+    pub fn __from_proxy(proxy: T::Proxy) -> Self {
+        Self { proxy }
+    }
+    pub(crate) fn node(&self) -> NodeRef {
+        self.proxy.node()
+    }
     pub(crate) fn from_node(node: NodeRef) -> Self {
         Self {
             proxy: T::Proxy::from_node(node),
         }
     }
-    pub(crate) fn node(&self) -> NodeRef {
-        self.proxy.node()
-    }
-}
-impl<T: Value> From<T> for Var<T> {
-    fn from(t: T) -> Self {
-        Self {
-            proxy: T::Proxy::from(t),
-        }
-    }
 }
 
-impl<T: Value> Deref for Var<T> {
+impl<T: Value> Deref for Expr<T> {
     type Target = T::Proxy;
     fn deref(&self) -> &Self::Target {
         &self.proxy
@@ -117,7 +136,7 @@ macro_rules! impl_prim {
                 const_(v).proxy
             }
         }
-        impl VarProxy<$t> for PrimProxy<$t> {
+        impl Proxy<$t> for PrimProxy<$t> {
             fn from_node(node: NodeRef) -> Self {
                 Self {
                     node,
@@ -142,12 +161,12 @@ impl_prim!(i64);
 impl_prim!(f32);
 // impl_prim!(f64);
 
-pub type Bool = Var<bool>;
-pub type Float = Var<f32>;
-pub type Int = Var<i32>;
-pub type Uint = Var<u32>;
-pub type Long = Var<i64>;
-pub type Ulong = Var<u64>;
+pub type Bool = Expr<bool>;
+pub type Float = Expr<f32>;
+pub type Int = Expr<i32>;
+pub type Uint = Expr<u32>;
+pub type Long = Expr<i64>;
+pub type Ulong = Expr<u64>;
 
 pub(crate) struct Recorder {
     scopes: Vec<IrBuilder>,
@@ -190,7 +209,7 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
 pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
     current_scope(|b| b.call(Func::Struct, nodes, <T as TypeOf>::type_()))
 }
-pub fn const_<T: Value + Copy + 'static>(value: T) -> Var<T> {
+pub fn const_<T: Value + Copy + 'static>(value: T) -> Expr<T> {
     let node = current_scope(|s| -> NodeRef {
         let any = &value as &dyn Any;
         if let Some(value) = any.downcast_ref::<bool>() {
@@ -219,7 +238,7 @@ pub fn const_<T: Value + Copy + 'static>(value: T) -> Var<T> {
             s.const_(Const::Generic(CBoxedSlice::new(buf), T::type_()))
         }
     });
-    Var::from_node(node)
+    Expr::from_node(node)
 }
 
 pub struct BufferVar<T: Value> {
@@ -244,8 +263,8 @@ impl BindlessArrayVar {
         &self,
         buffer_index: BI,
         element_index: EI,
-    ) -> Var<T> {
-        Var::from_node(current_scope(|b| {
+    ) -> Expr<T> {
+        Expr::from_node(current_scope(|b| {
             b.call(
                 Func::BindlessBufferRead,
                 &[
@@ -287,16 +306,16 @@ impl<T: Value> BufferVar<T> {
         }
     }
     pub fn len(&self) -> Uint {
-        Var::from_node(
+        Expr::from_node(
             current_scope(|b| b.call(Func::BufferSize, &[self.node], u32::type_())).into(),
         )
     }
-    pub fn read<I: Into<Uint>>(&self, i: I) -> Var<T> {
+    pub fn read<I: Into<Uint>>(&self, i: I) -> Expr<T> {
         current_scope(|b| {
-            Var::from_node(b.call(Func::BufferRead, &[self.node, i.into().node()], T::type_()))
+            Expr::from_node(b.call(Func::BufferRead, &[self.node, i.into().node()], T::type_()))
         })
     }
-    pub fn write<I: Into<Uint>, V: Into<Var<T>>>(&self, i: I, v: V) {
+    pub fn write<I: Into<Uint>, V: Into<Expr<T>>>(&self, i: I, v: V) {
         current_scope(|b| {
             b.call(
                 Func::BufferWrite,
@@ -305,7 +324,7 @@ impl<T: Value> BufferVar<T> {
             )
         });
     }
-    pub fn atomic_exchange<I: Into<Uint>, V: Into<Var<T>>>(&self, i: I, v: V) -> Var<T> {
+    pub fn atomic_exchange<I: Into<Uint>, V: Into<Expr<T>>>(&self, i: I, v: V) -> Expr<T> {
         todo!()
     }
 }

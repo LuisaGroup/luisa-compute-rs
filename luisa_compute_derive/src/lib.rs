@@ -6,16 +6,31 @@ pub fn derive_value(item: TokenStream) -> TokenStream {
     let compiler = luisa_compute_derive_impl::Compiler::new(false);
     compiler.derive_value(&item).into()
 }
-#[proc_macro_derive(StructOfNodes)]
-pub fn derive_struct_of_nodes(item: TokenStream) -> TokenStream {
+#[proc_macro_derive(Aggregate)]
+pub fn derive_aggregate(item: TokenStream) -> TokenStream {
     let item: syn::Item = syn::parse(item).unwrap();
     let compiler = luisa_compute_derive_impl::Compiler::new(false);
-    compiler.derive_struct_of_nodes(&item).into()
+    compiler.derive_aggregate(&item).into()
 }
 
 #[proc_macro_attribute]
-pub fn function(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn function(attr: TokenStream, item: TokenStream) -> TokenStream {
     let item: syn::ItemFn = syn::parse(item).unwrap();
+    let args = syn::parse_macro_input!(attr as syn::AttributeArgs);
     let compiler = luisa_compute_derive_impl::Compiler::new(false);
-    compiler.compile_fn(&item).into()
+    compiler.compile_fn(&args, &item).into()
+}
+
+
+#[proc_macro_derive(__Value)]
+pub fn _derive_value(item: TokenStream) -> TokenStream {
+    let item: syn::ItemStruct = syn::parse(item).unwrap();
+    let compiler = luisa_compute_derive_impl::Compiler::new(true);
+    compiler.derive_value(&item).into()
+}
+#[proc_macro_derive(__Aggregate)]
+pub fn _derive_aggregate(item: TokenStream) -> TokenStream {
+    let item: syn::Item = syn::parse(item).unwrap();
+    let compiler = luisa_compute_derive_impl::Compiler::new(true);
+    compiler.derive_aggregate(&item).into()
 }

@@ -1,6 +1,8 @@
+use std::collections::HashSet;
+
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned};
-use syn::{spanned::Spanned, Item, ItemEnum, ItemFn, ItemStruct};
+use syn::{spanned::Spanned, Attribute, Item, ItemEnum, ItemFn, ItemStruct, NestedMeta};
 pub struct Compiler {
     inside_crate: bool,
 }
@@ -15,13 +17,29 @@ impl Compiler {
     pub fn new(inside_crate: bool) -> Self {
         Self { inside_crate }
     }
-    pub fn compile_fn(&self, func: &ItemFn) -> TokenStream {
+    pub fn compile_fn(&self, args: &Vec<NestedMeta>, func: &ItemFn) -> TokenStream {
         quote!(#func)
     }
     pub fn compile_kernel(&self, func: &ItemFn) -> TokenStream {
         todo!()
     }
+    fn check_repr_c(&self, attribtes: &Vec<Attribute>) {
+        let mut has_repr_c = false;
+        for attr in attribtes {
+            let path = attr.path.get_ident().unwrap().to_string();
+            if path == "repr" {
+                let tokens = attr.tokens.to_string();
+                if tokens == "(C)" {
+                    has_repr_c = true;
+                }
+            }
+        }
+        if !has_repr_c {
+            panic!("Struct must have repr(C) attribute");
+        }
+    }
     pub fn derive_value(&self, struct_: &ItemStruct) -> TokenStream {
+        self.check_repr_c(&struct_.attrs);
         let span = struct_.span();
         let crate_path = self.crate_path();
         let name = &struct_.ident;
@@ -36,9 +54,25 @@ impl Compiler {
                 let ty = &f.ty;
                 let name = &f.ident;
                 let vis = &f.vis;
-                quote_spanned!(span=> #vis #name : <#ty as #crate_path ::Value>::Proxy)
+                quote_spanned!(span=> #vis #name : #crate_path ::Expr<#ty>)
             })
             .collect();
+        let type_of_impl = quote_spanned!(span=>
+            impl #crate_path ::TypeOf for #name {
+                fn type_() ->  #crate_path ::Gc< #crate_path ::Type> {
+                    use #crate_path ::*;
+                    let size = std::mem::size_of::<#name>();
+                    let alignment = std::mem::align_of::<#name>();
+                    let struct_type = StructType {
+                        fields: CBoxedSlice::new(vec![#(<#field_types as TypeOf>::type_(),)*]),
+                        size,
+                        alignment
+                    };
+                    let type_ = Type::Struct(struct_type);
+                    register_type(type_)
+                }
+            }
+        );
         let proxy_def = quote_spanned!(span=>
             #[derive(Clone, Copy, Debug)]
             #vis struct #proxy_name {
@@ -46,21 +80,24 @@ impl Compiler {
             }
             impl #crate_path ::Aggregate for #proxy_name {
                 fn to_nodes(&self, nodes: &mut Vec<#crate_path ::NodeRef>) {
-                    #( self.#fields.to_nodes(nodes); )*
+                    #( self.#field_names.to_nodes(nodes); )*
                 }
                 fn from_nodes<I: Iterator<Item = #crate_path ::NodeRef>>(iter: &mut I) -> Self {
                     Self {
-                        #( #proxy_fields : <#field_types as #crate_path ::Value>::StructOfNodes::from_nodes(iter) ),*
+                        #( #field_names : #crate_path ::Expr::<#field_types>::__from_proxy(
+                            <#field_types as #crate_path ::Value>::Proxy::from_nodes(iter)) ),*
                     }
                 }
             }
-            impl #crate_path ::VarProxy<#name> for #proxy_name {
+            impl #crate_path ::Proxy<#name> for #proxy_name {
+                #[allow(unused_assignments)]
                 fn from_node(node: #crate_path ::NodeRef) -> Self {
                     let mut index = 0;
                     #(
                     let #field_names = {
-                        let field = #crate_path ::__extract::<#field_types>(v.node(), &mut index);
-                        <#field_types as #crate_path ::Value>::Proxy::from_node(field)
+                        let field = #crate_path ::__extract::<#field_types>(node, index);
+                        index += 1;
+                        #crate_path ::Expr::<#field_types>::__from_proxy(<#field_types as #crate_path ::Value>::Proxy::from_node(field))
                     };
                     )*
                     Self{
@@ -70,32 +107,33 @@ impl Compiler {
                 fn node(&self) -> #crate_path ::NodeRef {
                     let mut nodes = Vec::new();
                     #(
-                        nodes.append(
+                        nodes.push(
                             self.#field_names.node()
                         );
                     )*
-                    __compose::<Self>(&nodes)
+                    #crate_path ::__compose::<#name>(&nodes)
                 }
             }
         );
         quote_spanned! {
             span=>
             #proxy_def
+            #type_of_impl
             impl #crate_path ::Value for #name {
                 type Proxy = #proxy_name;
             }
         }
     }
-    pub fn derive_struct_of_nodes_for_struct(&self, struct_: &ItemStruct) -> TokenStream {
+    pub fn derive_aggregate_for_struct(&self, struct_: &ItemStruct) -> TokenStream {
         todo!()
     }
-    pub fn derive_struct_of_nodes_for_enum(&self, enum_: &ItemEnum) -> TokenStream {
+    pub fn derive_aggregate_for_enum(&self, enum_: &ItemEnum) -> TokenStream {
         todo!()
     }
-    pub fn derive_struct_of_nodes(&self, item: &Item) -> TokenStream {
+    pub fn derive_aggregate(&self, item: &Item) -> TokenStream {
         match item {
-            Item::Struct(struct_) => self.derive_struct_of_nodes_for_struct(struct_),
-            Item::Enum(enum_) => self.derive_struct_of_nodes_for_enum(enum_),
+            Item::Struct(struct_) => self.derive_aggregate_for_struct(struct_),
+            Item::Enum(enum_) => self.derive_aggregate_for_enum(enum_),
             _ => todo!(),
         }
     }

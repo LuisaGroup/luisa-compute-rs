@@ -1,10 +1,13 @@
 #![allow(non_camel_case_types)]
+use luisa_compute_derive::{__Aggregate, __Value, function};
 
+use super::{Expr, Float};
 macro_rules! def_vec {
     ($t:ident, $el:ty, $align:literal, $($comps:ident), *) => {
         #[repr(C)]
         #[repr(align($align))]
         #[derive(Clone, Copy, Default, Debug)]
+        #[derive(__Value)]
         pub struct $t {
             $(pub $comps: $el), *
         }
@@ -42,3 +45,8 @@ pub type int4 = IVec4;
 pub type uint2 = UVec2;
 pub type uint3 = UVec3;
 pub type uint4 = UVec4;
+
+// #[function]
+// pub fn make_float2(x: Float, y: Float) -> Expr<float2> {
+//     Expr::<float2> { x, y }
+// }

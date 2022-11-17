@@ -1,4 +1,5 @@
 #![allow(unused_unsafe)]
+#[cfg(feature = "_cpp")]
 pub(crate) use luisa_compute_sys as sys;
 pub mod backend;
 pub mod lang;

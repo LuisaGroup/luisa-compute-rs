@@ -22,57 +22,6 @@ impl Deref for DeviceHandle {
 }
 unsafe impl Send for Device {}
 unsafe impl Sync for Device {}
-// pub struct Context {
-//     pub(crate) inner: sys::LCContext,
-// }
-// unsafe impl Send for Context {}
-// unsafe impl Sync for Context {}
-// impl Context {
-//     pub fn new() -> Self {
-//         let exe_path = std::env::current_exe().unwrap();
-//         catch_abort! {{
-//             let exe_path = CString::new(exe_path.to_str().unwrap()).unwrap();
-//             let ctx = sys::luisa_compute_context_create(exe_path.as_ptr());
-//             Self { inner: ctx }
-//         }}
-//     }
-//     pub fn create_device(&self, device: &str, properties: serde_json::Value) -> Device {
-//         catch_abort! {{
-//             let device = CString::new(device).unwrap();
-//             let properties = CString::new(properties.to_string()).unwrap();
-//             let device =
-//                 sys::luisa_compute_device_create(self.inner, device.as_ptr(), properties.as_ptr());
-//             let default_stream = sys::luisa_compute_stream_create(device);
-//             Device {
-//                 inner: Arc::new(DeviceHandle{
-//                     handle:device,
-//                     default_stream
-//                 })
-//         }
-//         }}
-//     }
-//     pub fn runtime_dir(&self) -> PathBuf {
-//         catch_abort! {{
-//             let path = sys::luisa_compute_context_runtime_directory(self.inner);
-//             let path = std::ffi::CStr::from_ptr(path).to_str().unwrap().to_string();
-//             PathBuf::from(path)
-//         }}
-//     }
-//     pub fn cache_dir(&self) -> PathBuf {
-//         catch_abort! {{
-//             let path = sys::luisa_compute_context_cache_directory(self.inner);
-//             let path = std::ffi::CStr::from_ptr(path).to_str().unwrap().to_string();
-//             PathBuf::from(path)
-//         }}
-//     }
-// }
-// impl Drop for Context {
-//     fn drop(&mut self) {
-//         catch_abort! {{
-//             sys::luisa_compute_context_destroy(self.inner);
-//         }}
-//     }
-// }
 
 impl Drop for DeviceHandle {
     fn drop(&mut self) {
@@ -257,7 +206,7 @@ pub struct Command<'a> {
     pub(crate) resource_tracker: Vec<Box<dyn Any>>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "_cpp"))]
 mod test {
     use super::*;
     #[test]

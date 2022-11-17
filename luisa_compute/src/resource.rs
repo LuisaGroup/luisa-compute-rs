@@ -1,4 +1,3 @@
-use std::ops::Range;
 use std::ops::RangeBounds;
 use std::sync::Arc;
 
@@ -8,7 +7,6 @@ use api::BufferUploadCommand;
 use lang::BufferVar;
 use lang::Value;
 use runtime::*;
-use sys::{LCPixelFormat, LCPixelStorage};
 pub struct Buffer<T: Value> {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BufferHandle>,

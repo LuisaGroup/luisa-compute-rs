@@ -93,7 +93,7 @@ impl<T: Value> Expr<T> {
         let proxy = T::Proxy::from_nodes(&mut nodes.iter().cloned());
         Self { proxy }
     }
-    pub fn __from_proxy(proxy: T::Proxy) -> Self {
+    pub fn from_proxy(proxy: T::Proxy) -> Self {
         Self { proxy }
     }
     pub(crate) fn node(&self) -> NodeRef {
@@ -159,14 +159,7 @@ impl_prim!(u64);
 impl_prim!(i32);
 impl_prim!(i64);
 impl_prim!(f32);
-// impl_prim!(f64);
-
-pub type Bool = Expr<bool>;
-pub type Float = Expr<f32>;
-pub type Int = Expr<i32>;
-pub type Uint = Expr<u32>;
-pub type Long = Expr<i64>;
-pub type Ulong = Expr<u64>;
+impl_prim!(f64);
 
 pub(crate) struct Recorder {
     scopes: Vec<IrBuilder>,
@@ -259,7 +252,7 @@ pub struct BindlessArrayVar {
     node: NodeRef,
 }
 impl BindlessArrayVar {
-    pub fn buffer_read<T: Value, BI: Into<Uint>, EI: Into<Uint>>(
+    pub fn buffer_read<T: Value, BI: Into<Expr<u32>>, EI: Into<Expr<u32>>>(
         &self,
         buffer_index: BI,
         element_index: EI,
@@ -276,8 +269,8 @@ impl BindlessArrayVar {
             )
         }))
     }
-    pub fn buffer_length<I: Into<Uint>>(&self, buffer_index: I) -> Uint {
-        Uint::from_node(current_scope(|b| {
+    pub fn buffer_length<I: Into<Expr<u32>>>(&self, buffer_index: I) -> Expr<u32> {
+        Expr::<u32>::from_node(current_scope(|b| {
             b.call(
                 Func::BindlessBufferSize,
                 &[self.node, buffer_index.into().node()],
@@ -305,17 +298,17 @@ impl<T: Value> BufferVar<T> {
             handle: buffer.handle.clone(),
         }
     }
-    pub fn len(&self) -> Uint {
+    pub fn len(&self) -> Expr<u32> {
         Expr::from_node(
             current_scope(|b| b.call(Func::BufferSize, &[self.node], u32::type_())).into(),
         )
     }
-    pub fn read<I: Into<Uint>>(&self, i: I) -> Expr<T> {
+    pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         current_scope(|b| {
             Expr::from_node(b.call(Func::BufferRead, &[self.node, i.into().node()], T::type_()))
         })
     }
-    pub fn write<I: Into<Uint>, V: Into<Expr<T>>>(&self, i: I, v: V) {
+    pub fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, v: V) {
         current_scope(|b| {
             b.call(
                 Func::BufferWrite,
@@ -324,7 +317,7 @@ impl<T: Value> BufferVar<T> {
             )
         });
     }
-    pub fn atomic_exchange<I: Into<Uint>, V: Into<Expr<T>>>(&self, i: I, v: V) -> Expr<T> {
+    pub fn atomic_exchange<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, v: V) -> Expr<T> {
         todo!()
     }
 }
@@ -342,3 +335,13 @@ pub struct VolumeVar<T: Value> {
 }
 pub type Tex2DVar<T> = ImageVar<T>;
 pub type Tex3DVar<T> = VolumeVar<T>;
+
+#[macro_export]
+macro_rules! struct_ {
+    ($name:ident $fields:tt) => {
+        {
+            type P = <$name as Value>::Proxy;
+            Expr::from_proxy(P $fields)
+        }
+    };
+}

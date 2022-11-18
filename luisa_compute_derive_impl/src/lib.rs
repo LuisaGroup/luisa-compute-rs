@@ -84,7 +84,7 @@ impl Compiler {
                 }
                 fn from_nodes<I: Iterator<Item = #crate_path ::NodeRef>>(iter: &mut I) -> Self {
                     Self {
-                        #( #field_names : #crate_path ::Expr::<#field_types>::__from_proxy(
+                        #( #field_names : #crate_path ::Expr::<#field_types>::from_proxy(
                             <#field_types as #crate_path ::Value>::Proxy::from_nodes(iter)) ),*
                     }
                 }
@@ -97,7 +97,7 @@ impl Compiler {
                     let #field_names = {
                         let field = #crate_path ::__extract::<#field_types>(node, index);
                         index += 1;
-                        #crate_path ::Expr::<#field_types>::__from_proxy(<#field_types as #crate_path ::Value>::Proxy::from_node(field))
+                        #crate_path ::Expr::<#field_types>::from_proxy(<#field_types as #crate_path ::Value>::Proxy::from_node(field))
                     };
                     )*
                     Self{

@@ -74,59 +74,59 @@ pub trait CommonVarOp: VarTrait {
     fn float(&self) -> Expr<f32> {
         self.cast()
     }
-    // fn double(&self) -> Expr<f64> {
-    //     self.cast()
-    // }
+    fn double(&self) -> Expr<f64> {
+        self.cast()
+    }
     fn bool_(&self) -> Expr<bool> {
         self.cast()
     }
 }
 pub trait VarCmp: VarTrait {
-    fn lt<A: Into<Self>>(&self, other: A) -> Bool {
+    fn lt<A: Into<Self>>(&self, other: A) -> Expr<bool> {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Lt, &[lhs, rhs], Bool::type_());
+            let ret = s.call(Func::Lt, &[lhs, rhs], Expr::<bool>::type_());
             Expr::<bool>::from_node(ret)
         })
     }
-    fn le<A: Into<Self>>(&self, other: A) -> Bool {
+    fn le<A: Into<Self>>(&self, other: A) -> Expr<bool> {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Le, &[lhs, rhs], Bool::type_());
+            let ret = s.call(Func::Le, &[lhs, rhs], Expr::<bool>::type_());
             Expr::<bool>::from_node(ret)
         })
     }
-    fn gt<A: Into<Self>>(&self, other: A) -> Bool {
+    fn gt<A: Into<Self>>(&self, other: A) -> Expr<bool> {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Gt, &[lhs, rhs], Bool::type_());
+            let ret = s.call(Func::Gt, &[lhs, rhs], Expr::<bool>::type_());
             Expr::<bool>::from_node(ret)
         })
     }
-    fn ge<A: Into<Self>>(&self, other: A) -> Bool {
+    fn ge<A: Into<Self>>(&self, other: A) -> Expr<bool> {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Ge, &[lhs, rhs], Bool::type_());
+            let ret = s.call(Func::Ge, &[lhs, rhs], Expr::<bool>::type_());
             Expr::<bool>::from_node(ret)
         })
     }
-    fn eq<A: Into<Self>>(&self, other: A) -> Bool {
+    fn eq<A: Into<Self>>(&self, other: A) -> Expr<bool> {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Eq, &[lhs, rhs], Bool::type_());
+            let ret = s.call(Func::Eq, &[lhs, rhs], Expr::<bool>::type_());
             Expr::<bool>::from_node(ret)
         })
     }
-    fn ne<A: Into<Self>>(&self, other: A) -> Bool {
+    fn ne<A: Into<Self>>(&self, other: A) -> Expr<bool> {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Ne, &[lhs, rhs], Bool::type_());
+            let ret = s.call(Func::Ne, &[lhs, rhs], Expr::<bool>::type_());
             Expr::<bool>::from_node(ret)
         })
     }
@@ -167,7 +167,7 @@ pub trait IntVarTrait:
     fn zero() -> Self {
         Self::from_i64(0)
     }
-    fn rotate_right(&self, n: Uint) -> Self {
+    fn rotate_right(&self, n: Expr<u32>) -> Self {
         let lhs = self.node();
         let rhs = n.node();
         current_scope(|s| {
@@ -175,7 +175,7 @@ pub trait IntVarTrait:
             Self::from_node(ret)
         })
     }
-    fn rotate_left(&self, n: Uint) -> Self {
+    fn rotate_left(&self, n: Expr<u32>) -> Self {
         let lhs = self.node();
         let rhs = n.node();
         current_scope(|s| {
@@ -359,11 +359,11 @@ pub trait FloatVarTrait:
     }
     fn is_nan(&self) -> Mask {
         let any = self as &dyn Any;
-        if let Some(a) = any.downcast_ref::<Float>() {
-            let u: Uint = a.bitcast();
+        if let Some(a) = any.downcast_ref::<Expr<f32>>() {
+            let u: Expr<u32> = a.bitcast();
             (&u & 0x7f800000u32).eq(0x7f800000u32) & (&u & 0x007fffffu32).ne(0u32)
         } else {
-            panic!("expect float")
+            panic!("expect Expr<f32>")
         }
     }
     fn ln(&self) -> Self {
@@ -557,7 +557,7 @@ impl Not for Expr<bool> {
     }
 }
 impl_common_binop!(f32);
-// impl_common_binop!(f64);
+impl_common_binop!(f64);
 impl_common_binop!(i32);
 impl_common_binop!(i64);
 impl_common_binop!(u32);
@@ -582,44 +582,45 @@ impl_neg!(u32);
 impl_neg!(u64);
 
 impl_fneg!(f32);
-// impl_fneg!(f64);
-impl VarCmp for Float {}
-impl VarCmp for Int {}
-impl VarCmp for Long {}
-impl VarCmp for Uint {}
-impl VarCmp for Ulong {}
-impl VarCmp for Bool {}
-impl CommonVarOp for Float {}
-// impl CommonVarOp for Double {}
-impl CommonVarOp for Int {}
-impl CommonVarOp for Long {}
-impl CommonVarOp for Uint {}
-impl CommonVarOp for Ulong {}
-impl CommonVarOp for Bool {}
+impl_fneg!(f64);
+impl VarCmp for Expr<f32> {}
+impl VarCmp for Expr<f64> {}
+impl VarCmp for Expr<i32> {}
+impl VarCmp for Expr<i64> {}
+impl VarCmp for Expr<u32> {}
+impl VarCmp for Expr<u64> {}
+impl VarCmp for Expr<bool> {}
+impl CommonVarOp for Expr<f32> {}
+impl CommonVarOp for Expr<f64> {}
+impl CommonVarOp for Expr<i32> {}
+impl CommonVarOp for Expr<i64> {}
+impl CommonVarOp for Expr<u32> {}
+impl CommonVarOp for Expr<u64> {}
+impl CommonVarOp for Expr<bool> {}
 
-impl From<f64> for Float {
+impl From<f64> for Expr<f32> {
     fn from(x: f64) -> Self {
         (x as f32).into()
     }
 }
 
-// impl FloatVarTrait for Float {
+// impl Expr<f32>VarTrait for Expr<f32> {
 //     fn from_f64(x: f64) -> Self {
 //         const_(x as f32)
 //     }
 // }
 
-impl IntVarTrait for Int {
+impl IntVarTrait for Expr<i32> {
     fn from_i64(x: i64) -> Self {
         const_(x as i32)
     }
 }
-impl IntVarTrait for Long {
+impl IntVarTrait for Expr<i64> {
     fn from_i64(x: i64) -> Self {
         const_(x)
     }
 }
-impl IntVarTrait for Uint {
+impl IntVarTrait for Expr<u32> {
     fn from_i64(x: i64) -> Self {
         const_(x as u32)
     }

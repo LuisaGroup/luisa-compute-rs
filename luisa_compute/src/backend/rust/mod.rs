@@ -1,5 +1,9 @@
 // A Rust implementation of LuisaCompute backend.
 
+use std::sync::Arc;
+
+use crate::prelude::{Device, DeviceHandle};
+
 use super::Backend;
 mod resource;
 pub struct RustBackend {}
@@ -158,5 +162,17 @@ impl Backend for RustBackend {
 
     fn synchronize_event(&self, event: luisa_compute_api_types::Event) -> super::Result<()> {
         todo!()
+    }
+}
+impl RustBackend {
+    pub fn create_device() -> super::Result<Device> {
+        let backend = Arc::new(RustBackend {});
+        let default_stream = backend.create_stream()?;
+        Ok(Device {
+            inner: Arc::new(DeviceHandle {
+                backend,
+                default_stream,
+            }),
+        })
     }
 }

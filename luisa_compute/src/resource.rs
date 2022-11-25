@@ -45,7 +45,8 @@ impl<'a, T: Value> BufferView<'a, T> {
 
     pub fn copy_to(&self, data: &mut [T]) {
         unsafe {
-            submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_async(data)]);
+            submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_async(data)])
+                .unwrap();
         }
     }
     pub unsafe fn copy_from_async(&'a self, data: &'a [T]) -> Command<'a> {
@@ -63,7 +64,8 @@ impl<'a, T: Value> BufferView<'a, T> {
     }
     pub fn copy_from(&self, data: &[T]) {
         unsafe {
-            submit_default_stream_and_sync(&self.buffer.device, [self.copy_from_async(data)]);
+            submit_default_stream_and_sync(&self.buffer.device, [self.copy_from_async(data)])
+                .unwrap();
         }
     }
 }

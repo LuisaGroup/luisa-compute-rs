@@ -14,6 +14,7 @@ pub mod prelude {
     pub use lang::traits_impl::*;
     pub use lang::*;
     pub use luisa_compute_derive::*;
+    pub use runtime::*;
 }
 use libc;
 pub(crate) fn _signal_handler(signal: libc::c_int) {

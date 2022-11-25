@@ -1,3 +1,3 @@
 pub(super) struct BufferImpl {
-    pub(super) data:Box<[u8]>,
+    pub(super) data: Box<[u8]>,
 }

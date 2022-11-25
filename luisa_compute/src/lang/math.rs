@@ -1,14 +1,14 @@
 #![allow(non_camel_case_types)]
-use luisa_compute_derive::{__Aggregate, __Value, function};
-
 use crate::struct_;
+use luisa_compute_derive::{__Aggregate, __Value, function};
+use serde::{Deserialize, Serialize};
 
 use super::{Expr, Value};
 macro_rules! def_vec {
     ($t:ident, $el:ty, $align:literal, $($comps:ident), *) => {
         #[repr(C)]
         #[repr(align($align))]
-        #[derive(Clone, Copy, Default, Debug)]
+        #[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
         #[derive(__Value)]
         pub struct $t {
             $(pub $comps: $el), *
@@ -106,3 +106,35 @@ def_make_vec!(make_ulong4, ulong4, u64, x, y, z, w);
 def_make_vec!(make_double2, double2, f64, x, y);
 def_make_vec!(make_double3, double3, f64, x, y, z);
 def_make_vec!(make_double4, double4, f64, x, y, z, w);
+
+#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize, __Value)]
+#[repr(C)]
+pub struct Mat3 {
+    pub x: Vec3,
+    pub y: Vec3,
+    pub z: Vec3,
+}
+
+#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize, __Value)]
+#[repr(C)]
+pub struct DMat3 {
+    pub x: DVec3,
+    pub y: DVec3,
+    pub z: DVec3,
+}
+#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize, __Value)]
+#[repr(C)]
+pub struct Mat4 {
+    pub x: Vec4,
+    pub y: Vec4,
+    pub z: Vec4,
+    pub w: Vec4,
+}
+#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize, __Value)]
+#[repr(C)]
+pub struct DMat4 {
+    pub x: DVec4,
+    pub y: DVec4,
+    pub z: DVec4,
+    pub w: DVec4,
+}

@@ -205,7 +205,22 @@ pub struct Command<'a> {
     #[allow(dead_code)]
     pub(crate) resource_tracker: Vec<Box<dyn Any>>,
 }
+pub struct Kernel {
+    pub(crate) device: Device,
+}
+impl Kernel {
+    pub unsafe fn dispatch_async<'a>(&'a self) -> Command<'a>{
+        Command { inner: api::Command::ShaderDispatch(api::ShaderDispatchCommand{
 
+        }), marker: std::marker::PhantomData, resource_tracker: vec![] }
+    }
+    pub fn dispatc(&self) -> backend::Result<()> {
+        unsafe { 
+            submit_default_stream_and_sync(&self.device, vec![self.dispatch_async()])
+        }
+    }
+}
+pub type Shader = Kernel;
 #[cfg(all(test, feature = "_cpp"))]
 mod test {
     use super::*;

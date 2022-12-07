@@ -209,15 +209,14 @@ pub struct Kernel {
     pub(crate) device: Device,
 }
 impl Kernel {
-    pub unsafe fn dispatch_async<'a>(&'a self) -> Command<'a>{
-        Command { inner: api::Command::ShaderDispatch(api::ShaderDispatchCommand{
-
-        }), marker: std::marker::PhantomData, resource_tracker: vec![] }
+    pub unsafe fn dispatch_async<'a>(&'a self) -> Command<'a> {
+        todo!()
+        // Command { inner: api::Command::ShaderDispatch(api::ShaderDispatchCommand{
+        //     s
+        // }), marker: std::marker::PhantomData, resource_tracker: vec![] }
     }
     pub fn dispatc(&self) -> backend::Result<()> {
-        unsafe { 
-            submit_default_stream_and_sync(&self.device, vec![self.dispatch_async()])
-        }
+        unsafe { submit_default_stream_and_sync(&self.device, vec![self.dispatch_async()]) }
     }
 }
 pub type Shader = Kernel;

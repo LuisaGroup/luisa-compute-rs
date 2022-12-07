@@ -75,6 +75,13 @@ fn cmake_build() -> PathBuf {
                 config.define($opt, "OFF");
             }
         };
+        ($opt:literal) => {
+            println!("cargo:rerun-if-env-changed={}", $opt);
+            if let Ok(v) = env::var($opt) {
+                println!("{}={}", $opt, v);
+                config.define($opt, v);
+            }
+        };
     }
     set_from_env!("dx", "LUISA_COMPUTE_ENABLE_DX");
     set_from_env!("cuda", "LUISA_COMPUTE_ENABLE_CUDA");
@@ -88,6 +95,9 @@ fn cmake_build() -> PathBuf {
     config.define("LUISA_COMPUTE_BUILD_TESTS", "OFF");
     config.define("LUISA_COMPUTE_RUST", "ON");
     config.define("CMAKE_BUILD_TYPE", "Release");
+    // set compiler based on env
+    set_from_env!("CMAKE_C_COMPILER");
+    set_from_env!("CMAKE_CXX_COMPILER");
     config.profile("Release");
     config.generator("Ninja");
     config.no_build_target(true);
@@ -132,7 +142,7 @@ fn copy_dlls(out_dir: &PathBuf) {
 }
 fn main() {
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE__cpp");
-    if cfg!(feature = "_cpp") {
+    // if cfg!(feature = "_cpp") {
         let out_dir = cmake_build();
         generate_bindings();
         // dbg!(&out_dir);
@@ -146,5 +156,5 @@ fn main() {
         );
         println!("cargo:rustc-link-lib=dylib=luisa-compute-api");
         copy_dlls(&out_dir);
-    }
+    // }
 }

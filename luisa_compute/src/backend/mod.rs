@@ -71,7 +71,7 @@ pub trait Backend: Sync + Send {
     //     swapchain_handle: u64,
     //     image_handle: u64,
     // );
-    fn create_shader_ex(&self, kernel: &KernelModule, meta_options: &str) -> Result<api::Shader>;
+    fn create_shader(&self, kernel: &KernelModule, meta_options: &str) -> Result<api::Shader>;
     fn destroy_shader(&self, shader: api::Shader);
     fn create_event(&self) -> Result<api::Event>;
     fn destroy_event(&self, event: api::Event);

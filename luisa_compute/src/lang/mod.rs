@@ -1,8 +1,14 @@
 use std::{any::Any, collections::HashMap, ops::Deref, sync::Arc};
 
-use crate::resource::{BindlessArrayHandle, Buffer, BufferHandle, TextureHandle};
+use crate::{
+    prelude::Kernel,
+    resource::{BindlessArrayHandle, Buffer, BufferHandle, TextureHandle},
+};
 pub use ir::ir::NodeRef;
-use ir::ir::{new_node, BasicBlock, Const, Func, Instruction, IrBuilder, Node};
+use ir::ir::{
+    new_node, BasicBlock, Binding, BufferBinding, Capture, Const, Func, Instruction, IrBuilder,
+    KernelModule, Module, ModuleKind, Node,
+};
 use luisa_compute_ir as ir;
 
 pub use luisa_compute_ir::{
@@ -163,13 +169,20 @@ impl_prim!(f64);
 
 pub(crate) struct Recorder {
     scopes: Vec<IrBuilder>,
-    buffer_to_node: HashMap<u64, NodeRef>,
+    lock: bool,
+    captured_buffer: HashMap<u64, (NodeRef, BufferBinding)>,
 }
-
+impl Recorder {
+    fn reset(&mut self) {
+        self.scopes.clear();
+        self.lock = false;
+    }
+}
 thread_local! {
     pub(crate) static RECORDER: RefCell<Recorder> = RefCell::new(Recorder {
         scopes: vec![],
-        buffer_to_node: HashMap::new(),
+        lock:false,
+        captured_buffer: HashMap::new(),
     });
 }
 
@@ -237,7 +250,7 @@ pub fn const_<T: Value + Copy + 'static>(value: T) -> Expr<T> {
 pub struct BufferVar<T: Value> {
     marker: std::marker::PhantomData<T>,
     #[allow(dead_code)]
-    handle: Arc<BufferHandle>,
+    handle: Option<Arc<BufferHandle>>,
     node: NodeRef,
 }
 
@@ -247,8 +260,6 @@ impl<T: Value> Drop for BufferVar<T> {
     }
 }
 pub struct BindlessArrayVar {
-    #[allow(dead_code)]
-    handle: Arc<BindlessArrayHandle>,
     node: NodeRef,
 }
 impl BindlessArrayVar {
@@ -284,18 +295,28 @@ impl<T: Value> BufferVar<T> {
         let node = RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             let handle: u64 = buffer.handle().0;
-            if let Some(node) = r.buffer_to_node.get(&handle) {
+            if let Some((node, _)) = r.captured_buffer.get(&handle) {
                 *node
             } else {
                 let node = new_node(Node::new(Gc::new(Instruction::Buffer), T::type_()));
-                r.buffer_to_node.insert(handle, node);
+                r.captured_buffer.insert(
+                    handle,
+                    (
+                        node,
+                        BufferBinding {
+                            handle: buffer.handle().0,
+                            size: buffer.size_bytes(),
+                            offset: 0,
+                        },
+                    ),
+                );
                 node
             }
         });
         Self {
             node,
             marker: std::marker::PhantomData,
-            handle: buffer.handle.clone(),
+            handle: Some(buffer.handle.clone()),
         }
     }
     pub fn len(&self) -> Expr<u32> {
@@ -323,14 +344,16 @@ impl<T: Value> BufferVar<T> {
 }
 
 pub struct ImageVar<T: Value> {
+    node: NodeRef,
     #[allow(dead_code)]
-    handle: Arc<TextureHandle>,
+    handle: Option<Arc<TextureHandle>>,
     _marker: std::marker::PhantomData<T>,
 }
 
 pub struct VolumeVar<T: Value> {
+    node: NodeRef,
     #[allow(dead_code)]
-    handle: Arc<TextureHandle>,
+    handle: Option<Arc<TextureHandle>>,
     _marker: std::marker::PhantomData<T>,
 }
 pub type Tex2DVar<T> = ImageVar<T>;
@@ -344,4 +367,88 @@ macro_rules! struct_ {
             Expr::from_proxy(P $fields)
         }
     };
+}
+
+// Not recommended to use this directly
+pub struct KernelBuilder {
+    device: crate::runtime::Device,
+    args: Vec<NodeRef>,
+}
+impl KernelBuilder {
+    pub fn new(device: crate::runtime::Device) -> Self {
+        RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            assert!(!r.lock, "Cannot record multiple kernels at the same time");
+            assert!(
+                r.scopes.is_empty(),
+                "Cannot record multiple kernels at the same time"
+            );
+            r.lock = true;
+            r.scopes.clear();
+        });
+        Self {
+            device,
+            args: vec![],
+        }
+    }
+    pub fn buffer<T: Value>(&mut self) -> BufferVar<T> {
+        let node = new_node(Node::new(Gc::new(Instruction::Buffer), T::type_()));
+        self.args.push(node);
+        BufferVar {
+            node,
+            marker: std::marker::PhantomData,
+            handle: None,
+        }
+    }
+    pub fn tex2d<T: Value>(&mut self) -> ImageVar<T> {
+        todo!()
+    }
+    pub fn tex3d<T: Value>(&mut self) -> VolumeVar<T> {
+        todo!()
+    }
+    pub fn bindless_array(&mut self) -> BindlessArrayVar {
+        let node = new_node(Node::new(Gc::new(Instruction::Bindless), u32::type_()));
+        self.args.push(node);
+        BindlessArrayVar { node }
+    }
+    pub fn build(
+        self,
+        body: impl FnOnce(),
+    ) -> Result<crate::runtime::Kernel, crate::backend::BackendError> {
+        body();
+        RECORDER.with(
+            |r| -> Result<crate::runtime::Kernel, crate::backend::BackendError> {
+                let mut r = r.borrow_mut();
+                assert!(r.lock);
+                r.lock = false;
+                assert_eq!(r.scopes.len(), 1);
+                let scope = r.scopes.pop().unwrap();
+                let entry = scope.finish();
+                let mut captured: Vec<Capture> = Vec::new();
+                for (_, (node, binding)) in r.captured_buffer.iter() {
+                    captured.push(Capture {
+                        node: *node,
+                        binding: Binding::Buffer(binding.clone()),
+                    });
+                }
+                let module = KernelModule {
+                    module: Module {
+                        entry,
+                        kind: ModuleKind::Kernel,
+                    },
+                    captures: CBoxedSlice::new(captured),
+                    shared: CBoxedSlice::new(vec![]),
+                    args: CBoxedSlice::new(self.args.clone()),
+                };
+                // build kernel here
+                let shader = self.device.inner.create_shader(&module, "")?;
+                //
+                r.reset();
+                Ok(Kernel {
+                    shader,
+                    device: self.device.clone(),
+                })
+            },
+        )
+    }
 }

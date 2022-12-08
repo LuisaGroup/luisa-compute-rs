@@ -132,7 +132,7 @@ impl Backend for RustBackend {
         todo!()
     }
 
-    fn create_shader_ex(
+    fn create_shader(
         &self,
         kernel: &luisa_compute_ir::ir::KernelModule,
         meta_options: &str,

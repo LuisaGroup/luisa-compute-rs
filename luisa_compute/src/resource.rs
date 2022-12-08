@@ -106,6 +106,12 @@ impl<T: Value> Buffer<T> {
             len: (upper - lower) as usize,
         }
     }
+    pub fn len(&self) -> usize {
+        self.len
+    }
+    pub fn size_bytes(&self) -> usize {
+        self.len * std::mem::size_of::<T>()
+    }
     pub fn var(&self) -> BufferVar<T> {
         BufferVar::new(self)
     }
@@ -181,37 +187,37 @@ impl BindlessArray {
     pub fn set_buffer<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
         unsafe {
             self.set_buffer_async(index, buffer);
-            submit_default_stream_and_sync(&self.device, [self.update_async()]);
+            submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
         }
     }
     pub fn set_tex2d<T: Texel>(&self, index: usize, texture: &Tex2D<T>, sampler: Sampler) {
         unsafe {
             self.set_tex2d_async(index, texture, sampler);
-            submit_default_stream_and_sync(&self.device, [self.update_async()]);
+            submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
         }
     }
     pub fn set_tex3d<T: Texel>(&self, index: usize, texture: &Tex3D<T>, sampler: Sampler) {
         unsafe {
             self.set_tex3d_async(index, texture, sampler);
-            submit_default_stream_and_sync(&self.device, [self.update_async()]);
+            submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
         }
     }
     pub fn remove_buffer(&self, index: usize) {
         unsafe {
             self.remove_buffer_async(index);
-            submit_default_stream_and_sync(&self.device, [self.update_async()]);
+            submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
         }
     }
     pub fn remove_tex2d(&self, index: usize) {
         unsafe {
             self.remove_tex2d_async(index);
-            submit_default_stream_and_sync(&self.device, [self.update_async()]);
+            submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
         }
     }
     pub fn remove_tex3d(&self, index: usize) {
         unsafe {
             self.remove_tex3d_async(index);
-            submit_default_stream_and_sync(&self.device, [self.update_async()]);
+            submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
         }
     }
     pub unsafe fn update_async<'a>(&'a self) -> Command<'a> {
@@ -228,7 +234,9 @@ pub use api::{PixelFormat, PixelStorage, Sampler, SamplerAddress, SamplerFilter}
 pub(crate) struct TextureHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::Texture,
+    #[allow(dead_code)]
     pub(crate) format: PixelFormat,
+    pub(crate) level: u32,
 }
 
 pub trait Texel: Value {

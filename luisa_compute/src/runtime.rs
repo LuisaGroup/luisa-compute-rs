@@ -67,6 +67,7 @@ impl Device {
             device: self.clone(),
             handle: texture,
             format,
+            level: mips,
         });
         Ok(Tex2D {
             handle,
@@ -90,6 +91,7 @@ impl Device {
             device: self.clone(),
             handle: texture,
             format,
+            level: mips,
         });
         Ok(Tex3D {
             handle,
@@ -115,6 +117,7 @@ impl Device {
             }),
         })
     }
+    
 }
 pub(crate) enum StreamHandle {
     Default(Arc<DeviceHandle>, api::Stream),
@@ -207,16 +210,45 @@ pub struct Command<'a> {
 }
 pub struct Kernel {
     pub(crate) device: Device,
+    pub(crate) shader:api::Shader,// strange naming, huh?
+}
+pub struct ArgEncoder {
+    pub(crate) args: Vec<api::Argument>,
+}
+impl ArgEncoder {
+    pub fn buffer<T: Value>(&mut self, buffer: &Buffer<T>) {
+        self.args.push(api::Argument::Buffer(api::BufferArgument {
+            buffer: buffer.handle.handle,
+            offset: 0,
+            size: buffer.len * std::mem::size_of::<T>(),
+        }));
+    }
+    pub fn tex2d<T: Texel>(&mut self, tex: &Tex2D<T>) {
+        self.args.push(api::Argument::Texture(api::TextureArgument {
+            texture: tex.handle.handle,
+            level: tex.handle.level,
+        }));
+    }
+    pub fn tex3d<T: Texel>(&mut self, tex: &Tex3D<T>) {
+        self.args.push(api::Argument::Texture(api::TextureArgument {
+            texture: tex.handle.handle,
+            level: tex.handle.level,
+        }));
+    }
+    pub fn bindless_array(&mut self, array: &BindlessArray) {
+        self.args
+            .push(api::Argument::BindlessArray(array.handle.handle));
+    }
 }
 impl Kernel {
-    pub unsafe fn dispatch_async<'a>(&'a self) -> Command<'a> {
+    pub unsafe fn dispatch_async<'a>(&'a self, args: ArgEncoder) -> Command<'a> {
         todo!()
         // Command { inner: api::Command::ShaderDispatch(api::ShaderDispatchCommand{
         //     s
         // }), marker: std::marker::PhantomData, resource_tracker: vec![] }
     }
-    pub fn dispatc(&self) -> backend::Result<()> {
-        unsafe { submit_default_stream_and_sync(&self.device, vec![self.dispatch_async()]) }
+    pub fn dispatch(&self, args: ArgEncoder) -> backend::Result<()> {
+        unsafe { submit_default_stream_and_sync(&self.device, vec![self.dispatch_async(args)]) }
     }
 }
 pub type Shader = Kernel;

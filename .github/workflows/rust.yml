@@ -35,6 +35,6 @@ jobs:
       with:
         linux-local-args: '["--toolkit"]'
     - name: "Build"
-      run: CC=gcc-11 CXX=g++-11 cargo build --verbose
+      run: CC=clang-14 CXX=clang++-14 cargo build --verbose
     - name: "Run Tests"
-      run: CC=gcc-11 CXX=g++-11 cargo test --verbose
+      run: CC=clang-14 CXX=clang++-14 cargo test --verbose

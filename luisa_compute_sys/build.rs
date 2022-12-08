@@ -96,8 +96,16 @@ fn cmake_build() -> PathBuf {
     config.define("LUISA_COMPUTE_RUST", "ON");
     config.define("CMAKE_BUILD_TYPE", "Release");
     // set compiler based on env
-    set_from_env!("CMAKE_C_COMPILER");
-    set_from_env!("CMAKE_CXX_COMPILER");
+    println!("cargo:rerun-if-env-changed=CC");
+    if let Ok(v) = env::var("CC") {
+        println!("CC={}", v);
+        config.define("CMAKE_C_COMPILER", v);
+    }
+    println!("cargo:rerun-if-env-changed=CXX");
+    if let Ok(v) = env::var("CXX") {
+        println!("CXX={}", v);
+        config.define("CMAKE_CXX_COMPILER", v);
+    }
     config.profile("Release");
     config.generator("Ninja");
     config.no_build_target(true);
@@ -143,18 +151,18 @@ fn copy_dlls(out_dir: &PathBuf) {
 fn main() {
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE__cpp");
     // if cfg!(feature = "_cpp") {
-        let out_dir = cmake_build();
-        generate_bindings();
-        // dbg!(&out_dir);
-        println!(
-            "cargo:rustc-link-search=native={}/build/bin/",
-            out_dir.to_str().unwrap()
-        );
-        println!(
-            "cargo:rustc-link-search=native={}/build/lib/",
-            out_dir.to_str().unwrap()
-        );
-        println!("cargo:rustc-link-lib=dylib=luisa-compute-api");
-        copy_dlls(&out_dir);
+    let out_dir = cmake_build();
+    generate_bindings();
+    // dbg!(&out_dir);
+    println!(
+        "cargo:rustc-link-search=native={}/build/bin/",
+        out_dir.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-link-search=native={}/build/lib/",
+        out_dir.to_str().unwrap()
+    );
+    println!("cargo:rustc-link-lib=dylib=luisa-compute-api");
+    copy_dlls(&out_dir);
     // }
 }

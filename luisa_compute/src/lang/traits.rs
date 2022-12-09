@@ -82,7 +82,7 @@ pub trait CommonVarOp: VarTrait {
     }
 }
 pub trait VarCmp: VarTrait {
-    fn lt<A: Into<Self>>(&self, other: A) -> Expr<bool> {
+    fn cmplt<A: Into<Self>>(&self, other: A) -> Expr<bool> {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
@@ -90,7 +90,7 @@ pub trait VarCmp: VarTrait {
             Expr::<bool>::from_node(ret)
         })
     }
-    fn le<A: Into<Self>>(&self, other: A) -> Expr<bool> {
+    fn cmple<A: Into<Self>>(&self, other: A) -> Expr<bool> {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
@@ -98,7 +98,7 @@ pub trait VarCmp: VarTrait {
             Expr::<bool>::from_node(ret)
         })
     }
-    fn gt<A: Into<Self>>(&self, other: A) -> Expr<bool> {
+    fn cmpgt<A: Into<Self>>(&self, other: A) -> Expr<bool> {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
@@ -106,7 +106,7 @@ pub trait VarCmp: VarTrait {
             Expr::<bool>::from_node(ret)
         })
     }
-    fn ge<A: Into<Self>>(&self, other: A) -> Expr<bool> {
+    fn cmpge<A: Into<Self>>(&self, other: A) -> Expr<bool> {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
@@ -114,7 +114,7 @@ pub trait VarCmp: VarTrait {
             Expr::<bool>::from_node(ret)
         })
     }
-    fn eq<A: Into<Self>>(&self, other: A) -> Expr<bool> {
+    fn cmpeq<A: Into<Self>>(&self, other: A) -> Expr<bool> {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
@@ -122,7 +122,7 @@ pub trait VarCmp: VarTrait {
             Expr::<bool>::from_node(ret)
         })
     }
-    fn ne<A: Into<Self>>(&self, other: A) -> Expr<bool> {
+    fn cmpne<A: Into<Self>>(&self, other: A) -> Expr<bool> {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
@@ -361,7 +361,7 @@ pub trait FloatVarTrait:
         let any = self as &dyn Any;
         if let Some(a) = any.downcast_ref::<Expr<f32>>() {
             let u: Expr<u32> = a.bitcast();
-            (&u & 0x7f800000u32).eq(0x7f800000u32) & (&u & 0x007fffffu32).ne(0u32)
+            (&u & 0x7f800000u32).cmpeq(0x7f800000u32) & (&u & 0x007fffffu32).cmpne(0u32)
         } else {
             panic!("expect Expr<f32>")
         }
@@ -623,5 +623,10 @@ impl IntVarTrait for Expr<i64> {
 impl IntVarTrait for Expr<u32> {
     fn from_i64(x: i64) -> Self {
         const_(x as u32)
+    }
+}
+impl FloatVarTrait for Expr<f32> {
+    fn from_f64(x: f64) -> Self {
+        const_(x as f32)
     }
 }

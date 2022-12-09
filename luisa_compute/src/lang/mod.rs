@@ -356,6 +356,7 @@ pub struct VolumeVar<T: Value> {
     handle: Option<Arc<TextureHandle>>,
     _marker: std::marker::PhantomData<T>,
 }
+
 pub type Tex2DVar<T> = ImageVar<T>;
 pub type Tex3DVar<T> = VolumeVar<T>;
 

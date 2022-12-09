@@ -47,7 +47,7 @@ impl Compiler {
         let fields: Vec<_> = struct_.fields.iter().map(|f| f).collect();
         let field_types: Vec<_> = fields.iter().map(|f| &f.ty).collect();
         let field_names: Vec<_> = fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
-        let proxy_name = syn::Ident::new(&format!("__{}Proxy", name), name.span());
+        let proxy_name = syn::Ident::new(&format!("{}Proxy", name), name.span());
         let proxy_fields: Vec<_> = fields
             .iter()
             .map(|f| {

@@ -5,7 +5,6 @@ use std::{
     process::{Command, Stdio},
 };
 
-
 fn canonicalize_and_fix_windows_path(path: PathBuf) -> std::io::Result<PathBuf> {
     let path = canonicalize(path)?;
     let mut s: String = path.to_str().unwrap().into();
@@ -85,4 +84,11 @@ pub(super) fn compile(source: String) -> std::io::Result<PathBuf> {
     }
 
     Ok(lib_path)
+}
+#[derive(Clone, Copy, Debug)]
+struct KernelFnArgs {}
+type KernelFn = unsafe extern "C" fn(*const KernelFnArgs);
+pub(super) struct ShaderImpl {
+    lib: libloading::Library,
+    entry: libloading::Symbol<'static, KernelFn>,
 }

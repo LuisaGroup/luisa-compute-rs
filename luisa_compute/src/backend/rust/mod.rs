@@ -2,9 +2,13 @@
 
 use std::sync::Arc;
 
+use base64ct::Encoding;
+use sha2::{Sha256, Digest};
+
 use crate::prelude::{Device, DeviceHandle};
 
 use super::Backend;
+mod shader;
 mod resource;
 pub struct RustBackend {}
 impl Backend for RustBackend {
@@ -175,4 +179,10 @@ impl RustBackend {
             }),
         })
     }
+}
+fn sha256(s: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(s);
+    let hash = hasher.finalize();
+    format!("A{}", base64ct::Base64UrlUnpadded::encode_string(&hash))
 }

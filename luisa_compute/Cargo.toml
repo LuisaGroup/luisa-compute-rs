@@ -1,23 +1,27 @@
 [package]
+edition = "2021"
 name = "luisa_compute"
 version = "0.1.0"
-edition = "2021"
 
 [dependencies]
-luisa_compute_sys = { path = "../luisa_compute_sys", optional = true }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+base64ct = {version = "1.5.0", features = ["alloc"]}
 libc = "0.2"
-luisa_compute_ir = { path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_ir" }
-luisa_compute_api_types = { path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_api_types" }
-luisa_compute_derive = { path = "../luisa_compute_derive" }
-luisa_compute_derive_impl = { path = "../luisa_compute_derive_impl" }
+libloading = "0.7"
+log = "0.4.17"
+luisa_compute_api_types = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_api_types"}
+luisa_compute_derive = {path = "../luisa_compute_derive"}
+luisa_compute_derive_impl = {path = "../luisa_compute_derive_impl"}
+luisa_compute_ir = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_ir"}
+luisa_compute_sys = {path = "../luisa_compute_sys", optional = true}
+serde = {version = "1.0", features = ["derive"]}
+serde_json = "1.0"
+sha2 = "0.10"
 
 [features]
-default = []
 _cpp = ["luisa_compute_sys"]
 cuda = ["_cpp"]
+default = []
 dx = ["_cpp"]
+llvm = ["_cpp"]
 metal = ["_cpp"]
 vulkan = ["_cpp"]
-llvm = ["_cpp"]

@@ -63,6 +63,7 @@ pub trait Proxy<T>: Copy + Aggregate {
 pub struct Expr<T: Value> {
     pub(crate) proxy: T::Proxy,
 }
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Var<T: Value> {
     pub(crate) proxy: T::Proxy,
@@ -101,6 +102,9 @@ impl<T: Value> Expr<T> {
     }
     pub fn from_proxy(proxy: T::Proxy) -> Self {
         Self { proxy }
+    }
+    pub fn proxy(&self) -> T::Proxy {
+        self.proxy
     }
     pub(crate) fn node(&self) -> NodeRef {
         self.proxy.node()

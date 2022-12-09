@@ -361,7 +361,7 @@ pub trait FloatVarTrait:
         let any = self as &dyn Any;
         if let Some(a) = any.downcast_ref::<Expr<f32>>() {
             let u: Expr<u32> = a.bitcast();
-            (&u & 0x7f800000u32).cmpeq(0x7f800000u32) & (&u & 0x007fffffu32).cmpne(0u32)
+            (u & 0x7f800000u32).cmpeq(0x7f800000u32) & (u & 0x007fffffu32).cmpne(0u32)
         } else {
             panic!("expect Expr<f32>")
         }
@@ -415,25 +415,20 @@ pub trait FloatVarTrait:
     }
 }
 macro_rules! impl_binop {
-    ($t:ty, $tr_assign:ident, $method_assign:ident, $tr:ident, $method:ident) => {
-        impl $tr_assign for Expr<$t> {
-            fn $method_assign(&mut self, rhs: Self) {
-                *self = self.clone().$method(rhs);
+    ($t:ty, $proxy:ty, $tr_assign:ident, $method_assign:ident, $tr:ident, $method:ident) => {
+        impl $tr_assign<Expr<$t>> for $proxy {
+            fn $method_assign(&mut self, rhs: Expr<$t>) {
+                *self = self.clone().$method(rhs).proxy();
             }
         }
-        impl $tr_assign<&Expr<$t>> for Expr<$t> {
-            fn $method_assign(&mut self, rhs: &Self) {
-                *self = self.clone().$method(rhs);
-            }
-        }
-        impl $tr_assign<$t> for Expr<$t> {
+        impl $tr_assign<$t> for $proxy {
             fn $method_assign(&mut self, rhs: $t) {
-                *self = self.clone().$method(rhs);
+                *self = self.clone().$method(rhs).proxy();
             }
         }
-        impl $tr for &Expr<$t> {
+        impl $tr<Expr<$t>> for $proxy {
             type Output = Expr<$t>;
-            fn $method(self, rhs: &Expr<$t>) -> Self::Output {
+            fn $method(self, rhs: Expr<$t>) -> Self::Output {
                 current_scope(|s| {
                     let lhs = self.node();
                     let rhs = rhs.node();
@@ -442,104 +437,63 @@ macro_rules! impl_binop {
                 })
             }
         }
-        impl $tr<$t> for &Expr<$t> {
+
+        impl $tr<$t> for $proxy {
             type Output = Expr<$t>;
             fn $method(self, rhs: $t) -> Self::Output {
-                $tr::$method(self, &const_(rhs))
+                $tr::$method(self, const_(rhs))
             }
         }
-        impl $tr<$t> for Expr<$t> {
+        impl $tr<$proxy> for $t {
             type Output = Expr<$t>;
-            fn $method(self, rhs: $t) -> Self::Output {
-                $tr::$method(&self, &const_(rhs))
-            }
-        }
-        impl $tr<&Expr<$t>> for $t {
-            type Output = Expr<$t>;
-            fn $method(self, rhs: &Expr<$t>) -> Self::Output {
-                $tr::$method(&const_(self), rhs)
-            }
-        }
-        impl $tr<&Expr<$t>> for Expr<$t> {
-            type Output = Expr<$t>;
-            fn $method(self, rhs: &Expr<$t>) -> Self::Output {
-                $tr::$method(&self, rhs)
-            }
-        }
-        impl $tr<Expr<$t>> for &Expr<$t> {
-            type Output = Expr<$t>;
-            fn $method(self, rhs: Expr<$t>) -> Self::Output {
-                $tr::$method(self, &rhs)
-            }
-        }
-        impl $tr<Expr<$t>> for $t {
-            type Output = Expr<$t>;
-            fn $method(self, rhs: Expr<$t>) -> Self::Output {
-                $tr::$method(&const_(self), &rhs)
-            }
-        }
-        impl $tr for Expr<$t> {
-            type Output = Expr<$t>;
-            fn $method(self, rhs: Expr<$t>) -> Self::Output {
-                $tr::$method(&self, &rhs)
+            fn $method(self, rhs: $proxy) -> Self::Output {
+                $tr::$method(const_(self), Expr::from_proxy(rhs))
             }
         }
     };
 }
 macro_rules! impl_common_binop {
-    ($t:ty) => {
-        impl_binop!($t, AddAssign, add_assign, Add, add);
-        impl_binop!($t, SubAssign, sub_assign, Sub, sub);
-        impl_binop!($t, MulAssign, mul_assign, Mul, mul);
-        impl_binop!($t, DivAssign, div_assign, Div, div);
-        impl_binop!($t, RemAssign, rem_assign, Rem, rem);
+    ($t:ty,$proxy:ty) => {
+        impl_binop!($t, $proxy, AddAssign, add_assign, Add, add);
+        impl_binop!($t, $proxy, SubAssign, sub_assign, Sub, sub);
+        impl_binop!($t, $proxy, MulAssign, mul_assign, Mul, mul);
+        impl_binop!($t, $proxy, DivAssign, div_assign, Div, div);
+        impl_binop!($t, $proxy, RemAssign, rem_assign, Rem, rem);
     };
 }
 macro_rules! impl_int_binop {
-    ($t:ty) => {
-        impl_binop!($t, ShlAssign, shl_assign, Shl, shl);
-        impl_binop!($t, ShrAssign, shr_assign, Shr, shr);
-        impl_binop!($t, BitAndAssign, bitand_assign, BitAnd, bitand);
-        impl_binop!($t, BitOrAssign, bitor_assign, BitOr, bitor);
-        impl_binop!($t, BitXorAssign, bitxor_assign, BitXor, bitxor);
+    ($t:ty,$proxy:ty) => {
+        impl_binop!($t, $proxy, ShlAssign, shl_assign, Shl, shl);
+        impl_binop!($t, $proxy, ShrAssign, shr_assign, Shr, shr);
+        impl_binop!($t, $proxy, BitAndAssign, bitand_assign, BitAnd, bitand);
+        impl_binop!($t, $proxy, BitOrAssign, bitor_assign, BitOr, bitor);
+        impl_binop!($t, $proxy, BitXorAssign, bitxor_assign, BitXor, bitxor);
     };
 }
 
 macro_rules! impl_not {
-    ($t:ty) => {
-        impl Not for Expr<$t> {
+    ($t:ty,$proxy:ty) => {
+        impl Not for $proxy {
             type Output = Expr<$t>;
             fn not(self) -> Self::Output {
-                &self ^ &const_(!0)
-            }
-        }
-        impl Not for &Expr<$t> {
-            type Output = Expr<$t>;
-            fn not(self) -> Self::Output {
-                self ^ &const_(!0)
+                self ^ const_(!0)
             }
         }
     };
 }
 macro_rules! impl_neg {
-    ($t:ty) => {
-        impl Neg for Expr<$t> {
+    ($t:ty,$proxy:ty) => {
+        impl Neg for $proxy {
             type Output = Expr<$t>;
             fn neg(self) -> Self::Output {
-                const_(0) - &self
-            }
-        }
-        impl Neg for &Expr<$t> {
-            type Output = Expr<$t>;
-            fn neg(self) -> Self::Output {
-                const_(0) - self
+                const_(0 as $t) - Expr::from_proxy(self)
             }
         }
     };
 }
 macro_rules! impl_fneg {
-    ($t:ty) => {
-        impl Neg for Expr<$t> {
+    ($t:ty,$proxy:ty) => {
+        impl Neg for $proxy {
             type Output = Expr<$t>;
             fn neg(self) -> Self::Output {
                 current_scope(|s| {
@@ -550,39 +504,60 @@ macro_rules! impl_fneg {
         }
     };
 }
-impl Not for Expr<bool> {
+impl Not for PrimProxy<bool> {
     type Output = Expr<bool>;
     fn not(self) -> Self::Output {
-        &self ^ &const_(true)
+        self ^ const_(true)
     }
 }
-impl_common_binop!(f32);
-impl_common_binop!(f64);
-impl_common_binop!(i32);
-impl_common_binop!(i64);
-impl_common_binop!(u32);
-impl_common_binop!(u64);
+impl_common_binop!(f32, PrimProxy<f32>);
+impl_common_binop!(f64, PrimProxy<f64>);
+impl_common_binop!(i32, PrimProxy<i32>);
+impl_common_binop!(i64, PrimProxy<i64>);
+impl_common_binop!(u32, PrimProxy<u32>);
+impl_common_binop!(u64, PrimProxy<u64>);
 
-impl_binop!(bool, BitAndAssign, bitand_assign, BitAnd, bitand);
-impl_binop!(bool, BitOrAssign, bitor_assign, BitOr, bitor);
-impl_binop!(bool, BitXorAssign, bitxor_assign, BitXor, bitxor);
-impl_int_binop!(i32);
-impl_int_binop!(i64);
-impl_int_binop!(u32);
-impl_int_binop!(u64);
+impl_binop!(
+    bool,
+    PrimProxy<bool>,
+    BitAndAssign,
+    bitand_assign,
+    BitAnd,
+    bitand
+);
+impl_binop!(
+    bool,
+    PrimProxy<bool>,
+    BitOrAssign,
+    bitor_assign,
+    BitOr,
+    bitor
+);
+impl_binop!(
+    bool,
+    PrimProxy<bool>,
+    BitXorAssign,
+    bitxor_assign,
+    BitXor,
+    bitxor
+);
+impl_int_binop!(i32, PrimProxy<i32>);
+impl_int_binop!(i64, PrimProxy<i64>);
+impl_int_binop!(u32, PrimProxy<u32>);
+impl_int_binop!(u64, PrimProxy<u64>);
 
-impl_not!(i32);
-impl_not!(i64);
-impl_not!(u32);
-impl_not!(u64);
+impl_not!(i32, PrimProxy<i32>);
+impl_not!(i64, PrimProxy<i64>);
+impl_not!(u32, PrimProxy<u32>);
+impl_not!(u64, PrimProxy<u64>);
 
-impl_neg!(i32);
-impl_neg!(i64);
-impl_neg!(u32);
-impl_neg!(u64);
+impl_neg!(i32, PrimProxy<i32>);
+impl_neg!(i64, PrimProxy<i64>);
+impl_neg!(u32, PrimProxy<u32>);
+impl_neg!(u64, PrimProxy<u64>);
 
-impl_fneg!(f32);
-impl_fneg!(f64);
+impl_fneg!(f32, PrimProxy<f32>);
+impl_fneg!(f64, PrimProxy<f64>);
 impl VarCmp for Expr<f32> {}
 impl VarCmp for Expr<f64> {}
 impl VarCmp for Expr<i32> {}
@@ -630,3 +605,91 @@ impl FloatVarTrait for Expr<f32> {
         const_(x as f32)
     }
 }
+macro_rules! expr_impl_ops_left {
+    ($tr:ident, $m:ident, $scalar:ty) => {
+        impl<T: Value> std::ops::$tr<Expr<T>> for $scalar
+        where
+            $scalar: std::ops::$tr<T::Proxy>,
+        {
+            type Output = <$scalar as std::ops::$tr<T::Proxy>>::Output;
+            fn $m(self, rhs: Expr<T>) -> Self::Output {
+                self.$m(rhs.proxy())
+            }
+        }
+    };
+    ($tr:ident, $m:ident, $scalar:ty, $($types:ty), *) => {
+        expr_impl_ops_left!($tr, $m, $scalar);
+        $(
+            expr_impl_ops_left!($tr, $m, $types);
+        )*
+    };
+}
+macro_rules! expr_impl_ops {
+    ($tr:ident, $m:ident) => {
+        impl<T: Value, R> std::ops::$tr<R> for Expr<T>
+        where
+            T::Proxy: std::ops::$tr<R>,
+        {
+            type Output = <T::Proxy as std::ops::$tr<R>>::Output;
+            fn $m(self, rhs: R) -> Self::Output {
+                self.proxy.$m(rhs)
+            }
+        }
+
+        expr_impl_ops_left!($tr, $m, f32, f64, i32, i64, u32, u64, bool);
+        expr_impl_ops_left!($tr, $m, Vec2, Vec3, Vec4);
+        expr_impl_ops_left!($tr, $m, IVec2, IVec3, IVec4);
+        expr_impl_ops_left!($tr, $m, UVec2, UVec3, UVec4);
+        expr_impl_ops_left!($tr, $m, BVec2, BVec3, BVec4);
+    };
+}
+macro_rules! expr_impl_ops_assign {
+    ($tr:ident, $m:ident) => {
+        impl<T: Value> std::ops::$tr for Expr<T>
+        where
+            T::Proxy: std::ops::$tr<Expr<T>>,
+        {
+            fn $m(&mut self, rhs: Self) {
+                self.proxy.$m(rhs);
+            }
+        }
+    };
+}
+impl<T: Value> std::ops::Neg for Expr<T>
+where
+    T::Proxy: std::ops::Neg,
+{
+    type Output = <T::Proxy as std::ops::Neg>::Output;
+    fn neg(self) -> Self::Output {
+        self.proxy.neg()
+    }
+}
+impl<T: Value> std::ops::Not for Expr<T>
+where
+    T::Proxy: std::ops::Not,
+{
+    type Output = <T::Proxy as std::ops::Not>::Output;
+    fn not(self) -> Self::Output {
+        self.proxy.not()
+    }
+}
+expr_impl_ops!(Add, add);
+expr_impl_ops!(Sub, sub);
+expr_impl_ops!(Mul, mul);
+expr_impl_ops!(Div, div);
+expr_impl_ops!(Rem, rem);
+expr_impl_ops!(BitAnd, bitand);
+expr_impl_ops!(BitOr, bitor);
+expr_impl_ops!(BitXor, bitxor);
+expr_impl_ops!(Shl, shl);
+expr_impl_ops!(Shr, shr);
+expr_impl_ops_assign!(AddAssign, add_assign);
+expr_impl_ops_assign!(SubAssign, sub_assign);
+expr_impl_ops_assign!(MulAssign, mul_assign);
+expr_impl_ops_assign!(DivAssign, div_assign);
+expr_impl_ops_assign!(RemAssign, rem_assign);
+expr_impl_ops_assign!(BitAndAssign, bitand_assign);
+expr_impl_ops_assign!(BitOrAssign, bitor_assign);
+expr_impl_ops_assign!(BitXorAssign, bitxor_assign);
+expr_impl_ops_assign!(ShlAssign, shl_assign);
+expr_impl_ops_assign!(ShrAssign, shr_assign);

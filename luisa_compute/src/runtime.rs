@@ -117,7 +117,6 @@ impl Device {
             }),
         })
     }
-    
 }
 pub(crate) enum StreamHandle {
     Default(Arc<DeviceHandle>, api::Stream),
@@ -210,7 +209,7 @@ pub struct Command<'a> {
 }
 pub struct Kernel {
     pub(crate) device: Device,
-    pub(crate) shader:api::Shader,// strange naming, huh?
+    pub(crate) shader: api::Shader, // strange naming, huh?
 }
 pub struct ArgEncoder {
     pub(crate) args: Vec<api::Argument>,
@@ -241,14 +240,29 @@ impl ArgEncoder {
     }
 }
 impl Kernel {
-    pub unsafe fn dispatch_async<'a>(&'a self, args: ArgEncoder) -> Command<'a> {
-        todo!()
-        // Command { inner: api::Command::ShaderDispatch(api::ShaderDispatchCommand{
-        //     s
-        // }), marker: std::marker::PhantomData, resource_tracker: vec![] }
+    pub unsafe fn dispatch_async<'a>(
+        &'a self,
+        args: &ArgEncoder,
+        dispatch_size: [u32; 3],
+    ) -> Command<'a> {
+        Command {
+            inner: api::Command::ShaderDispatch(api::ShaderDispatchCommand {
+                shader: self.shader,
+                args: args.args.as_ptr(),
+                args_count: args.args.len(),
+                dispatch_size,
+            }),
+            marker: std::marker::PhantomData,
+            resource_tracker: vec![],
+        }
     }
-    pub fn dispatch(&self, args: ArgEncoder) -> backend::Result<()> {
-        unsafe { submit_default_stream_and_sync(&self.device, vec![self.dispatch_async(args)]) }
+    pub fn dispatch(&self, args: &ArgEncoder, dispatch_size: [u32; 3]) -> backend::Result<()> {
+        unsafe {
+            submit_default_stream_and_sync(
+                &self.device,
+                vec![self.dispatch_async(args, dispatch_size)],
+            )
+        }
     }
 }
 pub type Shader = Kernel;

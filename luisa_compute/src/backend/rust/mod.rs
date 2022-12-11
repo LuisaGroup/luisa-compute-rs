@@ -3,14 +3,21 @@
 use std::sync::Arc;
 
 use base64ct::Encoding;
-use sha2::{Sha256, Digest};
+use rayon::ThreadPool;
+use sha2::{Digest, Sha256};
 
 use crate::prelude::{Device, DeviceHandle};
 
+use self::stream::StreamImpl;
+
 use super::Backend;
-mod shader;
+mod codegen;
 mod resource;
-pub struct RustBackend {}
+mod shader;
+mod stream;
+pub struct RustBackend {
+    shared_pool: Arc<rayon::ThreadPool>,
+}
 impl Backend for RustBackend {
     fn create_buffer(&self, size_bytes: usize) -> super::Result<luisa_compute_api_types::Buffer> {
         todo!()
@@ -113,19 +120,27 @@ impl Backend for RustBackend {
     }
 
     fn create_stream(&self) -> super::Result<luisa_compute_api_types::Stream> {
-        todo!()
+        let stream = Box::into_raw(Box::new(StreamImpl::new(self.shared_pool.clone())));
+        Ok(luisa_compute_api_types::Stream(stream as u64))
     }
 
     fn destroy_stream(&self, stream: luisa_compute_api_types::Stream) {
-        todo!()
+        unsafe {
+            let stream = stream.0 as *mut StreamImpl;
+            drop(Box::from_raw(stream));
+        }
     }
 
     fn synchronize_stream(&self, stream: luisa_compute_api_types::Stream) -> super::Result<()> {
-        todo!()
+        unsafe {
+            let stream = stream.0 as *mut StreamImpl;
+            (*stream).synchronize();
+            Ok(())
+        }
     }
 
     fn stream_native_handle(&self, stream: luisa_compute_api_types::Stream) -> *mut libc::c_void {
-        todo!()
+        stream.0 as *mut libc::c_void
     }
 
     fn dispatch(
@@ -170,7 +185,9 @@ impl Backend for RustBackend {
 }
 impl RustBackend {
     pub fn create_device() -> super::Result<Device> {
-        let backend = Arc::new(RustBackend {});
+        let backend = Arc::new(RustBackend {
+            shared_pool: Arc::new(rayon::ThreadPoolBuilder::new().build().unwrap()),
+        });
         let default_stream = backend.create_stream()?;
         Ok(Device {
             inner: Arc::new(DeviceHandle {

@@ -18,6 +18,8 @@ pub use luisa_compute_ir::{
     Gc, TypeOf,
 };
 use std::cell::RefCell;
+
+use self::math::UVec3;
 pub mod math;
 pub mod math_impl;
 pub mod traits;
@@ -219,6 +221,46 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
 pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
     current_scope(|b| b.call(Func::Struct, nodes, <T as TypeOf>::type_()))
 }
+fn unpack_uvec3(node: NodeRef) -> Expr<UVec3> {
+    let x = Expr::<u32>::from_node(__extract::<u32>(node, 0));
+    let y = Expr::<u32>::from_node(__extract::<u32>(node, 1));
+    let z = Expr::<u32>::from_node(__extract::<u32>(node, 2));
+    crate::struct_!(UVec3 { x, y, z })
+}
+pub fn thread_id() -> Expr<UVec3> {
+    use luisa_compute_ir::{context, ir::*};
+    let uvec3_ty = context::register_type(Type::Vector(VectorType {
+        element: VectorElementType::Scalar(Primitive::Uint32),
+        length: 3,
+    }));
+    unpack_uvec3(current_scope(|b| b.call(Func::ThreadId, &[], uvec3_ty)))
+}
+
+pub fn block_id() -> Expr<UVec3> {
+    use luisa_compute_ir::{context, ir::*};
+    let uvec3_ty = context::register_type(Type::Vector(VectorType {
+        element: VectorElementType::Scalar(Primitive::Uint32),
+        length: 3,
+    }));
+    unpack_uvec3(current_scope(|b| b.call(Func::BlockId, &[], uvec3_ty)))
+}
+pub fn dispatch_id() -> Expr<UVec3> {
+    use luisa_compute_ir::{context, ir::*};
+    let uvec3_ty = context::register_type(Type::Vector(VectorType {
+        element: VectorElementType::Scalar(Primitive::Uint32),
+        length: 3,
+    }));
+    unpack_uvec3(current_scope(|b| b.call(Func::DispatchId, &[], uvec3_ty)))
+}
+pub fn dispatch_size() -> Expr<UVec3> {
+    use luisa_compute_ir::{context, ir::*};
+    let uvec3_ty = context::register_type(Type::Vector(VectorType {
+        element: VectorElementType::Scalar(Primitive::Uint32),
+        length: 3,
+    }));
+    unpack_uvec3(current_scope(|b| b.call(Func::DispatchSize, &[], uvec3_ty)))
+}
+
 pub fn const_<T: Value + Copy + 'static>(value: T) -> Expr<T> {
     let node = current_scope(|s| -> NodeRef {
         let any = &value as &dyn Any;
@@ -380,7 +422,7 @@ pub struct KernelBuilder {
     args: Vec<NodeRef>,
 }
 impl KernelBuilder {
-    pub fn new(device: crate::runtime::Device) -> Self {
+    fn new(device: crate::runtime::Device) -> Self {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(!r.lock, "Cannot record multiple kernels at the same time");
@@ -416,11 +458,19 @@ impl KernelBuilder {
         self.args.push(node);
         BindlessArrayVar { node }
     }
-    pub fn build(
-        self,
-        body: impl FnOnce(),
+    pub(crate) fn build(
+        device: crate::runtime::Device,
+        f: impl FnOnce(&mut Self),
     ) -> Result<crate::runtime::Kernel, crate::backend::BackendError> {
-        body();
+        let mut builder = Self::new(device);
+
+        builder.build_(f)
+    }
+    fn build_(
+        &mut self,
+        body: impl FnOnce(&mut Self),
+    ) -> Result<crate::runtime::Kernel, crate::backend::BackendError> {
+        body(self);
         RECORDER.with(
             |r| -> Result<crate::runtime::Kernel, crate::backend::BackendError> {
                 let mut r = r.borrow_mut();

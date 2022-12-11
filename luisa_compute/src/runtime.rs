@@ -1,6 +1,7 @@
-use crate::backend::Backend;
+use crate::backend::{Backend, BackendError};
 use crate::*;
 use crate::{lang::Value, resource::*};
+use lang::KernelBuilder;
 pub use luisa_compute_api_types as api;
 use std::any::Any;
 use std::ops::Deref;
@@ -117,6 +118,9 @@ impl Device {
             }),
         })
     }
+    pub fn create_kernel(&self, f:impl FnOnce(&mut KernelBuilder))->Result<Kernel, BackendError>{
+        KernelBuilder::build(self.clone(), f)
+    }
 }
 pub(crate) enum StreamHandle {
     Default(Arc<DeviceHandle>, api::Stream),
@@ -215,6 +219,9 @@ pub struct ArgEncoder {
     pub(crate) args: Vec<api::Argument>,
 }
 impl ArgEncoder {
+    pub fn new() -> ArgEncoder {
+        ArgEncoder { args: Vec::new() }
+    }
     pub fn buffer<T: Value>(&mut self, buffer: &Buffer<T>) {
         self.args.push(api::Argument::Buffer(api::BufferArgument {
             buffer: buffer.handle.handle,
@@ -239,6 +246,7 @@ impl ArgEncoder {
             .push(api::Argument::BindlessArray(array.handle.handle));
     }
 }
+
 impl Kernel {
     pub unsafe fn dispatch_async<'a>(
         &'a self,

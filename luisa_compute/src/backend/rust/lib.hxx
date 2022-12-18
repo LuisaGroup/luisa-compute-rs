@@ -8,3 +8,10 @@
         std::fprintf(stderr, "assertion failed at %s:%d: " msg, __FILE__, __LINE__, ##__VA_ARGS__);\
         std::abort();\
     }
+#include <cmath>
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+namespace math {
+    using namespace std;
+}

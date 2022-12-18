@@ -150,19 +150,19 @@ fn copy_dlls(out_dir: &PathBuf) {
 }
 fn main() {
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE__cpp");
-    // if cfg!(feature = "_cpp") {
-    let out_dir = cmake_build();
-    generate_bindings();
-    // dbg!(&out_dir);
-    println!(
-        "cargo:rustc-link-search=native={}/build/bin/",
-        out_dir.to_str().unwrap()
-    );
-    println!(
-        "cargo:rustc-link-search=native={}/build/lib/",
-        out_dir.to_str().unwrap()
-    );
-    println!("cargo:rustc-link-lib=dylib=luisa-compute-api");
-    copy_dlls(&out_dir);
-    // }
+    if cfg!(feature = "_cpp") {
+        let out_dir = cmake_build();
+        generate_bindings();
+        // dbg!(&out_dir);
+        println!(
+            "cargo:rustc-link-search=native={}/build/bin/",
+            out_dir.to_str().unwrap()
+        );
+        println!(
+            "cargo:rustc-link-search=native={}/build/lib/",
+            out_dir.to_str().unwrap()
+        );
+        println!("cargo:rustc-link-lib=dylib=luisa-compute-api");
+        copy_dlls(&out_dir);
+    }
 }

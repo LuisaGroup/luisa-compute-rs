@@ -1,5 +1,5 @@
 use ir::Type;
-use luisa_compute_ir::ir::{self, NodeRef};
+use luisa_compute_ir::ir::{self, NodeRef, SwitchCase};
 use luisa_compute_ir::Gc;
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -136,109 +136,109 @@ impl CodeGen {
                     ir::Func::Bitcast => todo!(),
                     ir::Func::Add => writeln!(
                         self.body,
-                        "{} {} = {} + {};",
+                        "const {} {} = {} + {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Sub => writeln!(
                         self.body,
-                        "{} {} = {} - {};",
+                        "const {} {} = {} - {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Mul => writeln!(
                         self.body,
-                        "{} {} = {} * {};",
+                        "const {} {} = {} * {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Div => writeln!(
                         self.body,
-                        "{} {} = {} / {};",
+                        "const {} {} = {} / {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Rem => writeln!(
                         self.body,
-                        "{} {} = rem({}, {});",
+                        "const {} {} = rem({}, {});",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::BitAnd => writeln!(
                         self.body,
-                        "{} {} = {} & {};",
+                        "const {} {} = {} & {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::BitOr => writeln!(
                         self.body,
-                        "{} {} = {} | {};",
+                        "const {} {} = {} | {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::BitXor => writeln!(
                         self.body,
-                        "{} {} = {} ^ {};",
+                        "const {} {} = {} ^ {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Shl => writeln!(
                         self.body,
-                        "{} {} = {} << {};",
+                        "const {} {} = {} << {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Shr => writeln!(
                         self.body,
-                        "{} {} = {} >> {};",
+                        "const {} {} = {} >> {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::RotRight => writeln!(
                         self.body,
-                        "{} {} = rot_right({}, {});",
+                        "const {} {} = rot_right({}, {});",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::RotLeft => writeln!(
                         self.body,
-                        "{} {} = rot_left({}, {});",
+                        "const {} {} = rot_left({}, {});",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Eq => writeln!(
                         self.body,
-                        "{} {} = {} == {};",
+                        "const {} {} = {} == {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Ne => writeln!(
                         self.body,
-                        "{} {} = {} != {};",
+                        "const {} {} = {} != {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Lt => writeln!(
                         self.body,
-                        "{} {} = {} < {};",
+                        "const {} {} = {} < {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Le => writeln!(
                         self.body,
-                        "{} {} = {} <= {};",
+                        "const {} {} = {} <= {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Gt => writeln!(
                         self.body,
-                        "{} {} = {} > {};",
+                        "const {} {} = {} > {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Ge => writeln!(
                         self.body,
-                        "{} {} = {} >= {};",
+                        "const {} {} = {} >= {};",
                         node_ty_s, var, args_v[0], args_v[1]
                     )
                     .unwrap(),
@@ -533,13 +533,8 @@ impl CodeGen {
                     }
                     ir::Func::InsertElement => {
                         let i = args.as_ref()[2].get_i32();
-                        writeln!(
-                            self.body,
-                            "{}.f{};",
-                            args_v[0], i
-                        )
-                        .unwrap();
-                    },
+                        writeln!(self.body, "{}.f{};", args_v[0], i).unwrap();
+                    }
                     ir::Func::GetElementPtr => {
                         let i = args.as_ref()[1].get_i32();
                         writeln!(self.body, "{}* {} = &{}.f{};", node_ty_s, var, args_v[0], i)
@@ -556,31 +551,68 @@ impl CodeGen {
             }
             ir::Instruction::Phi(_) => todo!(),
             ir::Instruction::Return(_) => todo!(),
-            ir::Instruction::Loop { body, cond } => todo!(),
+            ir::Instruction::Loop { body, cond } => {
+                writeln!(self.body, "while (true) {{").unwrap();
+                self.gen_block(*body);
+                let cond = self.gen_node(*cond);
+                writeln!(self.body, "if (!{}) break;", cond).unwrap();
+                writeln!(self.body, "}}").unwrap();
+            }
             ir::Instruction::GenericLoop {
                 prepare,
                 cond,
                 body,
                 update,
-            } => todo!(),
-            ir::Instruction::Break => todo!(),
-            ir::Instruction::Continue => todo!(),
+            } => {
+                self.gen_block(*prepare);
+                let cond = self.gen_node(*cond);
+                writeln!(self.body, "if(!{}) break;", cond).unwrap();
+                self.gen_block(*body);
+                self.gen_block(*update);
+            }
+            ir::Instruction::Break => writeln!(self.body, "break;").unwrap(),
+            ir::Instruction::Continue => writeln!(self.body, "continue;").unwrap(),
             ir::Instruction::If {
                 cond,
                 true_branch,
                 false_branch,
-            } => todo!(),
+            } => {
+                let cond = self.gen_node(*cond);
+                writeln!(self.body, "if ({}) {{", cond).unwrap();
+                self.gen_block(*true_branch);
+                writeln!(self.body, "}} else {{").unwrap();
+                self.gen_block(*false_branch);
+                writeln!(self.body, "}}").unwrap();
+            }
             ir::Instruction::Switch {
                 value,
                 default,
                 cases,
-            } => todo!(),
+            } => {
+                let value = self.gen_node(*value);
+                writeln!(self.body, "switch ({}) {{", value).unwrap();
+                for SwitchCase { value, block } in cases.as_ref() {
+                    let value = self.gen_node(*value);
+                    writeln!(self.body, "case {}: {{", value).unwrap();
+                    self.gen_block(*block);
+                    writeln!(self.body, "break;}}").unwrap();
+                }
+                writeln!(self.body, "default: {{").unwrap();
+                self.gen_block(*default);
+                writeln!(self.body, "}}").unwrap();
+                writeln!(self.body, "}}").unwrap();
+            }
             ir::Instruction::Comment(comment) => {
                 let comment = CString::new(comment.as_ref()).unwrap();
                 writeln!(&mut self.body, "/* {} */", comment.to_string_lossy()).unwrap();
             }
             ir::Instruction::Debug(_) => {}
         }
-        todo!()
+        var
+    }
+    fn gen_block(&mut self, block: Gc<ir::BasicBlock>) {
+        for n in block.nodes() {
+            self.gen_node(n);
+        }
     }
 }

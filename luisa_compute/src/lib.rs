@@ -9,7 +9,7 @@ pub use luisa_compute_ir::Gc;
 pub mod prelude {
     pub use crate::*;
     pub use lang::math::*;
-    pub use lang::math_impl::*;
+    // pub use lang::math_impl::*;
     pub use lang::traits::*;
     pub use lang::traits_impl::*;
     pub use lang::*;

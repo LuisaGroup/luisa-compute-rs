@@ -1,140 +1,151 @@
-#![allow(non_camel_case_types)]
-use crate::struct_;
-use luisa_compute_derive::{__Aggregate, __Value, function};
-use serde::{Deserialize, Serialize};
+use luisa_compute_ir::{
+    context::register_type,
+    ir::{MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType},
+    TypeOf,
+};
 
-use super::{Expr, Value};
-macro_rules! def_vec {
-    ($t:ident, $el:ty, $align:literal, $($comps:ident), *) => {
-        #[repr(C)]
-        #[repr(align($align))]
-        #[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
-        #[derive(__Value)]
-        pub struct $t {
-            $(pub $comps: $el), *
+pub use super::math_impl::*;
+use super::{Aggregate, Expr, Proxy, Value, __extract};
+macro_rules! impl_proxy_fields {
+    ($proxy:ident, $scalar:ty, x) => {
+        impl $proxy {
+            #[inline]
+            pub fn x(&self) -> Expr<$scalar> {
+                Expr::from_proxy(<$scalar as Value>::Proxy::from_node(__extract::<$scalar>(
+                    self.node, 1,
+                )))
+            }
+        }
+    };
+    ($proxy:ident, $scalar:ty, y) => {
+        impl $proxy {
+            #[inline]
+            pub fn y(&self) -> Expr<$scalar> {
+                Expr::from_proxy(<$scalar as Value>::Proxy::from_node(__extract::<$scalar>(
+                    self.node, 2,
+                )))
+            }
+        }
+    };
+    ($proxy:ident, $scalar:ty, z) => {
+        impl $proxy {
+            #[inline]
+            pub fn z(&self) -> Expr<$scalar> {
+                Expr::from_proxy(<$scalar as Value>::Proxy::from_node(__extract::<$scalar>(
+                    self.node, 3,
+                )))
+            }
+        }
+    };
+    ($proxy:ident, $scalar:ty, w) => {
+        impl $proxy {
+            #[inline]
+            pub fn w(&self) -> Expr<$scalar> {
+                Expr::from_proxy(<$scalar as Value>::Proxy::from_node(__extract::<$scalar>(
+                    self.node, 4,
+                )))
+            }
+        }
+    };
+}
+macro_rules! impl_vec_proxy {
+    ($vec:ident, $proxy:ident, $scalar:ty, $scalar_ty:ident, $length:literal, $($comp:ident), *) => {
+        #[derive(Clone, Copy)]
+        pub struct $proxy {
+            node: NodeRef,
+        }
+        impl Value for $vec {
+            type Proxy = $proxy;
+        }
+        impl TypeOf for $vec {
+            fn type_() -> luisa_compute_ir::Gc<luisa_compute_ir::ir::Type> {
+                let type_ = Type::Vector(VectorType {
+                    element: VectorElementType::Scalar(Primitive::$scalar_ty),
+                    length: $length,
+                });
+                register_type(type_)
+            }
+        }
+        impl Aggregate for $proxy {
+            fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+                nodes.push(self.node);
+            }
+            fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+                Self {
+                    node: iter.next().unwrap(),
+                }
+            }
+        }
+        impl Proxy<$vec> for $proxy {
+            fn from_node(node: NodeRef) -> Self {
+                Self { node }
+            }
+            fn node(&self) -> NodeRef {
+                self.node
+            }
+        }
+        $(impl_proxy_fields!($proxy, $scalar, $comp);)*
+    };
+}
+
+macro_rules! impl_mat_proxy {
+    ($mat:ident, $proxy:ident, $vec:ty, $scalar_ty:ident, $length:literal) => {
+        #[derive(Clone, Copy)]
+        pub struct $proxy {
+            node: NodeRef,
+        }
+        impl Value for $mat {
+            type Proxy = $proxy;
+        }
+        impl TypeOf for $mat {
+            fn type_() -> luisa_compute_ir::Gc<luisa_compute_ir::ir::Type> {
+                let type_ = Type::Matrix(MatrixType {
+                    element: VectorElementType::Scalar(Primitive::$scalar_ty),
+                    dimension: $length,
+                });
+                register_type(type_)
+            }
+        }
+        impl Aggregate for $proxy {
+            fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+                nodes.push(self.node);
+            }
+            fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+                Self {
+                    node: iter.next().unwrap(),
+                }
+            }
+        }
+        impl Proxy<$mat> for $proxy {
+            fn from_node(node: NodeRef) -> Self {
+                Self { node }
+            }
+            fn node(&self) -> NodeRef {
+                self.node
+            }
+        }
+        impl $proxy {
+            pub fn col(&self, index: usize) -> Expr<$vec> {
+                Expr::from_proxy(<$vec as Value>::Proxy::from_node(__extract::<$vec>(
+                    self.node, index,
+                )))
+            }
         }
     };
 }
 
-def_vec!(BVec2, bool, 2, x, y);
-def_vec!(BVec3, bool, 4, x, y, z);
-def_vec!(BVec4, bool, 4, x, y, z, w);
+impl_vec_proxy!(Vec2, Vec2Proxy, f32, Float32, 2, x, y);
+impl_vec_proxy!(Vec3, Vec3Proxy, f32, Float32, 3, x, y, z);
+impl_vec_proxy!(Vec4, Vec4Proxy, f32, Float32, 4, x, y, z, w);
 
-def_vec!(Vec2, f32, 8, x, y);
-def_vec!(Vec3, f32, 16, x, y, z);
-def_vec!(Vec4, f32, 16, x, y, z, w);
+impl_vec_proxy!(UVec2, UVec2Proxy, u32, Uint32, 2, x, y);
+impl_vec_proxy!(UVec3, UVec3Proxy, u32, Uint32, 3, x, y, z);
+impl_vec_proxy!(UVec4, UVec4Proxy, u32, Uint32, 4, x, y, z, w);
 
-def_vec!(DVec2, f64, 8, x, y);
-def_vec!(DVec3, f64, 16, x, y, z);
-def_vec!(DVec4, f64, 16, x, y, z, w);
+impl_vec_proxy!(IVec2, IVec2Proxy, i32, Int32, 2, x, y);
+impl_vec_proxy!(IVec3, IVec3Proxy, i32, Int32, 3, x, y, z);
+impl_vec_proxy!(IVec4, IVec4Proxy, i32, Int32, 4, x, y, z, w);
 
-def_vec!(IVec2, i32, 8, x, y);
-def_vec!(IVec3, i32, 16, x, y, z);
-def_vec!(IVec4, i32, 16, x, y, z, w);
-
-def_vec!(UVec2, u32, 8, x, y);
-def_vec!(UVec3, u32, 16, x, y, z);
-def_vec!(UVec4, u32, 16, x, y, z, w);
-
-def_vec!(LVec2, i64, 16, x, y);
-def_vec!(LVec3, i64, 32, x, y, z);
-def_vec!(LVec4, i64, 32, x, y, z, w);
-
-def_vec!(ULVec2, u64, 16, x, y);
-def_vec!(ULVec3, u64, 32, x, y, z);
-def_vec!(ULVec4, u64, 32, x, y, z, w);
-
-pub type bool2 = BVec2;
-pub type bool3 = BVec3;
-pub type bool4 = BVec4;
-
-pub type float2 = Vec2;
-pub type float3 = Vec3;
-pub type float4 = Vec4;
-
-pub type int2 = IVec2;
-pub type int3 = IVec3;
-pub type int4 = IVec4;
-
-pub type uint2 = UVec2;
-pub type uint3 = UVec3;
-pub type uint4 = UVec4;
-
-pub type long2 = LVec2;
-pub type long3 = LVec3;
-pub type long4 = LVec4;
-
-pub type ulong2 = ULVec2;
-pub type ulong3 = ULVec3;
-pub type ulong4 = ULVec4;
-
-pub type double2 = DVec2;
-pub type double3 = DVec3;
-pub type double4 = DVec4;
-
-macro_rules! def_make_vec {
-    ($name:ident, $t:ident, $el:ty, $($comps:ident), *) => {
-        pub fn $name($($comps: Expr<$el>), *) -> Expr<$t> {
-            struct_!($t { $($comps), * })
-        }
-    };
-}
-def_make_vec!(make_float2, float2, f32, x, y);
-def_make_vec!(make_float3, float3, f32, x, y, z);
-def_make_vec!(make_float4, float4, f32, x, y, z, w);
-
-def_make_vec!(make_int2, int2, i32, x, y);
-def_make_vec!(make_int3, int3, i32, x, y, z);
-def_make_vec!(make_int4, int4, i32, x, y, z, w);
-
-def_make_vec!(make_uint2, uint2, u32, x, y);
-def_make_vec!(make_uint3, uint3, u32, x, y, z);
-def_make_vec!(make_uint4, uint4, u32, x, y, z, w);
-
-def_make_vec!(make_bool2, bool2, bool, x, y);
-def_make_vec!(make_bool3, bool3, bool, x, y, z);
-def_make_vec!(make_bool4, bool4, bool, x, y, z, w);
-
-def_make_vec!(make_long2, long2, i64, x, y);
-def_make_vec!(make_long3, long3, i64, x, y, z);
-def_make_vec!(make_long4, long4, i64, x, y, z, w);
-
-def_make_vec!(make_ulong2, ulong2, u64, x, y);
-def_make_vec!(make_ulong3, ulong3, u64, x, y, z);
-def_make_vec!(make_ulong4, ulong4, u64, x, y, z, w);
-
-def_make_vec!(make_double2, double2, f64, x, y);
-def_make_vec!(make_double3, double3, f64, x, y, z);
-def_make_vec!(make_double4, double4, f64, x, y, z, w);
-
-#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize, __Value)]
-#[repr(C)]
-pub struct Mat3 {
-    pub x: Vec3,
-    pub y: Vec3,
-    pub z: Vec3,
-}
-
-#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize, __Value)]
-#[repr(C)]
-pub struct DMat3 {
-    pub x: DVec3,
-    pub y: DVec3,
-    pub z: DVec3,
-}
-#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize, __Value)]
-#[repr(C)]
-pub struct Mat4 {
-    pub x: Vec4,
-    pub y: Vec4,
-    pub z: Vec4,
-    pub w: Vec4,
-}
-#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize, __Value)]
-#[repr(C)]
-pub struct DMat4 {
-    pub x: DVec4,
-    pub y: DVec4,
-    pub z: DVec4,
-    pub w: DVec4,
-}
+impl_mat_proxy!(Mat2, Mat2Proxy, Vec2, Float32, 2);
+impl_mat_proxy!(Mat3, Mat3Proxy, Vec3, Float32, 3);
+impl_mat_proxy!(Mat4, Mat4Proxy, Vec4, Float32, 4);

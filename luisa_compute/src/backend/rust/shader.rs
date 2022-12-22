@@ -120,5 +120,4 @@ pub(super) struct ShaderImpl {
     lib: libloading::Library,
     entry: libloading::Symbol<'static, KernelFn>,
 }
-
-const LIB_SRC: &str = include_str!("lib.hxx");
+const MATH_LIB_SRC: &str = include_str!("../../lang/math_impl.rs");

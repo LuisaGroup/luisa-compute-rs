@@ -12,7 +12,7 @@ fn main() {
             let buf_x = builder.buffer::<f32>();
             let buf_y = builder.buffer::<f32>();
             let buf_z = builder.buffer::<f32>();
-            let tid = dispatch_id().x;
+            let tid = dispatch_id().x();
             let x = buf_x.read(tid);
             let y = buf_y.read(tid);
             buf_z.write(tid, x + y);

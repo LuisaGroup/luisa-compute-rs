@@ -17,9 +17,10 @@ pub use luisa_compute_ir::{
     ir::{StructType, Type},
     Gc, TypeOf,
 };
+use math::UVec3;
 use std::cell::RefCell;
 
-use self::math::UVec3;
+// use self::math::UVec3;
 pub mod math;
 pub mod math_impl;
 pub mod traits;
@@ -212,53 +213,41 @@ pub fn pop_scope() -> Gc<BasicBlock> {
     })
 }
 pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
+    let inst = &node.get().instruction;
     current_scope(|b| {
         let i = b.const_(Const::Int32(index as i32));
-        let node = b.call(Func::ExtractElement, &[node, i], <T as TypeOf>::type_());
+        let op = match inst.as_ref() {
+            Instruction::Local { .. } => Func::GetElementPtr,
+            _ => Func::ExtractElement,
+        };
+        let node = b.call(op, &[node, i], <T as TypeOf>::type_());
         node
     })
 }
 pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
     current_scope(|b| b.call(Func::Struct, nodes, <T as TypeOf>::type_()))
 }
-fn unpack_uvec3(node: NodeRef) -> Expr<UVec3> {
-    let x = Expr::<u32>::from_node(__extract::<u32>(node, 0));
-    let y = Expr::<u32>::from_node(__extract::<u32>(node, 1));
-    let z = Expr::<u32>::from_node(__extract::<u32>(node, 2));
-    crate::struct_!(UVec3 { x, y, z })
-}
+
 pub fn thread_id() -> Expr<UVec3> {
-    use luisa_compute_ir::{context, ir::*};
-    let uvec3_ty = context::register_type(Type::Vector(VectorType {
-        element: VectorElementType::Scalar(Primitive::Uint32),
-        length: 3,
-    }));
-    unpack_uvec3(current_scope(|b| b.call(Func::ThreadId, &[], uvec3_ty)))
+    Expr::from_node(current_scope(|b| {
+        b.call(Func::ThreadId, &[], UVec3::type_())
+    }))
 }
 
 pub fn block_id() -> Expr<UVec3> {
-    use luisa_compute_ir::{context, ir::*};
-    let uvec3_ty = context::register_type(Type::Vector(VectorType {
-        element: VectorElementType::Scalar(Primitive::Uint32),
-        length: 3,
-    }));
-    unpack_uvec3(current_scope(|b| b.call(Func::BlockId, &[], uvec3_ty)))
+    Expr::from_node(current_scope(|b| {
+        b.call(Func::BlockId, &[], UVec3::type_())
+    }))
 }
 pub fn dispatch_id() -> Expr<UVec3> {
-    use luisa_compute_ir::{context, ir::*};
-    let uvec3_ty = context::register_type(Type::Vector(VectorType {
-        element: VectorElementType::Scalar(Primitive::Uint32),
-        length: 3,
-    }));
-    unpack_uvec3(current_scope(|b| b.call(Func::DispatchId, &[], uvec3_ty)))
+    Expr::from_node(current_scope(|b| {
+        b.call(Func::DispatchId, &[], UVec3::type_())
+    }))
 }
 pub fn dispatch_size() -> Expr<UVec3> {
-    use luisa_compute_ir::{context, ir::*};
-    let uvec3_ty = context::register_type(Type::Vector(VectorType {
-        element: VectorElementType::Scalar(Primitive::Uint32),
-        length: 3,
-    }));
-    unpack_uvec3(current_scope(|b| b.call(Func::DispatchSize, &[], uvec3_ty)))
+    Expr::from_node(current_scope(|b| {
+        b.call(Func::DispatchSize, &[], UVec3::type_())
+    }))
 }
 
 pub fn const_<T: Value + Copy + 'static>(value: T) -> Expr<T> {

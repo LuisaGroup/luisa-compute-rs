@@ -46,17 +46,19 @@ impl Compiler {
         let vis = &struct_.vis;
         let fields: Vec<_> = struct_.fields.iter().map(|f| f).collect();
         let field_types: Vec<_> = fields.iter().map(|f| &f.ty).collect();
-        let field_names: Vec<_> = fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
+        let field_methods: Vec<_> = fields.iter().enumerate().map(|(i, f)|{
+            let ident =  f.ident.as_ref().unwrap();
+            let vis = &f.vis;
+            let ty = &f.ty;
+            quote_spanned!(span=>
+                #vis fn #ident(&self) -> Expr<#ty> {
+                    Expr::from_proxy(<#ty as Value>::Proxy::from_node(__extract::<#ty>(
+                        self.node, #i,
+                    )))
+                }
+            )
+        }).collect();
         let proxy_name = syn::Ident::new(&format!("{}Proxy", name), name.span());
-        let proxy_fields: Vec<_> = fields
-            .iter()
-            .map(|f| {
-                let ty = &f.ty;
-                let name = &f.ident;
-                let vis = &f.vis;
-                quote_spanned!(span=> #vis #name : #crate_path ::Expr<#ty>)
-            })
-            .collect();
         let type_of_impl = quote_spanned!(span=>
             impl #crate_path ::TypeOf for #name {
                 fn type_() ->  #crate_path ::Gc< #crate_path ::Type> {
@@ -76,42 +78,25 @@ impl Compiler {
         let proxy_def = quote_spanned!(span=>
             #[derive(Clone, Copy, Debug)]
             #vis struct #proxy_name {
-                #( #proxy_fields ),*
+                node: #crate_path ::NodeRef,
             }
             impl #crate_path ::Aggregate for #proxy_name {
                 fn to_nodes(&self, nodes: &mut Vec<#crate_path ::NodeRef>) {
-                    #( self.#field_names.to_nodes(nodes); )*
+                    nodes.push(self.node);
                 }
                 fn from_nodes<I: Iterator<Item = #crate_path ::NodeRef>>(iter: &mut I) -> Self {
-                    Self {
-                        #( #field_names : #crate_path ::Expr::<#field_types>::from_proxy(
-                            <#field_types as #crate_path ::Value>::Proxy::from_nodes(iter)) ),*
+                    Self{
+                        node: iter.next().unwrap()
                     }
                 }
             }
             impl #crate_path ::Proxy<#name> for #proxy_name {
                 #[allow(unused_assignments)]
                 fn from_node(node: #crate_path ::NodeRef) -> Self {
-                    let mut index = 0;
-                    #(
-                    let #field_names = {
-                        let field = #crate_path ::__extract::<#field_types>(node, index);
-                        index += 1;
-                        #crate_path ::Expr::<#field_types>::from_proxy(<#field_types as #crate_path ::Value>::Proxy::from_node(field))
-                    };
-                    )*
-                    Self{
-                        #( #field_names ),*
-                    }
+                    Self { node }
                 }
                 fn node(&self) -> #crate_path ::NodeRef {
-                    let mut nodes = Vec::new();
-                    #(
-                        nodes.push(
-                            self.#field_names.node()
-                        );
-                    )*
-                    #crate_path ::__compose::<#name>(&nodes)
+                    self.node
                 }
             }
         );
@@ -121,6 +106,9 @@ impl Compiler {
             #type_of_impl
             impl #crate_path ::Value for #name {
                 type Proxy = #proxy_name;
+            }
+            impl #proxy_name {
+                #(#field_methods)*
             }
         }
     }

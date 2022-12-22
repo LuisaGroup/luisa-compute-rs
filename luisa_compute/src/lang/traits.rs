@@ -637,10 +637,10 @@ macro_rules! expr_impl_ops {
         }
 
         expr_impl_ops_left!($tr, $m, f32, f64, i32, i64, u32, u64, bool);
-        expr_impl_ops_left!($tr, $m, Vec2, Vec3, Vec4);
-        expr_impl_ops_left!($tr, $m, IVec2, IVec3, IVec4);
-        expr_impl_ops_left!($tr, $m, UVec2, UVec3, UVec4);
-        expr_impl_ops_left!($tr, $m, BVec2, BVec3, BVec4);
+        // expr_impl_ops_left!($tr, $m, Vec2, Vec3, Vec4);
+        // expr_impl_ops_left!($tr, $m, IVec2, IVec3, IVec4);
+        // expr_impl_ops_left!($tr, $m, UVec2, UVec3, UVec4);
+        // expr_impl_ops_left!($tr, $m, BVec2, BVec3, BVec4);
     };
 }
 macro_rules! expr_impl_ops_assign {

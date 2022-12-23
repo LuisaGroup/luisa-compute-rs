@@ -27,7 +27,8 @@ pub mod traits;
 pub mod traits_impl;
 
 pub trait Value: Copy + ir::TypeOf {
-    type Proxy: Proxy<Self>;
+    type ExprProxy: ExprProxy<Self>;
+    type VarProxy: VarProxy<Self>;
 }
 
 pub trait Aggregate: Sized {
@@ -58,18 +59,22 @@ fn _store<T: Aggregate>(var: &T, value: &T) {
 pub trait Selectable {
     fn select(mask: Mask, lhs: Self, rhs: Self) -> Self;
 }
-pub trait Proxy<T>: Copy + Aggregate {
+pub trait ExprProxy<T>: Copy + Aggregate {
+    fn from_node(node: NodeRef) -> Self;
+    fn node(&self) -> NodeRef;
+}
+pub trait VarProxy<T>: Copy + Aggregate {
     fn from_node(node: NodeRef) -> Self;
     fn node(&self) -> NodeRef;
 }
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Expr<T: Value> {
-    pub(crate) proxy: T::Proxy,
+    pub(crate) proxy: T::ExprProxy,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Var<T: Value> {
-    pub(crate) proxy: T::Proxy,
+    pub(crate) proxy: T::VarProxy,
 }
 
 impl<T: Value> Var<T> {
@@ -103,10 +108,10 @@ impl<T: Value> Expr<T> {
         let proxy = T::Proxy::from_nodes(&mut nodes.iter().cloned());
         Self { proxy }
     }
-    pub fn from_proxy(proxy: T::Proxy) -> Self {
+    pub fn from_proxy(proxy: T::ExprProxy) -> Self {
         Self { proxy }
     }
-    pub fn proxy(&self) -> T::Proxy {
+    pub fn proxy(&self) -> T::ExprProxy {
         self.proxy
     }
     pub(crate) fn node(&self) -> NodeRef {
@@ -120,7 +125,7 @@ impl<T: Value> Expr<T> {
 }
 
 impl<T: Value> Deref for Expr<T> {
-    type Target = T::Proxy;
+    type Target = T::ExprProxy;
     fn deref(&self) -> &Self::Target {
         &self.proxy
     }
@@ -149,7 +154,18 @@ macro_rules! impl_prim {
                 const_(v).proxy
             }
         }
-        impl Proxy<$t> for PrimProxy<$t> {
+        impl ExprProxy<$t> for PrimProxy<$t> {
+            fn from_node(node: NodeRef) -> Self {
+                Self {
+                    node,
+                    _phantom: std::marker::PhantomData,
+                }
+            }
+            fn node(&self) -> NodeRef {
+                self.node
+            }
+        }
+        impl VarProxy<$t> for PrimProxy<$t> {
             fn from_node(node: NodeRef) -> Self {
                 Self {
                     node,
@@ -161,7 +177,8 @@ macro_rules! impl_prim {
             }
         }
         impl Value for $t {
-            type Proxy = PrimProxy<$t>;
+            type ExprProxy = PrimProxy<$t>;
+            type VarProxy = PrimProxy<$t>;
         }
     };
 }

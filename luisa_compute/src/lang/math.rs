@@ -5,15 +5,15 @@ use luisa_compute_ir::{
 };
 
 pub use super::math_impl::*;
-use super::{Aggregate, Expr, Proxy, Value, __extract};
+use super::{Aggregate, Expr, ExprProxy, Value, VarProxy, __extract};
 macro_rules! impl_proxy_fields {
     ($proxy:ident, $scalar:ty, x) => {
         impl $proxy {
             #[inline]
             pub fn x(&self) -> Expr<$scalar> {
-                Expr::from_proxy(<$scalar as Value>::Proxy::from_node(__extract::<$scalar>(
-                    self.node, 1,
-                )))
+                Expr::from_proxy(<$scalar as Value>::ExprProxy::from_node(
+                    __extract::<$scalar>(self.node, 1),
+                ))
             }
         }
     };
@@ -21,9 +21,9 @@ macro_rules! impl_proxy_fields {
         impl $proxy {
             #[inline]
             pub fn y(&self) -> Expr<$scalar> {
-                Expr::from_proxy(<$scalar as Value>::Proxy::from_node(__extract::<$scalar>(
-                    self.node, 2,
-                )))
+                Expr::from_proxy(<$scalar as Value>::ExprProxy::from_node(
+                    __extract::<$scalar>(self.node, 2),
+                ))
             }
         }
     };
@@ -31,9 +31,9 @@ macro_rules! impl_proxy_fields {
         impl $proxy {
             #[inline]
             pub fn z(&self) -> Expr<$scalar> {
-                Expr::from_proxy(<$scalar as Value>::Proxy::from_node(__extract::<$scalar>(
-                    self.node, 3,
-                )))
+                Expr::from_proxy(<$scalar as Value>::ExprProxy::from_node(
+                    __extract::<$scalar>(self.node, 3),
+                ))
             }
         }
     };
@@ -41,9 +41,9 @@ macro_rules! impl_proxy_fields {
         impl $proxy {
             #[inline]
             pub fn w(&self) -> Expr<$scalar> {
-                Expr::from_proxy(<$scalar as Value>::Proxy::from_node(__extract::<$scalar>(
-                    self.node, 4,
-                )))
+                Expr::from_proxy(<$scalar as Value>::ExprProxy::from_node(
+                    __extract::<$scalar>(self.node, 4),
+                ))
             }
         }
     };
@@ -55,7 +55,7 @@ macro_rules! impl_vec_proxy {
             node: NodeRef,
         }
         impl Value for $vec {
-            type Proxy = $proxy;
+            type ExprProxy = $proxy;
         }
         impl TypeOf for $vec {
             fn type_() -> luisa_compute_ir::Gc<luisa_compute_ir::ir::Type> {
@@ -76,7 +76,7 @@ macro_rules! impl_vec_proxy {
                 }
             }
         }
-        impl Proxy<$vec> for $proxy {
+        impl ExprProxy<$vec> for $proxy {
             fn from_node(node: NodeRef) -> Self {
                 Self { node }
             }
@@ -95,7 +95,7 @@ macro_rules! impl_mat_proxy {
             node: NodeRef,
         }
         impl Value for $mat {
-            type Proxy = $proxy;
+            type ExprProxy = $proxy;
         }
         impl TypeOf for $mat {
             fn type_() -> luisa_compute_ir::Gc<luisa_compute_ir::ir::Type> {
@@ -116,7 +116,7 @@ macro_rules! impl_mat_proxy {
                 }
             }
         }
-        impl Proxy<$mat> for $proxy {
+        impl ExprProxy<$mat> for $proxy {
             fn from_node(node: NodeRef) -> Self {
                 Self { node }
             }
@@ -126,7 +126,7 @@ macro_rules! impl_mat_proxy {
         }
         impl $proxy {
             pub fn col(&self, index: usize) -> Expr<$vec> {
-                Expr::from_proxy(<$vec as Value>::Proxy::from_node(__extract::<$vec>(
+                Expr::from_proxy(<$vec as Value>::ExprProxy::from_node(__extract::<$vec>(
                     self.node, index,
                 )))
             }

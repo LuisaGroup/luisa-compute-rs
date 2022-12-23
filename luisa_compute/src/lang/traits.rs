@@ -609,9 +609,9 @@ macro_rules! expr_impl_ops_left {
     ($tr:ident, $m:ident, $scalar:ty) => {
         impl<T: Value> std::ops::$tr<Expr<T>> for $scalar
         where
-            $scalar: std::ops::$tr<T::Proxy>,
+            $scalar: std::ops::$tr<T::ExprProxy>,
         {
-            type Output = <$scalar as std::ops::$tr<T::Proxy>>::Output;
+            type Output = <$scalar as std::ops::$tr<T::ExprProxy>>::Output;
             fn $m(self, rhs: Expr<T>) -> Self::Output {
                 self.$m(rhs.proxy())
             }
@@ -628,9 +628,9 @@ macro_rules! expr_impl_ops {
     ($tr:ident, $m:ident) => {
         impl<T: Value, R> std::ops::$tr<R> for Expr<T>
         where
-            T::Proxy: std::ops::$tr<R>,
+            T::ExprProxy: std::ops::$tr<R>,
         {
-            type Output = <T::Proxy as std::ops::$tr<R>>::Output;
+            type Output = <T::ExprProxy as std::ops::$tr<R>>::Output;
             fn $m(self, rhs: R) -> Self::Output {
                 self.proxy.$m(rhs)
             }
@@ -647,7 +647,7 @@ macro_rules! expr_impl_ops_assign {
     ($tr:ident, $m:ident) => {
         impl<T: Value> std::ops::$tr for Expr<T>
         where
-            T::Proxy: std::ops::$tr<Expr<T>>,
+            T::ExprProxy: std::ops::$tr<Expr<T>>,
         {
             fn $m(&mut self, rhs: Self) {
                 self.proxy.$m(rhs);
@@ -657,18 +657,18 @@ macro_rules! expr_impl_ops_assign {
 }
 impl<T: Value> std::ops::Neg for Expr<T>
 where
-    T::Proxy: std::ops::Neg,
+    T::ExprProxy: std::ops::Neg,
 {
-    type Output = <T::Proxy as std::ops::Neg>::Output;
+    type Output = <T::ExprProxy as std::ops::Neg>::Output;
     fn neg(self) -> Self::Output {
         self.proxy.neg()
     }
 }
 impl<T: Value> std::ops::Not for Expr<T>
 where
-    T::Proxy: std::ops::Not,
+    T::ExprProxy: std::ops::Not,
 {
-    type Output = <T::Proxy as std::ops::Not>::Output;
+    type Output = <T::ExprProxy as std::ops::Not>::Output;
     fn not(self) -> Self::Output {
         self.proxy.not()
     }

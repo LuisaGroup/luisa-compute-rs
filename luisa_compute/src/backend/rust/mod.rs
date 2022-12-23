@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 
 use crate::prelude::{Device, DeviceHandle};
 
-use self::stream::StreamImpl;
+use self::{resource::BufferImpl, stream::StreamImpl};
 
 use super::Backend;
 mod codegen;
@@ -19,16 +19,28 @@ pub struct RustBackend {
     shared_pool: Arc<rayon::ThreadPool>,
 }
 impl Backend for RustBackend {
-    fn create_buffer(&self, size_bytes: usize) -> super::Result<luisa_compute_api_types::Buffer> {
-        todo!()
+    fn create_buffer(
+        &self,
+        size_bytes: usize,
+        align: usize,
+    ) -> super::Result<luisa_compute_api_types::Buffer> {
+        let buffer = Box::new(BufferImpl::new(size_bytes, align));
+        let ptr = Box::into_raw(buffer);
+        Ok(luisa_compute_api_types::Buffer(ptr as u64))
     }
 
-    fn destroy_buffer(&self, texture: luisa_compute_api_types::Buffer) {
-        todo!()
+    fn destroy_buffer(&self, buffer: luisa_compute_api_types::Buffer) {
+        unsafe {
+            let ptr = buffer.0 as *mut BufferImpl;
+            drop(Box::from_raw(ptr));
+        }
     }
 
-    fn buffer_native_handle(&self, texture: luisa_compute_api_types::Buffer) -> *mut libc::c_void {
-        todo!()
+    fn buffer_native_handle(&self, buffer: luisa_compute_api_types::Buffer) -> *mut libc::c_void {
+        unsafe {
+            let buffer = &*(buffer.0 as *mut BufferImpl);
+            buffer.data as *mut libc::c_void
+        }
     }
 
     fn create_texture(
@@ -156,6 +168,10 @@ impl Backend for RustBackend {
         kernel: &luisa_compute_ir::ir::KernelModule,
         meta_options: &str,
     ) -> super::Result<luisa_compute_api_types::Shader> {
+        let debug =
+            luisa_compute_ir::ir::debug::luisa_compute_ir_dump_human_readable(&kernel.module);
+        let debug = std::ffi::CString::new(debug.as_ref()).unwrap();
+        println!("{}", debug.to_str().unwrap());
         todo!()
     }
 

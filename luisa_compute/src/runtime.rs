@@ -4,6 +4,7 @@ use crate::{lang::Value, resource::*};
 use lang::KernelBuilder;
 pub use luisa_compute_api_types as api;
 use std::any::Any;
+use std::mem::align_of;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::{ffi::CString, path::PathBuf};
@@ -31,7 +32,9 @@ impl Drop for DeviceHandle {
 }
 impl Device {
     pub fn create_buffer<T: Value>(&self, count: usize) -> backend::Result<Buffer<T>> {
-        let buffer = self.inner.create_buffer(std::mem::size_of::<T>() * count)?;
+        let buffer = self
+            .inner
+            .create_buffer(std::mem::size_of::<T>() * count, align_of::<T>())?;
         Ok(Buffer {
             device: self.clone(),
             handle: Arc::new(BufferHandle {
@@ -118,7 +121,10 @@ impl Device {
             }),
         })
     }
-    pub fn create_kernel(&self, f:impl FnOnce(&mut KernelBuilder))->Result<Kernel, BackendError>{
+    pub fn create_kernel(
+        &self,
+        f: impl FnOnce(&mut KernelBuilder),
+    ) -> Result<Kernel, BackendError> {
         KernelBuilder::build(self.clone(), f)
     }
 }

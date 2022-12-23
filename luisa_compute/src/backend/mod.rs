@@ -8,9 +8,9 @@ pub mod rust;
 pub struct BackendError {}
 pub type Result<T> = std::result::Result<T, BackendError>;
 pub trait Backend: Sync + Send {
-    fn create_buffer(&self, size_bytes: usize) -> Result<api::Buffer>;
-    fn destroy_buffer(&self, texture: api::Buffer);
-    fn buffer_native_handle(&self, texture: api::Buffer) -> *mut c_void;
+    fn create_buffer(&self, size_bytes: usize, align:usize) -> Result<api::Buffer>;
+    fn destroy_buffer(&self, buffer: api::Buffer);
+    fn buffer_native_handle(&self, buffer: api::Buffer) -> *mut c_void;
     fn create_texture(
         &self,
         format: PixelFormat,

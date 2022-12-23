@@ -21,7 +21,7 @@ impl<T: Copy + 'static + Value> VarTrait for PrimProxy<T> {
         }
     }
     fn node(&self) -> NodeRef {
-        self.node()
+        self.node
     }
 }
 

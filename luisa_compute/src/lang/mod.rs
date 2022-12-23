@@ -268,9 +268,7 @@ pub struct BufferVar<T: Value> {
 }
 
 impl<T: Value> Drop for BufferVar<T> {
-    fn drop(&mut self) {
-        todo!()
-    }
+    fn drop(&mut self) {}
 }
 pub struct BindlessArrayVar {
     node: NodeRef,

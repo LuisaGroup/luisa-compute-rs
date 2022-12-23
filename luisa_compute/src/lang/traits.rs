@@ -2,6 +2,8 @@ use crate::prelude::*;
 use luisa_compute_ir::{ir::Func, ir::Type, TypeOf};
 use std::any::Any;
 use std::ops::*;
+
+use super::Expr;
 pub trait VarTrait: Copy + Clone + 'static {
     type Scalar: Value;
     fn from_node(node: NodeRef) -> Self;
@@ -10,15 +12,19 @@ pub trait VarTrait: Copy + Clone + 'static {
         <Self::Scalar as TypeOf>::type_()
     }
 }
-impl<T: Value + 'static> VarTrait for Expr<T> {
+impl<T: Copy + 'static + Value> VarTrait for PrimProxy<T> {
     type Scalar = T;
     fn from_node(node: NodeRef) -> Self {
-        Expr::from_node(node)
+        Self {
+            node,
+            _phantom: std::marker::PhantomData,
+        }
     }
     fn node(&self) -> NodeRef {
-        self.proxy.node()
+        self.node()
     }
 }
+
 pub trait CommonVarOp: VarTrait {
     fn max<A: Into<Self>>(&self, other: A) -> Self {
         let lhs = self.node();
@@ -87,7 +93,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Lt, &[lhs, rhs], Expr::<bool>::type_());
-            Expr::<bool>::from_node(ret)
+            <Expr<bool> as VarTrait>::from_node(ret)
         })
     }
     fn cmple<A: Into<Self>>(&self, other: A) -> Expr<bool> {
@@ -95,7 +101,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Le, &[lhs, rhs], Expr::<bool>::type_());
-            Expr::<bool>::from_node(ret)
+            <Expr<bool> as VarTrait>::from_node(ret)
         })
     }
     fn cmpgt<A: Into<Self>>(&self, other: A) -> Expr<bool> {
@@ -103,7 +109,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Gt, &[lhs, rhs], Expr::<bool>::type_());
-            Expr::<bool>::from_node(ret)
+            <Expr<bool> as VarTrait>::from_node(ret)
         })
     }
     fn cmpge<A: Into<Self>>(&self, other: A) -> Expr<bool> {
@@ -111,7 +117,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Ge, &[lhs, rhs], Expr::<bool>::type_());
-            Expr::<bool>::from_node(ret)
+            <Expr<bool> as VarTrait>::from_node(ret)
         })
     }
     fn cmpeq<A: Into<Self>>(&self, other: A) -> Expr<bool> {
@@ -119,7 +125,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Eq, &[lhs, rhs], Expr::<bool>::type_());
-            Expr::<bool>::from_node(ret)
+            <Expr<bool> as VarTrait>::from_node(ret)
         })
     }
     fn cmpne<A: Into<Self>>(&self, other: A) -> Expr<bool> {
@@ -127,7 +133,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Ne, &[lhs, rhs], Expr::<bool>::type_());
-            Expr::<bool>::from_node(ret)
+            <Expr<bool> as VarTrait>::from_node(ret)
         })
     }
 }
@@ -169,7 +175,7 @@ pub trait IntVarTrait:
     }
     fn rotate_right(&self, n: Expr<u32>) -> Self {
         let lhs = self.node();
-        let rhs = n.node();
+        let rhs = <Expr<u32> as VarTrait>::node(&n);
         current_scope(|s| {
             let ret = s.call(Func::RotRight, &[lhs, rhs], Self::type_());
             Self::from_node(ret)
@@ -177,7 +183,7 @@ pub trait IntVarTrait:
     }
     fn rotate_left(&self, n: Expr<u32>) -> Self {
         let lhs = self.node();
-        let rhs = n.node();
+        let rhs = <Expr<u32> as VarTrait>::node(&n);
         current_scope(|s| {
             let ret = s.call(Func::RotLeft, &[lhs, rhs], Self::type_());
             Self::from_node(ret)
@@ -418,22 +424,22 @@ macro_rules! impl_binop {
     ($t:ty, $proxy:ty, $tr_assign:ident, $method_assign:ident, $tr:ident, $method:ident) => {
         impl $tr_assign<Expr<$t>> for $proxy {
             fn $method_assign(&mut self, rhs: Expr<$t>) {
-                *self = self.clone().$method(rhs).proxy();
+                *self = self.clone().$method(rhs);
             }
         }
         impl $tr_assign<$t> for $proxy {
             fn $method_assign(&mut self, rhs: $t) {
-                *self = self.clone().$method(rhs).proxy();
+                *self = self.clone().$method(rhs);
             }
         }
         impl $tr<Expr<$t>> for $proxy {
             type Output = Expr<$t>;
             fn $method(self, rhs: Expr<$t>) -> Self::Output {
                 current_scope(|s| {
-                    let lhs = self.node();
-                    let rhs = rhs.node();
+                    let lhs = VarTrait::node(&self);
+                    let rhs = VarTrait::node(&rhs);
                     let ret = s.call(Func::$tr, &[lhs, rhs], Self::Output::type_());
-                    Expr::<$t>::from_node(ret)
+                    <Expr<$t> as VarTrait>::from_node(ret)
                 })
             }
         }
@@ -447,7 +453,7 @@ macro_rules! impl_binop {
         impl $tr<$proxy> for $t {
             type Output = Expr<$t>;
             fn $method(self, rhs: $proxy) -> Self::Output {
-                $tr::$method(const_(self), Expr::from_proxy(rhs))
+                $tr::$method(const_(self), rhs)
             }
         }
     };
@@ -476,7 +482,7 @@ macro_rules! impl_not {
         impl Not for $proxy {
             type Output = Expr<$t>;
             fn not(self) -> Self::Output {
-                self ^ const_(!0)
+                self ^ const_::<$t>(!0)
             }
         }
     };
@@ -486,7 +492,7 @@ macro_rules! impl_neg {
         impl Neg for $proxy {
             type Output = Expr<$t>;
             fn neg(self) -> Self::Output {
-                const_(0 as $t) - Expr::from_proxy(self)
+                const_(0 as $t) - self
             }
         }
     };
@@ -497,8 +503,8 @@ macro_rules! impl_fneg {
             type Output = Expr<$t>;
             fn neg(self) -> Self::Output {
                 current_scope(|s| {
-                    let ret = s.call(Func::Neg, &[self.node()], Self::Output::type_());
-                    Expr::<$t>::from_node(ret)
+                    let ret = s.call(Func::Neg, &[VarTrait::node(&self)], Self::Output::type_());
+                    <Expr<$t> as VarTrait>::from_node(ret)
                 })
             }
         }
@@ -558,22 +564,22 @@ impl_neg!(u64, PrimProxy<u64>);
 
 impl_fneg!(f32, PrimProxy<f32>);
 impl_fneg!(f64, PrimProxy<f64>);
-impl VarCmp for Expr<f32> {}
-impl VarCmp for Expr<f64> {}
-impl VarCmp for Expr<i32> {}
-impl VarCmp for Expr<i64> {}
-impl VarCmp for Expr<u32> {}
-impl VarCmp for Expr<u64> {}
-impl VarCmp for Expr<bool> {}
-impl CommonVarOp for Expr<f32> {}
-impl CommonVarOp for Expr<f64> {}
-impl CommonVarOp for Expr<i32> {}
-impl CommonVarOp for Expr<i64> {}
-impl CommonVarOp for Expr<u32> {}
-impl CommonVarOp for Expr<u64> {}
-impl CommonVarOp for Expr<bool> {}
+impl VarCmp for PrimProxy<f32> {}
+impl VarCmp for PrimProxy<f64> {}
+impl VarCmp for PrimProxy<i32> {}
+impl VarCmp for PrimProxy<i64> {}
+impl VarCmp for PrimProxy<u32> {}
+impl VarCmp for PrimProxy<u64> {}
+impl VarCmp for PrimProxy<bool> {}
+impl CommonVarOp for PrimProxy<f32> {}
+impl CommonVarOp for PrimProxy<f64> {}
+impl CommonVarOp for PrimProxy<i32> {}
+impl CommonVarOp for PrimProxy<i64> {}
+impl CommonVarOp for PrimProxy<u32> {}
+impl CommonVarOp for PrimProxy<u64> {}
+impl CommonVarOp for PrimProxy<bool> {}
 
-impl From<f64> for Expr<f32> {
+impl From<f64> for Float32 {
     fn from(x: f64) -> Self {
         (x as f32).into()
     }
@@ -605,91 +611,3 @@ impl FloatVarTrait for Expr<f32> {
         const_(x as f32)
     }
 }
-macro_rules! expr_impl_ops_left {
-    ($tr:ident, $m:ident, $scalar:ty) => {
-        impl<T: Value> std::ops::$tr<Expr<T>> for $scalar
-        where
-            $scalar: std::ops::$tr<T::ExprProxy>,
-        {
-            type Output = <$scalar as std::ops::$tr<T::ExprProxy>>::Output;
-            fn $m(self, rhs: Expr<T>) -> Self::Output {
-                self.$m(rhs.proxy())
-            }
-        }
-    };
-    ($tr:ident, $m:ident, $scalar:ty, $($types:ty), *) => {
-        expr_impl_ops_left!($tr, $m, $scalar);
-        $(
-            expr_impl_ops_left!($tr, $m, $types);
-        )*
-    };
-}
-macro_rules! expr_impl_ops {
-    ($tr:ident, $m:ident) => {
-        impl<T: Value, R> std::ops::$tr<R> for Expr<T>
-        where
-            T::ExprProxy: std::ops::$tr<R>,
-        {
-            type Output = <T::ExprProxy as std::ops::$tr<R>>::Output;
-            fn $m(self, rhs: R) -> Self::Output {
-                self.proxy.$m(rhs)
-            }
-        }
-
-        expr_impl_ops_left!($tr, $m, f32, f64, i32, i64, u32, u64, bool);
-        // expr_impl_ops_left!($tr, $m, Vec2, Vec3, Vec4);
-        // expr_impl_ops_left!($tr, $m, IVec2, IVec3, IVec4);
-        // expr_impl_ops_left!($tr, $m, UVec2, UVec3, UVec4);
-        // expr_impl_ops_left!($tr, $m, BVec2, BVec3, BVec4);
-    };
-}
-macro_rules! expr_impl_ops_assign {
-    ($tr:ident, $m:ident) => {
-        impl<T: Value> std::ops::$tr for Expr<T>
-        where
-            T::ExprProxy: std::ops::$tr<Expr<T>>,
-        {
-            fn $m(&mut self, rhs: Self) {
-                self.proxy.$m(rhs);
-            }
-        }
-    };
-}
-impl<T: Value> std::ops::Neg for Expr<T>
-where
-    T::ExprProxy: std::ops::Neg,
-{
-    type Output = <T::ExprProxy as std::ops::Neg>::Output;
-    fn neg(self) -> Self::Output {
-        self.proxy.neg()
-    }
-}
-impl<T: Value> std::ops::Not for Expr<T>
-where
-    T::ExprProxy: std::ops::Not,
-{
-    type Output = <T::ExprProxy as std::ops::Not>::Output;
-    fn not(self) -> Self::Output {
-        self.proxy.not()
-    }
-}
-expr_impl_ops!(Add, add);
-expr_impl_ops!(Sub, sub);
-expr_impl_ops!(Mul, mul);
-expr_impl_ops!(Div, div);
-expr_impl_ops!(Rem, rem);
-expr_impl_ops!(BitAnd, bitand);
-expr_impl_ops!(BitOr, bitor);
-expr_impl_ops!(BitXor, bitxor);
-expr_impl_ops!(Shl, shl);
-expr_impl_ops!(Shr, shr);
-expr_impl_ops_assign!(AddAssign, add_assign);
-expr_impl_ops_assign!(SubAssign, sub_assign);
-expr_impl_ops_assign!(MulAssign, mul_assign);
-expr_impl_ops_assign!(DivAssign, div_assign);
-expr_impl_ops_assign!(RemAssign, rem_assign);
-expr_impl_ops_assign!(BitAndAssign, bitand_assign);
-expr_impl_ops_assign!(BitOrAssign, bitor_assign);
-expr_impl_ops_assign!(BitXorAssign, bitxor_assign);
-expr_impl_ops_assign!(ShlAssign, shl_assign);
-expr_impl_ops_assign!(ShrAssign, shr_assign);

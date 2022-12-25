@@ -1,6 +1,6 @@
 // A Rust implementation of LuisaCompute backend.
 
-use std::sync::Arc;
+use std::{ptr::null, sync::Arc};
 
 use base64ct::Encoding;
 use rayon::ThreadPool;
@@ -14,6 +14,7 @@ use super::Backend;
 mod codegen;
 mod resource;
 mod shader;
+mod shader_impl;
 mod stream;
 pub struct RustBackend {
     shared_pool: Arc<rayon::ThreadPool>,
@@ -157,22 +158,35 @@ impl Backend for RustBackend {
 
     fn dispatch(
         &self,
-        stream: luisa_compute_api_types::Stream,
+        stream_: luisa_compute_api_types::Stream,
         command_list: &[luisa_compute_api_types::Command],
     ) -> super::Result<()> {
-        todo!()
+        unsafe {
+            let stream = &*(stream_.0 as *mut StreamImpl);
+            let command_list = command_list.to_vec();
+            stream.enqueue(move || {
+                let stream = &*(stream_.0 as *mut StreamImpl);
+                stream.dispatch(&command_list)
+            });
+            Ok(())
+        }
     }
 
     fn create_shader(
         &self,
         kernel: &luisa_compute_ir::ir::KernelModule,
-        meta_options: &str,
+        _meta_options: &str,
     ) -> super::Result<luisa_compute_api_types::Shader> {
-        let debug =
-            luisa_compute_ir::ir::debug::luisa_compute_ir_dump_human_readable(&kernel.module);
-        let debug = std::ffi::CString::new(debug.as_ref()).unwrap();
-        println!("{}", debug.to_str().unwrap());
-        todo!()
+        // let debug =
+        //     luisa_compute_ir::ir::debug::luisa_compute_ir_dump_human_readable(&kernel.module);
+        // let debug = std::ffi::CString::new(debug.as_ref()).unwrap();
+        // println!("{}", debug.to_str().unwrap());
+        let gened_src = codegen::CodeGen::run(&kernel);
+        // println!("{}", gened_src);
+        let lib_path = shader::compile(gened_src).unwrap();
+        let shader = Box::new(shader::ShaderImpl::load(lib_path));
+        let shader = Box::into_raw(shader);
+        Ok(luisa_compute_api_types::Shader(shader as u64))
     }
 
     fn destroy_shader(&self, shader: luisa_compute_api_types::Shader) {

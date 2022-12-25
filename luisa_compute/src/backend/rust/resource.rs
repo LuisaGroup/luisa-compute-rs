@@ -1,10 +1,13 @@
 use std::alloc::Layout;
 
-pub(super) struct BufferImpl {
-    pub(super) data: *mut u8,
-    pub(super) size: usize,
-    pub(super) align: usize,
+#[repr(C)]
+pub struct BufferImpl {
+    pub data: *mut u8,
+    pub size: usize, // # of elements
+    pub align: usize,
 }
+#[repr(C)]
+pub struct BindlessArrayImpl {}
 
 impl BufferImpl {
     pub(super) fn new(size: usize, align: usize) -> Self {

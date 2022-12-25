@@ -1,16 +1,17 @@
 use ir::Type;
-use luisa_compute_ir::ir::{self, NodeRef, SwitchCase};
+use luisa_compute_ir::ir::{self, NodeRef, Primitive, SwitchCase, VectorElementType};
 use luisa_compute_ir::Gc;
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::fmt::Write;
 
 use super::sha256;
+use super::shader::{MATH_LIB_SRC, SHADER_LIB_SRC};
 pub(crate) struct TypeGen {
     cache: HashMap<Gc<Type>, String>,
     struct_typedefs: String,
 }
-pub(crate) type PushConstants = Vec<u8>;
+
 impl TypeGen {
     fn new() -> Self {
         Self {
@@ -18,25 +19,25 @@ impl TypeGen {
             struct_typedefs: String::new(),
         }
     }
-    fn to_c_type_(&mut self, t: Gc<Type>) -> String {
+    fn to_rust_type_(&mut self, t: Gc<Type>) -> String {
         match t.as_ref() {
             Type::Primitive(t) => match t {
                 ir::Primitive::Bool => "bool".to_string(),
-                ir::Primitive::Int32 => "int32_t".to_string(),
-                ir::Primitive::Uint32 => "uint32_t".to_string(),
-                ir::Primitive::Int64 => "int64_t".to_string(),
-                ir::Primitive::Uint64 => "uint64_t".to_string(),
-                ir::Primitive::Float32 => "float".to_string(),
-                ir::Primitive::Float64 => "double".to_string(),
+                ir::Primitive::Int32 => "i32".to_string(),
+                ir::Primitive::Uint32 => "u32".to_string(),
+                ir::Primitive::Int64 => "i64".to_string(),
+                ir::Primitive::Uint64 => "u64".to_string(),
+                ir::Primitive::Float32 => "f32".to_string(),
+                ir::Primitive::Float64 => "f64".to_string(),
                 // crate::ir::Primitive::USize => format!("i{}", std::mem::size_of::<usize>() * 8),
             },
-            Type::Void => "void".to_string(),
+            Type::Void => "()".to_string(),
             Type::Struct(st) => {
                 let field_types: Vec<String> = st
                     .fields
                     .as_ref()
                     .iter()
-                    .map(|f| self.to_c_type(*f))
+                    .map(|f| self.to_rust_type(*f))
                     .collect();
                 let field_types_str = field_types.join(", ");
                 let hash = sha256(&format!("{}_alignas({})", field_types_str, st.alignment));
@@ -44,34 +45,67 @@ impl TypeGen {
 
                 self.cache.insert(t, name.clone());
                 let mut tmp = String::new();
-                writeln!(tmp, "struct alignas({}) {} {{", st.alignment, name).unwrap();
+                writeln!(
+                    tmp,
+                    "#[repr(C, align({}))]\nstruct {} {{",
+                    st.alignment, name
+                )
+                .unwrap();
                 for (i, field) in st.fields.as_ref().iter().enumerate() {
                     let field_name = format!("f{}", i);
-                    let field_type = self.to_c_type(*field);
-                    writeln!(tmp, "    {} {};", field_type, field_name).unwrap();
+                    let field_type = self.to_rust_type(*field);
+                    writeln!(tmp, "    {}: {};", field_name, field_type).unwrap();
                 }
-                writeln!(tmp, "}};").unwrap();
+                writeln!(tmp, "}}").unwrap();
                 self.struct_typedefs.push_str(&tmp);
                 name
+            }
+            Type::Vector(vt) => {
+                let n = vt.length;
+                match vt.element {
+                    VectorElementType::Scalar(s) => match s {
+                        Primitive::Bool => format!("BVec{}", n),
+                        Primitive::Int32 => format!("IVec{}", n),
+                        Primitive::Uint32 => format!("UVec{}", n),
+                        Primitive::Int64 => format!("LVec{}", n),
+                        Primitive::Uint64 => format!("ULVec{}", n),
+                        Primitive::Float32 => format!("Vec{}", n),
+                        Primitive::Float64 => format!("DVec{}", n),
+                    },
+                    _ => todo!(),
+                }
+            }
+            Type::Matrix(mt) => {
+                let n = mt.dimension;
+                match mt.element {
+                    VectorElementType::Scalar(s) => match s {
+                        Primitive::Float32 => format!("Mat{}", n),
+                        // Primitive::Float64 => format!("DMat{}", n),
+                        _ => unreachable!(),
+                    },
+                    _ => todo!(),
+                }
             }
             _ => todo!("{:?}", t),
         }
     }
-    fn to_c_type(&mut self, t: Gc<Type>) -> String {
+    fn to_rust_type(&mut self, t: Gc<Type>) -> String {
         if let Some(t) = self.cache.get(&t) {
             return t.clone();
         } else {
-            let t_ = self.to_c_type_(t);
+            let t_ = self.to_rust_type_(t);
             self.cache.insert(t, t_.clone());
             return t_;
         }
     }
 }
 
-struct CodeGen {
+pub struct CodeGen {
     type_gen: TypeGen,
     node_to_var: HashMap<NodeRef, String>,
     body: String,
+    captures: HashMap<NodeRef, usize>,
+    args: HashMap<NodeRef, usize>,
 }
 impl CodeGen {
     fn gen_node(&mut self, node: NodeRef) -> String {
@@ -83,27 +117,129 @@ impl CodeGen {
             return var;
         }
     }
+    fn gep_field_name(node: NodeRef, i: i32) -> String {
+        let node_ty = node.type_();
+        match node_ty.as_ref() {
+            Type::Struct(_) => {
+                format!("f{}", i)
+            }
+            Type::Vector(_) => match i {
+                0 => "x".to_string(),
+                1 => "y".to_string(),
+                2 => "z".to_string(),
+                3 => "w".to_string(),
+                _ => unreachable!(),
+            },
+            Type::Matrix(_) => {
+                format!("cols[{}]", i)
+            }
+            _ => todo!(),
+        }
+    }
     fn gen_node_(&mut self, node: NodeRef) -> String {
         let inst = node.get().instruction;
         let node_ty = node.type_();
-        let node_ty_s = self.type_gen.to_c_type(node_ty);
+        let node_ty_s = self.type_gen.to_rust_type(node_ty);
         let var = format!("v{}", self.node_to_var.len());
         self.node_to_var.insert(node, var.clone());
 
         match inst.as_ref() {
-            ir::Instruction::Buffer => todo!(),
+            ir::Instruction::Buffer => {
+                if let Some(i) = self.captures.get(&node) {
+                    writeln!(
+                        &mut self.body,
+                        "let {}: BufferView<_> = k_args.captures({}).as_buffer().unwrap();",
+                        var, i
+                    )
+                    .unwrap();
+                } else if let Some(i) = self.args.get(&node) {
+                    writeln!(
+                        &mut self.body,
+                        "let {}: BufferView<_> = k_args.args({}).as_buffer().unwrap();",
+                        var, i
+                    )
+                    .unwrap();
+                } else {
+                    panic!("unknown buffer");
+                }
+            }
             ir::Instruction::Bindless => todo!(),
             ir::Instruction::Texture2D => todo!(),
             ir::Instruction::Texture3D => todo!(),
             ir::Instruction::Accel => todo!(),
             ir::Instruction::Shared => todo!(),
             ir::Instruction::Uniform => todo!(),
-            ir::Instruction::Local { init } => todo!(),
+            ir::Instruction::Local { init } => {
+                let init_s = self.gen_node(*init);
+                writeln!(
+                    &mut self.body,
+                    "let mut {}: {} = {};",
+                    var, node_ty_s, init_s
+                )
+                .unwrap();
+            }
             ir::Instruction::Argument { by_value } => todo!(),
             ir::Instruction::UserData(_) => todo!(),
             ir::Instruction::Invalid => todo!(),
-            ir::Instruction::Const(_) => todo!(),
-            ir::Instruction::Update { var, value } => todo!(),
+            ir::Instruction::Const(c) => match c {
+                ir::Const::Zero(_) => writeln!(
+                    &mut self.body,
+                    "let {}: {} = unsafe{{ std::mem::zeroed() }};",
+                    var, node_ty_s
+                )
+                .unwrap(),
+                ir::Const::Bool(v) => {
+                    writeln!(&mut self.body, "let {}: {} = {};", var, node_ty_s, v).unwrap();
+                }
+                ir::Const::Int32(v) => {
+                    writeln!(&mut self.body, "let {}: {} = {}i32;", var, node_ty_s, v).unwrap();
+                }
+                ir::Const::Uint32(v) => {
+                    writeln!(&mut self.body, "let {}: {} = {}u32;", var, node_ty_s, v).unwrap();
+                }
+                ir::Const::Int64(v) => {
+                    writeln!(&mut self.body, "let {}: {} = {}i64;", var, node_ty_s, v).unwrap();
+                }
+                ir::Const::Uint64(v) => {
+                    writeln!(&mut self.body, "let {}: {} = {}u64;", var, node_ty_s, v).unwrap();
+                }
+                ir::Const::Float32(v) => {
+                    writeln!(&mut self.body, "let {}: {} = {}f32;", var, node_ty_s, v).unwrap();
+                }
+                ir::Const::Float64(v) => {
+                    writeln!(&mut self.body, "let {}: {} = {}f64;", var, node_ty_s, v).unwrap();
+                }
+                ir::Const::Generic(data, _) => {
+                    let data = data
+                        .as_ref()
+                        .iter()
+                        .map(|x| format!("{:?}u8", x))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    writeln!(
+                        &mut self.body,
+                        "let {0}: {1} = unsafe{{ const DATA:&'static [u8] = &[{2}];\
+                        let ptr = DATA.as_ptr() as * const {1}; std::ptr::read(ptr) }};",
+                        var, node_ty_s, data
+                    )
+                    .unwrap();
+                }
+            },
+            ir::Instruction::Update { var, value } => {
+                let var_s = self.gen_node(*var);
+                let value_s = self.gen_node(*value);
+                if var.is_local() {
+                    writeln!(&mut self.body, "{} = {};", var_s, value_s).unwrap();
+                } else {
+                    // should be gep
+                    writeln!(
+                        &mut self.body,
+                        "unsafe{{ *(&mut *{}) = {} }};",
+                        var_s, value_s
+                    )
+                    .unwrap();
+                }
+            }
             ir::Instruction::Call(f, args) => {
                 let args_v = args
                     .as_ref()
@@ -119,10 +255,34 @@ impl CodeGen {
                     ir::Func::Assert => {
                         writeln!(&mut self.body, "lc_assert({});", args_v[0]).unwrap()
                     }
-                    ir::Func::ThreadId => todo!(),
-                    ir::Func::BlockId => todo!(),
-                    ir::Func::DispatchId => todo!(),
-                    ir::Func::DispatchSize => todo!(),
+                    ir::Func::ThreadId => {
+                        writeln!(
+                            &mut self.body,
+                            "let {}: {} = UVec3::new(k_args.thread_id[0], k_args.thread_id[1], k_args.thread_id[2]);",
+                            var, node_ty_s
+                        ).unwrap();
+                    }
+                    ir::Func::BlockId => {
+                        writeln!(
+                            &mut self.body,
+                            "let {}: {} = UVec3::new(k_args.block_id[0], k_args.block_id[1], k_args.block_id[2]);",
+                            var, node_ty_s
+                        ).unwrap();
+                    }
+                    ir::Func::DispatchId => {
+                        writeln!(
+                            &mut self.body,
+                            "let {}: {} = UVec3::new(k_args.dispatch_id[0], k_args.dispatch_id[1], k_args.dispatch_id[2]);",
+                            var, node_ty_s
+                        ).unwrap();
+                    }
+                    ir::Func::DispatchSize => {
+                        writeln!(
+                            &mut self.body,
+                            "let {}: {} = UVec3::new(k_args.dispatch_size[0], k_args.dispatch_size[1], k_args.dispatch_size[2]);",
+                            var, node_ty_s
+                        ).unwrap();
+                    }
                     ir::Func::RequiresGradient => todo!(),
                     ir::Func::Gradient => todo!(),
                     ir::Func::GradientMarker => todo!(),
@@ -136,122 +296,122 @@ impl CodeGen {
                     ir::Func::Bitcast => todo!(),
                     ir::Func::Add => writeln!(
                         self.body,
-                        "const {} {} = {} + {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {} + {};",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Sub => writeln!(
                         self.body,
-                        "const {} {} = {} - {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {} - {};",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Mul => writeln!(
                         self.body,
-                        "const {} {} = {} * {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {} * {};",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Div => writeln!(
                         self.body,
-                        "const {} {} = {} / {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {} / {};",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Rem => writeln!(
                         self.body,
-                        "const {} {} = rem({}, {});",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {} % {};",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::BitAnd => writeln!(
                         self.body,
-                        "const {} {} = {} & {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {} & {};",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::BitOr => writeln!(
                         self.body,
-                        "const {} {} = {} | {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {} | {};",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::BitXor => writeln!(
                         self.body,
-                        "const {} {} = {} ^ {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {} ^ {};",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Shl => writeln!(
                         self.body,
-                        "const {} {} = {} << {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {} << {};",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Shr => writeln!(
                         self.body,
-                        "const {} {} = {} >> {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {} >> {};",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::RotRight => writeln!(
                         self.body,
-                        "const {} {} = rot_right({}, {});",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {}.rotate_right({});",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::RotLeft => writeln!(
                         self.body,
-                        "const {} {} = rot_left({}, {});",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {}.rotate_left({});",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Eq => writeln!(
                         self.body,
-                        "const {} {} = {} == {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {}.cmpeq({});",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Ne => writeln!(
                         self.body,
-                        "const {} {} = {} != {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {}.cmpne({});",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Lt => writeln!(
                         self.body,
-                        "const {} {} = {} < {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {}.cmplt({});",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Le => writeln!(
                         self.body,
-                        "const {} {} = {} <= {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {}.cmple({});",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Gt => writeln!(
                         self.body,
-                        "const {} {} = {} > {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {}.cmpgt({});",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Ge => writeln!(
                         self.body,
-                        "const {} {} = {} >= {};",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {}.cmpge({});",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::MatCompMul => todo!(),
                     ir::Func::MatCompDiv => todo!(),
                     ir::Func::Neg => {
-                        writeln!(self.body, "{} {} = -{};", node_ty_s, var, args_v[0]).unwrap()
+                        writeln!(self.body, "let {}: {} = -{};", var, node_ty_s, args_v[0]).unwrap()
                     }
                     ir::Func::Not => {
-                        writeln!(self.body, "{} {} = !{};", node_ty_s, var, args_v[0]).unwrap()
+                        writeln!(self.body, "let {}: {} = !{};", var, node_ty_s, args_v[0]).unwrap()
                     }
                     ir::Func::BitNot => {
-                        writeln!(self.body, "{} {} = ~{};", node_ty_s, var, args_v[0]).unwrap()
+                        writeln!(self.body, "let {}: {} = ~{};", var, node_ty_s, args_v[0]).unwrap()
                     }
                     ir::Func::All => todo!(),
                     ir::Func::Any => todo!(),
@@ -261,20 +421,20 @@ impl CodeGen {
                     ir::Func::Step => todo!(),
                     ir::Func::Abs => writeln!(
                         self.body,
-                        "const {} {} = math::abs({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.abs();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Min => writeln!(
                         self.body,
-                        "const {} {} = math::min({}, {});",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {}.min({});",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Max => writeln!(
                         self.body,
-                        "const {} {} = math::max({}, {});",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {}.max({});",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::ReduceSum => todo!(),
@@ -287,104 +447,104 @@ impl CodeGen {
                     ir::Func::Reverse => todo!(),
                     ir::Func::IsInf => writeln!(
                         self.body,
-                        "const {} {} = math::isinf({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.is_infinite();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::IsNan => writeln!(
                         self.body,
-                        "const {} {} = math::isnan({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.is_nan();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Acos => writeln!(
                         self.body,
-                        "const {} {} = math::acos({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.acos();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Acosh => writeln!(
                         self.body,
-                        "const {} {} = math::acosh({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.acosh();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Asin => writeln!(
                         self.body,
-                        "const {} {} = math::asin({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.asin();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Asinh => writeln!(
                         self.body,
-                        "const {} {} = math::asinh({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.asinh();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Atan => writeln!(
                         self.body,
-                        "const {} {} = math::atan({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.atan();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Atan2 => writeln!(
                         self.body,
-                        "const {} {} = math::atan2({}, {});",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {}.atan2({});",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Atanh => writeln!(
                         self.body,
-                        "const {} {} = math::atanh({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.atanh();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Cos => writeln!(
                         self.body,
-                        "const {} {} = math::cos({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.cos();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Cosh => writeln!(
                         self.body,
-                        "const {} {} = math::cosh({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.cosh();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Sin => writeln!(
                         self.body,
-                        "const {} {} = math::sin({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.sin();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Sinh => writeln!(
                         self.body,
-                        "const {} {} = math::sinh({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.sinh();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Tan => writeln!(
                         self.body,
-                        "const {} {} = math::tan({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.tan();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Tanh => writeln!(
                         self.body,
-                        "const {} {} = math::tanh({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.tanh();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Exp => writeln!(
                         self.body,
-                        "const {} {} = math::exp({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.exp();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Exp2 => writeln!(
                         self.body,
-                        "const {} {} = math::exp2({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.exp2();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Exp10 => writeln!(
@@ -395,97 +555,142 @@ impl CodeGen {
                     .unwrap(),
                     ir::Func::Log => writeln!(
                         self.body,
-                        "const {} {} = math::log({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.ln();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Log2 => writeln!(
                         self.body,
-                        "const {} {} = math::log2({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.log2();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Log10 => writeln!(
                         self.body,
-                        "const {} {} = math::log10({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.log10();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Powi => writeln!(
                         self.body,
-                        "const {} {} = math::powi({}, {});",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {}.powi({});",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Powf => writeln!(
                         self.body,
-                        "const {} {} = math::powf({}, {});",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {}.powf({});",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Sqrt => writeln!(
                         self.body,
-                        "const {} {} = math::sqrt({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.sqrt();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Rsqrt => writeln!(
                         self.body,
-                        "const {} {} = math::rsqrt({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.rsqrt();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Ceil => writeln!(
                         self.body,
-                        "const {} {} = math::ceil({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.ceil();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Floor => writeln!(
                         self.body,
-                        "const {} {} = math::floor({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.floor();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Fract => writeln!(
                         self.body,
-                        "const {} {} = math::fract({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.fract();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Trunc => writeln!(
                         self.body,
-                        "const {} {} = math::trunc({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.trunc();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Round => writeln!(
                         self.body,
-                        "const {} {} = math::round({});",
-                        node_ty_s, var, args_v[0]
+                        "let {}: {} = {}.round();",
+                        var, node_ty_s, args_v[0]
                     )
                     .unwrap(),
                     ir::Func::Fma => writeln!(
                         self.body,
-                        "const {} {} = math::fma({}, {}, {});",
-                        node_ty_s, var, args_v[0], args_v[1], args_v[2]
+                        "let {}: {} = {}.mul_add({}, {});",
+                        var, node_ty_s, args_v[0], args_v[1], args_v[2]
                     )
                     .unwrap(),
                     ir::Func::Copysign => writeln!(
                         self.body,
-                        "const {} {} = math::copysign({}, {});",
-                        node_ty_s, var, args_v[0], args_v[1]
+                        "let {}: {} = {}.copysign({});",
+                        var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
-                    ir::Func::Cross => todo!(),
-                    ir::Func::Dot => todo!(),
-                    ir::Func::Length => todo!(),
-                    ir::Func::LengthSquared => todo!(),
-                    ir::Func::Normalize => todo!(),
-                    ir::Func::Faceforward => todo!(),
-                    ir::Func::Determinant => todo!(),
-                    ir::Func::Transpose => todo!(),
-                    ir::Func::Inverse => todo!(),
+                    ir::Func::Cross => writeln!(
+                        self.body,
+                        "let {}: {} = {}.cross({});",
+                        var, node_ty_s, args_v[0], args_v[1]
+                    )
+                    .unwrap(),
+                    ir::Func::Dot => writeln!(
+                        self.body,
+                        "let {}: {} = {}.dot({});",
+                        var, node_ty_s, args_v[0], args_v[1]
+                    )
+                    .unwrap(),
+                    ir::Func::Length => writeln!(
+                        self.body,
+                        "let {}: {} = {}.length();",
+                        var, node_ty_s, args_v[0]
+                    )
+                    .unwrap(),
+                    ir::Func::LengthSquared => writeln!(
+                        self.body,
+                        "let {}: {} = {}.length_squared();",
+                        var, node_ty_s, args_v[0]
+                    )
+                    .unwrap(),
+                    ir::Func::Normalize => writeln!(
+                        self.body,
+                        "let {}: {} = {}.normalize();",
+                        var, node_ty_s, args_v[0]
+                    )
+                    .unwrap(),
+                    ir::Func::Faceforward => writeln!(
+                        self.body,
+                        "let {}: {} = {}.faceforward({}, {});",
+                        var, node_ty_s, args_v[0], args_v[1], args_v[2]
+                    )
+                    .unwrap(),
+                    ir::Func::Determinant => writeln!(
+                        self.body,
+                        "let {}: {} = {}.determinant();",
+                        var, node_ty_s, args_v[0]
+                    )
+                    .unwrap(),
+                    ir::Func::Transpose => writeln!(
+                        self.body,
+                        "let {}: {} = {}.transpose();",
+                        var, node_ty_s, args_v[0]
+                    )
+                    .unwrap(),
+                    ir::Func::Inverse => writeln!(
+                        self.body,
+                        "let {}: {} = {}.inverse();",
+                        var, node_ty_s, args_v[0]
+                    )
+                    .unwrap(),
                     ir::Func::SynchronizeBlock => todo!(),
                     ir::Func::AtomicExchange => todo!(),
                     ir::Func::AtomicCompareExchange => todo!(),
@@ -496,8 +701,18 @@ impl CodeGen {
                     ir::Func::AtomicFetchXor => todo!(),
                     ir::Func::AtomicFetchMin => todo!(),
                     ir::Func::AtomicFetchMax => todo!(),
-                    ir::Func::BufferRead => todo!(),
-                    ir::Func::BufferWrite => todo!(),
+                    ir::Func::BufferRead => writeln!(
+                        self.body,
+                        "let {}: {} = {}.read({} as usize);",
+                        var, node_ty_s, args_v[0], args_v[1]
+                    )
+                    .unwrap(),
+                    ir::Func::BufferWrite => writeln!(
+                        self.body,
+                        "{}.write({} as usize, {});",
+                        args_v[0], args_v[1], args_v[2]
+                    )
+                    .unwrap(),
                     ir::Func::BufferSize => todo!(),
                     ir::Func::TextureRead => todo!(),
                     ir::Func::TextureWrite => todo!(),
@@ -517,30 +732,66 @@ impl CodeGen {
                     ir::Func::BindlessTexture3dSizeLevel => todo!(),
                     ir::Func::BindlessBufferRead => todo!(),
                     ir::Func::BindlessBufferSize => todo!(),
-                    ir::Func::Vec => todo!(),
-                    ir::Func::Vec2 => todo!(),
-                    ir::Func::Vec3 => todo!(),
-                    ir::Func::Vec4 => todo!(),
+                    ir::Func::Vec => {
+                        writeln!(self.body, "{}::splat({})", node_ty_s, args_v[0]).unwrap()
+                    }
+                    ir::Func::Vec2 => writeln!(
+                        self.body,
+                        "{}::new({}, {})",
+                        node_ty_s, args_v[0], args_v[1]
+                    )
+                    .unwrap(),
+                    ir::Func::Vec3 => writeln!(
+                        self.body,
+                        "{}::new({}, {}, {})",
+                        node_ty_s, args_v[0], args_v[1], args_v[2]
+                    )
+                    .unwrap(),
+                    ir::Func::Vec4 => writeln!(
+                        self.body,
+                        "{}::new({}, {}, {}, {})",
+                        node_ty_s, args_v[0], args_v[1], args_v[2], args_v[3]
+                    )
+                    .unwrap(),
                     ir::Func::Permute => todo!(),
                     ir::Func::ExtractElement => {
                         let i = args.as_ref()[1].get_i32();
+                        let field_name = Self::gep_field_name(args.as_ref()[0], i);
                         writeln!(
                             self.body,
-                            "const {} {} = {}.f{};",
-                            node_ty_s, var, args_v[0], i
+                            "let {}: {} = {}.{};",
+                            var, node_ty_s, args_v[0], field_name
                         )
                         .unwrap();
                     }
                     ir::Func::InsertElement => {
                         let i = args.as_ref()[2].get_i32();
-                        writeln!(self.body, "{}.f{};", args_v[0], i).unwrap();
+                        let field_name = Self::gep_field_name(args.as_ref()[0], i);
+                        writeln!(self.body, "{}.{};", args_v[0], field_name).unwrap();
                     }
                     ir::Func::GetElementPtr => {
                         let i = args.as_ref()[1].get_i32();
-                        writeln!(self.body, "{}* {} = &{}.f{};", node_ty_s, var, args_v[0], i)
-                            .unwrap();
+                        let field_name = Self::gep_field_name(args.as_ref()[0], i);
+                        writeln!(
+                            self.body,
+                            "let {}: {}* = &mut {}.{} as * mut _;",
+                            var, node_ty_s, args_v[0], field_name
+                        )
+                        .unwrap();
                     }
-                    ir::Func::Struct => todo!(),
+                    ir::Func::Struct => {
+                        let mut fields = String::new();
+                        for (i, arg) in args_v.iter().enumerate() {
+                            let field_name = Self::gep_field_name(node, i as i32);
+                            fields.push_str(&format!("{}: {}, ", field_name, arg));
+                        }
+                        writeln!(
+                            self.body,
+                            "let {}: {} = {} {{ {} }};",
+                            var, node_ty_s, node_ty_s, fields
+                        )
+                        .unwrap();
+                    }
                     ir::Func::Mat => todo!(),
                     ir::Func::Matrix2 => todo!(),
                     ir::Func::Matrix3 => todo!(),
@@ -550,9 +801,12 @@ impl CodeGen {
                 }
             }
             ir::Instruction::Phi(_) => todo!(),
-            ir::Instruction::Return(_) => todo!(),
+            ir::Instruction::Return(v) => {
+                let v = self.gen_node(*v);
+                writeln!(self.body, "return {};", v).unwrap();
+            }
             ir::Instruction::Loop { body, cond } => {
-                writeln!(self.body, "while (true) {{").unwrap();
+                writeln!(self.body, "loop {{").unwrap();
                 self.gen_block(*body);
                 let cond = self.gen_node(*cond);
                 writeln!(self.body, "if (!{}) break;", cond).unwrap();
@@ -590,14 +844,14 @@ impl CodeGen {
                 cases,
             } => {
                 let value = self.gen_node(*value);
-                writeln!(self.body, "switch ({}) {{", value).unwrap();
+                writeln!(self.body, "match {} {{", value).unwrap();
                 for SwitchCase { value, block } in cases.as_ref() {
                     let value = self.gen_node(*value);
-                    writeln!(self.body, "case {}: {{", value).unwrap();
+                    writeln!(self.body, "{} => {{", value).unwrap();
                     self.gen_block(*block);
-                    writeln!(self.body, "break;}}").unwrap();
+                    writeln!(self.body, "}}").unwrap();
                 }
-                writeln!(self.body, "default: {{").unwrap();
+                writeln!(self.body, "_ => {{").unwrap();
                 self.gen_block(*default);
                 writeln!(self.body, "}}").unwrap();
                 writeln!(self.body, "}}").unwrap();
@@ -611,8 +865,34 @@ impl CodeGen {
         var
     }
     fn gen_block(&mut self, block: Gc<ir::BasicBlock>) {
+        writeln!(&mut self.body, "{{").unwrap();
         for n in block.nodes() {
             self.gen_node(n);
+        }
+        writeln!(&mut self.body, "}}").unwrap();
+    }
+    pub fn run(kernel: &ir::KernelModule) -> String {
+        let mut gen = Self::new();
+        for (i, capture) in kernel.captures.as_ref().iter().enumerate() {
+            gen.captures.insert(capture.node, i);
+        }
+        for (i, arg) in kernel.args.as_ref().iter().enumerate() {
+            gen.args.insert(*arg, i);
+        }
+        gen.gen_block(kernel.module.entry);
+        let prelude = r#"#[no_mangle] pub extern "C" fn kernel_fn(k_args:&KernelFnArgs) {"#;
+        format!(
+            "#![allow(unused_variables)]{}\n{}\n{}\n{} }}",
+            SHADER_LIB_SRC, MATH_LIB_SRC, prelude, gen.body
+        )
+    }
+    fn new() -> Self {
+        Self {
+            body: String::new(),
+            type_gen: TypeGen::new(),
+            node_to_var: HashMap::new(),
+            captures: HashMap::new(),
+            args: HashMap::new(),
         }
     }
 }

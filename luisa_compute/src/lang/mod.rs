@@ -153,7 +153,7 @@ pub type Uint64 = PrimProxy<u64>;
 pub(crate) struct Recorder {
     scopes: Vec<IrBuilder>,
     lock: bool,
-    captured_buffer: HashMap<u64, (NodeRef, BufferBinding)>,
+    captured_buffer: HashMap<u64, (NodeRef, BufferBinding, Arc<BufferHandle>)>,
 }
 impl Recorder {
     fn reset(&mut self) {
@@ -306,7 +306,7 @@ impl<T: Value> BufferVar<T> {
         let node = RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             let handle: u64 = buffer.handle().0;
-            if let Some((node, _)) = r.captured_buffer.get(&handle) {
+            if let Some((node, _, _)) = r.captured_buffer.get(&handle) {
                 *node
             } else {
                 let node = new_node(Node::new(Gc::new(Instruction::Buffer), T::type_()));
@@ -319,6 +319,7 @@ impl<T: Value> BufferVar<T> {
                             size: buffer.size_bytes(),
                             offset: 0,
                         },
+                        buffer.handle.clone(),
                     ),
                 );
                 node
@@ -442,6 +443,7 @@ impl KernelBuilder {
         body(self);
         RECORDER.with(
             |r| -> Result<crate::runtime::Kernel, crate::backend::BackendError> {
+                let mut resource_tracker: Vec<Box<dyn Any>> = Vec::new();
                 let mut r = r.borrow_mut();
                 assert!(r.lock);
                 r.lock = false;
@@ -449,11 +451,12 @@ impl KernelBuilder {
                 let scope = r.scopes.pop().unwrap();
                 let entry = scope.finish();
                 let mut captured: Vec<Capture> = Vec::new();
-                for (_, (node, binding)) in r.captured_buffer.iter() {
+                for (_, (node, binding, handle)) in r.captured_buffer.iter() {
                     captured.push(Capture {
                         node: *node,
                         binding: Binding::Buffer(binding.clone()),
                     });
+                    resource_tracker.push(Box::new(handle.clone()));
                 }
                 let module = KernelModule {
                     module: Module {
@@ -471,6 +474,7 @@ impl KernelBuilder {
                 Ok(Kernel {
                     shader,
                     device: self.device.clone(),
+                    resource_tracker,
                 })
             },
         )

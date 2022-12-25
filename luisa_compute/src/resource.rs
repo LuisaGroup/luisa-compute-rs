@@ -68,6 +68,9 @@ impl<'a, T: Value> BufferView<'a, T> {
                 .unwrap();
         }
     }
+    pub fn fill_fn<F: Fn(usize) -> T>(&self, f: F) {
+        self.copy_from(&(0..self.len).map(f).collect::<Vec<_>>());
+    }
 }
 impl<T: Value> Buffer<T> {
     pub(crate) fn handle(&self) -> api::Buffer {

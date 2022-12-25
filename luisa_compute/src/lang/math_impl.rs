@@ -1,4 +1,51 @@
 use std::ops::*;
+
+trait ArithCmp {
+    type Output;
+    fn cmplt(self, rhs: Self) -> Self::Output;
+    fn cmple(self, rhs: Self) -> Self::Output;
+    fn cmpgt(self, rhs: Self) -> Self::Output;
+    fn cmpge(self, rhs: Self) -> Self::Output;
+    fn cmpne(self, rhs: Self) -> Self::Output;
+    fn cmpeq(self, rhs: Self) -> Self::Output;
+}
+macro_rules! impl_cmp_for_primitive {
+    ($t:ty) => {
+        impl ArithCmp for $t {
+            type Output = bool;
+            #[inline]
+            fn cmplt(self, rhs: Self) -> Self::Output {
+                self < rhs
+            }
+            #[inline]
+            fn cmple(self, rhs: Self) -> Self::Output {
+                self <= rhs
+            }
+            #[inline]
+            fn cmpgt(self, rhs: Self) -> Self::Output {
+                self > rhs
+            }
+            #[inline]
+            fn cmpge(self, rhs: Self) -> Self::Output {
+                self >= rhs
+            }
+            #[inline]
+            fn cmpne(self, rhs: Self) -> Self::Output {
+                self != rhs
+            }
+            #[inline]
+            fn cmpeq(self, rhs: Self) -> Self::Output {
+                self == rhs
+            }
+        }
+    };
+}
+impl_cmp_for_primitive!(f32);
+impl_cmp_for_primitive!(f64);
+impl_cmp_for_primitive!(i32);
+impl_cmp_for_primitive!(i64);
+impl_cmp_for_primitive!(u32);
+impl_cmp_for_primitive!(u64);
 macro_rules! def_vec {
     ($name:ident, $scalar:ty, $align:literal, $($comp:ident), *) => {
         #[repr(C, align($align))]
@@ -10,6 +57,10 @@ macro_rules! def_vec {
             #[inline]
             pub fn new($($comp: $scalar), *) -> Self {
                 Self { $($comp), * }
+            }
+            #[inline]
+            pub fn splat(scalar: $scalar) -> Self {
+                Self { $($comp: scalar), * }
             }
         }
     };
@@ -104,43 +155,46 @@ macro_rules! common_binop {
 }
 macro_rules! cmp_op {
     ($vec:ident,$bvec:ident, $($comp:ident), *) => {
-        impl $vec {
+        impl ArithCmp for $vec {
+            type Output = $bvec;
             #[inline]
-            pub fn cmplt(self, rhs: Self) -> $bvec {
+            fn cmplt(self, rhs: Self) -> $bvec {
                 $bvec {
                     $($comp: self.$comp < rhs.$comp), *
                 }
             }
             #[inline]
-            pub fn cmple(self, rhs: Self) -> $bvec {
+            fn cmple(self, rhs: Self) -> $bvec {
                 $bvec {
                     $($comp: self.$comp <= rhs.$comp), *
                 }
             }
             #[inline]
-            pub fn cmpgt(self, rhs: Self) -> $bvec {
+            fn cmpgt(self, rhs: Self) -> $bvec {
                 $bvec {
                     $($comp: self.$comp > rhs.$comp), *
                 }
             }
             #[inline]
-            pub fn cmpge(self, rhs: Self) -> $bvec {
+            fn cmpge(self, rhs: Self) -> $bvec {
                 $bvec {
                     $($comp: self.$comp >= rhs.$comp), *
                 }
             }
             #[inline]
-            pub fn cmpne(self, rhs: Self) -> $bvec {
+            fn cmpne(self, rhs: Self) -> $bvec {
                 $bvec {
                     $($comp: self.$comp != rhs.$comp), *
                 }
             }
             #[inline]
-            pub fn cmpeq(self, rhs: Self) -> $bvec {
+            fn cmpeq(self, rhs: Self) -> $bvec {
                 $bvec {
                     $($comp: self.$comp == rhs.$comp), *
                 }
             }
+        }
+        impl $vec {
             #[inline]
             pub fn max(self, rhs: Self) -> Self {
                 Self {

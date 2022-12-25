@@ -220,6 +220,7 @@ pub struct Command<'a> {
 pub struct Kernel {
     pub(crate) device: Device,
     pub(crate) shader: api::Shader, // strange naming, huh?
+    pub(crate) resource_tracker: Vec<Box<dyn Any>>,
 }
 pub struct ArgEncoder {
     pub(crate) args: Vec<api::Argument>,

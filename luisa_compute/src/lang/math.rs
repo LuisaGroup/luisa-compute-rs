@@ -1,9 +1,9 @@
 pub use super::math_impl::*;
 use super::{Aggregate, Expr, ExprProxy, Value, VarProxy, __extract, traits::*};
-use crate::prelude::PrimProxy;
+use crate::prelude::{const_, current_scope, PrimProxy};
 use luisa_compute_ir::{
     context::register_type,
-    ir::{MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType},
+    ir::{Func, MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType},
     TypeOf,
 };
 macro_rules! impl_proxy_fields {
@@ -219,3 +219,91 @@ impl_vec_proxy!(IVec4, IVec4Expr, IVec4Var, i32, Int32, 4, x, y, z, w);
 impl_mat_proxy!(Mat2, Mat2Expr, Mat2Var, Vec2, Float32, 2);
 impl_mat_proxy!(Mat3, Mat3Expr, Mat3Var, Vec3, Float32, 3);
 impl_mat_proxy!(Mat4, Mat4Expr, Mat4Var, Vec4, Float32, 4);
+
+macro_rules! impl_binop {
+    ($t:ty, $scalar:ty, $proxy:ty, $tr:ident, $m:ident) => {
+        impl std::ops::$tr for $proxy {
+            type Output = $proxy;
+            fn $m(self, rhs: $proxy) -> Self::Output {
+                <$proxy>::from_node(current_scope(|s| {
+                    s.call(Func::$tr, &[self.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+        impl std::ops::$tr<$scalar> for $proxy {
+            type Output = $proxy;
+            fn $m(self, rhs: $scalar) -> Self::Output {
+                let rhs = Self::splat(rhs);
+                <$proxy>::from_node(current_scope(|s| {
+                    s.call(Func::$tr, &[self.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+        impl std::ops::$tr<$proxy> for $scalar {
+            type Output = $proxy;
+            fn $m(self, rhs: $proxy) -> Self::Output {
+                let lhs = <$proxy>::splat(self);
+                <$proxy>::from_node(current_scope(|s| {
+                    s.call(Func::$tr, &[lhs.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+        impl std::ops::$tr<PrimProxy<$scalar>> for $proxy {
+            type Output = $proxy;
+            fn $m(self, rhs: PrimProxy<$scalar>) -> Self::Output {
+                let rhs = Self::splat(rhs);
+                <$proxy>::from_node(current_scope(|s| {
+                    s.call(Func::$tr, &[self.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+        impl std::ops::$tr<$proxy> for PrimProxy<$scalar> {
+            type Output = $proxy;
+            fn $m(self, rhs: $proxy) -> Self::Output {
+                let lhs = <$proxy>::splat(self);
+                <$proxy>::from_node(current_scope(|s| {
+                    s.call(Func::$tr, &[lhs.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+    };
+}
+macro_rules! impl_arith_binop {
+    ($t:ty, $scalar:ty, $proxy:ty) => {
+        impl_common_op!($t, $scalar, $proxy);
+        impl_binop!($t, $scalar, $proxy, Add, add);
+        impl_binop!($t, $scalar, $proxy, Sub, sub);
+        impl_binop!($t, $scalar, $proxy, Mul, mul);
+        impl_binop!($t, $scalar, $proxy, Div, div);
+        impl_binop!($t, $scalar, $proxy, Rem, rem);
+    };
+}
+macro_rules! impl_common_op {
+    ($t:ty, $scalar:ty, $proxy:ty) => {
+        impl $proxy {
+            pub fn splat<V: Into<PrimProxy<$scalar>>>(value: V) -> Self {
+                let value = value.into();
+                <$proxy>::from_node(current_scope(|s| {
+                    s.call(Func::Vec, &[value.node], <$t as TypeOf>::type_())
+                }))
+            }
+            pub fn zero() -> Self {
+                Self::splat(0.0 as $scalar)
+            }
+            pub fn one() -> Self {
+                Self::splat(1.0 as $scalar)
+            }
+        }
+    };
+}
+impl_arith_binop!(Vec2, f32, Vec2Expr);
+impl_arith_binop!(Vec3, f32, Vec3Expr);
+impl_arith_binop!(Vec4, f32, Vec4Expr);
+
+impl_arith_binop!(IVec2, i32, IVec2Expr);
+impl_arith_binop!(IVec3, i32, IVec3Expr);
+impl_arith_binop!(IVec4, i32, IVec4Expr);
+
+impl_arith_binop!(UVec2, u32, UVec2Expr);
+impl_arith_binop!(UVec3, u32, UVec3Expr);
+impl_arith_binop!(UVec4, u32, UVec4Expr);

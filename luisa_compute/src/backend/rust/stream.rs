@@ -91,7 +91,9 @@ impl StreamImpl {
     pub(super) fn enqueue(&self, work: impl Fn() + Send + Sync + 'static) {
         let mut guard = self.ctx.queue.lock();
         guard.push_back(Arc::new(work));
-        self.ctx.work_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.ctx
+            .work_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.ctx.new_work.notify_one();
     }
     pub(super) fn parallel_for(
@@ -121,7 +123,6 @@ impl StreamImpl {
     }
     pub(super) fn dispatch(&self, command_list: &[luisa_compute_api_types::Command]) {
         unsafe {
-            // println!("dispatch");
             for cmd in command_list {
                 match cmd {
                     luisa_compute_api_types::Command::BufferUpload(cmd) => {
@@ -129,9 +130,8 @@ impl StreamImpl {
                         let offset = cmd.offset;
                         let size = cmd.size;
                         let data = cmd.data;
-                        // println!("copy {} bytes to buffer", size);
+
                         std::ptr::copy_nonoverlapping(data, buffer.data.add(offset), size);
-                        // println!("copy done");
                     }
                     luisa_compute_api_types::Command::BufferDownload(cmd) => {
                         let buffer = &*(cmd.buffer.0 as *mut BufferImpl);
@@ -186,7 +186,7 @@ impl StreamImpl {
                             block_size: [1, 1, 1], // FIXME
                             args_count: args.len(),
                         };
-                        // println!("parallel_for");
+
                         self.parallel_for(
                             move |i| {
                                 let mut args = kernel_args;
@@ -203,14 +203,12 @@ impl StreamImpl {
                             block,
                             count,
                         );
-                        // println!("parallel_for done");
                     }
                     luisa_compute_api_types::Command::MeshBuild(_) => todo!(),
                     luisa_compute_api_types::Command::AccelBuild(_) => todo!(),
                     luisa_compute_api_types::Command::BindlessArrayUpdate(_) => todo!(),
                 }
             }
-            // println!("dispatch done");
         }
     }
 }

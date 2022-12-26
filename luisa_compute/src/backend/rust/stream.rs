@@ -19,6 +19,8 @@ struct StreamContext {
     queue: Mutex<VecDeque<Arc<dyn Fn() + Send + Sync>>>,
     new_work: Condvar,
     sync: Condvar,
+    work_count: AtomicUsize,
+    finished_count: AtomicUsize,
 }
 pub(super) struct StreamImpl {
     shared_pool: Arc<rayon::ThreadPool>,
@@ -32,6 +34,8 @@ impl StreamImpl {
             queue: Mutex::new(VecDeque::new()),
             new_work: Condvar::new(),
             sync: Condvar::new(),
+            work_count: AtomicUsize::new(0),
+            finished_count: AtomicUsize::new(0),
         });
         let private_thread = {
             let ctx = ctx.clone();
@@ -41,20 +45,25 @@ impl StreamImpl {
                     while guard.is_empty() {
                         ctx.new_work.wait(&mut guard);
                     }
-                    println!("new work");
+                    // println!("new work");
                     loop {
                         if guard.is_empty() {
-                            println!("notify");
+                            break;
+                        }
+                        // println!("get work");
+                        let work = guard.pop_front().unwrap();
+                        drop(guard);
+                        // println!("do work");
+                        work();
+                        ctx.finished_count
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        // println!("work done");
+                        guard = ctx.queue.lock();
+                        if guard.is_empty() {
+                            // println!("notify");
                             ctx.sync.notify_one();
                             break;
                         }
-                        println!("get work");
-                        let work = guard.pop_front().unwrap();
-                        drop(guard);
-                        println!("do work");
-                        work();
-                        println!("work done");
-                        guard = ctx.queue.lock();
                     }
                 }
             }))
@@ -66,16 +75,23 @@ impl StreamImpl {
         }
     }
     pub(super) fn synchronize(&self) {
-        println!("synchronize");
         let mut guard = self.ctx.queue.lock();
-        while !guard.is_empty() {
+        while self
+            .ctx
+            .work_count
+            .load(std::sync::atomic::Ordering::Relaxed)
+            > self
+                .ctx
+                .finished_count
+                .load(std::sync::atomic::Ordering::Relaxed)
+        {
             self.ctx.sync.wait(&mut guard);
         }
     }
     pub(super) fn enqueue(&self, work: impl Fn() + Send + Sync + 'static) {
-        println!("enqueue");
         let mut guard = self.ctx.queue.lock();
         guard.push_back(Arc::new(work));
+        self.ctx.work_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.ctx.new_work.notify_one();
     }
     pub(super) fn parallel_for(
@@ -105,7 +121,7 @@ impl StreamImpl {
     }
     pub(super) fn dispatch(&self, command_list: &[luisa_compute_api_types::Command]) {
         unsafe {
-            println!("dispatch");
+            // println!("dispatch");
             for cmd in command_list {
                 match cmd {
                     luisa_compute_api_types::Command::BufferUpload(cmd) => {
@@ -113,9 +129,9 @@ impl StreamImpl {
                         let offset = cmd.offset;
                         let size = cmd.size;
                         let data = cmd.data;
-                        println!("copy {} bytes to buffer", size);
+                        // println!("copy {} bytes to buffer", size);
                         std::ptr::copy_nonoverlapping(data, buffer.data.add(offset), size);
-                        println!("copy done");
+                        // println!("copy done");
                     }
                     luisa_compute_api_types::Command::BufferDownload(cmd) => {
                         let buffer = &*(cmd.buffer.0 as *mut BufferImpl);
@@ -151,7 +167,7 @@ impl StreamImpl {
                                         data: buffer.data.add(offset),
                                         size,
                                         _marker: std::marker::PhantomData,
-                                        len:0,
+                                        len: 0,
                                     }));
                                 }
                                 luisa_compute_api_types::Argument::Texture(_) => todo!(),
@@ -170,10 +186,9 @@ impl StreamImpl {
                             block_size: [1, 1, 1], // FIXME
                             args_count: args.len(),
                         };
-                        println!("parallel_for");
+                        // println!("parallel_for");
                         self.parallel_for(
                             move |i| {
-                                println!("parallel_for {} / {}", i, count);
                                 let mut args = kernel_args;
                                 let dispatch_z =
                                     i / (args.dispatch_size[0] * args.dispatch_size[1]) as usize;
@@ -188,14 +203,14 @@ impl StreamImpl {
                             block,
                             count,
                         );
-                        println!("parallel_for done");
+                        // println!("parallel_for done");
                     }
                     luisa_compute_api_types::Command::MeshBuild(_) => todo!(),
                     luisa_compute_api_types::Command::AccelBuild(_) => todo!(),
                     luisa_compute_api_types::Command::BindlessArrayUpdate(_) => todo!(),
                 }
             }
-            println!("dispatch done");
+            // println!("dispatch done");
         }
     }
 }

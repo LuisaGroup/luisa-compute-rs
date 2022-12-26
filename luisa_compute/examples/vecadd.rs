@@ -10,8 +10,6 @@ fn main() {
     let z = device.create_buffer::<f32>(1024).unwrap();
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
-    let mut tmp = vec![0.0; 1024];
-    x.view(..).copy_to(&mut tmp);
     let kernel = device
         .create_kernel(|builder| {
             let buf_x = builder.buffer::<f32>();

@@ -437,10 +437,30 @@ impl CodeGen {
                         var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
-                    ir::Func::ReduceSum => todo!(),
-                    ir::Func::ReduceProd => todo!(),
-                    ir::Func::ReduceMin => todo!(),
-                    ir::Func::ReduceMax => todo!(),
+                    ir::Func::ReduceSum => writeln!(
+                        self.body,
+                        "let {}: {} = {}.reduce_sum();",
+                        var, node_ty_s, args_v[0]
+                    )
+                    .unwrap(),
+                    ir::Func::ReduceProd => writeln!(
+                        self.body,
+                        "let {}: {} = {}.reduce_prod();",
+                        var, node_ty_s, args_v[0]
+                    )
+                    .unwrap(),
+                    ir::Func::ReduceMin => writeln!(
+                        self.body,
+                        "let {}: {} = {}.reduce_min();",
+                        var, node_ty_s, args_v[0]
+                    )
+                    .unwrap(),
+                    ir::Func::ReduceMax => writeln!(
+                        self.body,
+                        "let {}: {} = {}.reduce_max();",
+                        var, node_ty_s, args_v[0]
+                    )
+                    .unwrap(),
                     ir::Func::Clz => todo!(),
                     ir::Func::Ctz => todo!(),
                     ir::Func::PopCount => todo!(),
@@ -732,25 +752,28 @@ impl CodeGen {
                     ir::Func::BindlessTexture3dSizeLevel => todo!(),
                     ir::Func::BindlessBufferRead => todo!(),
                     ir::Func::BindlessBufferSize => todo!(),
-                    ir::Func::Vec => {
-                        writeln!(self.body, "{}::splat({})", node_ty_s, args_v[0]).unwrap()
-                    }
+                    ir::Func::Vec => writeln!(
+                        self.body,
+                        "let {}: {} = {}::splat({});",
+                        var, node_ty_s, node_ty_s, args_v[0]
+                    )
+                    .unwrap(),
                     ir::Func::Vec2 => writeln!(
                         self.body,
-                        "{}::new({}, {})",
-                        node_ty_s, args_v[0], args_v[1]
+                        "let {}: {} = {}::new({}, {});",
+                        var, node_ty_s, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
                     ir::Func::Vec3 => writeln!(
                         self.body,
-                        "{}::new({}, {}, {})",
-                        node_ty_s, args_v[0], args_v[1], args_v[2]
+                        "let {}: {} = {}::new({}, {}, {});",
+                        var, node_ty_s, node_ty_s, args_v[0], args_v[1], args_v[2]
                     )
                     .unwrap(),
                     ir::Func::Vec4 => writeln!(
                         self.body,
-                        "{}::new({}, {}, {}, {})",
-                        node_ty_s, args_v[0], args_v[1], args_v[2], args_v[3]
+                        "let {}: {} = {}::new({}, {}, {}, {});",
+                        var, node_ty_s, node_ty_s, args_v[0], args_v[1], args_v[2], args_v[3]
                     )
                     .unwrap(),
                     ir::Func::Permute => todo!(),

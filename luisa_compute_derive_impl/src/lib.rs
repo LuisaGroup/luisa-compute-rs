@@ -51,7 +51,7 @@ impl Compiler {
             let vis = &f.vis;
             let ty = &f.ty;
             quote_spanned!(span=>
-                #vis fn #ident(&self) -> Expr<#ty> {
+                #vis fn #ident (&self) -> Expr<#ty> {
                     Expr::from_proxy(<#ty as Value>::Proxy::from_node(__extract::<#ty>(
                         self.node, #i,
                     )))

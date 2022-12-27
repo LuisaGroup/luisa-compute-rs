@@ -1,6 +1,6 @@
 pub use super::math_impl::*;
-use super::{Aggregate, Expr, ExprProxy, Value, VarProxy, __extract, traits::*};
-use crate::prelude::{const_, current_scope, PrimProxy};
+use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*};
+use crate::prelude::{__compose, const_, current_scope, Expr, PrimProxy, Var};
 use luisa_compute_ir::{
     context::register_type,
     ir::{Func, MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType},
@@ -134,6 +134,15 @@ macro_rules! impl_vec_proxy {
             }
         }
         $(impl_proxy_fields!($expr_proxy, $scalar, $comp);)*
+        $(impl_var_proxy_fields!($var_proxy, $scalar, $comp);)*
+        impl $expr_proxy {
+            #[inline]
+            pub fn new($($comp: Expr<$scalar>), *) -> Self {
+                Self {
+                    node: __compose::<$vec>(&[$(VarTrait::node(&$comp)), *]),
+                }
+            }
+        }
     };
 }
 
@@ -203,6 +212,10 @@ macro_rules! impl_mat_proxy {
         }
     };
 }
+
+impl_vec_proxy!(BVec2, BVec2Expr, BVec2Var, bool, Bool, 2, x, y);
+impl_vec_proxy!(BVec3, BVec3Expr, BVec3Var, bool, Bool, 3, x, y, z);
+impl_vec_proxy!(BVec4, BVec4Expr, BVec4Var, bool, Bool, 4, x, y, z, w);
 
 impl_vec_proxy!(Vec2, Vec2Expr, Vec2Var, f32, Float32, 2, x, y);
 impl_vec_proxy!(Vec3, Vec3Expr, Vec3Var, f32, Float32, 3, x, y, z);
@@ -276,6 +289,130 @@ macro_rules! impl_arith_binop {
         impl_binop!($t, $scalar, $proxy, Mul, mul);
         impl_binop!($t, $scalar, $proxy, Div, div);
         impl_binop!($t, $scalar, $proxy, Rem, rem);
+        impl_reduce!($t, $scalar, $proxy);
+    };
+}
+macro_rules! impl_int_binop {
+    ($t:ty, $scalar:ty, $proxy:ty) => {
+        impl_binop!($t, $scalar, $proxy, BitAnd, bitand);
+        impl_binop!($t, $scalar, $proxy, BitOr, bitor);
+        impl_binop!($t, $scalar, $proxy, BitXor, bitxor);
+        impl_binop!($t, $scalar, $proxy, Shl, shl);
+        impl_binop!($t, $scalar, $proxy, Shr, shr);
+    };
+}
+macro_rules! impl_bool_binop {
+    ($t:ty, $proxy:ty) => {
+        impl_binop!($t, bool, $proxy, BitAnd, bitand);
+        impl_binop!($t, bool, $proxy, BitOr, bitor);
+        impl_binop!($t, bool, $proxy, BitXor, bitxor);
+        impl $proxy {
+            pub fn splat<V: Into<PrimProxy<bool>>>(value: V) -> Self {
+                let value = value.into();
+                <$proxy>::from_node(current_scope(|s| {
+                    s.call(Func::Vec, &[value.node], <$t as TypeOf>::type_())
+                }))
+            }
+            pub fn zero() -> Self {
+                Self::splat(false)
+            }
+            pub fn one() -> Self {
+                Self::splat(true)
+            }
+            pub fn all(&self) -> Expr<bool> {
+                <PrimProxy<bool> as VarTrait>::from_node(current_scope(|s| {
+                    s.call(Func::All, &[self.node], <bool as TypeOf>::type_())
+                }))
+            }
+            pub fn any(&self) -> Expr<bool> {
+                <PrimProxy<bool> as VarTrait>::from_node(current_scope(|s| {
+                    s.call(Func::Any, &[self.node], <bool as TypeOf>::type_())
+                }))
+            }
+        }
+    };
+}
+macro_rules! impl_reduce {
+    ($t:ty, $scalar:ty, $proxy:ty) => {
+        impl $proxy {
+            #[inline]
+            pub fn reduce_sum(&self) -> Expr<$scalar> {
+                <PrimProxy<$scalar> as VarTrait>::from_node(current_scope(|s| {
+                    s.call(Func::ReduceSum, &[self.node], <$scalar as TypeOf>::type_())
+                }))
+            }
+            #[inline]
+            pub fn reduce_prod(&self) -> Expr<$scalar> {
+                <PrimProxy<$scalar> as VarTrait>::from_node(current_scope(|s| {
+                    s.call(Func::ReduceProd, &[self.node], <$scalar as TypeOf>::type_())
+                }))
+            }
+            #[inline]
+            pub fn reduce_min(&self) -> Expr<$scalar> {
+                <PrimProxy<$scalar> as VarTrait>::from_node(current_scope(|s| {
+                    s.call(Func::ReduceMin, &[self.node], <$scalar as TypeOf>::type_())
+                }))
+            }
+            #[inline]
+            pub fn reduce_max(&self) -> Expr<$scalar> {
+                <PrimProxy<$scalar> as VarTrait>::from_node(current_scope(|s| {
+                    s.call(Func::ReduceMax, &[self.node], <$scalar as TypeOf>::type_())
+                }))
+            }
+            #[inline]
+            pub fn dot(&self, rhs: $proxy) -> Expr<$scalar> {
+                <PrimProxy<$scalar> as VarTrait>::from_node(current_scope(|s| {
+                    s.call(
+                        Func::Dot,
+                        &[self.node, rhs.node],
+                        <$scalar as TypeOf>::type_(),
+                    )
+                }))
+            }
+        }
+    };
+}
+macro_rules! impl_cmp {
+    ($t:ty, $scalar:ty, $proxy:ty, $mask:ty) => {
+        impl ArithCmp for $proxy {
+            type Output = Expr<$mask>;
+            fn cmplt<T: Into<Self>>(self, rhs: T) -> Self::Output {
+                let rhs = rhs.into();
+                Expr::<$mask>::from_node(current_scope(|s| {
+                    s.call(Func::Lt, &[self.node, rhs.node], <$mask as TypeOf>::type_())
+                }))
+            }
+            fn cmple<T: Into<Self>>(self, rhs: T) -> Self::Output {
+                let rhs = rhs.into();
+                Expr::<$mask>::from_node(current_scope(|s| {
+                    s.call(Func::Le, &[self.node, rhs.node], <$mask as TypeOf>::type_())
+                }))
+            }
+            fn cmpgt<T: Into<Self>>(self, rhs: T) -> Self::Output {
+                let rhs = rhs.into();
+                Expr::<$mask>::from_node(current_scope(|s| {
+                    s.call(Func::Gt, &[self.node, rhs.node], <$mask as TypeOf>::type_())
+                }))
+            }
+            fn cmpge<T: Into<Self>>(self, rhs: T) -> Self::Output {
+                let rhs = rhs.into();
+                Expr::<$mask>::from_node(current_scope(|s| {
+                    s.call(Func::Ge, &[self.node, rhs.node], <$mask as TypeOf>::type_())
+                }))
+            }
+            fn cmpne<T: Into<Self>>(self, rhs: T) -> Self::Output {
+                let rhs = rhs.into();
+                Expr::<$mask>::from_node(current_scope(|s| {
+                    s.call(Func::Ne, &[self.node, rhs.node], <$mask as TypeOf>::type_())
+                }))
+            }
+            fn cmpeq<T: Into<Self>>(self, rhs: T) -> Self::Output {
+                let rhs = rhs.into();
+                Expr::<$mask>::from_node(current_scope(|s| {
+                    s.call(Func::Eq, &[self.node, rhs.node], <$mask as TypeOf>::type_())
+                }))
+            }
+        }
     };
 }
 macro_rules! impl_common_op {
@@ -296,6 +433,52 @@ macro_rules! impl_common_op {
         }
     };
 }
+macro_rules! impl_vec_op {
+    ($t:ty, $scalar:ty, $proxy:ty) => {
+        impl $proxy {
+            #[inline]
+            pub fn length(&self) -> Expr<$scalar> {
+                <PrimProxy<$scalar> as VarTrait>::from_node(current_scope(|s| {
+                    s.call(Func::Length, &[self.node], <$scalar as TypeOf>::type_())
+                }))
+            }
+            #[inline]
+            pub fn normalize(&self) -> Self {
+                <$proxy>::from_node(current_scope(|s| {
+                    s.call(Func::Normalize, &[self.node], <$t as TypeOf>::type_())
+                }))
+            }
+            #[inline]
+            pub fn length_squared(&self) -> Expr<$scalar> {
+                <PrimProxy<$scalar> as VarTrait>::from_node(current_scope(|s| {
+                    s.call(
+                        Func::LengthSquared,
+                        &[self.node],
+                        <$scalar as TypeOf>::type_(),
+                    )
+                }))
+            }
+            #[inline]
+            pub fn distance(&self, rhs: $proxy) -> Expr<$scalar> {
+                (*self - rhs).length()
+            }
+            #[inline]
+            pub fn distance_squared(&self, rhs: $proxy) -> Expr<$scalar> {
+                (*self - rhs).length_squared()
+            }
+            #[inline]
+            pub fn fma(&self, a: $proxy, b: $proxy) -> Self {
+                <$proxy>::from_node(current_scope(|s| {
+                    s.call(
+                        Func::Fma,
+                        &[self.node, a.node, b.node],
+                        <$t as TypeOf>::type_(),
+                    )
+                }))
+            }
+        }
+    };
+}
 impl_arith_binop!(Vec2, f32, Vec2Expr);
 impl_arith_binop!(Vec3, f32, Vec3Expr);
 impl_arith_binop!(Vec4, f32, Vec4Expr);
@@ -307,3 +490,135 @@ impl_arith_binop!(IVec4, i32, IVec4Expr);
 impl_arith_binop!(UVec2, u32, UVec2Expr);
 impl_arith_binop!(UVec3, u32, UVec3Expr);
 impl_arith_binop!(UVec4, u32, UVec4Expr);
+
+impl_int_binop!(IVec2, i32, IVec2Expr);
+impl_int_binop!(IVec3, i32, IVec3Expr);
+impl_int_binop!(IVec4, i32, IVec4Expr);
+
+impl_int_binop!(UVec2, u32, UVec2Expr);
+impl_int_binop!(UVec3, u32, UVec3Expr);
+impl_int_binop!(UVec4, u32, UVec4Expr);
+
+impl_cmp!(Vec2, f32, Vec2Expr, BVec2);
+impl_cmp!(Vec3, f32, Vec3Expr, BVec3);
+impl_cmp!(Vec4, f32, Vec4Expr, BVec4);
+
+impl_cmp!(IVec2, i32, IVec2Expr, BVec2);
+impl_cmp!(IVec3, i32, IVec3Expr, BVec3);
+impl_cmp!(IVec4, i32, IVec4Expr, BVec4);
+
+impl_cmp!(UVec2, u32, UVec2Expr, BVec2);
+impl_cmp!(UVec3, u32, UVec3Expr, BVec3);
+impl_cmp!(UVec4, u32, UVec4Expr, BVec4);
+
+impl_bool_binop!(BVec2, BVec2Expr);
+impl_bool_binop!(BVec3, BVec3Expr);
+impl_bool_binop!(BVec4, BVec4Expr);
+
+impl Vec3Expr {
+    #[inline]
+    pub fn cross(&self, rhs: Vec3Expr) -> Self {
+        Vec3Expr::from_node(current_scope(|s| {
+            s.call(
+                Func::Cross,
+                &[self.node, rhs.node],
+                <Vec3 as TypeOf>::type_(),
+            )
+        }))
+    }
+}
+impl_vec_op!(Vec2, f32, Vec2Expr);
+impl_vec_op!(Vec3, f32, Vec3Expr);
+impl_vec_op!(Vec4, f32, Vec4Expr);
+
+pub type Float2 = Vec2;
+pub type Float3 = Vec3;
+pub type Float4 = Vec4;
+
+pub type Int2 = IVec2;
+pub type Int3 = IVec3;
+pub type Int4 = IVec4;
+
+pub type Uint2 = UVec2;
+pub type Uint3 = UVec3;
+pub type Uint4 = UVec4;
+
+#[inline]
+pub fn make_float2<X: Into<PrimProxy<f32>>, Y: Into<PrimProxy<f32>>>(x: X, y: Y) -> Expr<Float2> {
+    Expr::<Float2>::new(x.into(), y.into())
+}
+#[inline]
+pub fn make_float3<X: Into<PrimProxy<f32>>, Y: Into<PrimProxy<f32>>, Z: Into<PrimProxy<f32>>>(
+    x: X,
+    y: Y,
+    z: Z,
+) -> Expr<Float3> {
+    Expr::<Float3>::new(x.into(), y.into(), z.into())
+}
+#[inline]
+pub fn make_float4<
+    X: Into<PrimProxy<f32>>,
+    Y: Into<PrimProxy<f32>>,
+    Z: Into<PrimProxy<f32>>,
+    W: Into<PrimProxy<f32>>,
+>(
+    x: X,
+    y: Y,
+    z: Z,
+    w: W,
+) -> Expr<Float4> {
+    Expr::<Float4>::new(x.into(), y.into(), z.into(), w.into())
+}
+
+#[inline]
+pub fn make_int2<X: Into<PrimProxy<i32>>, Y: Into<PrimProxy<i32>>>(x: X, y: Y) -> Expr<Int2> {
+    Expr::<Int2>::new(x.into(), y.into())
+}
+#[inline]
+pub fn make_int3<X: Into<PrimProxy<i32>>, Y: Into<PrimProxy<i32>>, Z: Into<PrimProxy<i32>>>(
+    x: X,
+    y: Y,
+    z: Z,
+) -> Expr<Int3> {
+    Expr::<Int3>::new(x.into(), y.into(), z.into())
+}
+#[inline]
+pub fn make_int4<
+    X: Into<PrimProxy<i32>>,
+    Y: Into<PrimProxy<i32>>,
+    Z: Into<PrimProxy<i32>>,
+    W: Into<PrimProxy<i32>>,
+>(
+    x: X,
+    y: Y,
+    z: Z,
+    w: W,
+) -> Expr<Int4> {
+    Expr::<Int4>::new(x.into(), y.into(), z.into(), w.into())
+}
+#[inline]
+pub fn make_uint2<X: Into<PrimProxy<u32>>, Y: Into<PrimProxy<u32>>>(x: X, y: Y) -> Expr<Uint2> {
+    Expr::<Uint2>::new(x.into(), y.into())
+}
+#[inline]
+pub fn make_uint3<X: Into<PrimProxy<u32>>, Y: Into<PrimProxy<u32>>, Z: Into<PrimProxy<u32>>>(
+    x: X,
+    y: Y,
+    z: Z,
+) -> Expr<Uint3> {
+    Expr::<Uint3>::new(x.into(), y.into(), z.into())
+}
+#[inline]
+pub fn make_uint4<
+    X: Into<PrimProxy<u32>>,
+    Y: Into<PrimProxy<u32>>,
+    Z: Into<PrimProxy<u32>>,
+    W: Into<PrimProxy<u32>>,
+>(
+    x: X,
+    y: Y,
+    z: Z,
+    w: W,
+) -> Expr<Uint4> {
+    Expr::<Uint4>::new(x.into(), y.into(), z.into(), w.into())
+}

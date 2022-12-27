@@ -201,7 +201,22 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
     })
 }
 pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
-    current_scope(|b| b.call(Func::Struct, nodes, <T as TypeOf>::type_()))
+    let ty = <T as TypeOf>::type_();
+    match ty.as_ref() {
+        Type::Struct(_) => current_scope(|b| b.call(Func::Struct, nodes, <T as TypeOf>::type_())),
+        Type::Primitive(_) => panic!("Can't compose primitive type"),
+        Type::Vector(vt) => {
+            let length = vt.length;
+            let func = match length {
+                2 => Func::Vec2,
+                3 => Func::Vec3,
+                4 => Func::Vec4,
+                _ => panic!("Can't compose vector with length {}", length),
+            };
+            current_scope(|b| b.call(func, nodes, <T as TypeOf>::type_()))
+        }
+        _ => todo!(),
+    }
 }
 
 pub fn thread_id() -> Expr<UVec3> {
@@ -225,8 +240,8 @@ pub fn dispatch_size() -> Expr<UVec3> {
         b.call(Func::DispatchSize, &[], UVec3::type_())
     }))
 }
-type Expr<T> = <T as Value>::Expr;
-type Var<T> = <T as Value>::Var;
+pub type Expr<T> = <T as Value>::Expr;
+pub type Var<T> = <T as Value>::Var;
 
 pub fn const_<T: Value + Copy + 'static>(value: T) -> T::Expr {
     let node = current_scope(|s| -> NodeRef {

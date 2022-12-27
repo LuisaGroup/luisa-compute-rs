@@ -1,41 +1,41 @@
 use std::ops::*;
 
-trait ArithCmp {
+pub trait ArithCmp: Sized {
     type Output;
-    fn cmplt(self, rhs: Self) -> Self::Output;
-    fn cmple(self, rhs: Self) -> Self::Output;
-    fn cmpgt(self, rhs: Self) -> Self::Output;
-    fn cmpge(self, rhs: Self) -> Self::Output;
-    fn cmpne(self, rhs: Self) -> Self::Output;
-    fn cmpeq(self, rhs: Self) -> Self::Output;
+    fn cmplt<T: Into<Self>>(self, rhs: T) -> Self::Output;
+    fn cmple<T: Into<Self>>(self, rhs: T) -> Self::Output;
+    fn cmpgt<T: Into<Self>>(self, rhs: T) -> Self::Output;
+    fn cmpge<T: Into<Self>>(self, rhs: T) -> Self::Output;
+    fn cmpne<T: Into<Self>>(self, rhs: T) -> Self::Output;
+    fn cmpeq<T: Into<Self>>(self, rhs: T) -> Self::Output;
 }
 macro_rules! impl_cmp_for_primitive {
     ($t:ty) => {
         impl ArithCmp for $t {
             type Output = bool;
             #[inline]
-            fn cmplt(self, rhs: Self) -> Self::Output {
-                self < rhs
+            fn cmplt<T: Into<Self>>(self, rhs: T) -> Self::Output {
+                self < rhs.into()
             }
             #[inline]
-            fn cmple(self, rhs: Self) -> Self::Output {
-                self <= rhs
+            fn cmple<T: Into<Self>>(self, rhs: T) -> Self::Output {
+                self <= rhs.into()
             }
             #[inline]
-            fn cmpgt(self, rhs: Self) -> Self::Output {
-                self > rhs
+            fn cmpgt<T: Into<Self>>(self, rhs: T) -> Self::Output {
+                self > rhs.into()
             }
             #[inline]
-            fn cmpge(self, rhs: Self) -> Self::Output {
-                self >= rhs
+            fn cmpge<T: Into<Self>>(self, rhs: T) -> Self::Output {
+                self >= rhs.into()
             }
             #[inline]
-            fn cmpne(self, rhs: Self) -> Self::Output {
-                self != rhs
+            fn cmpne<T: Into<Self>>(self, rhs: T) -> Self::Output {
+                self != rhs.into()
             }
             #[inline]
-            fn cmpeq(self, rhs: Self) -> Self::Output {
-                self == rhs
+            fn cmpeq<T: Into<Self>>(self, rhs: T) -> Self::Output {
+                self == rhs.into()
             }
         }
     };
@@ -158,37 +158,43 @@ macro_rules! cmp_op {
         impl ArithCmp for $vec {
             type Output = $bvec;
             #[inline]
-            fn cmplt(self, rhs: Self) -> $bvec {
+            fn cmplt<T: Into<Self>>(self, rhs: T) -> $bvec {
+                let rhs = rhs.into();
                 $bvec {
                     $($comp: self.$comp < rhs.$comp), *
                 }
             }
             #[inline]
-            fn cmple(self, rhs: Self) -> $bvec {
+            fn cmple<T: Into<Self>>(self, rhs: T) -> $bvec {
+                let rhs = rhs.into();
                 $bvec {
                     $($comp: self.$comp <= rhs.$comp), *
                 }
             }
             #[inline]
-            fn cmpgt(self, rhs: Self) -> $bvec {
+            fn cmpgt<T: Into<Self>>(self, rhs: T) -> $bvec {
+                let rhs = rhs.into();
                 $bvec {
                     $($comp: self.$comp > rhs.$comp), *
                 }
             }
             #[inline]
-            fn cmpge(self, rhs: Self) -> $bvec {
+            fn cmpge<T: Into<Self>>(self, rhs: T) -> $bvec {
+                let rhs = rhs.into();
                 $bvec {
                     $($comp: self.$comp >= rhs.$comp), *
                 }
             }
             #[inline]
-            fn cmpne(self, rhs: Self) -> $bvec {
+            fn cmpne<T: Into<Self>>(self, rhs: T) -> $bvec {
+                let rhs = rhs.into();
                 $bvec {
                     $($comp: self.$comp != rhs.$comp), *
                 }
             }
             #[inline]
-            fn cmpeq(self, rhs: Self) -> $bvec {
+            fn cmpeq<T: Into<Self>>(self, rhs: T) -> $bvec {
+                let rhs = rhs.into();
                 $bvec {
                     $($comp: self.$comp == rhs.$comp), *
                 }

@@ -128,20 +128,45 @@ impl Device {
     ) -> Result<RawKernel, BackendError> {
         KernelBuilder::build(self.clone(), f)
     }
-    pub fn __create_kernel<F>(&self, f: &F) -> <F as KernelBuildFn>::Output
+    pub fn create_kernel<F>(&self, f: F) -> <F as KernelBuildFn>::Output
     where
         F: KernelBuildFn,
     {
         let mut builder = KernelBuilder::new(self.clone());
-        KernelBuildFn::build(f, &mut builder)
+        KernelBuildFn::build(&f, &mut builder)
     }
 }
 #[macro_export]
+macro_rules! fn_n_args {
+    (0)=>{Box<dyn Fn()>};
+    (1)=>{Box<dyn Fn(_)>};
+    (2)=>{Box<dyn Fn(_,_)>};
+    (3)=>{Box<dyn Fn(_,_,_)>};
+    (4)=>{Box<dyn Fn(_,_,_,_)>};
+    (5)=>{Box<dyn Fn(_,_,_,_,_)>};
+    (6)=>{Box<dyn Fn(_,_,_,_,_,_)>};
+    (7)=>{Box<dyn Fn(_,_,_,_,_,_,_)>};
+    (8)=>{Box<dyn Fn(_,_,_,_,_,_,_,_)};
+    (9)=>{ Box<dyn Fn(_,_,_,_,_,_,_,_,_)>};
+    (10)=>{Box<dyn Fn(_,_,_,_,_,_,_,_,_,_)>};
+    (11)=>{Box<dyn Fn(_,_,_,_,_,_,_,_,_,_,_)>};
+    (12)=>{Box<dyn Fn(_,_,_,_,_,_,_,_,_,_,_,_)>};
+    (13)=>{Box<dyn Fn(_,_,_,_,_,_,_,_,_,_,_,_,_)>};
+    (14)=>{Box<dyn Fn(_,_,_,_,_,_,_,_,_,_,_,_,_,_)>};
+    (15)=>{Box<dyn Fn(_,_,_,_,_,_,_,_,_,_,_,_,_,_,_)>};
+}
+#[macro_export]
+macro_rules! wrap_fn {
+    ($arg_count:tt, $f:expr) => {
+        {let kernel:fn_n_args!($arg_count) = Box::new($f); kernel}
+    };
+}
+#[macro_export]
 macro_rules! create_kernel {
-    ($device:expr, ($($fn_type:ty),*), $f:expr) => {
+    ($device:expr, $arg_count:tt, $f:expr) => {
         {
-            let kernel: Box<dyn Fn($($fn_type),*)> = Box::new($f);
-            $device.__create_kernel(&kernel)
+            let kernel:fn_n_args!($arg_count) = Box::new($f);
+            $device.create_kernel(kernel)
         }
     };
 }

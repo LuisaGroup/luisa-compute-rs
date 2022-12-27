@@ -373,9 +373,9 @@ pub struct Kernel<T: KernelArg> {
 macro_rules! impl_dispatch_for_kernel {
 
    ($first:ident  $($rest:ident)*) => {
-        impl <T0:KernelArg, $($rest: KernelArg),*> Kernel<(T0, $($rest,)*)> {
+        impl <$first:KernelArg, $($rest: KernelArg),*> Kernel<($first, $($rest,)*)> {
             #[allow(non_snake_case)]
-            pub fn dispatch(&self, dispatch_size: [u32; 3], $first:&T0, $($rest:&$rest),*) -> backend::Result<()> {
+            pub fn dispatch(&self, dispatch_size: [u32; 3], $first:&$first, $($rest:&$rest),*) -> backend::Result<()> {
                 let mut encoder = ArgEncoder::new();
                 $first.encode(&mut encoder);
                 $($rest.encode(&mut encoder);)*
@@ -384,7 +384,7 @@ macro_rules! impl_dispatch_for_kernel {
             #[allow(non_snake_case)]
             pub unsafe fn dispatch_async<'a>(
                 &'a self,
-                dispatch_size: [u32; 3], $first:&T0, $($rest:&$rest),*
+                dispatch_size: [u32; 3], $first:&$first, $($rest:&$rest),*
             ) -> Command<'a> {
                 let mut encoder = ArgEncoder::new();
                 $first.encode(&mut encoder);

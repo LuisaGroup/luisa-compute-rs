@@ -24,22 +24,23 @@ fn main() {
     let z = device.create_buffer::<f32>(1024).unwrap();
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
-    let kernel = create_kernel!(
-        device,
-        (BufferVar<f32>, BufferVar<f32>, BufferVar<f32>),
-        |buf_x, buf_y, buf_z| {
-            let tid = dispatch_id().x();
-            let x = buf_x.read(tid);
-            let y = buf_y.read(tid);
-            buf_z.write(tid, x + y);
-        }
-    )
-    .unwrap();
+    let kernel = device
+        .create_kernel(wrap_fn!(
+            3,
+            |buf_x: BufferVar<f32>, buf_y: BufferVar<f32>, buf_z: BufferVar<f32>| {
+                let tid = dispatch_id().x();
+                let x = buf_x.read(tid);
+                let y = buf_y.read(tid);
+                buf_z.write(tid, x + y);
+            }
+        ))
+        .unwrap();
     kernel.dispatch([1024, 1, 1], &x, &y, &z).unwrap();
     let mut z_data = vec![0.0; 1024];
     z.view(..).copy_to(&mut z_data);
     println!("{:?}", &z_data[0..16]);
 }
+
 
 ```
 

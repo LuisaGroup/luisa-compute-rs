@@ -1,7 +1,8 @@
 use std::{any::Any, collections::HashMap, ops::Deref, sync::Arc};
 
 use crate::{
-    prelude::{ArgEncoder, Kernel, KernelArg},
+    backend,
+    prelude::{ArgEncoder, Kernel, KernelArg, RawKernel},
     resource::{
         BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, Tex2D, Tex3D, Texel,
         TextureHandle,
@@ -27,7 +28,6 @@ use std::cell::RefCell;
 pub mod math;
 pub mod math_impl;
 pub mod traits;
-
 
 pub trait Value: Copy + ir::TypeOf {
     type Expr: ExprProxy<Self>;
@@ -83,7 +83,7 @@ macro_rules! impl_aggregate_for_tuple {
         }
         impl_aggregate_for_tuple!($($rest)*);
     };
-    
+
 }
 impl_aggregate_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
@@ -486,7 +486,7 @@ macro_rules! impl_kernel_param_for_tuple {
 }
 impl_kernel_param_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 impl KernelBuilder {
-    fn new(device: crate::runtime::Device) -> Self {
+    pub fn new(device: crate::runtime::Device) -> Self {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(!r.lock, "Cannot record multiple kernels at the same time");
@@ -525,7 +525,7 @@ impl KernelBuilder {
     pub(crate) fn build(
         device: crate::runtime::Device,
         f: impl FnOnce(&mut Self),
-    ) -> Result<crate::runtime::Kernel, crate::backend::BackendError> {
+    ) -> Result<crate::runtime::RawKernel, crate::backend::BackendError> {
         let mut builder = Self::new(device);
 
         builder.build_(f)
@@ -533,10 +533,10 @@ impl KernelBuilder {
     fn build_(
         &mut self,
         body: impl FnOnce(&mut Self),
-    ) -> Result<crate::runtime::Kernel, crate::backend::BackendError> {
+    ) -> Result<crate::runtime::RawKernel, crate::backend::BackendError> {
         body(self);
         RECORDER.with(
-            |r| -> Result<crate::runtime::Kernel, crate::backend::BackendError> {
+            |r| -> Result<crate::runtime::RawKernel, crate::backend::BackendError> {
                 let mut resource_tracker: Vec<Box<dyn Any>> = Vec::new();
                 let mut r = r.borrow_mut();
                 assert!(r.lock);
@@ -565,7 +565,7 @@ impl KernelBuilder {
                 let shader = self.device.inner.create_shader(&module, "")?;
                 //
                 r.reset();
-                Ok(Kernel {
+                Ok(RawKernel {
                     shader,
                     device: self.device.clone(),
                     resource_tracker,
@@ -575,21 +575,44 @@ impl KernelBuilder {
     }
 }
 
-pub trait KernelBuildFn<T: KernelParameter> {
-    type Closure;
-    fn build(&self, builder: &mut KernelBuilder) -> Self::Closure;
+pub trait KernelBuildFn {
+    type Output;
+    fn build(&self, builder: &mut KernelBuilder) -> Self::Output;
 }
-// impl<P0: KernelParameter > KernelBuildFn for Arc<dyn Fn(P0)>{
-//     type Closure = Arc<dyn Fn(P0::Arg)>;
-//     fn build(&self, builder: &mut KernelBuilder) -> Self::Closure {
-//         let kernel = builder.build_(|builder| {
-//             let p0 = P0::def_param(builder);
-//             self(p0)
-//         }).unwrap();
-//         Arc::new(|p0| {
-//             let mut encoder = ArgEncoder::new();
-//             p0.encode(&mut encoder);
-
-//         })
-//     }
-// }
+macro_rules! impl_kernel_build_for_fn {
+    ()=>{
+        impl KernelBuildFn for Box<dyn Fn()> {
+            type Output = backend::Result<Kernel<()>>;
+            fn build(&self, builder: &mut KernelBuilder) -> backend::Result<Kernel<()>> {
+                let kernel = builder.build_(|_| {
+                    self()
+                })?;
+                let kernel = Kernel {
+                    inner: kernel,
+                    _marker: std::marker::PhantomData,
+                };
+                Ok(kernel)
+            }
+        }
+    };
+    ($first:ident  $($rest:ident)*) => {
+        impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelBuildFn for Box<dyn Fn($first, $($rest,)*)> {
+            type Output = backend::Result<Kernel<($first::Arg, $($rest::Arg),*)>>;
+            #[allow(non_snake_case)]
+            fn build(&self, builder: &mut KernelBuilder) -> backend::Result<Kernel<($first::Arg, $($rest::Arg),*)>> {
+                let kernel = builder.build_(|builder| {
+                    let $first = $first::def_param(builder);
+                    $(let $rest = $rest::def_param(builder);)*
+                    self($first, $($rest,)*)
+                })?;
+                let kernel = Kernel {
+                    inner: kernel,
+                    _marker: std::marker::PhantomData,
+                };
+                Ok(kernel)
+            }
+        }
+        impl_kernel_build_for_fn!($($rest)*);
+    };
+}
+impl_kernel_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);

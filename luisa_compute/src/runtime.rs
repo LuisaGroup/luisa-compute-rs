@@ -1,7 +1,7 @@
 use crate::backend::{Backend, BackendError};
 use crate::*;
 use crate::{lang::Value, resource::*};
-use lang::KernelBuilder;
+use lang::{KernelBuildFn, KernelBuilder};
 pub use luisa_compute_api_types as api;
 use std::any::Any;
 use std::mem::align_of;
@@ -121,12 +121,29 @@ impl Device {
             }),
         })
     }
-    pub fn create_kernel(
+    // not recommend to use directly
+    pub fn __create_kernel_raw(
         &self,
         f: impl FnOnce(&mut KernelBuilder),
-    ) -> Result<Kernel, BackendError> {
+    ) -> Result<RawKernel, BackendError> {
         KernelBuilder::build(self.clone(), f)
     }
+    pub fn __create_kernel<F>(&self, f: &F) -> <F as KernelBuildFn>::Output
+    where
+        F: KernelBuildFn,
+    {
+        let mut builder = KernelBuilder::new(self.clone());
+        KernelBuildFn::build(f, &mut builder)
+    }
+}
+#[macro_export]
+macro_rules! create_kernel {
+    ($device:expr, ($($fn_type:ty),*), $f:expr) => {
+        {
+            let kernel: Box<dyn Fn($($fn_type),*)> = Box::new($f);
+            $device.__create_kernel(&kernel)
+        }
+    };
 }
 pub(crate) enum StreamHandle {
     Default(Arc<DeviceHandle>, api::Stream),
@@ -217,7 +234,7 @@ pub struct Command<'a> {
     #[allow(dead_code)]
     pub(crate) resource_tracker: Vec<Box<dyn Any>>,
 }
-pub struct Kernel {
+pub struct RawKernel {
     pub(crate) device: Device,
     pub(crate) shader: api::Shader, // strange naming, huh?
     #[allow(dead_code)]
@@ -294,11 +311,11 @@ macro_rules! impl_kernel_arg_for_tuple {
         }
         impl_kernel_arg_for_tuple!($($rest)*);
     };
-    
+
 }
 impl_kernel_arg_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
-impl Kernel {
+impl RawKernel {
     pub unsafe fn dispatch_async<'a>(
         &'a self,
         args: &ArgEncoder,
@@ -324,10 +341,50 @@ impl Kernel {
         }
     }
 }
-macro_rules! dispatch {
-    ($func:expr, <<< >>>) => {};
+pub struct Kernel<T: KernelArg> {
+    pub(crate) inner: RawKernel,
+    pub(crate) _marker: std::marker::PhantomData<T>,
 }
-pub type Shader = Kernel;
+macro_rules! impl_dispatch_for_kernel {
+
+   ($first:ident  $($rest:ident)*) => {
+        impl <T0:KernelArg, $($rest: KernelArg),*> Kernel<(T0, $($rest,)*)> {
+            #[allow(non_snake_case)]
+            pub fn dispatch(&self, dispatch_size: [u32; 3], $first:&T0, $($rest:&$rest),*) -> backend::Result<()> {
+                let mut encoder = ArgEncoder::new();
+                $first.encode(&mut encoder);
+                $($rest.encode(&mut encoder);)*
+                self.inner.dispatch(&encoder, dispatch_size)
+            }
+            #[allow(non_snake_case)]
+            pub unsafe fn dispatch_async<'a>(
+                &'a self,
+                dispatch_size: [u32; 3], $first:&T0, $($rest:&$rest),*
+            ) -> Command<'a> {
+                let mut encoder = ArgEncoder::new();
+                $first.encode(&mut encoder);
+                $($rest.encode(&mut encoder);)*
+                self.inner.dispatch_async(&encoder, dispatch_size)
+            }
+        }
+        impl_dispatch_for_kernel!($($rest)*);
+   };
+   ()=>{
+    impl Kernel<()> {
+        pub fn dispatch(&self, dispatch_size: [u32; 3]) -> backend::Result<()> {
+            self.inner.dispatch(&ArgEncoder::new(), dispatch_size)
+        }
+        pub unsafe fn dispatch_async<'a>(
+            &'a self,
+            dispatch_size: [u32; 3],
+        ) -> Command<'a> {
+            self.inner.dispatch_async(&ArgEncoder::new(), dispatch_size)
+        }
+    }
+}
+}
+impl_dispatch_for_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
+pub type Shader = RawKernel;
 #[cfg(all(test, feature = "_cpp"))]
 mod test {
     use super::*;

@@ -2,6 +2,12 @@ use luisa::backend::rust::RustBackend;
 use luisa::prelude::*;
 use luisa_compute as luisa;
 
+#[derive(Copy, Clone, Debug, Value)]
+#[repr(C)]
+pub struct Sphere {
+    pub center: Vec3,
+    pub radius: f32,
+}
 fn main() {
     init();
     let device = RustBackend::create_device().unwrap();

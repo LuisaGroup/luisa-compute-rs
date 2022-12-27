@@ -220,6 +220,7 @@ pub struct Command<'a> {
 pub struct Kernel {
     pub(crate) device: Device,
     pub(crate) shader: api::Shader, // strange naming, huh?
+    #[allow(dead_code)]
     pub(crate) resource_tracker: Vec<Box<dyn Any>>,
 }
 pub struct ArgEncoder {
@@ -253,6 +254,49 @@ impl ArgEncoder {
             .push(api::Argument::BindlessArray(array.handle.handle));
     }
 }
+pub trait KernelArg {
+    fn encode(&self, encoder: &mut ArgEncoder);
+}
+impl<T: Value> KernelArg for Buffer<T> {
+    fn encode(&self, encoder: &mut ArgEncoder) {
+        encoder.buffer(self);
+    }
+}
+impl<T: Texel> KernelArg for Tex2D<T> {
+    fn encode(&self, encoder: &mut ArgEncoder) {
+        encoder.tex2d(self);
+    }
+}
+impl<T: Texel> KernelArg for Tex3D<T> {
+    fn encode(&self, encoder: &mut ArgEncoder) {
+        encoder.tex3d(self);
+    }
+}
+impl KernelArg for BindlessArray {
+    fn encode(&self, encoder: &mut ArgEncoder) {
+        encoder.bindless_array(self);
+    }
+}
+macro_rules! impl_kernel_arg_for_tuple {
+    ()=>{
+        impl KernelArg for () {
+            fn encode(&self, _: &mut ArgEncoder) { }
+        }
+    };
+    ($first:ident  $($rest:ident) *) => {
+        impl<$first:KernelArg, $($rest: KernelArg),*> KernelArg for ($first, $($rest,)*) {
+            #[allow(non_snake_case)]
+            fn encode(&self, encoder: &mut ArgEncoder) {
+                let ($first, $($rest,)*) = self;
+                $first.encode(encoder);
+                $($rest.encode(encoder);)*
+            }
+        }
+        impl_kernel_arg_for_tuple!($($rest)*);
+    };
+    
+}
+impl_kernel_arg_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
 impl Kernel {
     pub unsafe fn dispatch_async<'a>(
@@ -279,6 +323,9 @@ impl Kernel {
             )
         }
     }
+}
+macro_rules! dispatch {
+    ($func:expr, <<< >>>) => {};
 }
 pub type Shader = Kernel;
 #[cfg(all(test, feature = "_cpp"))]

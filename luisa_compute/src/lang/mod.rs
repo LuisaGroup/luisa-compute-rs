@@ -1,8 +1,11 @@
 use std::{any::Any, collections::HashMap, ops::Deref, sync::Arc};
 
 use crate::{
-    prelude::Kernel,
-    resource::{BindlessArrayHandle, Buffer, BufferHandle, TextureHandle},
+    prelude::{ArgEncoder, Kernel, KernelArg},
+    resource::{
+        BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, Tex2D, Tex3D, Texel,
+        TextureHandle,
+    },
 };
 pub use ir::ir::NodeRef;
 use ir::ir::{
@@ -24,7 +27,7 @@ use std::cell::RefCell;
 pub mod math;
 pub mod math_impl;
 pub mod traits;
-pub mod traits_impl;
+
 
 pub trait Value: Copy + ir::TypeOf {
     type Expr: ExprProxy<Self>;
@@ -56,6 +59,34 @@ fn _store<T1: Aggregate, T2: Aggregate>(var: &T1, value: &T2) {
         }
     })
 }
+macro_rules! impl_aggregate_for_tuple {
+    ()=>{
+        impl Aggregate for () {
+            fn to_nodes(&self, _: &mut Vec<NodeRef>) {}
+            fn from_nodes<I: Iterator<Item = NodeRef>>(_: &mut I) -> Self{}
+        }
+    };
+    ($first:ident  $($rest:ident) *) => {
+        impl<$first:Aggregate, $($rest: Aggregate),*> Aggregate for ($first, $($rest,)*) {
+            #[allow(non_snake_case)]
+            fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+                let ($first, $($rest,)*) = self;
+                $first.to_nodes(nodes);
+                $($rest.to_nodes(nodes);)*
+            }
+            #[allow(non_snake_case)]
+            fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+                let $first = Aggregate::from_nodes(iter);
+                $(let $rest = Aggregate::from_nodes(iter);)*
+                ($first, $($rest,)*)
+            }
+        }
+        impl_aggregate_for_tuple!($($rest)*);
+    };
+    
+}
+impl_aggregate_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
+
 pub trait Selectable {
     fn select(mask: Mask, lhs: Self, rhs: Self) -> Self;
 }
@@ -374,14 +405,14 @@ impl<T: Value> BufferVar<T> {
     }
 }
 
-pub struct ImageVar<T: Value> {
+pub struct ImageVar<T: Texel> {
     node: NodeRef,
     #[allow(dead_code)]
     handle: Option<Arc<TextureHandle>>,
     _marker: std::marker::PhantomData<T>,
 }
 
-pub struct VolumeVar<T: Value> {
+pub struct VolumeVar<T: Texel> {
     node: NodeRef,
     #[allow(dead_code)]
     handle: Option<Arc<TextureHandle>>,
@@ -406,6 +437,54 @@ pub struct KernelBuilder {
     device: crate::runtime::Device,
     args: Vec<NodeRef>,
 }
+pub trait KernelParameter {
+    type Arg: KernelArg;
+    fn def_param(builder: &mut KernelBuilder) -> Self;
+}
+impl<T: Value> KernelParameter for BufferVar<T> {
+    type Arg = Buffer<T>;
+    fn def_param(builder: &mut KernelBuilder) -> Self {
+        builder.buffer()
+    }
+}
+impl<T: Texel> KernelParameter for Tex2DVar<T> {
+    type Arg = Tex2D<T>;
+    fn def_param(builder: &mut KernelBuilder) -> Self {
+        builder.tex2d()
+    }
+}
+impl<T: Texel> KernelParameter for Tex3DVar<T> {
+    type Arg = Tex3D<T>;
+    fn def_param(builder: &mut KernelBuilder) -> Self {
+        builder.tex3d()
+    }
+}
+impl KernelParameter for BindlessArrayVar {
+    type Arg = BindlessArray;
+    fn def_param(builder: &mut KernelBuilder) -> Self {
+        builder.bindless_array()
+    }
+}
+macro_rules! impl_kernel_param_for_tuple {
+    ($first:ident  $($rest:ident)*) => {
+        impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelParameter for ($first, $($rest,)*) {
+            type Arg = ($first::Arg, $($rest::Arg),*);
+            #[allow(non_snake_case)]
+            fn def_param(builder: &mut KernelBuilder) -> Self {
+                ($first::def_param(builder), $($rest::def_param(builder)),*)
+            }
+        }
+        impl_kernel_param_for_tuple!($($rest)*);
+    };
+    ()=>{
+        impl KernelParameter for () {
+            type Arg = ();
+            fn def_param(_: &mut KernelBuilder) -> Self {
+            }
+        }
+    }
+}
+impl_kernel_param_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 impl KernelBuilder {
     fn new(device: crate::runtime::Device) -> Self {
         RECORDER.with(|r| {
@@ -432,10 +511,10 @@ impl KernelBuilder {
             handle: None,
         }
     }
-    pub fn tex2d<T: Value>(&mut self) -> ImageVar<T> {
+    pub fn tex2d<T: Texel>(&mut self) -> ImageVar<T> {
         todo!()
     }
-    pub fn tex3d<T: Value>(&mut self) -> VolumeVar<T> {
+    pub fn tex3d<T: Texel>(&mut self) -> VolumeVar<T> {
         todo!()
     }
     pub fn bindless_array(&mut self) -> BindlessArrayVar {
@@ -495,3 +574,22 @@ impl KernelBuilder {
         )
     }
 }
+
+pub trait KernelBuildFn<T: KernelParameter> {
+    type Closure;
+    fn build(&self, builder: &mut KernelBuilder) -> Self::Closure;
+}
+// impl<P0: KernelParameter > KernelBuildFn for Arc<dyn Fn(P0)>{
+//     type Closure = Arc<dyn Fn(P0::Arg)>;
+//     fn build(&self, builder: &mut KernelBuilder) -> Self::Closure {
+//         let kernel = builder.build_(|builder| {
+//             let p0 = P0::def_param(builder);
+//             self(p0)
+//         }).unwrap();
+//         Arc::new(|p0| {
+//             let mut encoder = ArgEncoder::new();
+//             p0.encode(&mut encoder);
+
+//         })
+//     }
+// }

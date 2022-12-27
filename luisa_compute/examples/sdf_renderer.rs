@@ -8,6 +8,7 @@ pub struct Sphere {
     pub center: Vec3,
     pub radius: f32,
 }
+
 fn main() {
     init();
     let device = RustBackend::create_device().unwrap();

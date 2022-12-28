@@ -188,6 +188,7 @@ impl CodeGen {
                     var, node_ty_s
                 )
                 .unwrap(),
+                ir::Const::One(_) => todo!(),
                 ir::Const::Bool(v) => {
                     writeln!(&mut self.body, "let {}: {} = {};", var, node_ty_s, v).unwrap();
                 }
@@ -402,8 +403,8 @@ impl CodeGen {
                         var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
+                    ir::Func::OuterProduct=>todo!(),
                     ir::Func::MatCompMul => todo!(),
-                    ir::Func::MatCompDiv => todo!(),
                     ir::Func::Neg => {
                         writeln!(self.body, "let {}: {} = -{};", var, node_ty_s, args_v[0]).unwrap()
                     }

@@ -143,6 +143,11 @@ impl Compiler {
                     self.node
                 }
             }
+            impl From<#var_proxy_name> for #expr_proxy_name {
+                fn from(var: #var_proxy_name) -> Self {
+                    var.load()
+                }
+            }
         );
         quote_spanned! {
             span=>

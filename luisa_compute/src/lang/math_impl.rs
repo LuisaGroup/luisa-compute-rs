@@ -785,17 +785,25 @@ impl Mat2 {
     #[inline]
     pub fn inverse(&self) -> Mat2 {
         let det = self.determinant();
+        assert!(det != 0.0);
+        let inv_det = 1.0 / det;
         Mat2 {
             cols: [
                 Vec2 {
-                    x: self.cols[1].y / det,
-                    y: -self.cols[0].y / det,
+                    x: self.cols[1].y * inv_det,
+                    y: -self.cols[0].y * inv_det,
                 },
                 Vec2 {
-                    x: -self.cols[1].x / det,
-                    y: self.cols[0].x / det,
+                    x: -self.cols[1].x * inv_det,
+                    y: self.cols[0].x * inv_det,
                 },
             ],
+        }
+    }
+    #[inline]
+    pub fn comp_mul(&self, rhs: Mat2) -> Mat2 {
+        Mat2 {
+            cols: [self.cols[0] * rhs.cols[0], self.cols[1] * rhs.cols[1]],
         }
     }
 }
@@ -833,37 +841,39 @@ impl Mat3 {
         }
     }
     #[inline]
+    #[rustfmt::skip]
     pub fn determinant(&self) -> f32 {
-        self.cols[0][0] * (self.cols[1][1] * self.cols[2][2] - self.cols[2][1] * self.cols[1][2])
-            - self.cols[0][1]
-                * (self.cols[1][0] * self.cols[2][2] - self.cols[1][2] * self.cols[2][0])
-            + self.cols[0][2]
-                * (self.cols[1][0] * self.cols[2][1] - self.cols[1][1] * self.cols[2][0])
+            self.cols[0][0] * (self.cols[1][1] * self.cols[2][2] - self.cols[2][1] * self.cols[1][2])
+        -   self.cols[0][1] * (self.cols[1][0] * self.cols[2][2] - self.cols[1][2] * self.cols[2][0])
+        +   self.cols[0][2] * (self.cols[1][0] * self.cols[2][1] - self.cols[1][1] * self.cols[2][0])
     }
     #[inline]
+    #[rustfmt::skip]
     pub fn inverse(&self) -> Mat3 {
         let det = self.determinant();
+        assert!(det != 0.0);
         let invdet = 1.0 / det;
         let mut inv = Mat3::identity();
-        inv.cols[0][0] =
-            (self.cols[1][1] * self.cols[2][2] - self.cols[2][1] * self.cols[1][2]) * invdet;
-        inv.cols[0][1] =
-            (self.cols[0][2] * self.cols[2][1] - self.cols[0][1] * self.cols[2][2]) * invdet;
-        inv.cols[0][2] =
-            (self.cols[0][1] * self.cols[1][2] - self.cols[0][2] * self.cols[1][1]) * invdet;
-        inv.cols[1][0] =
-            (self.cols[1][2] * self.cols[2][0] - self.cols[1][0] * self.cols[2][2]) * invdet;
-        inv.cols[1][1] =
-            (self.cols[0][0] * self.cols[2][2] - self.cols[0][2] * self.cols[2][0]) * invdet;
-        inv.cols[1][2] =
-            (self.cols[1][0] * self.cols[0][2] - self.cols[0][0] * self.cols[1][2]) * invdet;
-        inv.cols[2][0] =
-            (self.cols[1][0] * self.cols[2][1] - self.cols[2][0] * self.cols[1][1]) * invdet;
-        inv.cols[2][1] =
-            (self.cols[2][0] * self.cols[0][1] - self.cols[0][0] * self.cols[2][1]) * invdet;
-        inv.cols[2][2] =
-            (self.cols[0][0] * self.cols[1][1] - self.cols[1][0] * self.cols[0][1]) * invdet;
+        inv.cols[0][0] = (self.cols[1][1] * self.cols[2][2] - self.cols[2][1] * self.cols[1][2]) * invdet;
+        inv.cols[0][1] = (self.cols[0][2] * self.cols[2][1] - self.cols[0][1] * self.cols[2][2]) * invdet;
+        inv.cols[0][2] = (self.cols[0][1] * self.cols[1][2] - self.cols[0][2] * self.cols[1][1]) * invdet;
+        inv.cols[1][0] = (self.cols[1][2] * self.cols[2][0] - self.cols[1][0] * self.cols[2][2]) * invdet;
+        inv.cols[1][1] = (self.cols[0][0] * self.cols[2][2] - self.cols[0][2] * self.cols[2][0]) * invdet;
+        inv.cols[1][2] = (self.cols[1][0] * self.cols[0][2] - self.cols[0][0] * self.cols[1][2]) * invdet;
+        inv.cols[2][0] = (self.cols[1][0] * self.cols[2][1] - self.cols[2][0] * self.cols[1][1]) * invdet;
+        inv.cols[2][1] = (self.cols[2][0] * self.cols[0][1] - self.cols[0][0] * self.cols[2][1]) * invdet;
+        inv.cols[2][2] = (self.cols[0][0] * self.cols[1][1] - self.cols[1][0] * self.cols[0][1]) * invdet;
         inv
+    }
+    #[inline]
+    pub fn comp_mul(&self, rhs: Mat3) -> Mat3 {
+        Mat3 {
+            cols: [
+                self.cols[0] * rhs.cols[0],
+                self.cols[1] * rhs.cols[1],
+                self.cols[2] * rhs.cols[2],
+            ],
+        }
     }
 }
 impl Mat4 {
@@ -901,8 +911,136 @@ impl Mat4 {
             cols: [self.row(0), self.row(1), self.row(2), self.row(3)],
         }
     }
+
+    // https://stackoverflow.com/questions/1148309/inverting-a-4x4-matrix
     #[inline]
+    #[rustfmt::skip]
+    #[allow(non_snake_case)]
     pub fn determinant(&self) -> f32 {
-        todo!()
+        let A2323 = self.cols[2][2] * self.cols[3][3] - self.cols[2][3] * self.cols[3][2];
+        let A1323 = self.cols[2][1] * self.cols[3][3] - self.cols[2][3] * self.cols[3][1];
+        let A1223 = self.cols[2][1] * self.cols[3][2] - self.cols[2][2] * self.cols[3][1];
+        let A0323 = self.cols[2][0] * self.cols[3][3] - self.cols[2][3] * self.cols[3][0];
+        let A0223 = self.cols[2][0] * self.cols[3][2] - self.cols[2][2] * self.cols[3][0];
+        let A0123 = self.cols[2][0] * self.cols[3][1] - self.cols[2][1] * self.cols[3][0];
+
+        let det = self.cols[0][0] * ( self.cols[1][1] * A2323 - self.cols[1][2] * A1323 + self.cols[1][3] * A1223 )
+                     - self.cols[0][1] * ( self.cols[1][0] * A2323 - self.cols[1][2] * A0323 + self.cols[1][3] * A0223 )
+                     + self.cols[0][2] * ( self.cols[1][0] * A1323 - self.cols[1][1] * A0323 + self.cols[1][3] * A0123 )
+                     - self.cols[0][3] * ( self.cols[1][0] * A1223 - self.cols[1][1] * A0223 + self.cols[1][2] * A0123 );
+        det
+    }
+    #[inline]
+    #[rustfmt::skip]
+    #[allow(non_snake_case)]
+    pub fn inverse(&self)->Mat4 {
+        let A2323 = self.cols[2][2] * self.cols[3][3] - self.cols[2][3] * self.cols[3][2];
+        let A1323 = self.cols[2][1] * self.cols[3][3] - self.cols[2][3] * self.cols[3][1];
+        let A1223 = self.cols[2][1] * self.cols[3][2] - self.cols[2][2] * self.cols[3][1];
+        let A0323 = self.cols[2][0] * self.cols[3][3] - self.cols[2][3] * self.cols[3][0];
+        let A0223 = self.cols[2][0] * self.cols[3][2] - self.cols[2][2] * self.cols[3][0];
+        let A0123 = self.cols[2][0] * self.cols[3][1] - self.cols[2][1] * self.cols[3][0];
+        let A2313 = self.cols[1][2] * self.cols[3][3] - self.cols[1][3] * self.cols[3][2];
+        let A1313 = self.cols[1][1] * self.cols[3][3] - self.cols[1][3] * self.cols[3][1];
+        let A1213 = self.cols[1][1] * self.cols[3][2] - self.cols[1][2] * self.cols[3][1];
+        let A2312 = self.cols[1][2] * self.cols[2][3] - self.cols[1][3] * self.cols[2][2];
+        let A1312 = self.cols[1][1] * self.cols[2][3] - self.cols[1][3] * self.cols[2][1];
+        let A1212 = self.cols[1][1] * self.cols[2][2] - self.cols[1][2] * self.cols[2][1];
+        let A0313 = self.cols[1][0] * self.cols[3][3] - self.cols[1][3] * self.cols[3][0];
+        let A0213 = self.cols[1][0] * self.cols[3][2] - self.cols[1][2] * self.cols[3][0];
+        let A0312 = self.cols[1][0] * self.cols[2][3] - self.cols[1][3] * self.cols[2][0];
+        let A0212 = self.cols[1][0] * self.cols[2][2] - self.cols[1][2] * self.cols[2][0];
+        let A0113 = self.cols[1][0] * self.cols[3][1] - self.cols[1][1] * self.cols[3][0];
+        let A0112 = self.cols[1][0] * self.cols[2][1] - self.cols[1][1] * self.cols[2][0];
+
+        let det = self.cols[0][0] * ( self.cols[1][1] * A2323 - self.cols[1][2] * A1323 + self.cols[1][3] * A1223 )
+                     - self.cols[0][1] * ( self.cols[1][0] * A2323 - self.cols[1][2] * A0323 + self.cols[1][3] * A0223 )
+                     + self.cols[0][2] * ( self.cols[1][0] * A1323 - self.cols[1][1] * A0323 + self.cols[1][3] * A0123 )
+                     - self.cols[0][3] * ( self.cols[1][0] * A1223 - self.cols[1][1] * A0223 + self.cols[1][2] * A0123 );
+        assert!(det != 0.0);
+        let inv_det = 1.0 / det;
+        let mut inv = Mat4::identity();
+        inv.cols[0][0] = inv_det *   ( self.cols[1][1] * A2323 - self.cols[1][2] * A1323 + self.cols[1][3] * A1223 );
+        inv.cols[0][1] = inv_det * - ( self.cols[0][1] * A2323 - self.cols[0][2] * A1323 + self.cols[0][3] * A1223 );
+        inv.cols[0][2] = inv_det *   ( self.cols[0][1] * A2313 - self.cols[0][2] * A1313 + self.cols[0][3] * A1213 );
+        inv.cols[0][3] = inv_det * - ( self.cols[0][1] * A2312 - self.cols[0][2] * A1312 + self.cols[0][3] * A1212 );
+        inv.cols[1][0] = inv_det * - ( self.cols[1][0] * A2323 - self.cols[1][2] * A0323 + self.cols[1][3] * A0223 );
+        inv.cols[1][1] = inv_det *   ( self.cols[0][0] * A2323 - self.cols[0][2] * A0323 + self.cols[0][3] * A0223 );
+        inv.cols[1][2] = inv_det * - ( self.cols[0][0] * A2313 - self.cols[0][2] * A0313 + self.cols[0][3] * A0213 );
+        inv.cols[1][3] = inv_det *   ( self.cols[0][0] * A2312 - self.cols[0][2] * A0312 + self.cols[0][3] * A0212 );
+        inv.cols[2][0] = inv_det *   ( self.cols[1][0] * A1323 - self.cols[1][1] * A0323 + self.cols[1][3] * A0123 );
+        inv.cols[2][1] = inv_det * - ( self.cols[0][0] * A1323 - self.cols[0][1] * A0323 + self.cols[0][3] * A0123 );
+        inv.cols[2][2] = inv_det *   ( self.cols[0][0] * A1313 - self.cols[0][1] * A0313 + self.cols[0][3] * A0113 );
+        inv.cols[2][3] = inv_det * - ( self.cols[0][0] * A1312 - self.cols[0][1] * A0312 + self.cols[0][3] * A0112 );
+        inv.cols[3][0] = inv_det * - ( self.cols[1][0] * A1223 - self.cols[1][1] * A0223 + self.cols[1][2] * A0123 );
+        inv.cols[3][1] = inv_det *   ( self.cols[0][0] * A1223 - self.cols[0][1] * A0223 + self.cols[0][2] * A0123 );
+        inv.cols[3][2] = inv_det * - ( self.cols[0][0] * A1213 - self.cols[0][1] * A0213 + self.cols[0][2] * A0113 );
+        inv.cols[3][3] = inv_det *   ( self.cols[0][0] * A1212 - self.cols[0][1] * A0212 + self.cols[0][2] * A0112 );
+        inv
+    }
+    #[inline]
+    pub fn comp_mul(&self, rhs: Mat4) -> Mat4 {
+        Mat4 {
+            cols: [
+                self.cols[0] * rhs.cols[0],
+                self.cols[1] * rhs.cols[1],
+                self.cols[2] * rhs.cols[2],
+                self.cols[3] * rhs.cols[3],
+            ],
+        }
+    }
+}
+
+macro_rules! impl_vec {
+    ($vec:ident,$scalar:ty) => {
+        impl $vec {
+            #[inline]
+            pub fn length(&self) -> $scalar {
+                self.length_squared().sqrt()
+            }
+            #[inline]
+            pub fn length_squared(&self) -> $scalar {
+                self.dot(*self)
+            }
+            #[inline]
+            pub fn normalize(&self) -> $vec {
+                *self / self.length()
+            }
+        }
+    };
+}
+impl_vec!(Vec2, f32);
+impl_vec!(Vec3, f32);
+impl_vec!(Vec4, f32);
+impl Vec2 {
+    #[inline]
+    pub fn outer_product(&self, rhs: Self) -> Mat2 {
+        Mat2 {
+            cols: [*self * rhs.x, *self * rhs.y],
+        }
+    }
+}
+impl Vec3 {
+    #[inline]
+    pub fn cross(&self, rhs: Self) -> Self {
+        Self {
+            x: self.y * rhs.z - self.z * rhs.y,
+            y: self.z * rhs.x - self.x * rhs.z,
+            z: self.x * rhs.y - self.y * rhs.x,
+        }
+    }
+    #[inline]
+    pub fn outer_product(&self, rhs: Self) -> Mat3 {
+        Mat3 {
+            cols: [*self * rhs.x, *self * rhs.y, *self * rhs.z],
+        }
+    }
+}
+impl Vec4 {
+    #[inline]
+    pub fn outer_product(&self, rhs: Self) -> Mat4 {
+        Mat4 {
+            cols: [*self * rhs.x, *self * rhs.y, *self * rhs.z, *self * rhs.w],
+        }
     }
 }

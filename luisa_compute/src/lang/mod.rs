@@ -94,23 +94,25 @@ pub trait ExprProxy<T>: Copy + Aggregate {
     fn from_node(node: NodeRef) -> Self;
     fn node(&self) -> NodeRef;
 }
-pub trait VarProxy<T>: Copy + Aggregate {
+
+pub trait VarProxy<T:Value>: Copy + Aggregate {
     fn from_node(node: NodeRef) -> Self;
     fn node(&self) -> NodeRef;
-    fn store<U: ExprProxy<T>>(&self, value: &U) {
-        _store(self, value);
+    fn store(&self, value: Expr<T>) {
+        _store(self, &value);
     }
-    fn load<U: ExprProxy<T>>(&self) -> U {
+    fn load(&self) -> Expr<T>{
         current_scope(|b| {
             let nodes = self.to_vec_nodes();
             let mut ret = vec![];
             for node in nodes {
                 ret.push(b.call(Func::Load, &[node], node.type_()));
             }
-            U::from_nodes(&mut ret.into_iter())
+            Expr::<T>::from_nodes(&mut ret.into_iter())
         })
     }
 }
+
 
 #[derive(Clone, Copy, Debug)]
 pub struct PrimProxy<T> {
@@ -249,7 +251,12 @@ pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
         _ => todo!(),
     }
 }
-
+pub fn local<T: Value>(init: Expr<T>) -> Var<T> {
+    Var::<T>::from_node(current_scope(|b| b.local(init.node())))
+}
+pub fn local_zeroed<T: Value>() -> Var<T> {
+    Var::<T>::from_node(current_scope(|b| b.local_zero_init(<T as TypeOf>::type_())))
+}
 pub fn thread_id() -> Expr<UVec3> {
     Expr::<UVec3>::from_node(current_scope(|b| {
         b.call(Func::ThreadId, &[], UVec3::type_())
@@ -383,19 +390,22 @@ impl<T: Value> BufferVar<T> {
         )
     }
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
+        let i = i.into();
         current_scope(|b| {
             ExprProxy::from_node(b.call(
                 Func::BufferRead,
-                &[self.node, ExprProxy::node(&i.into())],
+                &[self.node, ExprProxy::node(&i)],
                 T::type_(),
             ))
         })
     }
     pub fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, v: V) {
+        let i = i.into();
+        let v = v.into();
         current_scope(|b| {
             b.call(
                 Func::BufferWrite,
-                &[self.node, ExprProxy::node(&i.into()), v.into().node()],
+                &[self.node, ExprProxy::node(&i), v.node()],
                 Type::void(),
             )
         });

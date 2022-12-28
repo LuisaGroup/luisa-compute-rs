@@ -41,20 +41,21 @@ impl TypeGen {
                     .collect();
                 let field_types_str = field_types.join(", ");
                 let hash = sha256(&format!("{}_alignas({})", field_types_str, st.alignment));
+                let hash = hash.replace("-", "x_");
                 let name = format!("s_{}", hash);
 
                 self.cache.insert(t, name.clone());
                 let mut tmp = String::new();
                 writeln!(
                     tmp,
-                    "#[repr(C, align({}))]\nstruct {} {{",
+                    "#[repr(C, align({}))]#[derive(Copy, Clone)]\nstruct {} {{",
                     st.alignment, name
                 )
                 .unwrap();
                 for (i, field) in st.fields.as_ref().iter().enumerate() {
                     let field_name = format!("f{}", i);
                     let field_type = self.to_rust_type(*field);
-                    writeln!(tmp, "    {}: {};", field_name, field_type).unwrap();
+                    writeln!(tmp, "    {}: {},", field_name, field_type).unwrap();
                 }
                 writeln!(tmp, "}}").unwrap();
                 self.struct_typedefs.push_str(&tmp);
@@ -292,7 +293,14 @@ impl CodeGen {
                     ir::Func::TraceAny => todo!(),
                     ir::Func::SetInstanceTransform => todo!(),
                     ir::Func::SetInstanceVisibility => todo!(),
-                    ir::Func::Load => todo!(),
+                    ir::Func::Load => {
+                        writeln!(
+                            &mut self.body,
+                            "let {}: {} = {};",
+                            var, node_ty_s, args_v[0]
+                        )
+                        .unwrap();
+                    }
                     ir::Func::Cast => todo!(),
                     ir::Func::Bitcast => todo!(),
                     ir::Func::Add => writeln!(
@@ -403,8 +411,18 @@ impl CodeGen {
                         var, node_ty_s, args_v[0], args_v[1]
                     )
                     .unwrap(),
-                    ir::Func::OuterProduct=>todo!(),
-                    ir::Func::MatCompMul => todo!(),
+                    ir::Func::OuterProduct => writeln!(
+                        self.body,
+                        "let {}: {} = {}.outer({});",
+                        var, node_ty_s, args_v[0], args_v[1]
+                    )
+                    .unwrap(),
+                    ir::Func::MatCompMul => writeln!(
+                        self.body,
+                        "let {}: {} = {}.comp_mul({});",
+                        var, node_ty_s, args_v[0], args_v[1]
+                    )
+                    .unwrap(),
                     ir::Func::Neg => {
                         writeln!(self.body, "let {}: {} = -{};", var, node_ty_s, args_v[0]).unwrap()
                     }
@@ -906,8 +924,8 @@ impl CodeGen {
         gen.gen_block(kernel.module.entry);
         let prelude = r#"#[no_mangle] pub extern "C" fn kernel_fn(k_args:&KernelFnArgs) {"#;
         format!(
-            "#![allow(unused_variables)]{}\n{}\n{}\n{} }}",
-            SHADER_LIB_SRC, MATH_LIB_SRC, prelude, gen.body
+            "#![allow(unused_variables)]{}{}\n{}\n{}\n{} }}",
+            SHADER_LIB_SRC, MATH_LIB_SRC, gen.type_gen.struct_typedefs, prelude, gen.body
         )
     }
     fn new() -> Self {

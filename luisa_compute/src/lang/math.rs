@@ -133,6 +133,11 @@ macro_rules! impl_vec_proxy {
                 self.node
             }
         }
+        impl From<$var_proxy> for $expr_proxy {
+            fn from(var: $var_proxy) -> Self {
+                var.load()
+            }
+        }
         $(impl_proxy_fields!($expr_proxy, $scalar, $comp);)*
         $(impl_var_proxy_fields!($var_proxy, $scalar, $comp);)*
         impl $expr_proxy {
@@ -203,6 +208,11 @@ macro_rules! impl_mat_proxy {
             }
             fn node(&self) -> NodeRef {
                 self.node
+            }
+        }
+        impl From<$var_proxy> for $expr_proxy {
+            fn from(var: $var_proxy) -> Self {
+                var.load()
             }
         }
         impl $expr_proxy {
@@ -434,7 +444,7 @@ macro_rules! impl_common_op {
     };
 }
 macro_rules! impl_vec_op {
-    ($t:ty, $scalar:ty, $proxy:ty) => {
+    ($t:ty, $scalar:ty, $proxy:ty, $mat:ty) => {
         impl $proxy {
             #[inline]
             pub fn length(&self) -> Expr<$scalar> {
@@ -473,6 +483,16 @@ macro_rules! impl_vec_op {
                         Func::Fma,
                         &[self.node, a.node, b.node],
                         <$t as TypeOf>::type_(),
+                    )
+                }))
+            }
+            #[inline]
+            pub fn outer_product(&self, rhs: $proxy) -> Expr<$mat> {
+                Expr::<$mat>::from_node(current_scope(|s| {
+                    s.call(
+                        Func::OuterProduct,
+                        &[self.node, rhs.node],
+                        <$mat as TypeOf>::type_(),
                     )
                 }))
             }
@@ -527,9 +547,9 @@ impl Vec3Expr {
         }))
     }
 }
-impl_vec_op!(Vec2, f32, Vec2Expr);
-impl_vec_op!(Vec3, f32, Vec3Expr);
-impl_vec_op!(Vec4, f32, Vec4Expr);
+impl_vec_op!(Vec2, f32, Vec2Expr, Mat2);
+impl_vec_op!(Vec3, f32, Vec3Expr, Mat3);
+impl_vec_op!(Vec4, f32, Vec4Expr, Mat4);
 
 pub type Float2 = Vec2;
 pub type Float3 = Vec3;

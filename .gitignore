@@ -1,3 +1,6 @@
 /target
 /Cargo.lock
 luisa_compute_sys/src/binding.rs
+
+.idea/**
+cmake-build-*/**

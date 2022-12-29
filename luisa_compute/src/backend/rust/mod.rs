@@ -3,6 +3,7 @@
 use std::{ptr::null, sync::Arc};
 
 use base64ct::Encoding;
+use luisa_compute_ir::codegen::CodeGen;
 use rayon::ThreadPool;
 use sha2::{Digest, Sha256};
 
@@ -11,10 +12,8 @@ use crate::prelude::{Device, DeviceHandle};
 use self::{resource::BufferImpl, stream::StreamImpl};
 
 use super::Backend;
-mod codegen;
 mod resource;
 mod shader;
-mod shader_impl;
 mod stream;
 pub struct RustBackend {
     shared_pool: Arc<rayon::ThreadPool>,
@@ -181,8 +180,8 @@ impl Backend for RustBackend {
         //     luisa_compute_ir::ir::debug::luisa_compute_ir_dump_human_readable(&kernel.module);
         // let debug = std::ffi::CString::new(debug.as_ref()).unwrap();
         // println!("{}", debug.to_str().unwrap());
-        let gened_src = codegen::CodeGen::run(&kernel);
-        // println!("{}", gened_src);
+        let gened_src = luisa_compute_ir::codegen::generic_cpp::CpuCodeGen::run(&kernel);
+        println!("{}", gened_src);
         let lib_path = shader::compile(gened_src).unwrap();
         let shader = Box::new(shader::ShaderImpl::load(lib_path));
         let shader = Box::into_raw(shader);

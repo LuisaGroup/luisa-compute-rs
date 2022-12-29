@@ -12,6 +12,7 @@ luisa_compute_api_types = {path = "../luisa_compute_sys/LuisaCompute/src/rust/lu
 luisa_compute_derive = {path = "../luisa_compute_derive"}
 luisa_compute_derive_impl = {path = "../luisa_compute_derive_impl"}
 luisa_compute_ir = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_ir"}
+luisa_compute_cpu_kernel_defs = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_cpu_kernel_defs"}
 luisa_compute_sys = {path = "../luisa_compute_sys", optional = true}
 parking_lot = "0.12.1"
 rayon = "1.6.0"

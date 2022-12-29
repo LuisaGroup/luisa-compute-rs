@@ -8,13 +8,9 @@ use std::{
 use parking_lot::{Condvar, Mutex};
 use rayon;
 
-use crate::backend::rust::shader_impl::BufferView;
+use luisa_compute_cpu_kernel_defs as defs;
 
-use super::{
-    resource::BufferImpl,
-    shader::ShaderImpl,
-    shader_impl::{KernelFnArg, KernelFnArgs},
-};
+use super::{resource::BufferImpl, shader::ShaderImpl};
 struct StreamContext {
     queue: Mutex<VecDeque<Arc<dyn Fn() + Send + Sync>>>,
     new_work: Condvar,
@@ -154,7 +150,7 @@ impl StreamImpl {
                             * dispatch_size[2] as usize;
                         let block = 256;
                         let kernel = shader.fn_ptr();
-                        let mut args: Vec<KernelFnArg> = Vec::new();
+                        let mut args: Vec<defs::KernelFnArg> = Vec::new();
                         for i in 0..cmd.args_count {
                             let arg = *cmd.args.add(i);
                             match arg {
@@ -163,11 +159,9 @@ impl StreamImpl {
                                     let offset = buffer_arg.offset;
                                     let size = buffer_arg.size;
                                     assert!(offset + size <= buffer.size);
-                                    args.push(KernelFnArg::Buffer(BufferView {
+                                    args.push(defs::KernelFnArg::Buffer(defs::BufferView {
                                         data: buffer.data.add(offset),
                                         size,
-                                        _marker: std::marker::PhantomData,
-                                        len: 0,
                                     }));
                                 }
                                 luisa_compute_api_types::Argument::Texture(_) => todo!(),
@@ -177,13 +171,14 @@ impl StreamImpl {
                             }
                         }
                         let args = Arc::new(args);
-                        let kernel_args = KernelFnArgs {
+                        let kernel_args = defs::KernelFnArgs {
                             captured: null(),
+                            captured_count: 0,
                             args: (*args).as_ptr(),
                             dispatch_id: [0, 0, 0],
                             thread_id: [0, 0, 0],
                             dispatch_size,
-                            block_size: [1, 1, 1], // FIXME
+                            block_id: [1, 1, 1], // FIXME
                             args_count: args.len(),
                         };
 

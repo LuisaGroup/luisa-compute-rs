@@ -46,6 +46,7 @@ impl Compiler {
         let vis = &struct_.vis;
         let fields: Vec<_> = struct_.fields.iter().map(|f| f).collect();
         let field_types: Vec<_> = fields.iter().map(|f| &f.ty).collect();
+        let field_names: Vec<_> = fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
         let expr_proxy_field_methods: Vec<_> = fields
             .iter()
             .enumerate()
@@ -53,11 +54,16 @@ impl Compiler {
                 let ident = f.ident.as_ref().unwrap();
                 let vis = &f.vis;
                 let ty = &f.ty;
+                let set_ident = syn::Ident::new(&format!("set_{}", ident), ident.span());
                 quote_spanned!(span=>
                     #vis fn #ident (&self) -> Expr<#ty> {
-                        <Expr::<#ty> as ExprProxy<#ty>>::from_node(__extract::<#ty>(
+                        <Expr::<#ty> as FromNode>::from_node(__extract::<#ty>(
                             self.node, #i,
                         ))
+                    }
+                    #vis fn #set_ident<T:Into<Expr<#ty>>>(&self, value: T) -> Self {
+                        let value = value.into();
+                        Self::from_node(#crate_path ::__insert::<#name>(self.node, #i, FromNode::node(&value)))
                     }
                 )
             })
@@ -71,7 +77,7 @@ impl Compiler {
                 let ty = &f.ty;
                 quote_spanned!(span=>
                     #vis fn #ident (&self) -> Var<#ty> {
-                        <Var::<#ty> as VarProxy<#ty>>::from_node(__extract::<#ty>(
+                        <Var::<#ty> as FromNode>::from_node(__extract::<#ty>(
                             self.node, #i,
                         ))
                     }
@@ -125,7 +131,20 @@ impl Compiler {
                     }
                 }
             }
+            impl #crate_path ::FromNode  for #expr_proxy_name {
+                #[allow(unused_assignments)]
+                fn from_node(node: #crate_path ::NodeRef) -> Self {
+                    Self { node }
+                }
+                fn node(&self) -> #crate_path ::NodeRef {
+                    self.node
+                }
+            }
+            impl #crate_path ::Selectable for #expr_proxy_name {}
             impl #crate_path ::ExprProxy<#name> for #expr_proxy_name {
+               
+            }
+            impl #crate_path ::FromNode for #var_proxy_name {
                 #[allow(unused_assignments)]
                 fn from_node(node: #crate_path ::NodeRef) -> Self {
                     Self { node }
@@ -135,13 +154,6 @@ impl Compiler {
                 }
             }
             impl #crate_path ::VarProxy<#name> for #var_proxy_name {
-                #[allow(unused_assignments)]
-                fn from_node(node: #crate_path ::NodeRef) -> Self {
-                    Self { node }
-                }
-                fn node(&self) -> #crate_path ::NodeRef {
-                    self.node
-                }
             }
             impl From<#var_proxy_name> for #expr_proxy_name {
                 fn from(var: #var_proxy_name) -> Self {
@@ -156,9 +168,16 @@ impl Compiler {
             impl #crate_path ::Value for #name {
                 type Expr = #expr_proxy_name;
                 type Var = #var_proxy_name;
+                fn fields() -> Vec<String> {
+                    vec![#(stringify!(#field_names).into(),)*]
+                }
             }
             impl #expr_proxy_name {
                 #(#expr_proxy_field_methods)*
+                #vis fn new(#(#field_names: Expr<#field_types>),*) -> Self {
+                    let node = #crate_path ::__compose::<#name>(&[ #( FromNode::node(&#field_names) ),* ]);
+                    Self { node }
+                }
             }
             impl #var_proxy_name {
                 #(#var_proxy_field_methods)*

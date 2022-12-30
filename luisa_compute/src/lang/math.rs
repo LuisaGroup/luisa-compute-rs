@@ -1,6 +1,7 @@
 pub use super::math_impl::*;
 use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*};
-use crate::prelude::{__compose, const_, current_scope, Expr, PrimProxy, Var};
+use crate::prelude::FromNode;
+use crate::prelude::{__compose, const_, current_scope, Expr, PrimExpr, Var, Selectable};
 use luisa_compute_ir::{
     context::register_type,
     ir::{Func, MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType},
@@ -11,7 +12,7 @@ macro_rules! impl_proxy_fields {
         impl $proxy {
             #[inline]
             pub fn x(&self) -> Expr<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(__extract::<$scalar>(self.node, 0))
+                FromNode::from_node(__extract::<$scalar>(self.node, 0))
             }
         }
     };
@@ -19,7 +20,7 @@ macro_rules! impl_proxy_fields {
         impl $proxy {
             #[inline]
             pub fn y(&self) -> Expr<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(__extract::<$scalar>(self.node, 1))
+                FromNode::from_node(__extract::<$scalar>(self.node, 1))
             }
         }
     };
@@ -27,7 +28,7 @@ macro_rules! impl_proxy_fields {
         impl $proxy {
             #[inline]
             pub fn z(&self) -> Expr<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(__extract::<$scalar>(self.node, 2))
+                FromNode::from_node(__extract::<$scalar>(self.node, 2))
             }
         }
     };
@@ -35,7 +36,7 @@ macro_rules! impl_proxy_fields {
         impl $proxy {
             #[inline]
             pub fn w(&self) -> Expr<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(__extract::<$scalar>(self.node, 3))
+                FromNode::from_node(__extract::<$scalar>(self.node, 3))
             }
         }
     };
@@ -45,7 +46,7 @@ macro_rules! impl_var_proxy_fields {
         impl $proxy {
             #[inline]
             pub fn x(&self) -> Var<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(__extract::<$scalar>(self.node, 0))
+                FromNode::from_node(__extract::<$scalar>(self.node, 0))
             }
         }
     };
@@ -53,7 +54,7 @@ macro_rules! impl_var_proxy_fields {
         impl $proxy {
             #[inline]
             pub fn y(&self) -> Var<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(__extract::<$scalar>(self.node, 1))
+                FromNode::from_node(__extract::<$scalar>(self.node, 1))
             }
         }
     };
@@ -61,7 +62,7 @@ macro_rules! impl_var_proxy_fields {
         impl $proxy {
             #[inline]
             pub fn z(&self) -> Var<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(__extract::<$scalar>(self.node, 2))
+                FromNode::from_node(__extract::<$scalar>(self.node, 2))
             }
         }
     };
@@ -69,7 +70,7 @@ macro_rules! impl_var_proxy_fields {
         impl $proxy {
             #[inline]
             pub fn w(&self) -> Var<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(__extract::<$scalar>(self.node, 3))
+                FromNode::from_node(__extract::<$scalar>(self.node, 3))
             }
         }
     };
@@ -87,6 +88,9 @@ macro_rules! impl_vec_proxy {
         impl Value for $vec {
             type Expr = $expr_proxy;
             type Var = $var_proxy;
+            fn fields() -> Vec<String> {
+                vec![$(stringify!($comp).to_string()),*]
+            }
         }
         impl TypeOf for $vec {
             fn type_() -> luisa_compute_ir::Gc<luisa_compute_ir::ir::Type> {
@@ -117,7 +121,7 @@ macro_rules! impl_vec_proxy {
                 }
             }
         }
-        impl ExprProxy<$vec> for $expr_proxy {
+        impl FromNode for $expr_proxy {
             fn from_node(node: NodeRef) -> Self {
                 Self { node }
             }
@@ -125,13 +129,22 @@ macro_rules! impl_vec_proxy {
                 self.node
             }
         }
-        impl VarProxy<$vec> for $var_proxy {
+        impl FromNode for $var_proxy {
             fn from_node(node: NodeRef) -> Self {
                 Self { node }
             }
             fn node(&self) -> NodeRef {
                 self.node
             }
+        }
+        impl ExprProxy<$vec> for $expr_proxy {
+
+        }
+        impl Selectable for $expr_proxy {
+
+        }
+        impl VarProxy<$vec> for $var_proxy {
+
         }
         impl From<$var_proxy> for $expr_proxy {
             fn from(var: $var_proxy) -> Self {
@@ -152,7 +165,7 @@ macro_rules! impl_vec_proxy {
 }
 
 macro_rules! impl_mat_proxy {
-    ($mat:ident, $expr_proxy:ident, $var_proxy:ident, $vec:ty, $scalar_ty:ident, $length:literal) => {
+    ($mat:ident, $expr_proxy:ident, $var_proxy:ident, $vec:ty, $scalar_ty:ident, $length:literal, $($comp:ident), *) => {
         #[derive(Clone, Copy)]
         pub struct $expr_proxy {
             node: NodeRef,
@@ -164,6 +177,9 @@ macro_rules! impl_mat_proxy {
         impl Value for $mat {
             type Expr = $expr_proxy;
             type Var = $var_proxy;
+            fn fields() -> Vec<String> {
+                vec![$(stringify!($comp).to_string()),*]
+            }
         }
         impl TypeOf for $mat {
             fn type_() -> luisa_compute_ir::Gc<luisa_compute_ir::ir::Type> {
@@ -194,7 +210,20 @@ macro_rules! impl_mat_proxy {
                 }
             }
         }
+        impl FromNode for $expr_proxy {
+            fn from_node(node: NodeRef) -> Self {
+                Self { node }
+            }
+            fn node(&self) -> NodeRef {
+                self.node
+            }
+        }
         impl ExprProxy<$mat> for $expr_proxy {
+
+        }
+        impl Selectable for $expr_proxy {
+        }
+        impl FromNode for $var_proxy {
             fn from_node(node: NodeRef) -> Self {
                 Self { node }
             }
@@ -203,12 +232,6 @@ macro_rules! impl_mat_proxy {
             }
         }
         impl VarProxy<$mat> for $var_proxy {
-            fn from_node(node: NodeRef) -> Self {
-                Self { node }
-            }
-            fn node(&self) -> NodeRef {
-                self.node
-            }
         }
         impl From<$var_proxy> for $expr_proxy {
             fn from(var: $var_proxy) -> Self {
@@ -216,6 +239,12 @@ macro_rules! impl_mat_proxy {
             }
         }
         impl $expr_proxy {
+            #[inline]
+            pub fn new($($comp: Expr<$vec>), *) -> Self {
+                Self {
+                    node: __compose::<$mat>(&[$(FromNode::node(&$comp)), *]),
+                }
+            }
             pub fn col(&self, index: usize) -> Expr<$vec> {
                 Expr::<$vec>::from_node(__extract::<$vec>(self.node, index))
             }
@@ -239,9 +268,9 @@ impl_vec_proxy!(IVec2, IVec2Expr, IVec2Var, i32, Int32, 2, x, y);
 impl_vec_proxy!(IVec3, IVec3Expr, IVec3Var, i32, Int32, 3, x, y, z);
 impl_vec_proxy!(IVec4, IVec4Expr, IVec4Var, i32, Int32, 4, x, y, z, w);
 
-impl_mat_proxy!(Mat2, Mat2Expr, Mat2Var, Vec2, Float32, 2);
-impl_mat_proxy!(Mat3, Mat3Expr, Mat3Var, Vec3, Float32, 3);
-impl_mat_proxy!(Mat4, Mat4Expr, Mat4Var, Vec4, Float32, 4);
+impl_mat_proxy!(Mat2, Mat2Expr, Mat2Var, Vec2, Float32, 2, x, y);
+impl_mat_proxy!(Mat3, Mat3Expr, Mat3Var, Vec3, Float32, 3, x, y, z);
+impl_mat_proxy!(Mat4, Mat4Expr, Mat4Var, Vec4, Float32, 4, x, y, z, w);
 
 macro_rules! impl_binop {
     ($t:ty, $scalar:ty, $proxy:ty, $tr:ident, $m:ident) => {
@@ -271,16 +300,16 @@ macro_rules! impl_binop {
                 }))
             }
         }
-        impl std::ops::$tr<PrimProxy<$scalar>> for $proxy {
+        impl std::ops::$tr<PrimExpr<$scalar>> for $proxy {
             type Output = $proxy;
-            fn $m(self, rhs: PrimProxy<$scalar>) -> Self::Output {
+            fn $m(self, rhs: PrimExpr<$scalar>) -> Self::Output {
                 let rhs = Self::splat(rhs);
                 <$proxy>::from_node(current_scope(|s| {
                     s.call(Func::$tr, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
             }
         }
-        impl std::ops::$tr<$proxy> for PrimProxy<$scalar> {
+        impl std::ops::$tr<$proxy> for PrimExpr<$scalar> {
             type Output = $proxy;
             fn $m(self, rhs: $proxy) -> Self::Output {
                 let lhs = <$proxy>::splat(self);
@@ -317,7 +346,7 @@ macro_rules! impl_bool_binop {
         impl_binop!($t, bool, $proxy, BitOr, bitor);
         impl_binop!($t, bool, $proxy, BitXor, bitxor);
         impl $proxy {
-            pub fn splat<V: Into<PrimProxy<bool>>>(value: V) -> Self {
+            pub fn splat<V: Into<PrimExpr<bool>>>(value: V) -> Self {
                 let value = value.into();
                 <$proxy>::from_node(current_scope(|s| {
                     s.call(Func::Vec, &[value.node], <$t as TypeOf>::type_())
@@ -330,12 +359,12 @@ macro_rules! impl_bool_binop {
                 Self::splat(true)
             }
             pub fn all(&self) -> Expr<bool> {
-                <PrimProxy<bool> as VarTrait>::from_node(current_scope(|s| {
+                <PrimExpr<bool> as VarTrait>::from_node(current_scope(|s| {
                     s.call(Func::All, &[self.node], <bool as TypeOf>::type_())
                 }))
             }
             pub fn any(&self) -> Expr<bool> {
-                <PrimProxy<bool> as VarTrait>::from_node(current_scope(|s| {
+                <PrimExpr<bool> as VarTrait>::from_node(current_scope(|s| {
                     s.call(Func::Any, &[self.node], <bool as TypeOf>::type_())
                 }))
             }
@@ -347,31 +376,31 @@ macro_rules! impl_reduce {
         impl $proxy {
             #[inline]
             pub fn reduce_sum(&self) -> Expr<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(current_scope(|s| {
+                FromNode::from_node(current_scope(|s| {
                     s.call(Func::ReduceSum, &[self.node], <$scalar as TypeOf>::type_())
                 }))
             }
             #[inline]
             pub fn reduce_prod(&self) -> Expr<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(current_scope(|s| {
+                FromNode::from_node(current_scope(|s| {
                     s.call(Func::ReduceProd, &[self.node], <$scalar as TypeOf>::type_())
                 }))
             }
             #[inline]
             pub fn reduce_min(&self) -> Expr<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(current_scope(|s| {
+                FromNode::from_node(current_scope(|s| {
                     s.call(Func::ReduceMin, &[self.node], <$scalar as TypeOf>::type_())
                 }))
             }
             #[inline]
             pub fn reduce_max(&self) -> Expr<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(current_scope(|s| {
+                FromNode::from_node(current_scope(|s| {
                     s.call(Func::ReduceMax, &[self.node], <$scalar as TypeOf>::type_())
                 }))
             }
             #[inline]
             pub fn dot(&self, rhs: $proxy) -> Expr<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(current_scope(|s| {
+                FromNode::from_node(current_scope(|s| {
                     s.call(
                         Func::Dot,
                         &[self.node, rhs.node],
@@ -428,7 +457,7 @@ macro_rules! impl_cmp {
 macro_rules! impl_common_op {
     ($t:ty, $scalar:ty, $proxy:ty) => {
         impl $proxy {
-            pub fn splat<V: Into<PrimProxy<$scalar>>>(value: V) -> Self {
+            pub fn splat<V: Into<PrimExpr<$scalar>>>(value: V) -> Self {
                 let value = value.into();
                 <$proxy>::from_node(current_scope(|s| {
                     s.call(Func::Vec, &[value.node], <$t as TypeOf>::type_())
@@ -448,7 +477,7 @@ macro_rules! impl_vec_op {
         impl $proxy {
             #[inline]
             pub fn length(&self) -> Expr<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(current_scope(|s| {
+                FromNode::from_node(current_scope(|s| {
                     s.call(Func::Length, &[self.node], <$scalar as TypeOf>::type_())
                 }))
             }
@@ -460,7 +489,7 @@ macro_rules! impl_vec_op {
             }
             #[inline]
             pub fn length_squared(&self) -> Expr<$scalar> {
-                <PrimProxy<$scalar> as VarTrait>::from_node(current_scope(|s| {
+                FromNode::from_node(current_scope(|s| {
                     s.call(
                         Func::LengthSquared,
                         &[self.node],
@@ -534,6 +563,37 @@ impl_cmp!(UVec4, u32, UVec4Expr, BVec4);
 impl_bool_binop!(BVec2, BVec2Expr);
 impl_bool_binop!(BVec3, BVec3Expr);
 impl_bool_binop!(BVec4, BVec4Expr);
+macro_rules! impl_select {
+    ($bvec:ty, $vec:ty, $proxy:ty) => {
+        impl $proxy {
+            pub fn select(mask: Expr<$bvec>, a: Expr<$vec>, b: Expr<$vec>) -> Expr<$vec> {
+                Expr::<$vec>::from_node(current_scope(|s| {
+                    s.call(
+                        Func::Select,
+                        &[mask.node(), a.node(), b.node()],
+                        <$vec as TypeOf>::type_(),
+                    )
+                }))
+            }
+        }
+    };
+}
+
+impl_select!(BVec2, BVec2, BVec2Expr);
+impl_select!(BVec3, BVec3, BVec3Expr);
+impl_select!(BVec4, BVec4, BVec4Expr);
+
+impl_select!(BVec2, Vec2, Vec2Expr);
+impl_select!(BVec3, Vec3, Vec3Expr);
+impl_select!(BVec4, Vec4, Vec4Expr);
+
+impl_select!(BVec2, IVec2, IVec2Expr);
+impl_select!(BVec3, IVec3, IVec3Expr);
+impl_select!(BVec4, IVec4, IVec4Expr);
+
+impl_select!(BVec2, UVec2, UVec2Expr);
+impl_select!(BVec3, UVec3, UVec3Expr);
+impl_select!(BVec4, UVec4, UVec4Expr);
 
 impl Vec3Expr {
     #[inline]
@@ -551,94 +611,83 @@ impl_vec_op!(Vec2, f32, Vec2Expr, Mat2);
 impl_vec_op!(Vec3, f32, Vec3Expr, Mat3);
 impl_vec_op!(Vec4, f32, Vec4Expr, Mat4);
 
-pub type Float2 = Vec2;
-pub type Float3 = Vec3;
-pub type Float4 = Vec4;
-
-pub type Int2 = IVec2;
-pub type Int3 = IVec3;
-pub type Int4 = IVec4;
-
-pub type Uint2 = UVec2;
-pub type Uint3 = UVec3;
-pub type Uint4 = UVec4;
 
 #[inline]
-pub fn make_float2<X: Into<PrimProxy<f32>>, Y: Into<PrimProxy<f32>>>(x: X, y: Y) -> Expr<Float2> {
-    Expr::<Float2>::new(x.into(), y.into())
+pub fn make_float2<X: Into<PrimExpr<f32>>, Y: Into<PrimExpr<f32>>>(x: X, y: Y) -> Expr<Vec2> {
+    Expr::<Vec2>::new(x.into(), y.into())
 }
 #[inline]
-pub fn make_float3<X: Into<PrimProxy<f32>>, Y: Into<PrimProxy<f32>>, Z: Into<PrimProxy<f32>>>(
+pub fn make_float3<X: Into<PrimExpr<f32>>, Y: Into<PrimExpr<f32>>, Z: Into<PrimExpr<f32>>>(
     x: X,
     y: Y,
     z: Z,
-) -> Expr<Float3> {
-    Expr::<Float3>::new(x.into(), y.into(), z.into())
+) -> Expr<Vec3> {
+    Expr::<Vec3>::new(x.into(), y.into(), z.into())
 }
 #[inline]
 pub fn make_float4<
-    X: Into<PrimProxy<f32>>,
-    Y: Into<PrimProxy<f32>>,
-    Z: Into<PrimProxy<f32>>,
-    W: Into<PrimProxy<f32>>,
+    X: Into<PrimExpr<f32>>,
+    Y: Into<PrimExpr<f32>>,
+    Z: Into<PrimExpr<f32>>,
+    W: Into<PrimExpr<f32>>,
 >(
     x: X,
     y: Y,
     z: Z,
     w: W,
-) -> Expr<Float4> {
-    Expr::<Float4>::new(x.into(), y.into(), z.into(), w.into())
+) -> Expr<Vec4> {
+    Expr::<Vec4>::new(x.into(), y.into(), z.into(), w.into())
 }
 
 #[inline]
-pub fn make_int2<X: Into<PrimProxy<i32>>, Y: Into<PrimProxy<i32>>>(x: X, y: Y) -> Expr<Int2> {
-    Expr::<Int2>::new(x.into(), y.into())
+pub fn make_int2<X: Into<PrimExpr<i32>>, Y: Into<PrimExpr<i32>>>(x: X, y: Y) -> Expr<IVec2> {
+    Expr::<IVec2>::new(x.into(), y.into())
 }
 #[inline]
-pub fn make_int3<X: Into<PrimProxy<i32>>, Y: Into<PrimProxy<i32>>, Z: Into<PrimProxy<i32>>>(
+pub fn make_int3<X: Into<PrimExpr<i32>>, Y: Into<PrimExpr<i32>>, Z: Into<PrimExpr<i32>>>(
     x: X,
     y: Y,
     z: Z,
-) -> Expr<Int3> {
-    Expr::<Int3>::new(x.into(), y.into(), z.into())
+) -> Expr<IVec3> {
+    Expr::<IVec3>::new(x.into(), y.into(), z.into())
 }
 #[inline]
 pub fn make_int4<
-    X: Into<PrimProxy<i32>>,
-    Y: Into<PrimProxy<i32>>,
-    Z: Into<PrimProxy<i32>>,
-    W: Into<PrimProxy<i32>>,
+    X: Into<PrimExpr<i32>>,
+    Y: Into<PrimExpr<i32>>,
+    Z: Into<PrimExpr<i32>>,
+    W: Into<PrimExpr<i32>>,
 >(
     x: X,
     y: Y,
     z: Z,
     w: W,
-) -> Expr<Int4> {
-    Expr::<Int4>::new(x.into(), y.into(), z.into(), w.into())
+) -> Expr<IVec4> {
+    Expr::<IVec4>::new(x.into(), y.into(), z.into(), w.into())
 }
 #[inline]
-pub fn make_uint2<X: Into<PrimProxy<u32>>, Y: Into<PrimProxy<u32>>>(x: X, y: Y) -> Expr<Uint2> {
-    Expr::<Uint2>::new(x.into(), y.into())
+pub fn make_uint2<X: Into<PrimExpr<u32>>, Y: Into<PrimExpr<u32>>>(x: X, y: Y) -> Expr<UVec2> {
+    Expr::<UVec2>::new(x.into(), y.into())
 }
 #[inline]
-pub fn make_uint3<X: Into<PrimProxy<u32>>, Y: Into<PrimProxy<u32>>, Z: Into<PrimProxy<u32>>>(
+pub fn make_uint3<X: Into<PrimExpr<u32>>, Y: Into<PrimExpr<u32>>, Z: Into<PrimExpr<u32>>>(
     x: X,
     y: Y,
     z: Z,
-) -> Expr<Uint3> {
-    Expr::<Uint3>::new(x.into(), y.into(), z.into())
+) -> Expr<UVec3> {
+    Expr::<UVec3>::new(x.into(), y.into(), z.into())
 }
 #[inline]
 pub fn make_uint4<
-    X: Into<PrimProxy<u32>>,
-    Y: Into<PrimProxy<u32>>,
-    Z: Into<PrimProxy<u32>>,
-    W: Into<PrimProxy<u32>>,
+    X: Into<PrimExpr<u32>>,
+    Y: Into<PrimExpr<u32>>,
+    Z: Into<PrimExpr<u32>>,
+    W: Into<PrimExpr<u32>>,
 >(
     x: X,
     y: Y,
     z: Z,
     w: W,
-) -> Expr<Uint4> {
-    Expr::<Uint4>::new(x.into(), y.into(), z.into(), w.into())
+) -> Expr<UVec4> {
+    Expr::<UVec4>::new(x.into(), y.into(), z.into(), w.into())
 }

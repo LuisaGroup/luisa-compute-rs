@@ -12,7 +12,7 @@ pub trait VarTrait: Copy + Clone + 'static {
         <Self::Scalar as TypeOf>::type_()
     }
 }
-impl<T: Copy + 'static + Value> VarTrait for PrimProxy<T> {
+impl<T: Copy + 'static + Value> VarTrait for PrimExpr<T> {
     type Scalar = T;
     fn from_node(node: NodeRef) -> Self {
         Self {
@@ -357,13 +357,13 @@ pub trait FloatVarTrait:
             Self::from_node(ret)
         })
     }
-    fn is_finite(&self) -> Mask {
+    fn is_finite(&self) -> Bool {
         unimplemented!()
     }
-    fn is_infinite(&self) -> Mask {
+    fn is_infinite(&self) -> Bool {
         unimplemented!()
     }
-    fn is_nan(&self) -> Mask {
+    fn is_nan(&self) -> Bool {
         let any = self as &dyn Any;
         if let Some(a) = any.downcast_ref::<Expr<f32>>() {
             let u: Expr<u32> = a.bitcast();
@@ -510,22 +510,22 @@ macro_rules! impl_fneg {
         }
     };
 }
-impl Not for PrimProxy<bool> {
+impl Not for PrimExpr<bool> {
     type Output = Expr<bool>;
     fn not(self) -> Self::Output {
         self ^ const_(true)
     }
 }
-impl_common_binop!(f32, PrimProxy<f32>);
-impl_common_binop!(f64, PrimProxy<f64>);
-impl_common_binop!(i32, PrimProxy<i32>);
-impl_common_binop!(i64, PrimProxy<i64>);
-impl_common_binop!(u32, PrimProxy<u32>);
-impl_common_binop!(u64, PrimProxy<u64>);
+impl_common_binop!(f32, PrimExpr<f32>);
+impl_common_binop!(f64, PrimExpr<f64>);
+impl_common_binop!(i32, PrimExpr<i32>);
+impl_common_binop!(i64, PrimExpr<i64>);
+impl_common_binop!(u32, PrimExpr<u32>);
+impl_common_binop!(u64, PrimExpr<u64>);
 
 impl_binop!(
     bool,
-    PrimProxy<bool>,
+    PrimExpr<bool>,
     BitAndAssign,
     bitand_assign,
     BitAnd,
@@ -533,7 +533,7 @@ impl_binop!(
 );
 impl_binop!(
     bool,
-    PrimProxy<bool>,
+    PrimExpr<bool>,
     BitOrAssign,
     bitor_assign,
     BitOr,
@@ -541,43 +541,43 @@ impl_binop!(
 );
 impl_binop!(
     bool,
-    PrimProxy<bool>,
+    PrimExpr<bool>,
     BitXorAssign,
     bitxor_assign,
     BitXor,
     bitxor
 );
-impl_int_binop!(i32, PrimProxy<i32>);
-impl_int_binop!(i64, PrimProxy<i64>);
-impl_int_binop!(u32, PrimProxy<u32>);
-impl_int_binop!(u64, PrimProxy<u64>);
+impl_int_binop!(i32, PrimExpr<i32>);
+impl_int_binop!(i64, PrimExpr<i64>);
+impl_int_binop!(u32, PrimExpr<u32>);
+impl_int_binop!(u64, PrimExpr<u64>);
 
-impl_not!(i32, PrimProxy<i32>);
-impl_not!(i64, PrimProxy<i64>);
-impl_not!(u32, PrimProxy<u32>);
-impl_not!(u64, PrimProxy<u64>);
+impl_not!(i32, PrimExpr<i32>);
+impl_not!(i64, PrimExpr<i64>);
+impl_not!(u32, PrimExpr<u32>);
+impl_not!(u64, PrimExpr<u64>);
 
-impl_neg!(i32, PrimProxy<i32>);
-impl_neg!(i64, PrimProxy<i64>);
-impl_neg!(u32, PrimProxy<u32>);
-impl_neg!(u64, PrimProxy<u64>);
+impl_neg!(i32, PrimExpr<i32>);
+impl_neg!(i64, PrimExpr<i64>);
+impl_neg!(u32, PrimExpr<u32>);
+impl_neg!(u64, PrimExpr<u64>);
 
-impl_fneg!(f32, PrimProxy<f32>);
-impl_fneg!(f64, PrimProxy<f64>);
-impl VarCmp for PrimProxy<f32> {}
-impl VarCmp for PrimProxy<f64> {}
-impl VarCmp for PrimProxy<i32> {}
-impl VarCmp for PrimProxy<i64> {}
-impl VarCmp for PrimProxy<u32> {}
-impl VarCmp for PrimProxy<u64> {}
-impl VarCmp for PrimProxy<bool> {}
-impl CommonVarOp for PrimProxy<f32> {}
-impl CommonVarOp for PrimProxy<f64> {}
-impl CommonVarOp for PrimProxy<i32> {}
-impl CommonVarOp for PrimProxy<i64> {}
-impl CommonVarOp for PrimProxy<u32> {}
-impl CommonVarOp for PrimProxy<u64> {}
-impl CommonVarOp for PrimProxy<bool> {}
+impl_fneg!(f32, PrimExpr<f32>);
+impl_fneg!(f64, PrimExpr<f64>);
+impl VarCmp for PrimExpr<f32> {}
+impl VarCmp for PrimExpr<f64> {}
+impl VarCmp for PrimExpr<i32> {}
+impl VarCmp for PrimExpr<i64> {}
+impl VarCmp for PrimExpr<u32> {}
+impl VarCmp for PrimExpr<u64> {}
+impl VarCmp for PrimExpr<bool> {}
+impl CommonVarOp for PrimExpr<f32> {}
+impl CommonVarOp for PrimExpr<f64> {}
+impl CommonVarOp for PrimExpr<i32> {}
+impl CommonVarOp for PrimExpr<i64> {}
+impl CommonVarOp for PrimExpr<u32> {}
+impl CommonVarOp for PrimExpr<u64> {}
+impl CommonVarOp for PrimExpr<bool> {}
 
 impl From<f64> for Float32 {
     fn from(x: f64) -> Self {

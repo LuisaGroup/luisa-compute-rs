@@ -181,7 +181,7 @@ impl Backend for RustBackend {
         // let debug = std::ffi::CString::new(debug.as_ref()).unwrap();
         // println!("{}", debug.to_str().unwrap());
         let gened_src = luisa_compute_ir::codegen::generic_cpp::CpuCodeGen::run(&kernel);
-        println!("{}", gened_src);
+        // println!("{}", gened_src);
         let lib_path = shader::compile(gened_src).unwrap();
         let shader = Box::new(shader::ShaderImpl::load(lib_path));
         let shader = Box::into_raw(shader);
@@ -189,7 +189,10 @@ impl Backend for RustBackend {
     }
 
     fn destroy_shader(&self, shader: luisa_compute_api_types::Shader) {
-        todo!()
+        unsafe {
+            let shader = shader.0 as *mut shader::ShaderImpl;
+            drop(Box::from_raw(shader));
+        }
     }
 
     fn create_event(&self) -> super::Result<luisa_compute_api_types::Event> {

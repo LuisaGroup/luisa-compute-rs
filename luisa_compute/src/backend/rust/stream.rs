@@ -20,6 +20,7 @@ struct StreamContext {
 }
 pub(super) struct StreamImpl {
     shared_pool: Arc<rayon::ThreadPool>,
+    #[allow(dead_code)]
     private_thread: Arc<JoinHandle<()>>,
     ctx: Arc<StreamContext>,
 }
@@ -41,22 +42,17 @@ impl StreamImpl {
                     while guard.is_empty() {
                         ctx.new_work.wait(&mut guard);
                     }
-                    // println!("new work");
                     loop {
                         if guard.is_empty() {
                             break;
                         }
-                        // println!("get work");
                         let work = guard.pop_front().unwrap();
                         drop(guard);
-                        // println!("do work");
                         work();
                         ctx.finished_count
                             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        // println!("work done");
                         guard = ctx.queue.lock();
                         if guard.is_empty() {
-                            // println!("notify");
                             ctx.sync.notify_one();
                             break;
                         }

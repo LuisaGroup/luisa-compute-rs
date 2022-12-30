@@ -158,7 +158,10 @@ macro_rules! fn_n_args {
 #[macro_export]
 macro_rules! wrap_fn {
     ($arg_count:tt, $f:expr) => {
-        {let kernel:fn_n_args!($arg_count) = Box::new($f); kernel}
+        {   
+            let f = Box::new($f);
+            f as fn_n_args!($arg_count)
+        }
     };
 }
 #[macro_export]

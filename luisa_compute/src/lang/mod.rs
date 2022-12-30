@@ -11,7 +11,7 @@ use crate::{
 pub use ir::ir::NodeRef;
 use ir::ir::{
     new_node, BasicBlock, Binding, BufferBinding, Capture, Const, Func, Instruction, IrBuilder,
-    KernelModule, Module, ModuleKind, Node,
+    KernelModule, Module, ModuleKind, Node, PhiIncoming,
 };
 use luisa_compute_ir as ir;
 
@@ -21,7 +21,7 @@ pub use luisa_compute_ir::{
     ir::{StructType, Type},
     Gc, TypeOf,
 };
-use math::UVec3;
+use math::{BVec2Expr, BVec3Expr, BVec4Expr, UVec3};
 use std::cell::RefCell;
 
 // use self::math::UVec3;
@@ -32,6 +32,7 @@ pub mod traits;
 pub trait Value: Copy + ir::TypeOf {
     type Expr: ExprProxy<Self>;
     type Var: VarProxy<Self>;
+    fn fields() -> Vec<String>;
 }
 
 pub trait Aggregate: Sized {
@@ -48,6 +49,11 @@ pub trait Aggregate: Sized {
     }
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>);
     fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self;
+}
+pub trait Selectable: Aggregate {}
+pub trait FromNode {
+    fn from_node(node: NodeRef) -> Self;
+    fn node(&self) -> NodeRef;
 }
 fn _store<T1: Aggregate, T2: Aggregate>(var: &T1, value: &T2) {
     let value_nodes = value.to_vec_nodes();
@@ -87,21 +93,41 @@ macro_rules! impl_aggregate_for_tuple {
 }
 impl_aggregate_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
-pub trait Selectable {
-    fn select(mask: Mask, lhs: Self, rhs: Self) -> Self;
-}
-pub trait ExprProxy<T>: Copy + Aggregate {
-    fn from_node(node: NodeRef) -> Self;
-    fn node(&self) -> NodeRef;
-}
+pub unsafe trait _Mask: FromNode {}
 
-pub trait VarProxy<T:Value>: Copy + Aggregate {
-    fn from_node(node: NodeRef) -> Self;
-    fn node(&self) -> NodeRef;
+pub fn select<M: _Mask, A: Selectable>(mask: M, a: A, b: A) -> A {
+    let a_nodes = a.to_vec_nodes();
+    let b_nodes = b.to_vec_nodes();
+    assert_eq!(a_nodes.len(), b_nodes.len());
+    let mut ret = vec![];
+    current_scope(|b| {
+        for (a_node, b_node) in a_nodes.into_iter().zip(b_nodes.into_iter()) {
+            assert_eq!(a_node.type_(), b_node.type_());
+            assert!(!a_node.is_local(), "cannot select local variables");
+            assert!(!b_node.is_local(), "cannot select local variables");
+            ret.push(b.call(Func::Select, &[mask.node(), a_node, b_node], a_node.type_()));
+        }
+    });
+    A::from_vec_nodes(ret)
+}
+impl FromNode for bool {
+    fn from_node(_: NodeRef) -> Self {
+        panic!("don't call this")
+    }
+    fn node(&self) -> NodeRef {
+        const_(*self).node()
+    }
+}
+unsafe impl _Mask for bool {}
+unsafe impl _Mask for Bool {}
+
+pub trait ExprProxy<T>: Copy + Aggregate + FromNode {}
+
+pub trait VarProxy<T: Value>: Copy + Aggregate + FromNode {
     fn store(&self, value: Expr<T>) {
         _store(self, &value);
     }
-    fn load(&self) -> Expr<T>{
+    fn load(&self) -> Expr<T> {
         current_scope(|b| {
             let nodes = self.to_vec_nodes();
             let mut ret = vec![];
@@ -113,14 +139,29 @@ pub trait VarProxy<T:Value>: Copy + Aggregate {
     }
 }
 
-
 #[derive(Clone, Copy, Debug)]
-pub struct PrimProxy<T> {
+pub struct PrimExpr<T> {
     pub(crate) node: NodeRef,
     pub(crate) _phantom: std::marker::PhantomData<T>,
 }
-
-impl<T> Aggregate for PrimProxy<T> {
+#[derive(Clone, Copy, Debug)]
+pub struct PrimVar<T> {
+    pub(crate) node: NodeRef,
+    pub(crate) _phantom: std::marker::PhantomData<T>,
+}
+impl<T> Selectable for PrimExpr<T> {}
+impl<T> Aggregate for PrimExpr<T> {
+    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+        nodes.push(self.node);
+    }
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+        Self {
+            node: iter.next().unwrap(),
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+impl<T> Aggregate for PrimVar<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
@@ -133,12 +174,12 @@ impl<T> Aggregate for PrimProxy<T> {
 }
 macro_rules! impl_prim {
     ($t:ty) => {
-        impl From<$t> for PrimProxy<$t> {
+        impl From<$t> for PrimExpr<$t> {
             fn from(v: $t) -> Self {
                 const_(v)
             }
         }
-        impl ExprProxy<$t> for PrimProxy<$t> {
+        impl FromNode for PrimExpr<$t> {
             fn from_node(node: NodeRef) -> Self {
                 Self {
                     node,
@@ -149,7 +190,7 @@ macro_rules! impl_prim {
                 self.node
             }
         }
-        impl VarProxy<$t> for PrimProxy<$t> {
+        impl FromNode for PrimVar<$t> {
             fn from_node(node: NodeRef) -> Self {
                 Self {
                     node,
@@ -160,9 +201,14 @@ macro_rules! impl_prim {
                 self.node
             }
         }
+        impl ExprProxy<$t> for PrimExpr<$t> {}
+        impl VarProxy<$t> for PrimVar<$t> {}
         impl Value for $t {
-            type Expr = PrimProxy<$t>;
-            type Var = PrimProxy<$t>;
+            type Expr = PrimExpr<$t>;
+            type Var = PrimVar<$t>;
+            fn fields() -> Vec<String> {
+                vec![]
+            }
         }
     };
 }
@@ -174,14 +220,22 @@ impl_prim!(i32);
 impl_prim!(i64);
 impl_prim!(f32);
 impl_prim!(f64);
-pub type Mask = PrimProxy<bool>;
-pub type Bool = PrimProxy<bool>;
-pub type Float32 = PrimProxy<f32>;
-pub type Float64 = PrimProxy<f64>;
-pub type Int32 = PrimProxy<i32>;
-pub type Int64 = PrimProxy<i64>;
-pub type Uint32 = PrimProxy<u32>;
-pub type Uint64 = PrimProxy<u64>;
+
+pub type Bool = PrimExpr<bool>;
+pub type Float32 = PrimExpr<f32>;
+pub type Float64 = PrimExpr<f64>;
+pub type Int32 = PrimExpr<i32>;
+pub type Int64 = PrimExpr<i64>;
+pub type Uint32 = PrimExpr<u32>;
+pub type Uint64 = PrimExpr<u64>;
+
+pub type BoolVar = PrimVar<bool>;
+pub type Float32Var = PrimVar<f32>;
+pub type Float64Var = PrimVar<f64>;
+pub type Int32Var = PrimVar<i32>;
+pub type Int64Var = PrimVar<i64>;
+pub type Uint32Var = PrimVar<u32>;
+pub type Uint64Var = PrimVar<u64>;
 
 pub(crate) struct Recorder {
     scopes: Vec<IrBuilder>,
@@ -233,10 +287,25 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
         node
     })
 }
+pub fn __insert<T: Value>(node: NodeRef, index: usize, value: NodeRef) -> NodeRef {
+    let inst = &node.get().instruction;
+    current_scope(|b| {
+        let i = b.const_(Const::Int32(index as i32));
+        let op = match inst.as_ref() {
+            Instruction::Local { .. } => panic!("Can't insert into local variable"),
+            _ => Func::InsertElement,
+        };
+        let node = b.call(op, &[node, value, i], <T as TypeOf>::type_());
+        node
+    })
+}
 pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
     let ty = <T as TypeOf>::type_();
     match ty.as_ref() {
-        Type::Struct(_) => current_scope(|b| b.call(Func::Struct, nodes, <T as TypeOf>::type_())),
+        Type::Struct(st) => {
+            assert_eq!(st.fields.as_ref().len(), nodes.len());
+            current_scope(|b| b.call(Func::Struct, nodes, <T as TypeOf>::type_()))
+        }
         Type::Primitive(_) => panic!("Can't compose primitive type"),
         Type::Vector(vt) => {
             let length = vt.length;
@@ -310,7 +379,7 @@ pub fn const_<T: Value + Copy + 'static>(value: T) -> T::Expr {
             s.const_(Const::Generic(CBoxedSlice::new(buf), T::type_()))
         }
     });
-    ExprProxy::from_node(node)
+    FromNode::from_node(node)
 }
 
 pub struct BufferVar<T: Value> {
@@ -337,18 +406,18 @@ impl BindlessArrayVar {
                 Func::BindlessBufferRead,
                 &[
                     self.node,
-                    ExprProxy::node(&buffer_index.into()),
-                    ExprProxy::node(&element_index.into()),
+                    FromNode::node(&buffer_index.into()),
+                    FromNode::node(&element_index.into()),
                 ],
                 T::type_(),
             )
         }))
     }
     pub fn buffer_length<I: Into<Expr<u32>>>(&self, buffer_index: I) -> Expr<u32> {
-        <Expr<u32> as ExprProxy<u32>>::from_node(current_scope(|b| {
+        <Expr<u32> as FromNode>::from_node(current_scope(|b| {
             b.call(
                 Func::BindlessBufferSize,
-                &[self.node, ExprProxy::node(&buffer_index.into())],
+                &[self.node, FromNode::node(&buffer_index.into())],
                 u32::type_(),
             )
         }))
@@ -385,16 +454,16 @@ impl<T: Value> BufferVar<T> {
         }
     }
     pub fn len(&self) -> Expr<u32> {
-        ExprProxy::from_node(
+        FromNode::from_node(
             current_scope(|b| b.call(Func::BufferSize, &[self.node], u32::type_())).into(),
         )
     }
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
         current_scope(|b| {
-            ExprProxy::from_node(b.call(
+            FromNode::from_node(b.call(
                 Func::BufferRead,
-                &[self.node, ExprProxy::node(&i)],
+                &[self.node, FromNode::node(&i)],
                 T::type_(),
             ))
         })
@@ -405,7 +474,7 @@ impl<T: Value> BufferVar<T> {
         current_scope(|b| {
             b.call(
                 Func::BufferWrite,
-                &[self.node, ExprProxy::node(&i), v.node()],
+                &[self.node, FromNode::node(&i), v.node()],
                 Type::void(),
             )
         });
@@ -626,3 +695,119 @@ macro_rules! impl_kernel_build_for_fn {
     };
 }
 impl_kernel_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
+
+pub fn if_<R: Aggregate>(
+    cond: impl _Mask,
+    then: impl FnOnce() -> R,
+    else_: impl FnOnce() -> R,
+) -> R {
+    RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        let s = &mut r.scopes;
+        s.push(IrBuilder::new());
+    });
+    let then = then();
+    let then_block = RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        let s = &mut r.scopes;
+        let then_block = s.pop().unwrap().finish();
+        s.push(IrBuilder::new());
+        then_block
+    });
+    let else_ = else_();
+    let else_block = RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        let s = &mut r.scopes;
+        s.pop().unwrap().finish()
+    });
+    let then_nodes = then.to_vec_nodes();
+    let else_nodes = else_.to_vec_nodes();
+    current_scope(|b| {
+        b.if_(cond.node(), then_block, else_block);
+    });
+    assert_eq!(then_nodes.len(), else_nodes.len());
+    let phis = current_scope(|b| {
+        then_nodes
+            .iter()
+            .zip(else_nodes.iter())
+            .map(|(then, else_)| {
+                let incomings = vec![
+                    PhiIncoming {
+                        value: *then,
+                        block: then_block,
+                    },
+                    PhiIncoming {
+                        value: *else_,
+                        block: else_block,
+                    },
+                ];
+                assert_eq!(then.type_(), else_.type_());
+                let phi = new_node(Node::new(
+                    Gc::new(Instruction::Phi(CBoxedSlice::new(incomings))),
+                    then.type_(),
+                ));
+                b.append(phi);
+                phi
+            })
+            .collect::<Vec<_>>()
+    });
+    R::from_vec_nodes(phis)
+}
+pub fn generic_loop(cond: impl FnOnce() -> Bool, body: impl FnOnce(), update: impl FnOnce()) {
+    RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        let s = &mut r.scopes;
+        s.push(IrBuilder::new());
+    });
+    let cond_v = cond().node();
+    let prepare = RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        let s = &mut r.scopes;
+        let prepare = s.pop().unwrap().finish();
+        s.push(IrBuilder::new());
+        prepare
+    });
+    body();
+    let body = RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        let s = &mut r.scopes;
+        let body = s.pop().unwrap().finish();
+        s.push(IrBuilder::new());
+        body
+    });
+    update();
+    let update = RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        let s = &mut r.scopes;
+        s.pop().unwrap().finish()
+    });
+    current_scope(|b| {
+        b.generic_loop(prepare, cond_v, body, update);
+    });
+}
+#[macro_export]
+macro_rules! if_ {
+    ($cond:expr, $then:block, else $else_:block) => {
+        if_($cond, || $then, || $else_)
+    };
+    ($cond:expr, $then:block) => {
+        if_($cond, || $then, || {})
+    };
+}
+#[macro_export]
+macro_rules! while_ {
+    ($cond:expr,$body:block) => {
+        generic_loop(|| $cond, || $body, || {})
+    };
+}
+
+pub fn break_() {
+    current_scope(|b| {
+        b.break_();
+    });
+}
+pub fn continue_() {
+    current_scope(|b| {
+        b.continue_();
+    });
+}

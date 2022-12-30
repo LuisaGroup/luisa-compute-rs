@@ -3,7 +3,7 @@ use std::alloc::Layout;
 #[repr(C)]
 pub struct BufferImpl {
     pub data: *mut u8,
-    pub size: usize, // # of elements
+    pub size: usize,
     pub align: usize,
 }
 #[repr(C)]

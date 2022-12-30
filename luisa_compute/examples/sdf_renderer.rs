@@ -11,7 +11,7 @@ pub struct Sphere {
 
 fn main() {
     init();
-    let device = RustBackend::create_device().unwrap();
+    let device = create_cpu_device().unwrap();
     let spheres = device.create_buffer::<Sphere>(1).unwrap();
     spheres.view(..).copy_from(&[Sphere {
         center: Vec3::new(0.0, 0.0, 0.0),

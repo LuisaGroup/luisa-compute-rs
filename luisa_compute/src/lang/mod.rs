@@ -811,3 +811,77 @@ pub fn continue_() {
         b.continue_();
     });
 }
+struct AdContext {
+    started: bool,
+    backward_called: bool,
+}
+impl AdContext {
+    fn new() -> Self {
+        Self {
+            started: false,
+            backward_called: false,
+        }
+    }
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+thread_local! {
+    static AD_CONTEXT:RefCell<AdContext> = RefCell::new(AdContext::new());
+}
+pub fn requires_grad<T: Value>(var: impl ExprProxy<T>) {}
+pub fn backward<T: Value>(out: impl ExprProxy<T>) {
+    backward_with_grad(
+        out,
+        FromNode::from_node(current_scope(|b| {
+            let one = new_node(Node::new(
+                Gc::new(Instruction::Const(Const::One(T::type_()))),
+                T::type_(),
+            ));
+            b.append(one);
+            one
+        })),
+    );
+}
+pub fn backward_with_grad<T: Value, U: ExprProxy<T>>(out: U, grad: U) {
+    AD_CONTEXT.with(|c| {
+        let mut c = c.borrow_mut();
+        assert!(c.started, "autodiff section is not started");
+        assert!(!c.backward_called, "backward is already called");
+        c.backward_called = true;
+    });
+    let out = out.node();
+    let grad = grad.node();
+    current_scope(|b| {
+        b.call(Func::GradientMarker, &[out, grad], Type::void());
+    })
+}
+pub fn gradient<T: Value, U: ExprProxy<T>>(var: U) -> U {
+    U::from_node(current_scope(|b| {
+        b.call(Func::Gradient, &[var.node()], Type::void())
+    }))
+}
+pub fn autodiff(body: impl FnOnce()) {
+    AD_CONTEXT.with(|c| {
+        let mut c = c.borrow_mut();
+        assert!(!c.started, "autodiff section is already started");
+        c.started = true;
+    });
+    RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        let s = &mut r.scopes;
+        s.push(IrBuilder::new());
+    });
+    body();
+    let body = RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        let s = &mut r.scopes;
+        s.pop().unwrap().finish()
+    });
+    AD_CONTEXT.with(|c| {
+        let mut c = c.borrow_mut();
+        assert!(c.started, "autodiff section is not started");
+        assert!(c.backward_called, "backward is not called");
+        c.reset();
+    });
+}

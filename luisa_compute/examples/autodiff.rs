@@ -10,7 +10,7 @@ fn main() {
     let dx = device.create_buffer::<f32>(1024).unwrap();
     let dy = device.create_buffer::<f32>(1024).unwrap();
     x.view(..).fill_fn(|i| i as f32);
-    y.view(..).fill_fn(|i| 1000.0 * i as f32);
+    y.view(..).fill_fn(|i| 1.0 + i as f32);
     let kernel = device
         .create_kernel(wrap_fn!(
             4,

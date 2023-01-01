@@ -9,9 +9,12 @@ use crate::{
     },
 };
 pub use ir::ir::NodeRef;
-use ir::ir::{
-    new_node, BasicBlock, Binding, BufferBinding, Capture, Const, Func, Instruction, IrBuilder,
-    KernelModule, Module, ModuleKind, Node, PhiIncoming,
+use ir::{
+    ir::{
+        new_node, BasicBlock, Binding, BufferBinding, Capture, Const, Func, Instruction, IrBuilder,
+        KernelModule, Module, ModuleKind, Node, PhiIncoming,
+    },
+    transform::{self, Transform},
 };
 use luisa_compute_ir as ir;
 
@@ -814,12 +817,14 @@ pub fn continue_() {
 struct AdContext {
     started: bool,
     backward_called: bool,
+    forward: Option<Gc<BasicBlock>>,
 }
 impl AdContext {
     fn new() -> Self {
         Self {
             started: false,
             backward_called: false,
+            forward: None,
         }
     }
     fn reset(&mut self) {
@@ -829,7 +834,11 @@ impl AdContext {
 thread_local! {
     static AD_CONTEXT:RefCell<AdContext> = RefCell::new(AdContext::new());
 }
-pub fn requires_grad<T: Value>(var: impl ExprProxy<T>) {}
+pub fn requires_grad<T: Value>(var: impl ExprProxy<T>) {
+    current_scope(|b|{
+        b.call(Func::RequiresGradient, &[var.node()], Type::void());
+    });
+}
 pub fn backward<T: Value>(out: impl ExprProxy<T>) {
     backward_with_grad(
         out,
@@ -854,11 +863,21 @@ pub fn backward_with_grad<T: Value, U: ExprProxy<T>>(out: U, grad: U) {
     let grad = grad.node();
     current_scope(|b| {
         b.call(Func::GradientMarker, &[out, grad], Type::void());
-    })
+    });
+    let fwd = pop_scope();
+    AD_CONTEXT.with(|c| {
+        let mut c = c.borrow_mut();
+        c.forward = Some(fwd);
+    });
+    RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        let s = &mut r.scopes;
+        s.push(IrBuilder::new());
+    });
 }
 pub fn gradient<T: Value, U: ExprProxy<T>>(var: U) -> U {
     U::from_node(current_scope(|b| {
-        b.call(Func::Gradient, &[var.node()], Type::void())
+        b.call(Func::Gradient, &[var.node()], var.node().type_())
     }))
 }
 pub fn autodiff(body: impl FnOnce()) {
@@ -873,15 +892,33 @@ pub fn autodiff(body: impl FnOnce()) {
         s.push(IrBuilder::new());
     });
     body();
-    let body = RECORDER.with(|r| {
+    let fwd = AD_CONTEXT.with(|c| {
+        let mut c = c.borrow_mut();
+        assert!(c.started, "autodiff section is not started");
+        assert!(c.backward_called, "backward is not called");
+        c.forward.take().unwrap()
+    });
+    let fwd_module = Module {
+        kind: ModuleKind::Block,
+        entry: fwd,
+    };
+    let ad_transform = transform::autodiff::Autodiff;
+    let ad_module = ad_transform.transform(fwd_module);
+    let epilogue = RECORDER.with(|r| {
         let mut r = r.borrow_mut();
         let s = &mut r.scopes;
         s.pop().unwrap().finish()
     });
+    let fwd_bwd = ad_module.entry;
+
     AD_CONTEXT.with(|c| {
         let mut c = c.borrow_mut();
         assert!(c.started, "autodiff section is not started");
         assert!(c.backward_called, "backward is not called");
         c.reset();
     });
+    current_scope(|b| {
+        b.append_block(fwd_bwd);
+        b.append_block(epilogue);
+    })
 }

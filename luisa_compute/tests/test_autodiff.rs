@@ -471,6 +471,26 @@ fn test_matmul_2() {
         o.z()
     });
 }
+#[test]
+fn test_mat_det() {
+    init_once();
+    test_helper(-2.0..2.0, 1024 * 1024, 9, |inputs| {
+        let ax = inputs[0];
+        let ay = inputs[1];
+        let az = inputs[2];
+        let a = make_float3(ax, ay, az);
+        let bx = inputs[0 + 3];
+        let by = inputs[1 + 3];
+        let bz = inputs[2 + 3];
+        let b = make_float3(bx, by, bz);
+        let cx = inputs[0 + 6];
+        let cy = inputs[1 + 6];
+        let cz = inputs[2 + 6];
+        let c = make_float3(cx, cy, cz);
+        let m = Mat3Expr::new(a, b, c);
+        m.determinant()
+    });
+}
 // #[test]
 // fn test_vec3_reduce_min(){
 //     init_once();

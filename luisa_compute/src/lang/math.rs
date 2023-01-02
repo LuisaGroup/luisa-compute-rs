@@ -1,7 +1,7 @@
 use std::ops::Mul;
 
 pub use super::math_impl::*;
-use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*};
+use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*, Float32};
 use crate::prelude::FromNode;
 use crate::prelude::{__compose, __insert, const_, current_scope, Expr, PrimExpr, Selectable, Var};
 use luisa_compute_ir::{
@@ -648,6 +648,11 @@ impl Mat2Expr {
             s.call(Func::Transpose, &[self.node], <Mat2 as TypeOf>::type_())
         }))
     }
+    pub fn determinant(&self) -> Float32 {
+        FromNode::from_node(current_scope(|s| {
+            s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
+        }))
+    }
 }
 impl Mul<Vec3Expr> for Mat3Expr {
     type Output = Vec3Expr;
@@ -667,6 +672,11 @@ impl Mat3Expr {
     pub fn transpose(&self) -> Self {
         Self::from_node(current_scope(|s| {
             s.call(Func::Transpose, &[self.node], <Mat3 as TypeOf>::type_())
+        }))
+    }
+    pub fn determinant(&self) -> Float32 {
+        FromNode::from_node(current_scope(|s| {
+            s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
         }))
     }
 }
@@ -715,6 +725,11 @@ impl Mat4Expr {
     pub fn transpose(&self) -> Self {
         Self::from_node(current_scope(|s| {
             s.call(Func::Transpose, &[self.node], <Mat4 as TypeOf>::type_())
+        }))
+    }
+    pub fn determinant(&self) -> Float32 {
+        FromNode::from_node(current_scope(|s| {
+            s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
         }))
     }
 }

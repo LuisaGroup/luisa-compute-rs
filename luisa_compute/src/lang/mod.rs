@@ -492,11 +492,178 @@ impl<T: Value> BufferVar<T> {
             )
         });
     }
-    pub fn atomic_exchange<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, v: V) -> Expr<T> {
-        todo!()
-    }
 }
 
+macro_rules! impl_atomic {
+    ($t:ty) => {
+        impl BufferVar<$t> {
+            pub fn atomic_exchange<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                Expr::<$t>::from_node(current_scope(|b| {
+                    b.call(
+                        Func::AtomicExchange,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_(),
+                    )
+                }))
+            }
+            pub fn atomic_compare_exchange<
+                I: Into<Expr<u32>>,
+                V0: Into<Expr<$t>>,
+                V1: Into<Expr<$t>>,
+            >(
+                &self,
+                i: I,
+                expected: V0,
+                desired: V1,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let expected = expected.into();
+                let desired = desired.into();
+                Expr::<$t>::from_node(current_scope(|b| {
+                    b.call(
+                        Func::AtomicCompareExchange,
+                        &[
+                            self.node,
+                            FromNode::node(&i),
+                            expected.node(),
+                            desired.node(),
+                        ],
+                        <$t>::type_()
+                    )
+                }))
+            }
+            pub fn atomic_fetch_add<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                Expr::<$t>::from_node(current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchAdd,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_()
+                    )
+                }))
+            }
+            pub fn atomic_fetch_sub<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                Expr::<$t>::from_node(current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchSub,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_()
+                    )
+                }))
+            }
+
+            
+        }
+    };
+}
+macro_rules! impl_atomic_bit {
+    ($t:ty) => {
+        impl BufferVar<$t> {
+            pub fn atomic_fetch_and<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                Expr::<$t>::from_node(current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchAnd,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_()
+                    )
+                }))
+            }
+            pub fn atomic_fetch_or<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                Expr::<$t>::from_node(current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchOr,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_(),
+                    )
+                }))
+            }
+            pub fn atomic_fetch_xor<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                Expr::<$t>::from_node(current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchXor,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_(),
+                    )
+                }))
+            }
+
+            pub fn atomic_fetch_min<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                Expr::<$t>::from_node(current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchMin,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_()
+                    )
+                }))
+            }
+            pub fn atomic_fetch_max<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                Expr::<$t>::from_node(current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchMax,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_()
+                    )
+                }))
+            }
+        }
+    };
+}
+impl_atomic!(i32);
+impl_atomic!(u32);
+impl_atomic!(i64);
+impl_atomic!(u64);
+impl_atomic!(f32);
+impl_atomic_bit!(u32);
+impl_atomic_bit!(u64);
+impl_atomic_bit!(i32);
+impl_atomic_bit!(i64);
 pub struct ImageVar<T: Texel> {
     node: NodeRef,
     #[allow(dead_code)]
@@ -845,7 +1012,7 @@ thread_local! {
     static AD_CONTEXT:RefCell<AdContext> = RefCell::new(AdContext::new());
 }
 pub fn requires_grad<T: Value>(var: impl ExprProxy<T>) {
-    current_scope(|b|{
+    current_scope(|b| {
         b.call(Func::RequiresGradient, &[var.node()], Type::void());
     });
 }
@@ -932,4 +1099,3 @@ pub fn autodiff(body: impl FnOnce()) {
         b.append_block(epilogue);
     })
 }
-

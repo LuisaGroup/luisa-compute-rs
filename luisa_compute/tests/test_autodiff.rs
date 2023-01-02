@@ -195,7 +195,19 @@ macro_rules! test_1 {
         }
     };
 }
-
+macro_rules! test_2 {
+    ($name:ident, $range:expr, $e:expr) => {
+        #[test]
+        fn $name() {
+            init_once();
+            test_helper($range, 1024 * 1024, 2, |inputs| {
+                let x = inputs[0];
+                let y = inputs[1];
+                ($e)(x, y)
+            });
+        }
+    };
+}
 test_1!(test_sin, -10.0..10.0, |x: Float32| x.sin());
 test_1!(test_cos, -10.0..10.0, |x: Float32| x.cos());
 test_1!(test_sincos, -10.0..10.0, |x: Float32| x.cos() * x.sin());
@@ -214,6 +226,8 @@ test_1!(test_atan, -10.0..10.0, |x: Float32| x.atan());
 test_1!(test_sinh, -10.0..10.0, |x: Float32| x.sinh());
 test_1!(test_cosh, -10.0..10.0, |x: Float32| x.cosh());
 test_1!(test_tanh, -10.0..10.0, |x: Float32| x.tanh());
+
+test_2!(test_div, 1.0..10.0, |x: Float32, y: Float32| x / y);
 
 #[test]
 fn test_vec3_reduce_add_manual() {

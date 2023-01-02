@@ -163,12 +163,10 @@ macro_rules! wrap_fn {
 }
 #[macro_export]
 macro_rules! create_kernel {
-    ($device:expr, $arg_count:tt, $f:expr) => {
-        {
-            let kernel:fn_n_args!($arg_count) = Box::new($f);
-            $device.create_kernel(kernel)
-        }
-    };
+    ($device:expr, $arg_count:tt, $f:expr) => {{
+        let kernel: fn_n_args!($arg_count) = Box::new($f);
+        $device.create_kernel(kernel)
+    }};
 }
 pub(crate) enum StreamHandle {
     Default(Arc<DeviceHandle>, api::Stream),
@@ -369,6 +367,13 @@ impl RawKernel {
 pub struct Kernel<T: KernelArg> {
     pub(crate) inner: RawKernel,
     pub(crate) _marker: std::marker::PhantomData<T>,
+}
+impl<T: KernelArg> Kernel<T> {
+    pub fn cache_dir(&self) -> Option<PathBuf> {
+        let handle = self.inner.shader;
+        let device = &self.inner.device;
+        device.inner.shader_cache_dir(handle)
+    }
 }
 macro_rules! impl_dispatch_for_kernel {
 

@@ -262,6 +262,12 @@ pub trait FloatVarTrait:
             Self::from_node(ret)
         })
     }
+    fn rsqrt(&self) -> Self {
+        current_scope(|s| {
+            let ret = s.call(Func::Rsqrt, &[self.node()], Self::type_());
+            Self::from_node(ret)
+        })
+    }
     fn fract(&self) -> Self {
         self.clone() - self.clone().floor()
     }

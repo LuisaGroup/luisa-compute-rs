@@ -261,6 +261,17 @@ fn test_vec3_reduce_mul() {
     });
 }
 #[test]
+fn test_vec3_dot() {
+    init_once();
+    test_helper(-2.0..2.0, 1024 * 1024, 3, |inputs| {
+        let x = inputs[0];
+        let y = inputs[1];
+        let z = inputs[2];
+        let v = make_float3(x, y, z);
+        v.dot(v)
+    });
+}
+#[test]
 fn test_vec3_length() {
     init_once();
     test_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
@@ -370,6 +381,94 @@ fn test_vec3_distance() {
         let bz = inputs[5];
         let b = make_float3(bx, by, bz);
         a.distance(b)
+    });
+}
+#[test]
+fn test_vec3_replace() {
+    init_once();
+    test_helper(-2.0..2.0, 1024 * 1024, 4, |inputs| {
+        let ax = inputs[0];
+        let ay = inputs[1];
+        let az = inputs[2];
+        let a = make_float3(ax, ay, az);
+        let b = inputs[3];
+        let c = a.replace_y(b);
+        a.dot(c)
+    });
+}
+#[test]
+fn test_matmul() {
+    init_once();
+    test_helper(-4.0..4.0, 1024 * 1024, 12, |inputs| {
+        let ax = inputs[0];
+        let ay = inputs[1];
+        let az = inputs[2];
+        let a = make_float3(ax, ay, az);
+        let bx = inputs[0 + 3];
+        let by = inputs[1 + 3];
+        let bz = inputs[2 + 3];
+        let b = make_float3(bx, by, bz);
+        let cx = inputs[0 + 6];
+        let cy = inputs[1 + 6];
+        let cz = inputs[2 + 6];
+        let c = make_float3(cx, cy, cz);
+        let dx = inputs[0 + 9];
+        let dy = inputs[1 + 9];
+        let dz = inputs[2 + 9];
+        let d = make_float3(dx, dy, dz);
+        let m = Mat3Expr::new(a, b, c);
+        let o = m * d;
+        o.x()
+    });
+}
+#[test]
+fn test_matmul_tranpose() {
+    init_once();
+    test_helper(-4.0..4.0, 1024 * 1024, 12, |inputs| {
+        let ax = inputs[0];
+        let ay = inputs[1];
+        let az = inputs[2];
+        let a = make_float3(ax, ay, az);
+        let bx = inputs[0 + 3];
+        let by = inputs[1 + 3];
+        let bz = inputs[2 + 3];
+        let b = make_float3(bx, by, bz);
+        let cx = inputs[0 + 6];
+        let cy = inputs[1 + 6];
+        let cz = inputs[2 + 6];
+        let c = make_float3(cx, cy, cz);
+        let dx = inputs[0 + 9];
+        let dy = inputs[1 + 9];
+        let dz = inputs[2 + 9];
+        let d = make_float3(dx, dy, dz);
+        let m = Mat3Expr::new(a, b, c);
+        let o = m.transpose() * d;
+        o.y()
+    });
+}
+#[test]
+fn test_matmul_2() {
+    init_once();
+    test_helper(-2.0..2.0, 1024 * 1024, 12, |inputs| {
+        let ax = inputs[0];
+        let ay = inputs[1];
+        let az = inputs[2];
+        let a = make_float3(ax, ay, az);
+        let bx = inputs[0 + 3];
+        let by = inputs[1 + 3];
+        let bz = inputs[2 + 3];
+        let b = make_float3(bx, by, bz);
+        let cx = inputs[0 + 6];
+        let cy = inputs[1 + 6];
+        let cz = inputs[2 + 6];
+        let c = make_float3(cx, cy, cz);
+        let dx = inputs[0 + 9];
+        let dy = inputs[1 + 9];
+        let dz = inputs[2 + 9];
+        let d = make_float3(dx, dy, dz);
+        let m = Mat3Expr::new(a, b, c);
+        let o = m * m * d;
+        o.z()
     });
 }
 // #[test]

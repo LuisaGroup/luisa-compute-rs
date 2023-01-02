@@ -1,42 +1,60 @@
+use std::ops::Mul;
+
 pub use super::math_impl::*;
 use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*};
 use crate::prelude::FromNode;
-use crate::prelude::{__compose, const_, current_scope, Expr, PrimExpr, Var, Selectable};
+use crate::prelude::{__compose, __insert, const_, current_scope, Expr, PrimExpr, Selectable, Var};
 use luisa_compute_ir::{
     context::register_type,
     ir::{Func, MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType},
     TypeOf,
 };
 macro_rules! impl_proxy_fields {
-    ($proxy:ident, $scalar:ty, x) => {
+    ($vec:ident, $proxy:ident, $scalar:ty, x) => {
         impl $proxy {
             #[inline]
             pub fn x(&self) -> Expr<$scalar> {
                 FromNode::from_node(__extract::<$scalar>(self.node, 0))
             }
+            #[inline]
+            pub fn replace_x(&self, value: Expr<$scalar>) -> Self {
+                Self::from_node(__insert::<$vec>(self.node, 0, FromNode::node(&value)))
+            }
         }
     };
-    ($proxy:ident, $scalar:ty, y) => {
+    ($vec:ident,$proxy:ident, $scalar:ty, y) => {
         impl $proxy {
             #[inline]
             pub fn y(&self) -> Expr<$scalar> {
                 FromNode::from_node(__extract::<$scalar>(self.node, 1))
             }
+            #[inline]
+            pub fn replace_y(&self, value: Expr<$scalar>) -> Self {
+                Self::from_node(__insert::<$vec>(self.node, 1, FromNode::node(&value)))
+            }
         }
     };
-    ($proxy:ident, $scalar:ty, z) => {
+    ($vec:ident,$proxy:ident, $scalar:ty, z) => {
         impl $proxy {
             #[inline]
             pub fn z(&self) -> Expr<$scalar> {
                 FromNode::from_node(__extract::<$scalar>(self.node, 2))
             }
+            #[inline]
+            pub fn replace_z(&self, value: Expr<$scalar>) -> Self {
+                Self::from_node(__insert::<$vec>(self.node, 2, FromNode::node(&value)))
+            }
         }
     };
-    ($proxy:ident, $scalar:ty, w) => {
+    ($vec:ident,$proxy:ident, $scalar:ty, w) => {
         impl $proxy {
             #[inline]
             pub fn w(&self) -> Expr<$scalar> {
                 FromNode::from_node(__extract::<$scalar>(self.node, 3))
+            }
+            #[inline]
+            pub fn replace_w(&self, value: Expr<$scalar>) -> Self {
+                Self::from_node(__insert::<$vec>(self.node, 3, FromNode::node(&value)))
             }
         }
     };
@@ -151,7 +169,7 @@ macro_rules! impl_vec_proxy {
                 var.load()
             }
         }
-        $(impl_proxy_fields!($expr_proxy, $scalar, $comp);)*
+        $(impl_proxy_fields!($vec, $expr_proxy, $scalar, $comp);)*
         $(impl_var_proxy_fields!($var_proxy, $scalar, $comp);)*
         impl $expr_proxy {
             #[inline]
@@ -610,8 +628,96 @@ impl Vec3Expr {
 impl_vec_op!(Vec2, f32, Vec2Expr, Mat2);
 impl_vec_op!(Vec3, f32, Vec3Expr, Mat3);
 impl_vec_op!(Vec4, f32, Vec4Expr, Mat4);
-
-
+impl Mul<Vec2Expr> for Mat2Expr {
+    type Output = Vec2Expr;
+    #[inline]
+    fn mul(self, rhs: Vec2Expr) -> Self::Output {
+        Vec2Expr::from_node(current_scope(|s| {
+            s.call(Func::Mul, &[self.node, rhs.node], <Vec2 as TypeOf>::type_())
+        }))
+    }
+}
+impl Mat2Expr {
+    pub fn inverse(&self) -> Self {
+        Mat2Expr::from_node(current_scope(|s| {
+            s.call(Func::Inverse, &[self.node], <Mat2 as TypeOf>::type_())
+        }))
+    }
+    pub fn transpose(&self) -> Self {
+        Mat2Expr::from_node(current_scope(|s| {
+            s.call(Func::Transpose, &[self.node], <Mat2 as TypeOf>::type_())
+        }))
+    }
+}
+impl Mul<Vec3Expr> for Mat3Expr {
+    type Output = Vec3Expr;
+    #[inline]
+    fn mul(self, rhs: Vec3Expr) -> Self::Output {
+        Vec3Expr::from_node(current_scope(|s| {
+            s.call(Func::Mul, &[self.node, rhs.node], <Vec3 as TypeOf>::type_())
+        }))
+    }
+}
+impl Mat3Expr {
+    pub fn inverse(&self) -> Self {
+        Self::from_node(current_scope(|s| {
+            s.call(Func::Inverse, &[self.node], <Mat3 as TypeOf>::type_())
+        }))
+    }
+    pub fn transpose(&self) -> Self {
+        Self::from_node(current_scope(|s| {
+            s.call(Func::Transpose, &[self.node], <Mat3 as TypeOf>::type_())
+        }))
+    }
+}
+impl Mul<Vec4Expr> for Mat4Expr {
+    type Output = Vec4Expr;
+    #[inline]
+    fn mul(self, rhs: Vec4Expr) -> Self::Output {
+        Vec4Expr::from_node(current_scope(|s| {
+            s.call(Func::Mul, &[self.node, rhs.node], <Vec4 as TypeOf>::type_())
+        }))
+    }
+}
+impl Mul for Mat2Expr {
+    type Output = Self;
+    #[inline]
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self::from_node(current_scope(|s| {
+            s.call(Func::Mul, &[self.node, rhs.node], <Mat2 as TypeOf>::type_())
+        }))
+    }
+}
+impl Mul for Mat3Expr {
+    type Output = Self;
+    #[inline]
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self::from_node(current_scope(|s| {
+            s.call(Func::Mul, &[self.node, rhs.node], <Mat3 as TypeOf>::type_())
+        }))
+    }
+}
+impl Mul for Mat4Expr {
+    type Output = Self;
+    #[inline]
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self::from_node(current_scope(|s| {
+            s.call(Func::Mul, &[self.node, rhs.node], <Mat4 as TypeOf>::type_())
+        }))
+    }
+}
+impl Mat4Expr {
+    pub fn inverse(&self) -> Self {
+        Self::from_node(current_scope(|s| {
+            s.call(Func::Inverse, &[self.node], <Mat4 as TypeOf>::type_())
+        }))
+    }
+    pub fn transpose(&self) -> Self {
+        Self::from_node(current_scope(|s| {
+            s.call(Func::Transpose, &[self.node], <Mat4 as TypeOf>::type_())
+        }))
+    }
+}
 #[inline]
 pub fn make_float2<X: Into<PrimExpr<f32>>, Y: Into<PrimExpr<f32>>>(x: X, y: Y) -> Expr<Vec2> {
     Expr::<Vec2>::new(x.into(), y.into())

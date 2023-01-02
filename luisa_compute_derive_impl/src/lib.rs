@@ -54,7 +54,7 @@ impl Compiler {
                 let ident = f.ident.as_ref().unwrap();
                 let vis = &f.vis;
                 let ty = &f.ty;
-                let set_ident = syn::Ident::new(&format!("set_{}", ident), ident.span());
+                let set_ident = syn::Ident::new(&format!("replace_{}", ident), ident.span());
                 quote_spanned!(span=>
                     #vis fn #ident (&self) -> Expr<#ty> {
                         <Expr::<#ty> as FromNode>::from_node(__extract::<#ty>(

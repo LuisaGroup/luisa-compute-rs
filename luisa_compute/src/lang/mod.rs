@@ -320,6 +320,16 @@ pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
             };
             current_scope(|b| b.call(func, nodes, <T as TypeOf>::type_()))
         }
+        Type::Matrix(vt) => {
+            let length = vt.dimension;
+            let func = match length {
+                2 => Func::Mat2,
+                3 => Func::Mat3,
+                4 => Func::Mat4,
+                _ => panic!("Can't compose vector with length {}", length),
+            };
+            current_scope(|b| b.call(func, nodes, <T as TypeOf>::type_()))
+        }
         _ => todo!(),
     }
 }

@@ -663,7 +663,7 @@ pub trait KernelBuildFn {
 }
 macro_rules! impl_kernel_build_for_fn {
     ()=>{
-        impl KernelBuildFn for Box<dyn Fn()> {
+        impl KernelBuildFn for &dyn Fn() {
             type Output = backend::Result<Kernel<()>>;
             fn build(&self, builder: &mut KernelBuilder) -> backend::Result<Kernel<()>> {
                 let kernel = builder.build_(|_| {
@@ -678,7 +678,7 @@ macro_rules! impl_kernel_build_for_fn {
         }
     };
     ($first:ident  $($rest:ident)*) => {
-        impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelBuildFn for Box<dyn Fn($first, $($rest,)*)> {
+        impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelBuildFn for &dyn Fn($first, $($rest,)*) {
             type Output = backend::Result<Kernel<($first::Arg, $($rest::Arg),*)>>;
             #[allow(non_snake_case)]
             fn build(&self, builder: &mut KernelBuilder) -> backend::Result<Kernel<($first::Arg, $($rest::Arg),*)>> {

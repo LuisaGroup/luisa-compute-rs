@@ -35,17 +35,10 @@ fn main() {
             let y = buf_y.read(tid);
             let args = MyAddArgsExpr::new(x, y, Float32::zero());
             let result = my_add.call(args);
-
             let _ = my_print.call(tid);
-            let f = CpuFn::new(|x: &mut MyAddArgs| {
-                println!("{} {:?}", file!(), x);
+            if_!(tid.cmpeq(0), {
+                cpu_dbg!(MyAddArgs, args);
             });
-            let _ = f.call(args);
-            __cpu_dbg::<MyAddArgs>(args, "", line!());
-            // cpu_dbg!(MyAddArgs, args);
-            // if_!(tid.cmpeq(0), {
-            //     cpu_dbg!(MyAddArgs, args);
-            // });
             buf_z.write(tid, result.result());
         }))
         .unwrap();

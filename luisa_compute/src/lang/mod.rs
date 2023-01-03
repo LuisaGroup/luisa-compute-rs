@@ -252,14 +252,15 @@ macro_rules! cpu_dbg {
     }};
 }
 pub fn __cpu_dbg<T: Value + Debug>(arg: Expr<T>, file: &'static str, line: u32) {
-    let f = CpuFn::new(|x: &mut T| {
-        println!("{}:{} {:?}", file, line, x);
+    let f = CpuFn::new(move |x: &mut T| {
+        println!("[{}]:{} {:?}", file, line, x);
     });
     let _ = f.call(arg);
 }
 extern "C" fn _trampoline<T, F: FnMut(&mut T)>(data: *mut u8, args: *mut u8) {
     unsafe {
-        let f = &mut *(data as *mut F);
+        let container = &*(data as *const ClosureContainer<T>);
+        let f = &container.f;
         let args = &mut *(args as *mut T);
         f(args);
     }
@@ -269,9 +270,15 @@ extern "C" fn _drop<T>(data: *mut u8) {
         let _ = Box::from_raw(data as *mut T);
     }
 }
+/*
+Interestingly, Box::into_raw(Box<Closure>) does not give a valid pointer.
+*/
+struct ClosureContainer<T> {
+    f: Arc<dyn Fn(&mut T) + 'static + Send + Sync>,
+}
 impl<T: Value> CpuFn<T> {
-    pub fn new<F: FnMut(&mut T)>(f: F) -> Self {
-        let f_ptr = Box::into_raw(Box::new(f));
+    pub fn new<F: Fn(&mut T) + 'static + Send + Sync>(f: F) -> Self {
+        let f_ptr = Box::into_raw(Box::new(ClosureContainer::<T> { f: Arc::new(f) }));
         let op = CpuCustomOp {
             data: f_ptr as *mut u8,
             func: _trampoline::<T, F>,

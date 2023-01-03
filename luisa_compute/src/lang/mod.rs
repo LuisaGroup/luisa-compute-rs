@@ -11,10 +11,11 @@ use crate::{
 pub use ir::ir::NodeRef;
 use ir::{
     ir::{
-        new_node, BasicBlock, Binding, BufferBinding, Capture, Const, Func, Instruction, IrBuilder,
-        KernelModule, Module, ModuleKind, Node, PhiIncoming,
+        new_node, BasicBlock, Binding, BufferBinding, Capture, Const, CpuCustomOp, Func,
+        Instruction, IrBuilder, KernelModule, Module, ModuleKind, Node, PhiIncoming,
     },
     transform::{self, Transform},
+    CRc,
 };
 use luisa_compute_ir as ir;
 
@@ -240,14 +241,67 @@ pub type Int64Var = PrimVar<i64>;
 pub type Uint32Var = PrimVar<u32>;
 pub type Uint64Var = PrimVar<u64>;
 
+pub struct CpuFn<T: Value> {
+    op: CRc<CpuCustomOp>,
+    _marker: std::marker::PhantomData<T>,
+}
+extern "C" fn _trampoline<T, F: FnMut(&mut T)>(data: *mut u8, args: *mut u8) {
+    unsafe {
+        let f = &mut *(data as *mut F);
+        let args = &mut *(args as *mut T);
+        f(args);
+    }
+}
+extern "C" fn _drop<T>(data: *mut u8) {
+    unsafe {
+        let _ = Box::from_raw(data as *mut T);
+    }
+}
+impl<T: Value> CpuFn<T> {
+    pub fn new<F: FnMut(&mut T)>(f: F) -> Self {
+        let f_ptr = Box::into_raw(Box::new(f));
+        let op = CpuCustomOp {
+            data: f_ptr as *mut u8,
+            func: _trampoline::<T, F>,
+            destructor: _drop::<F>,
+            arg_type: T::type_(),
+        };
+        Self {
+            op: CRc::new(op),
+            _marker: std::marker::PhantomData,
+        }
+    }
+    pub fn call(&self, arg: Expr<T>) -> Expr<T> {
+        RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            assert!(r.lock);
+            let addr = CRc::as_ptr(&self.op) as u64;
+            if let Some(op) = r.cpu_custom_ops.get(&addr) {
+                assert_eq!(CRc::as_ptr(op), CRc::as_ptr(&self.op));
+            } else {
+                r.cpu_custom_ops.insert(addr, self.op.clone());
+            }
+        });
+        Expr::<T>::from_node(current_scope(|b| {
+            b.call(
+                Func::CpuCustomOp(self.op.clone()),
+                &[arg.node()],
+                T::type_(),
+            )
+        }))
+    }
+}
 pub(crate) struct Recorder {
     scopes: Vec<IrBuilder>,
     lock: bool,
     captured_buffer: HashMap<u64, (NodeRef, BufferBinding, Arc<BufferHandle>)>,
+    cpu_custom_ops: HashMap<u64, CRc<CpuCustomOp>>,
 }
 impl Recorder {
     fn reset(&mut self) {
         self.scopes.clear();
+        self.captured_buffer.clear();
+        self.cpu_custom_ops.clear();
         self.lock = false;
     }
 }
@@ -256,6 +310,7 @@ thread_local! {
         scopes: vec![],
         lock:false,
         captured_buffer: HashMap::new(),
+        cpu_custom_ops: HashMap::new(),
     });
 }
 
@@ -263,6 +318,7 @@ thread_local! {
 pub fn current_scope<F: FnOnce(&mut IrBuilder) -> R, R>(f: F) -> R {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
+        assert!(r.lock, "current_scope must be called within a kernel");
         let s = &mut r.scopes;
         if s.is_empty() {
             s.push(IrBuilder::new());
@@ -440,6 +496,7 @@ impl<T: Value> BufferVar<T> {
     pub fn new(buffer: &Buffer<T>) -> Self {
         let node = RECORDER.with(|r| {
             let mut r = r.borrow_mut();
+            assert!(r.lock, "BufferVar must be created from within a kernel");
             let handle: u64 = buffer.handle().0;
             if let Some((node, _, _)) = r.captured_buffer.get(&handle) {
                 *node
@@ -534,7 +591,7 @@ macro_rules! impl_atomic {
                             expected.node(),
                             desired.node(),
                         ],
-                        <$t>::type_()
+                        <$t>::type_(),
                     )
                 }))
             }
@@ -549,7 +606,7 @@ macro_rules! impl_atomic {
                     b.call(
                         Func::AtomicFetchAdd,
                         &[self.node, FromNode::node(&i), v.node()],
-                        <$t>::type_()
+                        <$t>::type_(),
                     )
                 }))
             }
@@ -564,12 +621,10 @@ macro_rules! impl_atomic {
                     b.call(
                         Func::AtomicFetchSub,
                         &[self.node, FromNode::node(&i), v.node()],
-                        <$t>::type_()
+                        <$t>::type_(),
                     )
                 }))
             }
-
-            
         }
     };
 }
@@ -587,7 +642,7 @@ macro_rules! impl_atomic_bit {
                     b.call(
                         Func::AtomicFetchAnd,
                         &[self.node, FromNode::node(&i), v.node()],
-                        <$t>::type_()
+                        <$t>::type_(),
                     )
                 }))
             }
@@ -633,7 +688,7 @@ macro_rules! impl_atomic_bit {
                     b.call(
                         Func::AtomicFetchMin,
                         &[self.node, FromNode::node(&i), v.node()],
-                        <$t>::type_()
+                        <$t>::type_(),
                     )
                 }))
             }
@@ -648,7 +703,7 @@ macro_rules! impl_atomic_bit {
                     b.call(
                         Func::AtomicFetchMax,
                         &[self.node, FromNode::node(&i), v.node()],
-                        <$t>::type_()
+                        <$t>::type_(),
                     )
                 }))
             }
@@ -816,6 +871,7 @@ impl KernelBuilder {
                         entry,
                         kind: ModuleKind::Kernel,
                     },
+                    cpu_custom_ops: CBoxedSlice::new(r.cpu_custom_ops.values().cloned().collect()),
                     captures: CBoxedSlice::new(captured),
                     shared: CBoxedSlice::new(vec![]),
                     args: CBoxedSlice::new(self.args.clone()),

@@ -56,11 +56,13 @@ impl Compiler {
                 let ty = &f.ty;
                 let set_ident = syn::Ident::new(&format!("replace_{}", ident), ident.span());
                 quote_spanned!(span=>
+                    #[allow(dead_code)]
                     #vis fn #ident (&self) -> Expr<#ty> {
                         <Expr::<#ty> as FromNode>::from_node(__extract::<#ty>(
                             self.node, #i,
                         ))
                     }
+                    #[allow(dead_code)]
                     #vis fn #set_ident<T:Into<Expr<#ty>>>(&self, value: T) -> Self {
                         let value = value.into();
                         Self::from_node(#crate_path ::__insert::<#name>(self.node, #i, FromNode::node(&value)))

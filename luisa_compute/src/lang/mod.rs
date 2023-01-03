@@ -1,8 +1,8 @@
-use std::{any::Any, collections::HashMap, ops::Deref, sync::Arc};
+use std::{any::Any, collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 
 use crate::{
     backend,
-    prelude::{ArgEncoder, Kernel, KernelArg, RawKernel},
+    prelude::{ArgEncoder, Device, Kernel, KernelArg, RawKernel},
     resource::{
         BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, Tex2D, Tex3D, Texel,
         TextureHandle,
@@ -245,6 +245,18 @@ pub struct CpuFn<T: Value> {
     op: CRc<CpuCustomOp>,
     _marker: std::marker::PhantomData<T>,
 }
+#[macro_export]
+macro_rules! cpu_dbg {
+    ($t:ty, $arg:expr) => {{
+        __cpu_dbg::<$t>($arg, file!(), line!())
+    }};
+}
+pub fn __cpu_dbg<T: Value + Debug>(arg: Expr<T>, file: &'static str, line: u32) {
+    let f = CpuFn::new(|x: &mut T| {
+        println!("{}:{} {:?}", file, line, x);
+    });
+    let _ = f.call(arg);
+}
 extern "C" fn _trampoline<T, F: FnMut(&mut T)>(data: *mut u8, args: *mut u8) {
     unsafe {
         let f = &mut *(data as *mut F);
@@ -275,6 +287,10 @@ impl<T: Value> CpuFn<T> {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(r.lock);
+            assert!(
+                r.device.as_ref().unwrap().inner.is_cpu_backend(),
+                "CpuFn can only be used in cpu backend"
+            );
             let addr = CRc::as_ptr(&self.op) as u64;
             if let Some(op) = r.cpu_custom_ops.get(&addr) {
                 assert_eq!(CRc::as_ptr(op), CRc::as_ptr(&self.op));
@@ -296,6 +312,7 @@ pub(crate) struct Recorder {
     lock: bool,
     captured_buffer: HashMap<u64, (NodeRef, BufferBinding, Arc<BufferHandle>)>,
     cpu_custom_ops: HashMap<u64, CRc<CpuCustomOp>>,
+    device: Option<Device>,
 }
 impl Recorder {
     fn reset(&mut self) {
@@ -303,6 +320,7 @@ impl Recorder {
         self.captured_buffer.clear();
         self.cpu_custom_ops.clear();
         self.lock = false;
+        self.device = None;
     }
 }
 thread_local! {
@@ -311,6 +329,7 @@ thread_local! {
         lock:false,
         captured_buffer: HashMap::new(),
         cpu_custom_ops: HashMap::new(),
+        device:None,
     });
 }
 
@@ -809,6 +828,7 @@ impl KernelBuilder {
                 "Cannot record multiple kernels at the same time"
             );
             r.lock = true;
+            r.device = Some(device.clone());
             r.scopes.clear();
         });
         Self {

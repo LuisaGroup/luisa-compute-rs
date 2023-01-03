@@ -1,7 +1,7 @@
 use luisa::prelude::*;
 use luisa_compute as luisa;
 
-#[derive(Clone, Copy, Value)]
+#[derive(Clone, Copy, Value, Debug)]
 #[repr(C)]
 pub struct MyAddArgs {
     pub x: f32,
@@ -20,6 +20,11 @@ fn main() {
     let my_add = CpuFn::new(|args: &mut MyAddArgs| {
         args.result = args.x + args.y;
     });
+    let my_print = CpuFn::new(|tid: &mut u32| {
+        if *tid == 0 {
+            println!("Hello from thread 0!");
+        }
+    });
     let kernel = device
         .create_kernel(wrap_fn!(1, |buf_z: BufferVar<f32>| {
             // z is pass by arg
@@ -30,6 +35,17 @@ fn main() {
             let y = buf_y.read(tid);
             let args = MyAddArgsExpr::new(x, y, Float32::zero());
             let result = my_add.call(args);
+
+            let _ = my_print.call(tid);
+            let f = CpuFn::new(|x: &mut MyAddArgs| {
+                println!("{} {:?}", file!(), x);
+            });
+            let _ = f.call(args);
+            __cpu_dbg::<MyAddArgs>(args, "", line!());
+            // cpu_dbg!(MyAddArgs, args);
+            // if_!(tid.cmpeq(0), {
+            //     cpu_dbg!(MyAddArgs, args);
+            // });
             buf_z.write(tid, result.result());
         }))
         .unwrap();

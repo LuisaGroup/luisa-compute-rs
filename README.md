@@ -57,6 +57,8 @@ We provided an Rust-flavored implementation of LuisaCompute EDSL that tightly in
 ### Automatic Differentiation
 We implemented a source-to-source reverse mode automatic differentiation that supports complex control flow.
 
+The autodiff works tightly with builtin functions and the type system. Instead of implementing every function using basic arithmetic operations and apply autodiff on it, all builtin functions are differentiated using efficient VJP formulae.
+
 ### CPU Backend
 This crate also provides a CPU backend implementation in Rust that will eventually replace the current LLVM backend in LuisaCompute. This backend emphasizes on debuggability, flexibility and as well as safety. 
 
@@ -100,9 +102,12 @@ Mat4 // float4x4 in C++
 
 ```
 ### Control Flow
+If, while, break, continue are supported. Note that `if` and `switch` works similar to native Rust `if` and `match` in that values can be returned at the end of the block.
+
 ```rust
 if_!(cond, { /* then */});
 if_!(cond, { /* then */}, { /* else */});
+if_!(cond, { value_a }, { value_b })
 while_!(cond, { /* body */});
 break_();
 continue_();
@@ -132,12 +137,16 @@ v.set_x(v_ld.x() + 1.0);
 TODO
 
 ### Autodiff
-The autodiff works tightly with builtin functions and the type system. Instead of implementing every function using basic arithmetic operations and apply autodiff on it, all builtin functions are differentiated using efficient VJP formulae.
+Autodiff code should be enclosed in the `autodiff` call. The `requires_grad` call is used to mark the variables that need to be differentiated. Any type including user defined ones can receive gradients. The `backward` call triggers the backward pass. Subsequent calls to `gradient` will return the gradient of the variable passed in. User can also supply custom gradients with `backward_with_grad`.
+
+Note: Only one backward call is allowed in a single autodiff block. The autodiff block does not return any value. To store any side effects, use of local variables or buffers is required.
 
 ```rust
 autodiff(||{
     let v: Expr<Vec3> = buf_v.read(..);
     let m: Expr<Mat3> = buf_m.read(..);
+    requires_grad(v);
+    requires_grad(m);
     let z = v.dot(m * v) * 0.5;
     backward(z);
     let dv = gradient(dv);
@@ -149,6 +158,8 @@ autodiff(||{
 
 ```
 ### Kernel
+A kernel can be written in a closure or a function. The closure/function should be wrapped with `wrap_fn!` macro. The first argument of `wrap_fn!` is the number of arguments that will be passed to the kernel. The rest of the arguments are the types of the arguments. The body of the closure/function should be written in the same way as a normal closure/function. The only difference is that the arguments should be wrapped with `XXVar<T>`. e.g. `BufferVar<T>`, `Tex2DVar<T>`.
+
 ```rust
 let kernel = device.create_kernel(wrap_fn!(/*num of arguments*/, |/*args*/| {
     /*body*/

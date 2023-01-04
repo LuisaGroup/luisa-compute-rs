@@ -1,16 +1,24 @@
 # luisa-compute-rs 
-Rust binding to LuisaCompute (WIP)
-
-Inside this crate:
-- An *almost* safe binding to LuisaCompute
-- An EDSL for writing kernels
-- A new backend implementation in pure Rust
+Rust frontend to LuisaCompute and more! (WIP)
 
 ## Table of Contents
-* Example
-* Usage
-* Safety
-## Example (WIP)
+* [Overview](#overview)
+    + [Embedded Domain-Specific Language](#embedded-domain-specific-language)
+    + [Automatic Differentiation](#automatic-differentiation)
+    + [A CPU backend](#cpu-backend)
+    + [IR Module for EDSL](#ir-module)
+* [Usage](#usage)
+    + [Variables and Expressions](#variables-and-expressions)
+    + [Control Flow](#control-flow)
+    + [Custom Data Types](#custom-data-types)
+    + [Polymorphism](#polymorphism)
+    + [Autodiff](#autodiff)
+    + [Kernel](#kernel)
+* [Advanced Usage](#advanced-usage)
+
+* [Safety](#safety)
+    
+## Example
 ```rust
 use luisa::prelude::*;
 use luisa_compute as luisa;
@@ -42,8 +50,134 @@ fn main() {
 
 
 ```
+## Overview
+### Embedded Domain-Specific Language
+We provided an Rust-flavored implementation of LuisaCompute EDSL that tightly integrates with Rust language via traits and proc-macros.
 
-## Usage (WIP)
+### Automatic Differentiation
+We implemented a source-to-source reverse mode automatic differentiation that supports complex control flow.
+
+### CPU Backend
+This crate also provides a CPU backend implementation in Rust that will eventually replace the current LLVM backend in LuisaCompute. This backend emphasizes on debuggability, flexibility and as well as safety. 
+
+### IR Module
+The EDSL and code generation are built atop of an SSA-based IR module. The IR module is in a separate crate and can be used to implement other backends and IR transformation such as autodiff.
+
+## Usage
+To get started, add the following to your `Cargo.toml`:
+```toml
+[dependencies]
+luisa_compute = { git= "https://github.com/LuisaGroup/luisa-compute-rs.git"}
+```
+Then added the following to your files:
+```rust
+use luisa_compute as luisa;
+use luisa::prelude::*;
+```
+### Variables and Expressions
+There are six basic types in EDSL. `bool`, `i32`, `u32`, `i64`, `u64`, `f32`. (`f64` support might be added to CPU backend).
+For each type, there are two EDSL objects `Expr<T>` and `Var<T>`. `Expr<T>` is an immutable object that represents a value. `Var<T>` is a mutable object that represents a variable. `Expr<T>` can be converted to `Var<T>` by calling `Var<T>::load()`.
+All operations except load/store should be performed on `Expr<T>`. `Var<T>` can only be used to load/store values.
+
+As in the C++ EDSL, we additionally supports the following vector/matrix types: 
+
+```rust
+BVec2 // bool2 in C++
+BVec3 // bool3 in C++
+BVec4 // bool4 in C++
+Vec2 // float2 in C++
+Vec3 // float3 in C++
+Vec4 // float4 in C++
+IVec2 // int2 in C++
+IVec3 // int3 in C++
+IVec4 // int4 in C++
+UVec2 // uint2 in C++
+UVec3 // uint3 in C++
+UVec4 // uint4 in C++
+Mat2 // float2x2 in C++
+Mat3 // float3x3 in C++
+Mat4 // float4x4 in C++
+
+```
+### Control Flow
+```rust
+if_!(cond, { /* then */});
+if_!(cond, { /* then */}, { /* else */});
+while_!(cond, { /* body */});
+break_();
+continue_();
+//switch : TODO
+```
+
+### Custom Data Types
+To add custom data types to the EDSL, simply derive from `luisa::Value` macro. Note that `#[repr(C)]` is required for the struct to be compatible with C ABI.
+
+```rust
+#[derive(Copy, Clone, Default, Debug, Value)]
+#[repr(C)]
+pub struct MyVec2 {
+    pub x: f32,
+    pub y: f32,
+}
+
+let v: Var<MyVec2> = local::<MyVec2>();
+let v_ld: Expr<MyVec2> = v.load();
+let v_x = v_ld.x();
+let v_ld = v_ld.set_x(v_x + 1.0); // v_ld.x += 1.0
+// or
+v.set_x(v_ld.x() + 1.0);
+
+```
+### Polymorphism
+TODO
+
+### Autodiff
+The autodiff works tightly with builtin functions and the type system. Instead of implementing every function using basic arithmetic operations and apply autodiff on it, all builtin functions are differentiated using efficient VJP formulae.
+
+```rust
+autodiff(||{
+    let v: Expr<Vec3> = buf_v.read(..);
+    let m: Expr<Mat3> = buf_m.read(..);
+    let z = v.dot(m * v) * 0.5;
+    backward(z);
+    let dv = gradient(dv);
+    let dm = gradient(dm);
+    buf_dv.write(.., dv);
+    buf_dm.write(.., dm);
+});
+
+
+```
+### Kernel
+```rust
+let kernel = device.create_kernel(wrap_fn!(/*num of arguments*/, |/*args*/| {
+    /*body*/
+})).unwrap();
+kernel.dispatch([/*dispatch size*/], /*args*/).unwrap();
+```
+There are two ways to pass arguments to a kernel: by arguments or by capture.
+```rust
+let captured:Buffer<f32> = device.create_buffer(...).unwrap();
+let kernel = device.create_kernel(wrap_fn!(1, |arg:BufferVar<f32>| {
+    let v = arg.read(..);
+    let u = captured.var().read(..);
+})).unwrap();
+```
+User can pass a maximum of 16 arguments to kernel and unlimited number of captured variables. If more than 16 arguments are needed, user can pack them into a tuple and pass the tuple as an argument:
+```rust
+let kernel = device.create_kernel(wrap_fn!(1, |(a,b):(BufferVar<f32>,BufferVar<f32>)| {
+    // ...
+})).unwrap();
+let a = device.create_buffer(...).unwrap();
+let b = device.create_buffer(...).unwrap();
+let packed = (a,b);
+kernel.dispatch([...], &packed).unwrap();
+let (a,b) = packed; // unpack if you need to use them later
+```
+## Advanced Usage
+Note that the IR module has a public interface. If needed, user can implement their own DSL syntax sugar. Every EDSL object implements either `Aggregate` or `FromNode` trait, which allows any EDSL type to be destructured into its underlying IR nodes and reconstructed from them.
+
+TODO
 
 ## Safety
 ### API

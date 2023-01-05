@@ -1,4 +1,3 @@
-use luisa::backend::rust::RustBackend;
 use luisa::prelude::*;
 use luisa_compute as luisa;
 

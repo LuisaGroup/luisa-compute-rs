@@ -1,3 +1,5 @@
+use std::io::stderr;
+use std::process::abort;
 use std::{any::Any, collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 
 use crate::lang::traits::VarCmp;
@@ -519,6 +521,9 @@ pub struct BindlessBufferVar<T> {
 impl<T: Value> BindlessBufferVar<T> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
+        if __env_need_backtrace() {
+            assert(i.cmplt(self.len()));
+        }
         Expr::<T>::from_node(current_scope(|b| {
             b.call(
                 Func::BindlessBufferRead,
@@ -530,20 +535,59 @@ impl<T: Value> BindlessBufferVar<T> {
     pub fn len(&self) -> Expr<u32> {
         Expr::<u32>::from_node(current_scope(|b| {
             b.call(
-                Func::BindlessBufferSize,
+                Func::BindlessBufferSize(T::type_()),
                 &[self.array, self.buffer_index.node()],
                 T::type_(),
+            )
+        }))
+    }
+    pub fn __type(&self) -> Expr<u64> {
+        Expr::<u64>::from_node(current_scope(|b| {
+            b.call(
+                Func::BindlessBufferType,
+                &[self.array, self.buffer_index.node()],
+                u64::type_(),
             )
         }))
     }
 }
 impl BindlessArrayVar {
     pub fn buffer<T: Value>(&self, buffer_index: Expr<u32>) -> BindlessBufferVar<T> {
-        BindlessBufferVar {
+        let v = BindlessBufferVar {
             array: self.node,
             buffer_index,
             _marker: std::marker::PhantomData,
+        };
+        let vt = v.__type();
+        if __env_need_backtrace() {
+            let backtrace = backtrace::Backtrace::new();
+            let check_type = CpuFn::new(move |t: &mut u64| {
+                let expected = T::type_();
+                if *t != Gc::as_ptr(expected) as u64 {
+                    let t = unsafe { &*(*t as *const Type) };
+                    eprintln!(
+                            "Bindless buffer type mismatch: expected {:?}, got {:?}; host backtrace:\n {:?}",
+                            expected, t, backtrace
+                        );
+                    abort();
+                }
+            });
+            let _ = check_type.call(vt);
+        } else {
+            let check_type = CpuFn::new(move |t: &mut u64| {
+                let expected = T::type_();
+                if *t != Gc::as_ptr(expected) as u64 {
+                    let t = unsafe { &*(*t as *const Type) };
+                    eprintln!(
+                        "Bindless buffer type mismatch: expected {:?}, got {:?}; set LUISA_BACKTRACE=1 for more info",
+                        expected, t,
+                    );
+                    abort();
+                }
+            });
+            let _ = check_type.call(vt);
         }
+        v
     }
 
     pub fn new(array: &BindlessArray) -> Self {
@@ -1277,7 +1321,7 @@ pub fn assert(cond: Expr<bool>) {
         let backtrace = backtrace::Backtrace::new();
         let assert_fn = CpuFn::new(move |b: &mut bool| {
             if !*b {
-                eprintln!("assertion failed with host backtrace: {:?}", backtrace);
+                eprintln!("assertion failed with host backtrace:\n {:?}", backtrace);
             }
         });
         let _ = assert_fn.call(cond);

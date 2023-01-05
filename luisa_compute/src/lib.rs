@@ -10,6 +10,7 @@ pub use luisa_compute_ir::Gc;
 pub use luisa_compute_backend as backend;
 use luisa_compute_backend::Backend;
 pub mod prelude {
+    pub use glam;
     pub use crate::*;
     pub use lang::math::*;
     pub use lang::traits::*;

@@ -30,7 +30,6 @@ use std::cell::RefCell;
 
 // use self::math::UVec3;
 pub mod math;
-pub mod math_impl;
 pub mod traits;
 
 pub trait Value: Copy + ir::TypeOf {
@@ -1181,4 +1180,10 @@ pub fn autodiff(body: impl FnOnce()) {
         b.append_block(fwd_bwd);
         b.append_block(epilogue);
     })
+}
+
+pub fn assert(cond: Expr<bool>) {
+    current_scope(|b| {
+        b.call(Func::Assert, &[cond.node()], Type::void());
+    });
 }

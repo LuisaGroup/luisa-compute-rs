@@ -1,6 +1,5 @@
 use std::ops::Mul;
 
-pub use super::math_impl::*;
 use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*, Float32};
 use crate::prelude::FromNode;
 use crate::prelude::{__compose, __insert, const_, current_scope, Expr, PrimExpr, Selectable, Var};
@@ -9,6 +8,136 @@ use luisa_compute_ir::{
     ir::{Func, MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType},
     TypeOf,
 };
+macro_rules! def_vec {
+    ($name:ident, $scalar:ty, $align:literal, $($comp:ident), *) => {
+        #[repr(C, align($align))]
+        #[derive(Copy, Clone, Debug, Default)]
+        pub struct $name {
+            $(pub $comp: $scalar), *
+        }
+        impl $name {
+            #[inline]
+            pub fn new($($comp: $scalar), *) -> Self {
+                Self { $($comp), * }
+            }
+            #[inline]
+            pub fn splat(scalar: $scalar) -> Self {
+                Self { $($comp: scalar), * }
+            }
+        }
+        impl From<$name> for glam::$name {
+            #[inline]
+            fn from(v: $name) -> Self {
+                Self::new($(v.$comp), *)
+            }
+        }
+        impl From<glam::$name> for $name {
+            #[inline]
+            fn from(v: glam::$name) -> Self {
+                Self::new($(v.$comp), *)
+            }
+        }
+    };
+}
+
+def_vec!(Vec2, f32, 8, x, y);
+def_vec!(Vec3, f32, 16, x, y, z);
+def_vec!(Vec4, f32, 16, x, y, z, w);
+
+def_vec!(UVec2, u32, 8, x, y);
+def_vec!(UVec3, u32, 16, x, y, z);
+def_vec!(UVec4, u32, 16, x, y, z, w);
+
+def_vec!(IVec2, i32, 8, x, y);
+def_vec!(IVec3, i32, 16, x, y, z);
+def_vec!(IVec4, i32, 16, x, y, z, w);
+
+def_vec!(DVec2, f64, 16, x, y);
+def_vec!(DVec3, f64, 32, x, y, z);
+def_vec!(DVec4, f64, 32, x, y, z, w);
+
+def_vec!(BVec2, bool, 2, x, y);
+def_vec!(BVec3, bool, 4, x, y, z);
+def_vec!(BVec4, bool, 4, x, y, z, w);
+
+#[derive(Clone, Copy, Debug, Default)]
+#[repr(C, align(8))]
+pub struct Mat2 {
+    pub cols: [Vec2; 2],
+}
+#[derive(Clone, Copy, Debug, Default)]
+#[repr(C, align(16))]
+pub struct Mat3 {
+    pub cols: [Vec3; 3],
+}
+#[derive(Clone, Copy, Debug, Default)]
+#[repr(C, align(16))]
+pub struct Mat4 {
+    pub cols: [Vec4; 4],
+}
+impl From<Mat2> for glam::Mat2 {
+    #[inline]
+    fn from(m: Mat2) -> Self {
+        Self::from_cols(m.cols[0].into(), m.cols[1].into())
+    }
+}
+impl From<Mat3> for glam::Mat3 {
+    #[inline]
+    fn from(m: Mat3) -> Self {
+        Self::from_cols(m.cols[0].into(), m.cols[1].into(), m.cols[2].into())
+    }
+}
+impl From<Mat4> for glam::Mat4 {
+    #[inline]
+    fn from(m: Mat4) -> Self {
+        Self::from_cols(
+            m.cols[0].into(),
+            m.cols[1].into(),
+            m.cols[2].into(),
+            m.cols[3].into(),
+        )
+    }
+}
+impl From<glam::Mat2> for Mat2 {
+    #[inline]
+    fn from(m: glam::Mat2) -> Self {
+        Self {
+            cols: [m.x_axis.into(), m.y_axis.into()],
+        }
+    }
+}
+impl From<glam::Mat3> for Mat3 {
+    #[inline]
+    fn from(m: glam::Mat3) -> Self {
+        Self {
+            cols: [m.x_axis.into(), m.y_axis.into(), m.z_axis.into()],
+        }
+    }
+}
+impl From<glam::Mat4> for Mat4 {
+    #[inline]
+    fn from(m: glam::Mat4) -> Self {
+        Self {
+            cols: [
+                m.x_axis.into(),
+                m.y_axis.into(),
+                m.z_axis.into(),
+                m.w_axis.into(),
+            ],
+        }
+    }
+}
+
+pub trait ArithCmp: Sized {
+    type Output;
+    fn cmplt<T: Into<Self>>(self, rhs: T) -> Self::Output;
+    fn cmple<T: Into<Self>>(self, rhs: T) -> Self::Output;
+    fn cmpgt<T: Into<Self>>(self, rhs: T) -> Self::Output;
+    fn cmpge<T: Into<Self>>(self, rhs: T) -> Self::Output;
+    fn cmpne<T: Into<Self>>(self, rhs: T) -> Self::Output;
+    fn cmpeq<T: Into<Self>>(self, rhs: T) -> Self::Output;
+}
+
 macro_rules! impl_proxy_fields {
     ($vec:ident, $proxy:ident, $scalar:ty, x) => {
         impl $proxy {
@@ -17,7 +146,7 @@ macro_rules! impl_proxy_fields {
                 FromNode::from_node(__extract::<$scalar>(self.node, 0))
             }
             #[inline]
-            pub fn replace_x(&self, value: Expr<$scalar>) -> Self {
+            pub fn set_x(&self, value: Expr<$scalar>) -> Self {
                 Self::from_node(__insert::<$vec>(self.node, 0, FromNode::node(&value)))
             }
         }
@@ -29,7 +158,7 @@ macro_rules! impl_proxy_fields {
                 FromNode::from_node(__extract::<$scalar>(self.node, 1))
             }
             #[inline]
-            pub fn replace_y(&self, value: Expr<$scalar>) -> Self {
+            pub fn set_y(&self, value: Expr<$scalar>) -> Self {
                 Self::from_node(__insert::<$vec>(self.node, 1, FromNode::node(&value)))
             }
         }
@@ -41,7 +170,7 @@ macro_rules! impl_proxy_fields {
                 FromNode::from_node(__extract::<$scalar>(self.node, 2))
             }
             #[inline]
-            pub fn replace_z(&self, value: Expr<$scalar>) -> Self {
+            pub fn set_z(&self, value: Expr<$scalar>) -> Self {
                 Self::from_node(__insert::<$vec>(self.node, 2, FromNode::node(&value)))
             }
         }
@@ -53,7 +182,7 @@ macro_rules! impl_proxy_fields {
                 FromNode::from_node(__extract::<$scalar>(self.node, 3))
             }
             #[inline]
-            pub fn replace_w(&self, value: Expr<$scalar>) -> Self {
+            pub fn set_w(&self, value: Expr<$scalar>) -> Self {
                 Self::from_node(__insert::<$vec>(self.node, 3, FromNode::node(&value)))
             }
         }

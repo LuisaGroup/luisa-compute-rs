@@ -54,7 +54,7 @@ impl Compiler {
                 let ident = f.ident.as_ref().unwrap();
                 let vis = &f.vis;
                 let ty = &f.ty;
-                let set_ident = syn::Ident::new(&format!("replace_{}", ident), ident.span());
+                let set_ident = syn::Ident::new(&format!("set_{}", ident), ident.span());
                 quote_spanned!(span=>
                     #[allow(dead_code)]
                     #vis fn #ident (&self) -> Expr<#ty> {
@@ -77,11 +77,18 @@ impl Compiler {
                 let ident = f.ident.as_ref().unwrap();
                 let vis = &f.vis;
                 let ty = &f.ty;
+                let set_ident = syn::Ident::new(&format!("set_{}", ident), ident.span());
                 quote_spanned!(span=>
+                    #[allow(dead_code)]
                     #vis fn #ident (&self) -> Var<#ty> {
                         <Var::<#ty> as FromNode>::from_node(__extract::<#ty>(
                             self.node, #i,
                         ))
+                    }
+                    #[allow(dead_code)]
+                    #vis fn #set_ident<T:Into<Expr<#ty>>>(&self, value: T) {
+                        let value = value.into();
+                        self.#ident().store(value);
                     }
                 )
             })
@@ -144,7 +151,7 @@ impl Compiler {
             }
             impl #crate_path ::Selectable for #expr_proxy_name {}
             impl #crate_path ::ExprProxy<#name> for #expr_proxy_name {
-               
+
             }
             impl #crate_path ::FromNode for #var_proxy_name {
                 #[allow(unused_assignments)]

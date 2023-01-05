@@ -406,7 +406,7 @@ fn test_vec3_replace() {
         let az = inputs[2];
         let a = make_float3(ax, ay, az);
         let b = inputs[3];
-        let c = a.replace_y(b);
+        let c = a.set_y(b);
         a.dot(c)
     });
 }

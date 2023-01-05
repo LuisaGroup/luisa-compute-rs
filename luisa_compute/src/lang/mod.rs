@@ -299,10 +299,11 @@ impl<T: Value> CpuFn<T> {
                 "CpuFn can only be used in cpu backend"
             );
             let addr = CRc::as_ptr(&self.op) as u64;
-            if let Some(op) = r.cpu_custom_ops.get(&addr) {
+            if let Some((_, op)) = r.cpu_custom_ops.get(&addr) {
                 assert_eq!(CRc::as_ptr(op), CRc::as_ptr(&self.op));
             } else {
-                r.cpu_custom_ops.insert(addr, self.op.clone());
+                let i = r.cpu_custom_ops.len();
+                r.cpu_custom_ops.insert(addr, (i, self.op.clone()));
             }
         });
         Expr::<T>::from_node(current_scope(|b| {
@@ -317,8 +318,8 @@ impl<T: Value> CpuFn<T> {
 pub(crate) struct Recorder {
     scopes: Vec<IrBuilder>,
     lock: bool,
-    captured_buffer: HashMap<u64, (NodeRef, BufferBinding, Arc<BufferHandle>)>,
-    cpu_custom_ops: HashMap<u64, CRc<CpuCustomOp>>,
+    captured_buffer: HashMap<u64, (usize, NodeRef, BufferBinding, Arc<BufferHandle>)>,
+    cpu_custom_ops: HashMap<u64, (usize, CRc<CpuCustomOp>)>,
     device: Option<Device>,
 }
 impl Recorder {
@@ -524,13 +525,15 @@ impl<T: Value> BufferVar<T> {
             let mut r = r.borrow_mut();
             assert!(r.lock, "BufferVar must be created from within a kernel");
             let handle: u64 = buffer.handle().0;
-            if let Some((node, _, _)) = r.captured_buffer.get(&handle) {
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
                 *node
             } else {
                 let node = new_node(Node::new(Gc::new(Instruction::Buffer), T::type_()));
+                let i = r.captured_buffer.len();
                 r.captured_buffer.insert(
                     handle,
                     (
+                        i,
                         node,
                         BufferBinding {
                             handle: buffer.handle().0,
@@ -556,7 +559,9 @@ impl<T: Value> BufferVar<T> {
     }
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
-        assert(i.cmplt(self.len()));
+        if __env_need_backtrace() {
+            assert(i.cmplt(self.len()));
+        }
         current_scope(|b| {
             FromNode::from_node(b.call(
                 Func::BufferRead,
@@ -568,7 +573,9 @@ impl<T: Value> BufferVar<T> {
     pub fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, v: V) {
         let i = i.into();
         let v = v.into();
-        assert(i.cmplt(self.len()));
+        if __env_need_backtrace() {
+            assert(i.cmplt(self.len()));
+        }
         current_scope(|b| {
             b.call(
                 Func::BufferWrite,
@@ -888,19 +895,32 @@ impl KernelBuilder {
                 let scope = r.scopes.pop().unwrap();
                 let entry = scope.finish();
                 let mut captured: Vec<Capture> = Vec::new();
-                for (_, (node, binding, handle)) in r.captured_buffer.iter() {
+                let mut captured_buffers: Vec<_> = r.captured_buffer.values().cloned().collect();
+                captured_buffers.sort_by_key(|(i, _, _, _)| *i);
+                for (j, (i, node, binding, handle)) in captured_buffers.iter().enumerate() {
+                    assert_eq!(j, *i);
                     captured.push(Capture {
                         node: *node,
                         binding: Binding::Buffer(binding.clone()),
                     });
                     resource_tracker.push(Box::new(handle.clone()));
                 }
+                let mut cpu_custom_ops: Vec<_> = r.cpu_custom_ops.values().cloned().collect();
+                cpu_custom_ops.sort_by_key(|(i, _)| *i);
+                let cpu_custom_ops = cpu_custom_ops
+                    .iter()
+                    .enumerate()
+                    .map(|(j, (i, op))| {
+                        assert_eq!(j, *i);
+                        op.clone()
+                    })
+                    .collect::<Vec<_>>();
                 let module = KernelModule {
                     module: Module {
                         entry,
                         kind: ModuleKind::Kernel,
                     },
-                    cpu_custom_ops: CBoxedSlice::new(r.cpu_custom_ops.values().cloned().collect()),
+                    cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
                     captures: CBoxedSlice::new(captured),
                     shared: CBoxedSlice::new(vec![]),
                     args: CBoxedSlice::new(self.args.clone()),
@@ -1190,8 +1210,14 @@ pub fn is_cpu_backend() -> bool {
         r.device.as_ref().unwrap().inner.is_cpu_backend()
     })
 }
+pub fn __env_need_backtrace() -> bool {
+    match std::env::var("LUISA_BACKTRACE") {
+        Ok(s) => s == "1" || s == "ON",
+        Err(_) => false,
+    }
+}
 pub fn assert(cond: Expr<bool>) {
-    if is_cpu_backend() {
+    if is_cpu_backend() && __env_need_backtrace() {
         let backtrace = backtrace::Backtrace::new();
         let assert_fn = CpuFn::new(move |b: &mut bool| {
             if !*b {

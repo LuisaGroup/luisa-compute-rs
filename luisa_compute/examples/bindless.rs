@@ -18,7 +18,7 @@ fn main() {
             let tid = dispatch_id().x();
             let buf_x = bindless.buffer::<f32>(Uint32::from(0));
             let buf_y = bindless.buffer::<f32>(Uint32::from(1));
-            let x = buf_x.read(tid);
+            let x = buf_x.read(tid).cast::<u32>().cast::<f32>();
             let y = buf_y.read(tid);
             buf_z.write(tid, x + y);
         }))

@@ -51,40 +51,57 @@ pub trait CommonVarOp: VarTrait {
             Self::from_node(ret)
         })
     }
-    fn cast<A: VarTrait>(&self) -> A {
-        let ty = <A as VarTrait>::type_();
+    // fn cast<A: VarTrait>(&self) -> A {
+    //     let ty = <A as VarTrait>::type_();
+    //     let node = current_scope(|s| s.cast(self.node(), ty));
+    //     A::from_node(node)
+    // }
+    // fn bitcast<A: VarTrait>(&self) -> A {
+    //     assert_eq!(
+    //         std::mem::size_of::<Self::Scalar>(),
+    //         std::mem::size_of::<A::Scalar>()
+    //     );
+    //     let ty = <A as VarTrait>::type_();
+    //     let node = current_scope(|s| s.bitcast(self.node(), ty));
+    //     A::from_node(node)
+    // }
+    fn cast<T: Value>(&self) -> Expr<T>
+    where
+        Expr<T>: VarTrait,
+    {
+        let ty = <T>::type_();
         let node = current_scope(|s| s.cast(self.node(), ty));
-        A::from_node(node)
+        VarTrait::from_node(node)
     }
-    fn bitcast<A: VarTrait>(&self) -> A {
+    fn bitcast<T: Value>(&self) -> Expr<T> {
         assert_eq!(
             std::mem::size_of::<Self::Scalar>(),
-            std::mem::size_of::<A::Scalar>()
+            std::mem::size_of::<T>()
         );
-        let ty = <A as VarTrait>::type_();
+        let ty = <T>::type_();
         let node = current_scope(|s| s.bitcast(self.node(), ty));
-        A::from_node(node)
+        Expr::<T>::from_node(node)
     }
     fn uint(&self) -> Expr<u32> {
-        self.cast()
+        self.cast::<u32>()
     }
     fn int(&self) -> Expr<i32> {
-        self.cast()
+        self.cast::<i32>()
     }
     fn ulong(&self) -> Expr<u64> {
-        self.cast()
+        self.cast::<u64>()
     }
     fn long(&self) -> Expr<i64> {
-        self.cast()
+        self.cast::<i64>()
     }
     fn float(&self) -> Expr<f32> {
-        self.cast()
+        self.cast::<f32>()
     }
     fn double(&self) -> Expr<f64> {
-        self.cast()
+        self.cast::<f64>()
     }
     fn bool_(&self) -> Expr<bool> {
-        self.cast()
+        self.cast::<bool>()
     }
 }
 pub trait VarCmp: VarTrait {
@@ -372,7 +389,7 @@ pub trait FloatVarTrait:
     fn is_nan(&self) -> Bool {
         let any = self as &dyn Any;
         if let Some(a) = any.downcast_ref::<Expr<f32>>() {
-            let u: Expr<u32> = a.bitcast();
+            let u: Expr<u32> = a.bitcast::<u32>();
             (u & 0x7f800000u32).cmpeq(0x7f800000u32) & (u & 0x007fffffu32).cmpne(0u32)
         } else {
             panic!("expect Expr<f32>")

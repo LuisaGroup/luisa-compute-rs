@@ -1,5 +1,6 @@
 use std::{any::Any, collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 
+use crate::lang::traits::VarCmp;
 use crate::{
     backend,
     prelude::{ArgEncoder, Device, Kernel, KernelArg, RawKernel},
@@ -555,6 +556,7 @@ impl<T: Value> BufferVar<T> {
     }
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
+        assert(i.cmplt(self.len()));
         current_scope(|b| {
             FromNode::from_node(b.call(
                 Func::BufferRead,
@@ -566,6 +568,7 @@ impl<T: Value> BufferVar<T> {
     pub fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, v: V) {
         let i = i.into();
         let v = v.into();
+        assert(i.cmplt(self.len()));
         current_scope(|b| {
             b.call(
                 Func::BufferWrite,
@@ -1181,8 +1184,22 @@ pub fn autodiff(body: impl FnOnce()) {
         b.append_block(epilogue);
     })
 }
-
+pub fn is_cpu_backend() -> bool {
+    RECORDER.with(|r| {
+        let r = r.borrow();
+        r.device.as_ref().unwrap().inner.is_cpu_backend()
+    })
+}
 pub fn assert(cond: Expr<bool>) {
+    if is_cpu_backend() {
+        let backtrace = backtrace::Backtrace::new();
+        let assert_fn = CpuFn::new(move |b: &mut bool| {
+            if !*b {
+                eprintln!("assertion failed with host backtrace: {:?}", backtrace);
+            }
+        });
+        let _ = assert_fn.call(cond);
+    }
     current_scope(|b| {
         b.call(Func::Assert, &[cond.node()], Type::void());
     });

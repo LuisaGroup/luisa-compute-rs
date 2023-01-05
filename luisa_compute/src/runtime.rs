@@ -4,6 +4,7 @@ use crate::{lang::Value, resource::*};
 use lang::{KernelBuildFn, KernelBuilder};
 pub use luisa_compute_api_types as api;
 use std::any::Any;
+use std::cell::RefCell;
 use std::mem::align_of;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -35,6 +36,7 @@ impl Device {
         let buffer = self
             .inner
             .create_buffer(std::mem::size_of::<T>() * count, align_of::<T>())?;
+        self.inner.set_buffer_type(buffer, T::type_());
         Ok(Buffer {
             device: self.clone(),
             handle: Arc::new(BufferHandle {
@@ -53,6 +55,9 @@ impl Device {
                 device: self.clone(),
                 handle: array,
             }),
+            buffers: RefCell::new((0..slots).map(|_| None).collect()),
+            tex_2ds: RefCell::new((0..slots).map(|_| None).collect()),
+            tex_3ds: RefCell::new((0..slots).map(|_| None).collect()),
         })
     }
     pub fn create_tex2d<T: Texel>(
@@ -261,7 +266,7 @@ pub struct RawKernel {
     pub(crate) device: Device,
     pub(crate) shader: api::Shader, // strange naming, huh?
     #[allow(dead_code)]
-    pub(crate) resource_tracker: Vec<Box<dyn Any>>,
+    pub(crate) resource_tracker: Vec<Arc<dyn Any>>,
 }
 pub struct ArgEncoder {
     pub(crate) args: Vec<api::Argument>,

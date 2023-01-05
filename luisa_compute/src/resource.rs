@@ -1,9 +1,12 @@
+use std::any::Any;
+use std::cell::RefCell;
 use std::ops::RangeBounds;
 use std::sync::Arc;
 
 use crate::*;
 use api::BufferDownloadCommand;
 use api::BufferUploadCommand;
+use lang::BindlessArrayVar;
 use lang::BufferVar;
 use lang::Value;
 use runtime::*;
@@ -71,7 +74,7 @@ impl<'a, T: Value> BufferView<'a, T> {
     pub fn fill_fn<F: FnMut(usize) -> T>(&self, f: F) {
         self.copy_from(&(0..self.len).map(f).collect::<Vec<_>>());
     }
-    pub fn fill(&self, value : T) {
+    pub fn fill(&self, value: T) {
         self.fill_fn(|_| value);
     }
 }
@@ -134,20 +137,28 @@ impl Drop for BindlessArrayHandle {
 pub struct BindlessArray {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BindlessArrayHandle>,
+    pub(crate) buffers: RefCell<Vec<Option<Box<dyn Any>>>>,
+    pub(crate) tex_2ds: RefCell<Vec<Option<Box<dyn Any>>>>,
+    pub(crate) tex_3ds: RefCell<Vec<Option<Box<dyn Any>>>>,
 }
 impl BindlessArray {
     // pub fn buffer<T:Value>(&self, index: usize)->BufferVar<T> {
     //     todo!()
     // }
+    pub fn var(&self)->BindlessArrayVar{
+        BindlessArrayVar::new(self)
+    }
+    pub fn handle(&self) -> api::BindlessArray {
+        self.handle.handle
+    }
     pub unsafe fn set_buffer_async<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
-        catch_abort! {{
-            self.device.inner.emplace_buffer_in_bindless_array(
-                self.handle.handle,
-                index,
-                buffer.handle(),
-                0,
-            );
-        }}
+        self.device.inner.emplace_buffer_in_bindless_array(
+            self.handle.handle,
+            index,
+            buffer.handle(),
+            0,
+        );
+        self.buffers.borrow_mut()[index] = Some(Box::new(buffer.handle.clone()));
     }
     pub unsafe fn set_tex2d_async<T: Texel>(
         &self,
@@ -161,6 +172,7 @@ impl BindlessArray {
             texture.handle(),
             sampler,
         );
+        self.tex_2ds.borrow_mut()[index] = Some(Box::new(texture.handle.clone()));
     }
     pub unsafe fn set_tex3d_async<T: Texel>(
         &self,
@@ -174,21 +186,25 @@ impl BindlessArray {
             texture.handle(),
             sampler,
         );
+        self.tex_3ds.borrow_mut()[index] = Some(Box::new(texture.handle.clone()));
     }
     pub unsafe fn remove_buffer_async(&self, index: usize) {
         self.device
             .inner
             .remove_buffer_from_bindless_array(self.handle.handle, index);
+        self.buffers.borrow_mut()[index] = None;
     }
     pub unsafe fn remove_tex2d_async(&self, index: usize) {
         self.device
             .inner
             .remove_tex2d_from_bindless_array(self.handle.handle, index);
+        self.tex_2ds.borrow_mut()[index] = None;
     }
     pub unsafe fn remove_tex3d_async(&self, index: usize) {
         self.device
             .inner
             .remove_tex3d_from_bindless_array(self.handle.handle, index);
+        self.tex_3ds.borrow_mut()[index] = None;
     }
     pub fn set_buffer<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
         unsafe {

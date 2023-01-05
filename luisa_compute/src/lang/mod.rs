@@ -9,6 +9,7 @@ use crate::{
         TextureHandle,
     },
 };
+use ir::ir::BindlessArrayBinding;
 pub use ir::ir::NodeRef;
 use ir::{
     ir::{
@@ -318,9 +319,10 @@ impl<T: Value> CpuFn<T> {
 pub(crate) struct Recorder {
     scopes: Vec<IrBuilder>,
     lock: bool,
-    captured_buffer: HashMap<u64, (usize, NodeRef, BufferBinding, Arc<BufferHandle>)>,
+    captured_buffer: HashMap<u64, (usize, NodeRef, Binding, Arc<dyn Any>)>,
     cpu_custom_ops: HashMap<u64, (usize, CRc<CpuCustomOp>)>,
     device: Option<Device>,
+    block_size: Option<[u32; 3]>,
 }
 impl Recorder {
     fn reset(&mut self) {
@@ -329,6 +331,7 @@ impl Recorder {
         self.cpu_custom_ops.clear();
         self.lock = false;
         self.device = None;
+        self.block_size = None;
     }
 }
 thread_local! {
@@ -338,6 +341,7 @@ thread_local! {
         captured_buffer: HashMap::new(),
         cpu_custom_ops: HashMap::new(),
         device:None,
+        block_size: None,
     });
 }
 
@@ -443,6 +447,20 @@ pub fn dispatch_size() -> Expr<UVec3> {
         b.call(Func::DispatchSize, &[], UVec3::type_())
     }))
 }
+pub fn set_block_size(size: [u32; 3]) {
+    RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        assert!(r.block_size.is_none(), "Block size already set");
+        r.block_size = Some(size);
+    });
+}
+pub fn block_size() -> Expr<UVec3> {
+    RECORDER.with(|r| {
+        let r = r.borrow();
+        let s = r.block_size.unwrap_or_else(|| panic!("Block size not set"));
+        const_::<UVec3>(UVec3::new(s[0], s[1], s[2]))
+    })
+}
 pub type Expr<T> = <T as Value>::Expr;
 pub type Var<T> = <T as Value>::Var;
 
@@ -490,33 +508,70 @@ impl<T: Value> Drop for BufferVar<T> {
 }
 pub struct BindlessArrayVar {
     node: NodeRef,
+    #[allow(dead_code)]
+    handle: Option<Arc<BindlessArrayHandle>>,
 }
-impl BindlessArrayVar {
-    pub fn buffer_read<T: Value, BI: Into<Expr<u32>>, EI: Into<Expr<u32>>>(
-        &self,
-        buffer_index: BI,
-        element_index: EI,
-    ) -> Expr<T> {
+pub struct BindlessBufferVar<T> {
+    array: NodeRef,
+    buffer_index: Expr<u32>,
+    _marker: std::marker::PhantomData<T>,
+}
+impl<T: Value> BindlessBufferVar<T> {
+    pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
+        let i = i.into();
         Expr::<T>::from_node(current_scope(|b| {
             b.call(
                 Func::BindlessBufferRead,
-                &[
-                    self.node,
-                    FromNode::node(&buffer_index.into()),
-                    FromNode::node(&element_index.into()),
-                ],
+                &[self.array, self.buffer_index.node(), FromNode::node(&i)],
                 T::type_(),
             )
         }))
     }
-    pub fn buffer_length<I: Into<Expr<u32>>>(&self, buffer_index: I) -> Expr<u32> {
-        <Expr<u32> as FromNode>::from_node(current_scope(|b| {
+    pub fn len(&self) -> Expr<u32> {
+        Expr::<u32>::from_node(current_scope(|b| {
             b.call(
                 Func::BindlessBufferSize,
-                &[self.node, FromNode::node(&buffer_index.into())],
-                u32::type_(),
+                &[self.array, self.buffer_index.node()],
+                T::type_(),
             )
         }))
+    }
+}
+impl BindlessArrayVar {
+    pub fn buffer<T: Value>(&self, buffer_index: Expr<u32>) -> BindlessBufferVar<T> {
+        BindlessBufferVar {
+            array: self.node,
+            buffer_index,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    pub fn new(array: &BindlessArray) -> Self {
+        let node = RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            assert!(r.lock, "BufferVar must be created from within a kernel");
+            let handle: u64 = array.handle().0;
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
+                *node
+            } else {
+                let node = new_node(Node::new(Gc::new(Instruction::Bindless), Type::void()));
+                let i = r.captured_buffer.len();
+                r.captured_buffer.insert(
+                    handle,
+                    (
+                        i,
+                        node,
+                        Binding::BindlessArray(BindlessArrayBinding { handle }),
+                        Arc::new(array.handle.clone()),
+                    ),
+                );
+                node
+            }
+        });
+        Self {
+            node,
+            handle: Some(array.handle.clone()),
+        }
     }
 }
 impl<T: Value> BufferVar<T> {
@@ -535,12 +590,12 @@ impl<T: Value> BufferVar<T> {
                     (
                         i,
                         node,
-                        BufferBinding {
+                        Binding::Buffer(BufferBinding {
                             handle: buffer.handle().0,
                             size: buffer.size_bytes(),
                             offset: 0,
-                        },
-                        buffer.handle.clone(),
+                        }),
+                        Arc::new(buffer.handle.clone()),
                     ),
                 );
                 node
@@ -870,7 +925,7 @@ impl KernelBuilder {
     pub fn bindless_array(&mut self) -> BindlessArrayVar {
         let node = new_node(Node::new(Gc::new(Instruction::Bindless), u32::type_()));
         self.args.push(node);
-        BindlessArrayVar { node }
+        BindlessArrayVar { node, handle: None }
     }
     pub(crate) fn build(
         device: crate::runtime::Device,
@@ -887,7 +942,7 @@ impl KernelBuilder {
         body(self);
         RECORDER.with(
             |r| -> Result<crate::runtime::RawKernel, crate::backend::BackendError> {
-                let mut resource_tracker: Vec<Box<dyn Any>> = Vec::new();
+                let mut resource_tracker: Vec<Arc<dyn Any>> = Vec::new();
                 let mut r = r.borrow_mut();
                 assert!(r.lock);
                 r.lock = false;
@@ -897,13 +952,13 @@ impl KernelBuilder {
                 let mut captured: Vec<Capture> = Vec::new();
                 let mut captured_buffers: Vec<_> = r.captured_buffer.values().cloned().collect();
                 captured_buffers.sort_by_key(|(i, _, _, _)| *i);
-                for (j, (i, node, binding, handle)) in captured_buffers.iter().enumerate() {
-                    assert_eq!(j, *i);
+                for (j, (i, node, binding, handle)) in captured_buffers.into_iter().enumerate() {
+                    assert_eq!(j, i);
                     captured.push(Capture {
-                        node: *node,
-                        binding: Binding::Buffer(binding.clone()),
+                        node: node,
+                        binding: binding,
                     });
-                    resource_tracker.push(Box::new(handle.clone()));
+                    resource_tracker.push(handle);
                 }
                 let mut cpu_custom_ops: Vec<_> = r.cpu_custom_ops.values().cloned().collect();
                 cpu_custom_ops.sort_by_key(|(i, _)| *i);
@@ -924,6 +979,7 @@ impl KernelBuilder {
                     captures: CBoxedSlice::new(captured),
                     shared: CBoxedSlice::new(vec![]),
                     args: CBoxedSlice::new(self.args.clone()),
+                    block_size: r.block_size.unwrap_or([1, 1, 1]),
                 };
                 // build kernel here
                 let shader = self.device.inner.create_shader(&module, "")?;

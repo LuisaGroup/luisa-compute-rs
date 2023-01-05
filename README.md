@@ -7,12 +7,14 @@ Rust frontend to LuisaCompute and more! (WIP)
     + [Automatic Differentiation](#automatic-differentiation)
     + [A CPU backend](#cpu-backend)
     + [IR Module for EDSL](#ir-module)
+    + [Debuggability](#debuggability)
 * [Usage](#usage)
     + [Variables and Expressions](#variables-and-expressions)
     + [Control Flow](#control-flow)
     + [Custom Data Types](#custom-data-types)
     + [Polymorphism](#polymorphism)
     + [Autodiff](#autodiff)
+    + [Custom Operators](#custom-operators)
     + [Kernel](#kernel)
 * [Advanced Usage](#advanced-usage)
 
@@ -64,6 +66,9 @@ This crate also provides a CPU backend implementation in Rust that will eventual
 
 ### IR Module
 The EDSL and code generation are built atop of an SSA-based IR module. The IR module is in a separate crate and can be used to implement other backends and IR transformation such as autodiff.
+
+### Debuggability
+The CPU backend is designed to be debuggable. If needed, it will perform runtime checks to detect errors such as out-of-bound access, bindless array type mismatch, etc. It will display error message containing the **host** stacktrace for pinpointing the error location.
 
 ## Usage
 To get started, add the following to your `Cargo.toml`:
@@ -157,6 +162,28 @@ autodiff(||{
 
 
 ```
+
+### Custom Operators
+LuisaCompute supports injecting arbitrary user code to implement a custom operator. This is handled differently on different backends.
+On CPU backends, user can directly pass a closure to the kernel. The closure needs to have a `Fn(&mut T)` signature where it modifies the argument inplace. The EDSL frontend would then wrap the closure into a `T->T` function object.
+
+```rust
+#[derive(Clone, Copy, Value, Debug)]
+#[repr(C)]
+pub struct MyAddArgs {
+    pub x: f32,
+    pub y: f32,
+    pub result: f32,
+}
+let my_add = CpuFn::new(|args: &mut MyAddArgs| {
+    args.result = args.x + args.y;
+});
+
+let args = MyAddArgsExpr::new(x, y, Float32::zero());
+let result = my_add.call(args);
+
+```
+
 ### Kernel
 A kernel can be written in a closure or a function. The closure/function should be wrapped with `wrap_fn!` macro. The first argument of `wrap_fn!` is the number of arguments that will be passed to the kernel. The rest of the arguments are the types of the arguments. The body of the closure/function should be written in the same way as a normal closure/function. The only difference is that the arguments should be wrapped with `XXVar<T>`. e.g. `BufferVar<T>`, `Tex2DVar<T>`.
 

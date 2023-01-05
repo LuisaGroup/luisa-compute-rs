@@ -17,6 +17,7 @@ pub mod prelude {
     pub use lang::*;
     pub use luisa_compute_derive::*;
     pub use runtime::*;
+    pub use resource::*;
 }
 use libc;
 use prelude::{Device, DeviceHandle};

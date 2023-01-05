@@ -742,6 +742,111 @@ impl_select!(BVec2, UVec2, UVec2Expr);
 impl_select!(BVec3, UVec3, UVec3Expr);
 impl_select!(BVec4, UVec4, UVec4Expr);
 
+macro_rules! impl_cast {
+    ($proxy:ty, $to:ty, $m:ident) => {
+        impl $proxy {
+            pub fn $m(&self) -> Expr<$to> {
+                Expr::<$to>::from_node(current_scope(|s| {
+                    s.call(Func::Cast, &[self.node], <$to as TypeOf>::type_())
+                }))
+            }
+        }
+    };
+}
+impl_cast!(Vec2Expr, IVec2, as_ivec2);
+impl_cast!(Vec2Expr, UVec2, as_uvec2);
+impl_cast!(Vec3Expr, IVec3, as_ivec3);
+impl_cast!(Vec3Expr, UVec3, as_uvec3);
+impl_cast!(Vec4Expr, IVec4, as_ivec4);
+impl_cast!(Vec4Expr, UVec4, as_uvec4);
+
+impl_cast!(IVec2Expr, Vec2, as_vec2);
+impl_cast!(IVec2Expr, UVec2, as_uvec2);
+impl_cast!(IVec3Expr, Vec3, as_vec3);
+impl_cast!(IVec3Expr, UVec3, as_uvec3);
+impl_cast!(IVec4Expr, Vec4, as_vec4);
+impl_cast!(IVec4Expr, UVec4, as_uvec4);
+
+impl_cast!(UVec2Expr, Vec2, as_vec2);
+impl_cast!(UVec2Expr, IVec2, as_ivec2);
+impl_cast!(UVec3Expr, Vec3, as_vec3);
+impl_cast!(UVec3Expr, IVec3, as_ivec3);
+impl_cast!(UVec4Expr, Vec4, as_vec4);
+impl_cast!(UVec4Expr, IVec4, as_ivec4);
+macro_rules! impl_permute {
+    ($proxy:ty,$len:expr, $v2:ty, $v3:ty, $v4:ty) => {
+        impl $proxy {
+            pub fn permute2(&self, x: i32, y: i32) -> Expr<$v2> {
+                assert!(x < $len);
+                assert!(y < $len);
+                let x: Expr<i32> = x.into();
+                let y: Expr<i32> = y.into();
+                Expr::<$v2>::from_node(current_scope(|s| {
+                    s.call(
+                        Func::Permute,
+                        &[self.node, VarTrait::node(&x), VarTrait::node(&y)],
+                        <$v2 as TypeOf>::type_(),
+                    )
+                }))
+            }
+            pub fn permute3(&self, x: i32, y: i32, z: i32) -> Expr<$v3> {
+                assert!(x < $len);
+                assert!(y < $len);
+                assert!(z < $len);
+                let x: Expr<i32> = x.into();
+                let y: Expr<i32> = y.into();
+                let z: Expr<i32> = z.into();
+                Expr::<$v3>::from_node(current_scope(|s| {
+                    s.call(
+                        Func::Permute,
+                        &[
+                            self.node,
+                            VarTrait::node(&x),
+                            VarTrait::node(&y),
+                            VarTrait::node(&z),
+                        ],
+                        <$v3 as TypeOf>::type_(),
+                    )
+                }))
+            }
+            pub fn permute4(&self, x: i32, y: i32, z: i32, w: i32) -> Expr<$v4> {
+                assert!(x < $len);
+                assert!(y < $len);
+                assert!(z < $len);
+                assert!(w < $len);
+                let x: Expr<i32> = x.into();
+                let y: Expr<i32> = y.into();
+                let z: Expr<i32> = z.into();
+                let w: Expr<i32> = w.into();
+                Expr::<$v4>::from_node(current_scope(|s| {
+                    s.call(
+                        Func::Permute,
+                        &[
+                            self.node,
+                            VarTrait::node(&x),
+                            VarTrait::node(&y),
+                            VarTrait::node(&z),
+                            VarTrait::node(&w),
+                        ],
+                        <$v4 as TypeOf>::type_(),
+                    )
+                }))
+            }
+        }
+    };
+}
+impl_permute!(Vec2Expr, 2, Vec2, Vec3, Vec4);
+impl_permute!(Vec3Expr, 3, Vec3, Vec4, Vec4);
+impl_permute!(Vec4Expr, 4, Vec4, Vec4, Vec4);
+
+impl_permute!(IVec2Expr, 2, IVec2, IVec3, IVec4);
+impl_permute!(IVec3Expr, 3, IVec3, IVec4, IVec4);
+impl_permute!(IVec4Expr, 4, IVec4, IVec4, IVec4);
+
+impl_permute!(UVec2Expr, 2, UVec2, UVec3, UVec4);
+impl_permute!(UVec3Expr, 3, UVec3, UVec4, UVec4);
+impl_permute!(UVec4Expr, 4, UVec4, UVec4, UVec4);
+
 impl Vec3Expr {
     #[inline]
     pub fn cross(&self, rhs: Vec3Expr) -> Self {

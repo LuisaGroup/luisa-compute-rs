@@ -497,7 +497,12 @@ pub fn const_<T: Value + Copy + 'static>(value: T) -> T::Expr {
     });
     FromNode::from_node(node)
 }
-
+pub fn bitcast<From: Value, To: Value>(expr: Expr<From>) -> Expr<To> {
+    assert_eq!(std::mem::size_of::<From>(), std::mem::size_of::<To>());
+    Expr::<To>::from_node(current_scope(|b| {
+        b.call(Func::Bitcast, &[expr.node()], <To as TypeOf>::type_())
+    }))
+}
 pub struct BufferVar<T: Value> {
     marker: std::marker::PhantomData<T>,
     #[allow(dead_code)]

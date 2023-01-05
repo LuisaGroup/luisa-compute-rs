@@ -1086,76 +1086,6 @@ macro_rules! impl_kernel_build_for_fn {
     };
 }
 impl_kernel_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
-// pub fn switch_<R: Aggregate>(
-//     value: Expr<i32>,
-//     cases: Vec<(i32, &dyn FnOnce() -> R)>,
-//     default: impl FnOnce() -> R,
-// ) -> R {
-//     let mut cases = cases;
-//     cases.sort_by_key(|(i, _)| *i);
-//     let mut case_phis = vec![];
-//     let cases = cases
-//         .into_iter()
-//         .map(|(i, f)| {
-//             RECORDER.with(|r| {
-//                 let mut r = r.borrow_mut();
-//                 let s = &mut r.scopes;
-//                 s.push(IrBuilder::new());
-//             });
-//             let r = f();
-//             let nodes = r.to_vec_nodes();
-//             case_phis.push(nodes);
-//             let block = pop_scope();
-//             SwitchCase { value: i, block }
-//         })
-//         .collect::<Vec<_>>();
-//     RECORDER.with(|r| {
-//         let mut r = r.borrow_mut();
-//         let s = &mut r.scopes;
-//         s.push(IrBuilder::new());
-//     });
-//     let default_nodes = default().to_vec_nodes();
-//     let default = pop_scope();
-//     let node = new_node(Node::new(
-//         Gc::new(Instruction::Switch {
-//             value: FromNode::node(&value),
-//             default,
-//             cases: CBoxedSlice::new(cases.clone()),
-//         }),
-//         Type::void(),
-//     ));
-//     current_scope(|b| b.append(node));
-//     let phi_count = default_nodes.len();
-//     for i in 0..case_phis.len() {
-//         let nodes = case_phis[i].clone();
-//         assert_eq!(nodes.len(), phi_count);
-//         for j in 0..phi_count {
-//             assert_eq!(nodes[j].type_(), default_nodes[j].type_());
-//         }
-//     }
-//     let mut phis = vec![];
-//     for i in 0..phi_count {
-//         let mut incomings = vec![];
-//         for j in 0..case_phis.len() {
-//             let nodes = case_phis[j].clone();
-//             incomings.push(PhiIncoming {
-//                 value: nodes[i],
-//                 block: cases[i].block,
-//             });
-//         }
-//         incomings.push(PhiIncoming {
-//             value: default_nodes[i],
-//             block: default,
-//         });
-//         let phi = new_node(Node::new(
-//             Gc::new(Instruction::Phi(CBoxedSlice::new(incomings))),
-//             default_nodes[i].type_(),
-//         ));
-//         phis.push(phi);
-//         current_scope(|b| b.append(phi));
-//     }
-//     R::from_vec_nodes(phis)
-// }
 
 pub fn if_<R: Aggregate>(
     cond: impl _Mask,
@@ -1203,11 +1133,7 @@ pub fn if_<R: Aggregate>(
                     },
                 ];
                 assert_eq!(then.type_(), else_.type_());
-                let phi = new_node(Node::new(
-                    Gc::new(Instruction::Phi(CBoxedSlice::new(incomings))),
-                    then.type_(),
-                ));
-                b.append(phi);
+                let phi = b.phi(&incomings, then.type_());
                 phi
             })
             .collect::<Vec<_>>()
@@ -1328,16 +1254,8 @@ impl<R: Aggregate> SwitchBuilder<R> {
             default_nodes = self.default.as_ref().unwrap().1.clone();
             self.default.as_ref().unwrap().0
         };
-        let switch_node = new_node(Node::new(
-            Gc::new(Instruction::Switch {
-                value: self.value,
-                default: default_block,
-                cases: CBoxedSlice::new(cases.clone()),
-            }),
-            Type::void(),
-        ));
         current_scope(|b| {
-            b.append(switch_node);
+            b.switch(self.value, &cases, default_block);
         });
         let mut phis = vec![];
         for i in 0..phi_count {
@@ -1352,13 +1270,8 @@ impl<R: Aggregate> SwitchBuilder<R> {
                 value: default_nodes[i],
                 block: default_block,
             });
-            phis.push(new_node(Node::new(
-                Gc::new(Instruction::Phi(CBoxedSlice::new(incomings))),
-                case_phis[0][i].type_(),
-            )));
-            current_scope(|b| {
-                b.append(phis[i]);
-            });
+            let phi = current_scope(|b| b.phi(&incomings, case_phis[0][i].type_()));
+            phis.push(phi);
         }
         R::from_vec_nodes(phis)
     }
@@ -1455,6 +1368,9 @@ pub fn gradient<T: Value, U: ExprProxy<T>>(var: U) -> U {
     U::from_node(current_scope(|b| {
         b.call(Func::Gradient, &[var.node()], var.node().type_())
     }))
+}
+pub fn grad<T: Value, U: ExprProxy<T>>(var: U) -> U {
+   gradient(var)
 }
 pub fn autodiff(body: impl FnOnce()) {
     AD_CONTEXT.with(|c| {

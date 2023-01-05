@@ -45,7 +45,15 @@ impl<'a, T: Value> BufferView<'a, T> {
             resource_tracker: vec![Box::new(self.buffer.handle.clone())],
         }
     }
-
+    pub fn copy_to_vec(&self) -> Vec<T> {
+        let mut data = Vec::with_capacity(self.len);
+        unsafe {
+            let slice = std::slice::from_raw_parts_mut(data.as_mut_ptr(), self.len);
+            self.copy_to(slice);
+            data.set_len(self.len);
+        }
+        data
+    }
     pub fn copy_to(&self, data: &mut [T]) {
         unsafe {
             submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_async(data)])
@@ -145,7 +153,7 @@ impl BindlessArray {
     // pub fn buffer<T:Value>(&self, index: usize)->BufferVar<T> {
     //     todo!()
     // }
-    pub fn var(&self)->BindlessArrayVar{
+    pub fn var(&self) -> BindlessArrayVar {
         BindlessArrayVar::new(self)
     }
     pub fn handle(&self) -> api::BindlessArray {

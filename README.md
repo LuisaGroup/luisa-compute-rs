@@ -45,11 +45,9 @@ fn main() {
         }))
         .unwrap();
     kernel.dispatch([1024, 1, 1], &z).unwrap();
-    let mut z_data = vec![0.0; 1024];
-    z.view(..).copy_to(&mut z_data);
+    let z_data = z.view(..).copy_to_vec();
     println!("{:?}", &z_data[0..16]);
 }
-
 
 ```
 ## Overview
@@ -116,7 +114,11 @@ if_!(cond, { value_a }, { value_b })
 while_!(cond, { /* body */});
 break_();
 continue_();
-//switch : TODO
+let (x,y) = switch::<(Expr<i32>, Expr<f32>)>(value)
+    .case(1, || { ... })
+    .case(2, || { ... })
+    .default(|| { ... })
+    .finish();
 ```
 
 ### Custom Data Types

@@ -66,3 +66,128 @@ fn vec_permute() {
         assert_eq!(i_data[i].z, i as i32);
     }
 }
+
+#[test]
+fn if_phi() {
+    init_once();
+    let device = create_cpu_device().unwrap();
+    let x: Buffer<i32> = device.create_buffer(1024).unwrap();
+    let even: Buffer<bool> = device.create_buffer(1024).unwrap();
+    x.view(..).fill_fn(|i| i as i32);
+    let kernel = device
+        .create_kernel(wrap_fn!(0, || {
+            let x = x.var();
+            let even = even.var();
+            let tid = dispatch_id().x();
+            let v = x.read(tid);
+            let result = if_!((v % 2).cmpeq(0), { Bool::from(true) }, else { Bool::from(false) });
+            even.write(tid, result);
+        }))
+        .unwrap();
+    kernel.dispatch([1024, 1, 1]).unwrap();
+    let mut i_data = vec![false; 1024];
+    even.view(..).copy_to(&mut i_data);
+    for i in 0..1024 {
+        assert_eq!(i_data[i], i % 2 == 0);
+    }
+}
+
+#[test]
+fn switch_phi() {
+    init_once();
+    let device = create_cpu_device().unwrap();
+    let x: Buffer<i32> = device.create_buffer(1024).unwrap();
+    let y: Buffer<i32> = device.create_buffer(1024).unwrap();
+    let z: Buffer<f32> = device.create_buffer(1024).unwrap();
+    x.view(..).fill_fn(|i| i as i32);
+    let kernel = device
+        .create_kernel(wrap_fn!(0, || {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_z = z.var();
+            let tid = dispatch_id().x();
+            let x = buf_x.read(tid);
+            let (y, z) = switch::<(Expr<i32>, Expr<f32>)>(x)
+                .case(0, || (Int32::from(0), Float32::from(1.0)))
+                .case(1, || (Int32::from(1), Float32::from(2.0)))
+                .case(2, || (Int32::from(2), Float32::from(3.0)))
+                .default(|| (Int32::from(3), Float32::from(4.0)))
+                .finish();
+            buf_y.write(tid, y);
+            buf_z.write(tid, z);
+        }))
+        .unwrap();
+    kernel.dispatch([1024, 1, 1]).unwrap();
+    let y_data = y.view(..).copy_to_vec();
+    let z_data = z.view(..).copy_to_vec();
+    for i in 0..1024 {
+        match i{
+            0 => {
+                assert_eq!(y_data[i], 0);
+                assert_eq!(z_data[i], 1.0);
+            }
+            1 => {
+                assert_eq!(y_data[i], 1);
+                assert_eq!(z_data[i], 2.0);
+            }
+            2 => {
+                assert_eq!(y_data[i], 2);
+                assert_eq!(z_data[i], 3.0);
+            }
+            _ => {
+                assert_eq!(y_data[i], 3);
+                assert_eq!(z_data[i], 4.0);
+            }
+        }
+    }
+
+}
+
+#[test]
+fn switch_unreachable() {
+    init_once();
+    let device = create_cpu_device().unwrap();
+    let x: Buffer<i32> = device.create_buffer(1024).unwrap();
+    let y: Buffer<i32> = device.create_buffer(1024).unwrap();
+    let z: Buffer<f32> = device.create_buffer(1024).unwrap();
+    x.view(..).fill_fn(|i| i as i32 % 3);
+    let kernel = device
+        .create_kernel(wrap_fn!(0, || {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_z = z.var();
+            let tid = dispatch_id().x();
+            let x = buf_x.read(tid);
+            let (y, z) = switch::<(Expr<i32>, Expr<f32>)>(x)
+                .case(0, || (Int32::from(0), Float32::from(1.0)))
+                .case(1, || (Int32::from(1), Float32::from(2.0)))
+                .case(2, || (Int32::from(2), Float32::from(3.0)))
+                .finish();
+            buf_y.write(tid, y);
+            buf_z.write(tid, z);
+        }))
+        .unwrap();
+    kernel.dispatch([1024, 1, 1]).unwrap();
+    let y_data = y.view(..).copy_to_vec();
+    let z_data = z.view(..).copy_to_vec();
+    for i in 0..1024 {
+        match i % 3{
+            0 => {
+                assert_eq!(y_data[i], 0);
+                assert_eq!(z_data[i], 1.0);
+            }
+            1 => {
+                assert_eq!(y_data[i], 1);
+                assert_eq!(z_data[i], 2.0);
+            }
+            2 => {
+                assert_eq!(y_data[i], 2);
+                assert_eq!(z_data[i], 3.0);
+            }
+            _ => {
+                unreachable!()
+            }
+        }
+    }
+
+}

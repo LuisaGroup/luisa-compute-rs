@@ -1,4 +1,5 @@
 use std::io::stderr;
+use std::marker::PhantomData;
 use std::process::abort;
 use std::{any::Any, collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 
@@ -11,8 +12,8 @@ use crate::{
         TextureHandle,
     },
 };
-use ir::ir::BindlessArrayBinding;
 pub use ir::ir::NodeRef;
+use ir::ir::{BindlessArrayBinding, SwitchCase};
 use ir::{
     ir::{
         new_node, BasicBlock, Binding, BufferBinding, Capture, Const, CpuCustomOp, Func,
@@ -1085,6 +1086,76 @@ macro_rules! impl_kernel_build_for_fn {
     };
 }
 impl_kernel_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
+// pub fn switch_<R: Aggregate>(
+//     value: Expr<i32>,
+//     cases: Vec<(i32, &dyn FnOnce() -> R)>,
+//     default: impl FnOnce() -> R,
+// ) -> R {
+//     let mut cases = cases;
+//     cases.sort_by_key(|(i, _)| *i);
+//     let mut case_phis = vec![];
+//     let cases = cases
+//         .into_iter()
+//         .map(|(i, f)| {
+//             RECORDER.with(|r| {
+//                 let mut r = r.borrow_mut();
+//                 let s = &mut r.scopes;
+//                 s.push(IrBuilder::new());
+//             });
+//             let r = f();
+//             let nodes = r.to_vec_nodes();
+//             case_phis.push(nodes);
+//             let block = pop_scope();
+//             SwitchCase { value: i, block }
+//         })
+//         .collect::<Vec<_>>();
+//     RECORDER.with(|r| {
+//         let mut r = r.borrow_mut();
+//         let s = &mut r.scopes;
+//         s.push(IrBuilder::new());
+//     });
+//     let default_nodes = default().to_vec_nodes();
+//     let default = pop_scope();
+//     let node = new_node(Node::new(
+//         Gc::new(Instruction::Switch {
+//             value: FromNode::node(&value),
+//             default,
+//             cases: CBoxedSlice::new(cases.clone()),
+//         }),
+//         Type::void(),
+//     ));
+//     current_scope(|b| b.append(node));
+//     let phi_count = default_nodes.len();
+//     for i in 0..case_phis.len() {
+//         let nodes = case_phis[i].clone();
+//         assert_eq!(nodes.len(), phi_count);
+//         for j in 0..phi_count {
+//             assert_eq!(nodes[j].type_(), default_nodes[j].type_());
+//         }
+//     }
+//     let mut phis = vec![];
+//     for i in 0..phi_count {
+//         let mut incomings = vec![];
+//         for j in 0..case_phis.len() {
+//             let nodes = case_phis[j].clone();
+//             incomings.push(PhiIncoming {
+//                 value: nodes[i],
+//                 block: cases[i].block,
+//             });
+//         }
+//         incomings.push(PhiIncoming {
+//             value: default_nodes[i],
+//             block: default,
+//         });
+//         let phi = new_node(Node::new(
+//             Gc::new(Instruction::Phi(CBoxedSlice::new(incomings))),
+//             default_nodes[i].type_(),
+//         ));
+//         phis.push(phi);
+//         current_scope(|b| b.append(phi));
+//     }
+//     R::from_vec_nodes(phis)
+// }
 
 pub fn if_<R: Aggregate>(
     cond: impl _Mask,
@@ -1175,6 +1246,124 @@ pub fn generic_loop(cond: impl FnOnce() -> Bool, body: impl FnOnce(), update: im
         b.generic_loop(prepare, cond_v, body, update);
     });
 }
+pub struct SwitchBuilder<R: Aggregate> {
+    cases: Vec<(i32, Gc<BasicBlock>, Vec<NodeRef>)>,
+    default: Option<(Gc<BasicBlock>, Vec<NodeRef>)>,
+    value: NodeRef,
+    _marker: PhantomData<R>,
+    depth: usize,
+}
+pub fn switch<R: Aggregate>(node: Expr<i32>) -> SwitchBuilder<R> {
+    SwitchBuilder::new(node)
+}
+impl<R: Aggregate> SwitchBuilder<R> {
+    pub fn new(node: Expr<i32>) -> Self {
+        SwitchBuilder {
+            cases: vec![],
+            default: None,
+            value: node.node(),
+            _marker: PhantomData,
+            depth: RECORDER.with(|r| r.borrow().scopes.len()),
+        }
+    }
+    pub fn case(mut self, value: i32, then: impl FnOnce() -> R) -> Self {
+        RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            let s = &mut r.scopes;
+            assert_eq!(s.len(), self.depth);
+            s.push(IrBuilder::new());
+        });
+        let then = then();
+        let block = pop_scope();
+        self.cases.push((value, block, then.to_vec_nodes()));
+        self
+    }
+    pub fn default(mut self, then: impl FnOnce() -> R) -> Self {
+        RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            let s = &mut r.scopes;
+            assert_eq!(s.len(), self.depth);
+            s.push(IrBuilder::new());
+        });
+        let then = then();
+        let block = pop_scope();
+        self.default = Some((block, then.to_vec_nodes()));
+        self
+    }
+    pub fn finish(self) -> R {
+        RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            let s = &mut r.scopes;
+            assert_eq!(s.len(), self.depth);
+        });
+        let cases = self
+            .cases
+            .iter()
+            .map(|(v, b, _)| SwitchCase {
+                value: *v,
+                block: *b,
+            })
+            .collect::<Vec<_>>();
+        let case_phis = self
+            .cases
+            .iter()
+            .map(|(_, _, nodes)| nodes.clone())
+            .collect::<Vec<_>>();
+        let phi_count = case_phis[0].len();
+        let mut default_nodes = vec![];
+        let default_block = if self.default.is_none() {
+            RECORDER.with(|r| {
+                let mut r = r.borrow_mut();
+                let s = &mut r.scopes;
+                assert_eq!(s.len(), self.depth);
+                s.push(IrBuilder::new());
+            });
+            for i in 0..phi_count {
+                let default_node =
+                    current_scope(|b| b.call(Func::Unreachable, &[], case_phis[0][i].type_()));
+                default_nodes.push(default_node);
+            }
+            pop_scope()
+        } else {
+            default_nodes = self.default.as_ref().unwrap().1.clone();
+            self.default.as_ref().unwrap().0
+        };
+        let switch_node = new_node(Node::new(
+            Gc::new(Instruction::Switch {
+                value: self.value,
+                default: default_block,
+                cases: CBoxedSlice::new(cases.clone()),
+            }),
+            Type::void(),
+        ));
+        current_scope(|b| {
+            b.append(switch_node);
+        });
+        let mut phis = vec![];
+        for i in 0..phi_count {
+            let mut incomings = vec![];
+            for (j, nodes) in case_phis.iter().enumerate() {
+                incomings.push(PhiIncoming {
+                    value: nodes[i],
+                    block: self.cases[j].1,
+                });
+            }
+            incomings.push(PhiIncoming {
+                value: default_nodes[i],
+                block: default_block,
+            });
+            phis.push(new_node(Node::new(
+                Gc::new(Instruction::Phi(CBoxedSlice::new(incomings))),
+                case_phis[0][i].type_(),
+            )));
+            current_scope(|b| {
+                b.append(phis[i]);
+            });
+        }
+        R::from_vec_nodes(phis)
+    }
+}
+
 #[macro_export]
 macro_rules! if_ {
     ($cond:expr, $then:block, else $else_:block) => {

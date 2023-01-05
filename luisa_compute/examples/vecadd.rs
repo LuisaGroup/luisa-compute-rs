@@ -21,7 +21,6 @@ fn main() {
         }))
         .unwrap();
     kernel.dispatch([1024, 1, 1], &z).unwrap();
-    let mut z_data = vec![0.0; 1024];
-    z.view(..).copy_to(&mut z_data);
+    let z_data = z.view(..).copy_to_vec();
     println!("{:?}", &z_data[0..16]);
 }

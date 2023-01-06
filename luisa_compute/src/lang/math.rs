@@ -836,16 +836,16 @@ macro_rules! impl_permute {
     };
 }
 impl_permute!(Vec2Expr, 2, Vec2, Vec3, Vec4);
-impl_permute!(Vec3Expr, 3, Vec3, Vec4, Vec4);
-impl_permute!(Vec4Expr, 4, Vec4, Vec4, Vec4);
+impl_permute!(Vec3Expr, 3, Vec2, Vec3, Vec4);
+impl_permute!(Vec4Expr, 4, Vec2, Vec3, Vec4);
 
 impl_permute!(IVec2Expr, 2, IVec2, IVec3, IVec4);
-impl_permute!(IVec3Expr, 3, IVec3, IVec4, IVec4);
-impl_permute!(IVec4Expr, 4, IVec4, IVec4, IVec4);
+impl_permute!(IVec3Expr, 3, IVec2, IVec3, IVec4);
+impl_permute!(IVec4Expr, 4, IVec2, IVec3, IVec4);
 
 impl_permute!(UVec2Expr, 2, UVec2, UVec3, UVec4);
-impl_permute!(UVec3Expr, 3, UVec3, UVec4, UVec4);
-impl_permute!(UVec4Expr, 4, UVec4, UVec4, UVec4);
+impl_permute!(UVec3Expr, 3, UVec2, UVec3, UVec4);
+impl_permute!(UVec4Expr, 4, UVec2, UVec3, UVec4);
 
 impl Vec3Expr {
     #[inline]

@@ -504,6 +504,110 @@ pub fn bitcast<From: Value, To: Value>(expr: Expr<From>) -> Expr<To> {
         b.call(Func::Bitcast, &[expr.node()], <To as TypeOf>::type_())
     }))
 }
+
+impl<T: Value, const N: usize> Value for [T; N] {
+    type Expr = ArrayExpr<T, N>;
+    type Var = ArrayVar<T, N>;
+    fn fields() -> Vec<String> {
+        todo!("why this method exists?")
+    }
+}
+#[derive(Clone, Copy, Debug)]
+pub struct ArrayExpr<T: Value, const N: usize> {
+    marker: std::marker::PhantomData<T>,
+    node: NodeRef,
+}
+#[derive(Clone, Copy, Debug)]
+pub struct ArrayVar<T: Value, const N: usize> {
+    marker: std::marker::PhantomData<T>,
+    node: NodeRef,
+}
+impl<T: Value, const N: usize> FromNode for ArrayExpr<T, N> {
+    fn from_node(node: NodeRef) -> Self {
+        Self {
+            marker: std::marker::PhantomData,
+            node,
+        }
+    }
+    fn node(&self) -> NodeRef {
+        self.node
+    }
+}
+impl<T: Value, const N: usize> Aggregate for ArrayExpr<T, N> {
+    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+        nodes.push(self.node);
+    }
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+        Self::from_node(iter.next().unwrap())
+    }
+}
+impl<T: Value, const N: usize> FromNode for ArrayVar<T, N> {
+    fn from_node(node: NodeRef) -> Self {
+        Self {
+            marker: std::marker::PhantomData,
+            node,
+        }
+    }
+    fn node(&self) -> NodeRef {
+        self.node
+    }
+}
+impl<T: Value, const N: usize> Aggregate for ArrayVar<T, N> {
+    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+        nodes.push(self.node);
+    }
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+        Self::from_node(iter.next().unwrap())
+    }
+}
+impl<T: Value, const N: usize> ExprProxy<[T; N]> for ArrayExpr<T, N> {}
+impl<T: Value, const N: usize> VarProxy<[T; N]> for ArrayVar<T, N> {}
+impl<T: Value, const N: usize> ArrayVar<T, N> {
+    pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
+        let i = i.into();
+        if __env_need_backtrace() {
+            assert(i.cmplt(const_(N as u32)));
+        }
+        Expr::<T>::from_node(current_scope(|b| {
+            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
+            b.call(Func::Load, &[gep], T::type_())
+        }))
+    }
+    pub fn len(&self) -> Expr<u32> {
+        const_(N as u32)
+    }
+    pub fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, value: V) {
+        let i = i.into();
+        let value = value.into();
+        if __env_need_backtrace() {
+            assert(i.cmplt(const_(N as u32)));
+        }
+        current_scope(|b| {
+            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
+            b.update(gep, value.node());
+        });
+    }
+}
+impl<T: Value, const N: usize> ArrayExpr<T, N> {
+    pub fn zero() -> Self {
+        let node = current_scope(|b| b.call(Func::ZeroInitializer, &[], <[T; N]>::type_()));
+        Self::from_node(node)
+    }
+    pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
+        let i = i.into();
+        if __env_need_backtrace() {
+            assert(i.cmplt(const_(N as u32)));
+        }
+        Expr::<T>::from_node(current_scope(|b| {
+            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
+            b.call(Func::Load, &[gep], T::type_())
+        }))
+    }
+    pub fn len(&self) -> Expr<u32> {
+        const_(N as u32)
+    }
+}
+
 pub struct BufferVar<T: Value> {
     marker: std::marker::PhantomData<T>,
     #[allow(dead_code)]
@@ -1370,7 +1474,7 @@ pub fn gradient<T: Value, U: ExprProxy<T>>(var: U) -> U {
     }))
 }
 pub fn grad<T: Value, U: ExprProxy<T>>(var: U) -> U {
-   gradient(var)
+    gradient(var)
 }
 pub fn autodiff(body: impl FnOnce()) {
     AD_CONTEXT.with(|c| {

@@ -1,7 +1,7 @@
 use crate::backend::{Backend, BackendError};
 use crate::*;
 use crate::{lang::Value, resource::*};
-use lang::{KernelBuildFn, KernelBuilder};
+use lang::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSigature};
 pub use luisa_compute_api_types as api;
 use std::any::Any;
 use std::cell::RefCell;
@@ -133,10 +133,17 @@ impl Device {
     ) -> Result<RawKernel, BackendError> {
         KernelBuilder::build(self.clone(), f)
     }
-    pub fn create_kernel<F>(&self, f: F) -> <F as KernelBuildFn>::Output
+    pub fn create_kernel_old<F>(&self, f: F) -> <F as KernelBuildFn>::Output
     where
         F: KernelBuildFn,
     {
+        let mut builder = KernelBuilder::new(self.clone());
+        KernelBuildFn::build(&f, &mut builder)
+    }
+    pub fn create_kernel<'a, S: KernelSigature<'a>>(
+        &self,
+        f: S::Fn,
+    ) -> <S::Fn as KernelBuildFn>::Output {
         let mut builder = KernelBuilder::new(self.clone());
         KernelBuildFn::build(&f, &mut builder)
     }
@@ -300,24 +307,29 @@ impl ArgEncoder {
     }
 }
 pub trait KernelArg {
+    type Parameter: KernelParameter;
     fn encode(&self, encoder: &mut ArgEncoder);
 }
 impl<T: Value> KernelArg for Buffer<T> {
+    type Parameter = lang::BufferVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.buffer(self);
     }
 }
 impl<T: Texel> KernelArg for Tex2D<T> {
+    type Parameter = lang::Tex2DVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.tex2d(self);
     }
 }
 impl<T: Texel> KernelArg for Tex3D<T> {
+    type Parameter = lang::Tex3DVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.tex3d(self);
     }
 }
 impl KernelArg for BindlessArray {
+    type Parameter = lang::BindlessArrayVar;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.bindless_array(self);
     }
@@ -325,11 +337,13 @@ impl KernelArg for BindlessArray {
 macro_rules! impl_kernel_arg_for_tuple {
     ()=>{
         impl KernelArg for () {
+            type Parameter = ();
             fn encode(&self, _: &mut ArgEncoder) { }
         }
     };
     ($first:ident  $($rest:ident) *) => {
         impl<$first:KernelArg, $($rest: KernelArg),*> KernelArg for ($first, $($rest,)*) {
+            type Parameter = ($first::Parameter, $($rest::Parameter),*);
             #[allow(non_snake_case)]
             fn encode(&self, encoder: &mut ArgEncoder) {
                 let ($first, $($rest,)*) = self;

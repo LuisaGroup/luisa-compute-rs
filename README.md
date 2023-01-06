@@ -34,7 +34,7 @@ fn main() {
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
     let kernel = device
-        .create_kernel(wrap_fn!(1, |buf_z: BufferVar<f32>| {
+        .create_kernel::<(Buffer<f32>,)>(&|buf_z| {
             // z is pass by arg
             let buf_x = x.var(); // x and y are captured
             let buf_y = y.var();
@@ -42,12 +42,13 @@ fn main() {
             let x = buf_x.read(tid);
             let y = buf_y.read(tid);
             buf_z.write(tid, x + y);
-        }))
+        })
         .unwrap();
     kernel.dispatch([1024, 1, 1], &z).unwrap();
     let z_data = z.view(..).copy_to_vec();
     println!("{:?}", &z_data[0..16]);
 }
+
 
 ```
 ## Overview
@@ -81,10 +82,18 @@ use luisa::prelude::*;
 ```
 ### Variables and Expressions
 There are six basic types in EDSL. `bool`, `i32`, `u32`, `i64`, `u64`, `f32`. (`f64` support might be added to CPU backend).
-For each type, there are two EDSL objects `Expr<T>` and `Var<T>`. `Expr<T>` is an immutable object that represents a value. `Var<T>` is a mutable object that represents a variable. `Expr<T>` can be converted to `Var<T>` by calling `Var<T>::load()`.
-All operations except load/store should be performed on `Expr<T>`. `Var<T>` can only be used to load/store values.
+For each type, there are two EDSL proxy objects `Expr<T>` and `Var<T>`. `Expr<T>` is an immutable object that represents a value. `Var<T>` is a mutable object that represents a variable. `Expr<T>` can be converted to `Var<T>` by calling `Var<T>::load()`.
+All operations except load/store should be performed on `Expr<T>`. `Var<T>` can only be used to load/store values. While `Expr<T>` and `Var<T>` are sufficent in most cases, it cannot be placed in an `impl` block. To do so, the exact name of these proxies are needed. 
+```rust
+Expr<Bool> == Bool, Var<Bool> == BoolVar
+Expr<f32> == Float32, Var<f32> == Float32Var
+Expr<i32> == Int32, Var<i32> == Int32Var
+Expr<u32> == UInt32, Var<u32> == UInt32Var
+Expr<i64> == Int64, Var<i64> == Int64Var
+Expr<u64> == UInt64, Var<u64> == UInt64Var
+```     
 
-As in the C++ EDSL, we additionally supports the following vector/matrix types: 
+As in the C++ EDSL, we additionally supports the following vector/matrix types. Their proxy types are `XXXExpr` and `XXXVar`:
 
 ```rust
 BVec2 // bool2 in C++
@@ -102,8 +111,9 @@ UVec4 // uint4 in C++
 Mat2 // float2x2 in C++
 Mat3 // float3x3 in C++
 Mat4 // float4x4 in C++
-
 ```
+Array types `[T;N]` are also supported and their proxy types are `ArrayExpr<T, N>` and `ArrayVar<T, N>`. 
+
 ### Control Flow
 If, while, break, continue are supported. Note that `if` and `switch` works similar to native Rust `if` and `match` in that values can be returned at the end of the block.
 
@@ -122,7 +132,7 @@ let (x,y) = switch::<(Expr<i32>, Expr<f32>)>(value)
 ```
 
 ### Custom Data Types
-To add custom data types to the EDSL, simply derive from `luisa::Value` macro. Note that `#[repr(C)]` is required for the struct to be compatible with C ABI.
+To add custom data types to the EDSL, simply derive from `luisa::Value` macro. Note that `#[repr(C)]` is required for the struct to be compatible with C ABI. The proxy types are `XXXExpr` and `XXXVar`:
 
 ```rust
 #[derive(Copy, Clone, Default, Debug, Value)]
@@ -187,32 +197,39 @@ let result = my_add.call(args);
 ```
 
 ### Kernel
-A kernel can be written in a closure or a function. The closure/function should be wrapped with `wrap_fn!` macro. The first argument of `wrap_fn!` is the number of arguments that will be passed to the kernel. The rest of the arguments are the types of the arguments. The body of the closure/function should be written in the same way as a normal closure/function. The only difference is that the arguments should be wrapped with `XXVar<T>`. e.g. `BufferVar<T>`, `Tex2DVar<T>`.
+A kernel can be written in a closure or a function. The closure/function should have a `Fn(/*args*/)->()` signature, where the args are taking the `Var` type of resources, such as `BufferVar<T>`, `Tex2D<T>`, etc.
+
+Note: `Device::create_kernel` takes a tuple of types as its generic parameter. If the kernel takes a single argument, it is required to use `create_kernel::<(Type,)>` instead of `create_kernel::<Type>`.
 
 ```rust
-let kernel = device.create_kernel(wrap_fn!(/*num of arguments*/, |/*args*/| {
+let kernel = device.create_kernel::<(Arg0, Arg1, ...)>(&|/*args*/| {
     /*body*/
-})).unwrap();
-kernel.dispatch([/*dispatch size*/], /*args*/).unwrap();
+}).unwrap();
+kernel.dispatch([/*dispatch size*/], &arg0, &arg1, ...).unwrap();
 ```
 There are two ways to pass arguments to a kernel: by arguments or by capture.
 ```rust
 let captured:Buffer<f32> = device.create_buffer(...).unwrap();
-let kernel = device.create_kernel(wrap_fn!(1, |arg:BufferVar<f32>| {
+let kernel = device.create_kernel::<(BufferVar<f32>, )>(arg| {
     let v = arg.read(..);
     let u = captured.var().read(..);
 })).unwrap();
 ```
-User can pass a maximum of 16 arguments to kernel and unlimited number of captured variables. If more than 16 arguments are needed, user can pack them into a tuple and pass the tuple as an argument:
+User can pass a maximum of 16 arguments to kernel and unlimited number of captured variables. If more than 16 arguments are needed, user can pack them into a struct and pass the struct as a single argument.
 ```rust
-let kernel = device.create_kernel(wrap_fn!(1, |(a,b):(BufferVar<f32>,BufferVar<f32>)| {
+#[derive(KernelArg)]
+pub struct BufferPair {
+    a:Buffer<f32>,
+    b:Buffer<f32>
+}
+let kernel = device.create_kernel::<(BufferPair, )>(&|| {
     // ...
-})).unwrap();
+}).unwrap();
 let a = device.create_buffer(...).unwrap();
 let b = device.create_buffer(...).unwrap();
-let packed = (a,b);
+let pair = BufferPair{a,b};
 kernel.dispatch([...], &packed).unwrap();
-let (a,b) = packed; // unpack if you need to use them later
+let BufferPair{a, b} = packed; // unpack if you need to use them later
 ```
 ## Advanced Usage
 Note that the IR module has a public interface. If needed, user can implement their own DSL syntax sugar. Every EDSL object implements either `Aggregate` or `FromNode` trait, which allows any EDSL type to be destructured into its underlying IR nodes and reconstructed from them.

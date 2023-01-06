@@ -26,7 +26,7 @@ fn main() {
         }
     });
     let kernel = device
-        .create_kernel(wrap_fn!(1, |buf_z: BufferVar<f32>| {
+        .create_kernel::<(Buffer<f32>,)>(&|buf_z: BufferVar<f32>| {
             // z is pass by arg
             let buf_x = x.var(); // x and y are captured
             let buf_y = y.var();
@@ -40,7 +40,7 @@ fn main() {
                 cpu_dbg!(MyAddArgs, args);
             });
             buf_z.write(tid, result.result());
-        }))
+        })
         .unwrap();
     kernel.dispatch([1024, 1, 1], &z).unwrap();
     let mut z_data = vec![0.0; 1024];

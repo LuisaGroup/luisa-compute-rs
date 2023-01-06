@@ -38,6 +38,39 @@ impl Compiler {
             panic!("Struct must have repr(C) attribute");
         }
     }
+    pub fn derive_kernel_arg(&self, struct_: &ItemStruct) -> TokenStream {
+        let span = struct_.span();
+        let name = &struct_.ident;
+        let vis = &struct_.vis;
+        let fields: Vec<_> = struct_.fields.iter().map(|f| f).collect();
+        let field_vis: Vec<_> = fields.iter().map(|f| &f.vis).collect();
+        let field_types: Vec<_> = fields.iter().map(|f| &f.ty).collect();
+        let field_names: Vec<_> = fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
+        let parameter_name = syn::Ident::new(&format!("{}Var", name), name.span());
+        let parameter_def = quote!(
+            #vis struct #parameter_name {
+                #(#field_vis #field_names: <#field_types as luisa_compute::runtime::KernelArg>::Parameter),*
+            }
+        );
+        quote_spanned!(span=>
+            #parameter_def
+
+            impl luisa_compute::lang::KernelParameter for #parameter_name {
+                type Arg = #name;
+                fn def_param(builder: &mut KernelBuilder) -> Self {
+                    Self{
+                        #(#field_names:  luisa_compute::lang::KernelParameter::def_param(builder)),*
+                    }
+                }
+            }
+            impl luisa_compute::runtime::KernelArg for #name {
+                type Parameter = #parameter_name;
+                fn encode(&self, encoder: &mut  luisa_compute::prelude::ArgEncoder) {
+                    #(self.#field_names.encode(encoder);)*
+                }
+            }
+        )
+    }
     pub fn derive_value(&self, struct_: &ItemStruct) -> TokenStream {
         self.check_repr_c(&struct_.attrs);
         let span = struct_.span();

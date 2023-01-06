@@ -19,9 +19,8 @@ fn main() {
     }]);
     let x = device.create_buffer::<f32>(1024).unwrap();
     let kernel = device
-        .create_kernel(wrap_fn!(
-            2,
-            |buf_x: BufferVar<f32>, spheres: BufferVar<Sphere>| {
+        .create_kernel::<(Buffer<f32>, Buffer<Sphere>)>(
+            &|buf_x: BufferVar<f32>, spheres: BufferVar<Sphere>| {
                 let tid = dispatch_id().x();
                 let o = make_float3(0.0, 0.0, -2.0);
                 let d = make_float3(0.0, 0.0, 1.0);
@@ -36,8 +35,8 @@ fn main() {
                     t.store(t.load() + d);
                 });
                 buf_x.write(tid, t.load());
-            }
-        ))
+            },
+        )
         .unwrap();
     kernel.dispatch([1024, 1, 1], &x, &spheres).unwrap();
     let mut x_data = vec![f32::default(); 1024];

@@ -11,12 +11,11 @@ fn main() {
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1.0 + i as f32);
     let kernel = device
-        .create_kernel(wrap_fn!(
-            4,
-            |buf_x: BufferVar<f32>,
-             buf_y: BufferVar<f32>,
-             buf_dx: BufferVar<f32>,
-             buf_dy: BufferVar<f32>| {
+        .create_kernel::<(Buffer<f32>, Buffer<f32>, Buffer<f32>, Buffer<f32>)>(
+            &|buf_x: BufferVar<f32>,
+              buf_y: BufferVar<f32>,
+              buf_dx: BufferVar<f32>,
+              buf_dy: BufferVar<f32>| {
                 let tid = dispatch_id().x();
                 let x = buf_x.read(tid);
                 let y = buf_y.read(tid);
@@ -28,8 +27,8 @@ fn main() {
                     buf_dx.write(tid, gradient(x));
                     buf_dy.write(tid, gradient(y));
                 });
-            }
-        ))
+            },
+        )
         .unwrap();
     kernel.dispatch([1024, 1, 1], &x, &y, &dx, &dy).unwrap();
     let mut dx_data = vec![0.0; 1024];

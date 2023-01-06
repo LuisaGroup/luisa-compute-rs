@@ -6,7 +6,7 @@ use std::{any::Any, collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 use crate::lang::traits::VarCmp;
 use crate::{
     backend,
-    prelude::{ArgEncoder, Device, Kernel, KernelArg, RawKernel},
+    prelude::{Device, Kernel, KernelArg, RawKernel},
     resource::{
         BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, Tex2D, Tex3D, Texel,
         TextureHandle,
@@ -354,9 +354,6 @@ pub fn current_scope<F: FnOnce(&mut IrBuilder) -> R, R>(f: F) -> R {
         let mut r = r.borrow_mut();
         assert!(r.lock, "current_scope must be called within a kernel");
         let s = &mut r.scopes;
-        if s.is_empty() {
-            s.push(IrBuilder::new());
-        }
         f(s.last_mut().unwrap())
     })
 }
@@ -1055,6 +1052,7 @@ impl KernelBuilder {
             r.lock = true;
             r.device = Some(device.clone());
             r.scopes.clear();
+            r.scopes.push(IrBuilder::new());
         });
         Self {
             device,
@@ -1153,6 +1151,26 @@ pub trait KernelBuildFn {
     type Output;
     fn build(&self, builder: &mut KernelBuilder) -> Self::Output;
 }
+pub trait KernelSigature<'a> {
+    type Fn: KernelBuildFn;
+}
+
+macro_rules! impl_kernel_signature {
+    ()=>{
+        impl<'a> KernelSigature<'a> for () {
+            type Fn = &'a dyn Fn();
+        }
+    };
+    ($first:ident  $($rest:ident)*) => {
+        impl<'a, $first:KernelArg +'static, $($rest: KernelArg +'static),*> KernelSigature<'a> for ($first, $($rest,)*) {
+            type Fn = &'a dyn Fn($first::Parameter, $($rest::Parameter),*);
+        }
+        impl_kernel_signature!($($rest)*);
+    };
+}
+impl_kernel_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
+
+
 macro_rules! impl_kernel_build_for_fn {
     ()=>{
         impl KernelBuildFn for &dyn Fn() {

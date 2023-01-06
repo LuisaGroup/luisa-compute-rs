@@ -13,7 +13,7 @@ fn main() {
     bindless.set_buffer(0, &x);
     bindless.set_buffer(1, &y);
     let kernel = device
-        .create_kernel(wrap_fn!(1, |buf_z: BufferVar<f32>| {
+        .create_kernel::<(Buffer<f32>,)>(&|buf_z| {
             let bindless = bindless.var();
             let tid = dispatch_id().x();
             let buf_x = bindless.buffer::<f32>(Uint32::from(0));
@@ -21,7 +21,7 @@ fn main() {
             let x = buf_x.read(tid).cast::<u32>().cast::<f32>();
             let y = buf_y.read(tid);
             buf_z.write(tid, x + y);
-        }))
+        })
         .unwrap();
     kernel.dispatch([1024, 1, 1], &z).unwrap();
     let mut z_data = vec![0.0; 1024];

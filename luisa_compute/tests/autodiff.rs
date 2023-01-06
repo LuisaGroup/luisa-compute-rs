@@ -64,7 +64,7 @@ fn autodiff_helper<F: Fn(&[Float32]) -> Float32>(
     // }
     println!("init time: {:?}", tic.elapsed());
     let kernel = device
-        .create_kernel(wrap_fn!(0, || {
+        .create_kernel::<()>(&|| {
             let input_vars = inputs.iter().map(|input| input.var()).collect::<Vec<_>>();
             let grad_fd_vars = grad_fd.iter().map(|grad| grad.var()).collect::<Vec<_>>();
             let grad_ad_vars = grad_ad.iter().map(|grad| grad.var()).collect::<Vec<_>>();
@@ -87,7 +87,7 @@ fn autodiff_helper<F: Fn(&[Float32]) -> Float32>(
             for i in 0..n_inputs {
                 grad_fd_vars[i].write(tid, fd[i]);
             }
-        }))
+        })
         .unwrap();
     let tic = std::time::Instant::now();
     kernel.dispatch([repeats as u32, 1, 1]).unwrap();
@@ -540,7 +540,7 @@ fn autodiff_select() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = device
-        .create_kernel(wrap_fn!(0, || {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -556,7 +556,7 @@ fn autodiff_select() {
                 buf_dx.write(tid, gradient(x));
                 buf_dy.write(tid, gradient(y));
             });
-        }))
+        })
         .unwrap();
     kernel.dispatch([1024, 1, 1]).unwrap();
     let dx = dx.view(..).copy_to_vec();
@@ -587,7 +587,7 @@ fn autodiff_if_phi() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = device
-        .create_kernel(wrap_fn!(0, || {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -607,7 +607,7 @@ fn autodiff_if_phi() {
                 buf_dx.write(tid, gradient(x));
                 buf_dy.write(tid, gradient(y));
             });
-        }))
+        })
         .unwrap();
     kernel.dispatch([1024, 1, 1]).unwrap();
     let dx = dx.view(..).copy_to_vec();
@@ -638,7 +638,7 @@ fn autodiff_if_phi2() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = device
-        .create_kernel(wrap_fn!(0, || {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -662,7 +662,7 @@ fn autodiff_if_phi2() {
                 buf_dx.write(tid, gradient(x));
                 buf_dy.write(tid, gradient(y));
             });
-        }))
+        })
         .unwrap();
     kernel.dispatch([1024, 1, 1]).unwrap();
     let dx = dx.view(..).copy_to_vec();
@@ -697,7 +697,7 @@ fn autodiff_if_phi3() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = device
-        .create_kernel(wrap_fn!(0, || {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -721,7 +721,7 @@ fn autodiff_if_phi3() {
                 buf_dx.write(tid, gradient(x));
                 buf_dy.write(tid, gradient(y));
             });
-        }))
+        })
         .unwrap();
     kernel.dispatch([1024, 1, 1]).unwrap();
     let dx = dx.view(..).copy_to_vec();
@@ -758,7 +758,7 @@ fn autodiff_switch() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = device
-        .create_kernel(wrap_fn!(0, || {
+        .create_kernel::<()>(&|| {
             let buf_t = t.var();
             let buf_x = x.var();
             let buf_y = y.var();
@@ -780,7 +780,7 @@ fn autodiff_switch() {
                 buf_dx.write(tid, gradient(x));
                 buf_dy.write(tid, gradient(y));
             });
-        }))
+        })
         .unwrap();
     kernel.dispatch([1024, 1, 1]).unwrap();
     let dx = dx.view(..).copy_to_vec();

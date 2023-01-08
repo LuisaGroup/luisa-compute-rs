@@ -35,8 +35,8 @@ use std::cell::RefCell;
 
 // use self::math::UVec3;
 pub mod math;
-pub mod traits;
 pub mod swizzle;
+pub mod traits;
 
 pub trait Value: Copy + ir::TypeOf {
     type Expr: ExprProxy<Self>;
@@ -1160,7 +1160,6 @@ macro_rules! impl_kernel_signature {
 }
 impl_kernel_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
-
 macro_rules! impl_kernel_build_for_fn {
     ()=>{
         impl KernelBuildFn for &dyn Fn() {
@@ -1413,6 +1412,16 @@ pub fn break_() {
 pub fn continue_() {
     current_scope(|b| {
         b.continue_();
+    });
+}
+pub fn return_v<T: FromNode>(v: T) {
+    current_scope(|b| {
+        b.return_(Some(v.node()));
+    });
+}
+pub fn return_() {
+    current_scope(|b| {
+        b.return_(None);
     });
 }
 struct AdContext {

@@ -926,6 +926,7 @@ macro_rules! impl_var_trait2 {
         }
         impl CommonVarOp for $t {}
         impl VarCmp for $t {}
+        impl VarCmpEq for $t {}
         impl From<$v> for $t {
             fn from(v: $v) -> Self {
                 Self::new(const_(v.x), const_(v.y))
@@ -946,6 +947,7 @@ macro_rules! impl_var_trait3 {
         }
         impl CommonVarOp for $t {}
         impl VarCmp for $t {}
+        impl VarCmpEq for $t {}
         impl From<$v> for $t {
             fn from(v: $v) -> Self {
                 Self::new(const_(v.x), const_(v.y), const_(v.z))
@@ -966,6 +968,7 @@ macro_rules! impl_var_trait4 {
         }
         impl CommonVarOp for $t {}
         impl VarCmp for $t {}
+        impl VarCmpEq for $t {}
         impl From<$v> for $t {
             fn from(v: $v) -> Self {
                 Self::new(const_(v.x), const_(v.y), const_(v.z), const_(v.w))

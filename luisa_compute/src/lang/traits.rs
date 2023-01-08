@@ -114,53 +114,55 @@ pub trait CommonVarOp: VarTrait {
         self._cast()
     }
 }
-pub trait VarCmp: VarTrait {
-    fn cmplt<A: Into<Self>>(&self, other: A) -> Expr<bool> {
+pub trait VarCmpEq: VarTrait {
+    fn cmpeq<A: Into<Self>>(&self, other: A) -> Self::Bool {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Lt, &[lhs, rhs], Expr::<bool>::type_());
-            Expr::<bool>::from_node(ret)
+            let ret = s.call(Func::Eq, &[lhs, rhs],  Self::Bool::type_());
+            FromNode::from_node(ret)
         })
     }
-    fn cmple<A: Into<Self>>(&self, other: A) -> Expr<bool> {
+    fn cmpne<A: Into<Self>>(&self, other: A) -> Self::Bool {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Le, &[lhs, rhs], Expr::<bool>::type_());
-            Expr::<bool>::from_node(ret)
+            let ret = s.call(Func::Ne, &[lhs, rhs],  Self::Bool::type_());
+            FromNode::from_node(ret)
         })
     }
-    fn cmpgt<A: Into<Self>>(&self, other: A) -> Expr<bool> {
+}
+pub trait VarCmp: VarTrait + VarCmpEq{
+    fn cmplt<A: Into<Self>>(&self, other: A) -> Self::Bool {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Gt, &[lhs, rhs], Expr::<bool>::type_());
-            Expr::<bool>::from_node(ret)
+            let ret = s.call(Func::Lt, &[lhs, rhs],  Self::Bool::type_());
+            FromNode::from_node(ret)
         })
     }
-    fn cmpge<A: Into<Self>>(&self, other: A) -> Expr<bool> {
+    fn cmple<A: Into<Self>>(&self, other: A) -> Self::Bool {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Ge, &[lhs, rhs], Expr::<bool>::type_());
-            Expr::<bool>::from_node(ret)
+            let ret = s.call(Func::Le, &[lhs, rhs],  Self::Bool::type_());
+            FromNode::from_node(ret)
         })
     }
-    fn cmpeq<A: Into<Self>>(&self, other: A) -> Expr<bool> {
+    fn cmpgt<A: Into<Self>>(&self, other: A) -> Self::Bool {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Eq, &[lhs, rhs], Expr::<bool>::type_());
-            Expr::<bool>::from_node(ret)
+            let ret = s.call(Func::Gt, &[lhs, rhs],  Self::Bool::type_());
+            FromNode::from_node(ret)
         })
     }
-    fn cmpne<A: Into<Self>>(&self, other: A) -> Expr<bool> {
+    fn cmpge<A: Into<Self>>(&self, other: A) -> Self::Bool {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Ne, &[lhs, rhs], Expr::<bool>::type_());
-            Expr::<bool>::from_node(ret)
+            let ret = s.call(Func::Ge, &[lhs, rhs],  Self::Bool::type_());
+            FromNode::from_node(ret)
         })
     }
 }
@@ -599,6 +601,13 @@ impl_neg!(u32, PrimExpr<u32>);
 impl_neg!(u64, PrimExpr<u64>);
 
 impl_fneg!(f32, PrimExpr<f32>);
+impl VarCmpEq for PrimExpr<f32> {}
+// impl VarCmp for PrimExpr<f64> {}
+impl VarCmpEq for PrimExpr<i32> {}
+impl VarCmpEq for PrimExpr<i64> {}
+impl VarCmpEq for PrimExpr<u32> {}
+impl VarCmpEq for PrimExpr<u64> {}
+
 // impl_fneg!(f64, PrimExpr<f64>);
 impl VarCmp for PrimExpr<f32> {}
 // impl VarCmp for PrimExpr<f64> {}
@@ -606,7 +615,7 @@ impl VarCmp for PrimExpr<i32> {}
 impl VarCmp for PrimExpr<i64> {}
 impl VarCmp for PrimExpr<u32> {}
 impl VarCmp for PrimExpr<u64> {}
-impl VarCmp for PrimExpr<bool> {}
+impl VarCmpEq for PrimExpr<bool> {}
 impl CommonVarOp for PrimExpr<f32> {}
 // impl CommonVarOp for PrimExpr<f64> {}
 impl CommonVarOp for PrimExpr<i32> {}

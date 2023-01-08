@@ -12,7 +12,7 @@ pub trait VarTrait: Copy + Clone + 'static + FromNode {
     type Ulong: VarTrait;
     type Float: VarTrait;
     // type Double: VarTrait;
-    type Bool: VarTrait;
+    type Bool: VarTrait + Not<Output = Self::Bool>;
     fn type_() -> Gc<Type> {
         <Self::Value as TypeOf>::type_()
     }
@@ -392,23 +392,27 @@ pub trait FloatVarTrait:
             Self::from_node(ret)
         })
     }
-    fn is_finite(&self) -> Bool {
+    fn is_finite(&self) -> Self::Bool {
         !self.is_infinite()
     }
-    fn is_infinite(&self) -> Bool {
+    fn is_infinite(&self) -> Self::Bool {
         current_scope(|s| {
             let ret = s.call(Func::IsInf, &[self.node()], Self::type_());
             FromNode::from_node(ret)
         })
     }
-    fn is_nan(&self) -> Bool {
-        let any = self as &dyn Any;
-        if let Some(a) = any.downcast_ref::<Expr<f32>>() {
-            let u: Expr<u32> = a.bitcast::<u32>();
-            (u & 0x7f800000u32).cmpeq(0x7f800000u32) & (u & 0x007fffffu32).cmpne(0u32)
-        } else {
-            panic!("expect Expr<f32>")
-        }
+    fn is_nan(&self) -> Self::Bool {
+        // let any = self as &dyn Any;
+        // if let Some(a) = any.downcast_ref::<Expr<f32>>() {
+        //     let u: Expr<u32> = a.bitcast::<u32>();
+        //     (u & 0x7f800000u32).cmpeq(0x7f800000u32) & (u & 0x007fffffu32).cmpne(0u32)
+        // } else {
+        //     panic!("expect Expr<f32>")
+        // }
+        current_scope(|s| {
+            let ret = s.call(Func::IsNan, &[self.node()], Self::type_());
+            FromNode::from_node(ret)
+        })
     }
     fn ln(&self) -> Self {
         current_scope(|s| {
@@ -520,7 +524,10 @@ macro_rules! impl_not {
         impl Not for $proxy {
             type Output = Expr<$t>;
             fn not(self) -> Self::Output {
-                self ^ const_::<$t>(!0)
+                current_scope(|s| {
+                    let ret = s.call(Func::BitNot, &[FromNode::node(&self)], Self::Output::type_());
+                    Expr::<$t>::from_node(ret)
+                })
             }
         }
     };
@@ -530,13 +537,16 @@ macro_rules! impl_neg {
         impl Neg for $proxy {
             type Output = Expr<$t>;
             fn neg(self) -> Self::Output {
-                const_(0 as $t) - self
+                current_scope(|s| {
+                    let ret = s.call(Func::Neg, &[FromNode::node(&self)], Self::Output::type_());
+                    Expr::<$t>::from_node(ret)
+                })
             }
         }
     };
 }
 macro_rules! impl_fneg {
-    ($t:ty,$proxy:ty) => {
+    ($t:ty, $proxy:ty) => {
         impl Neg for $proxy {
             type Output = Expr<$t>;
             fn neg(self) -> Self::Output {
@@ -551,7 +561,10 @@ macro_rules! impl_fneg {
 impl Not for PrimExpr<bool> {
     type Output = Expr<bool>;
     fn not(self) -> Self::Output {
-        self ^ const_(true)
+        current_scope(|s| {
+            let ret = s.call(Func::BitNot, &[FromNode::node(&self)], Self::Output::type_());
+            FromNode::from_node(ret)
+        })
     }
 }
 impl_common_binop!(f32, PrimExpr<f32>);

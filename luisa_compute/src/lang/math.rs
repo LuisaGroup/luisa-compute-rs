@@ -543,7 +543,10 @@ macro_rules! impl_int_binop {
         impl std::ops::Not for $proxy {
             type Output = Expr<$t>;
             fn not(self) -> Self::Output {
-                self ^ Self::splat(!(0 as $scalar))
+                current_scope(|s| {
+                    let ret = s.call(Func::BitNot, &[FromNode::node(&self)], Self::Output::type_());
+                    Expr::<$t>::from_node(ret)
+                })
             }
         }
     };
@@ -591,6 +594,12 @@ macro_rules! impl_bool_binop {
                 Expr::<bool>::from_node(current_scope(|s| {
                     s.call(Func::Any, &[self.node], <bool as TypeOf>::type_())
                 }))
+            }
+        }
+        impl std::ops::Not for $proxy {
+            type Output = Expr<$t>;
+            fn not(self) -> Self::Output {
+                self ^ Self::splat(true)
             }
         }
     };

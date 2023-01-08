@@ -133,7 +133,8 @@ unsafe impl _Mask for Bool {}
 pub trait ExprProxy<T>: Copy + Aggregate + FromNode {}
 
 pub trait VarProxy<T: Value>: Copy + Aggregate + FromNode {
-    fn store(&self, value: Expr<T>) {
+    fn store<U: Into<Expr<T>>>(&self, value: U) {
+        let value = value.into();
         _store(self, &value);
     }
     fn load(&self) -> Expr<T> {
@@ -1414,11 +1415,11 @@ pub fn continue_() {
         b.continue_();
     });
 }
-pub fn return_v<T: FromNode>(v: T) {
-    current_scope(|b| {
-        b.return_(Some(v.node()));
-    });
-}
+// pub fn return_v<T: FromNode>(v: T) {
+//     current_scope(|b| {
+//         b.return_(Some(v.node()));
+//     });
+// }
 pub fn return_() {
     current_scope(|b| {
         b.return_(None);

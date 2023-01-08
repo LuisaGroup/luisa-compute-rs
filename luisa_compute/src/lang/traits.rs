@@ -397,7 +397,7 @@ pub trait FloatVarTrait:
     }
     fn is_infinite(&self) -> Self::Bool {
         current_scope(|s| {
-            let ret = s.call(Func::IsInf, &[self.node()], Self::type_());
+            let ret = s.call(Func::IsInf, &[self.node()], <Self::Bool>::type_());
             FromNode::from_node(ret)
         })
     }

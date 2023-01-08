@@ -1,5 +1,6 @@
 use std::ops::Mul;
 
+pub use super::swizzle::*;
 use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*, Float32};
 use crate::prelude::FromNode;
 use crate::prelude::{__compose, __insert, const_, current_scope, Expr, PrimExpr, Selectable, Var};
@@ -39,7 +40,25 @@ macro_rules! def_vec {
         }
     };
 }
-
+macro_rules! def_vec_long {
+    ($name:ident, $scalar:ty, $align:literal, $($comp:ident), *) => {
+        #[repr(C, align($align))]
+        #[derive(Copy, Clone, Debug, Default)]
+        pub struct $name {
+            $(pub $comp: $scalar), *
+        }
+        impl $name {
+            #[inline]
+            pub fn new($($comp: $scalar), *) -> Self {
+                Self { $($comp), * }
+            }
+            #[inline]
+            pub fn splat(scalar: $scalar) -> Self {
+                Self { $($comp: scalar), * }
+            }
+        }
+    };
+}
 def_vec!(Vec2, f32, 8, x, y);
 def_vec!(Vec3, f32, 16, x, y, z);
 def_vec!(Vec4, f32, 16, x, y, z, w);
@@ -59,6 +78,14 @@ def_vec!(DVec4, f64, 32, x, y, z, w);
 def_vec!(BVec2, bool, 2, x, y);
 def_vec!(BVec3, bool, 4, x, y, z);
 def_vec!(BVec4, bool, 4, x, y, z, w);
+
+def_vec_long!(ULVec2, u64, 16, x, y);
+def_vec_long!(ULVec3, u64, 32, x, y, z);
+def_vec_long!(ULVec4, u64, 32, x, y, z, w);
+
+def_vec_long!(LVec2, i64, 16, x, y);
+def_vec_long!(LVec3, i64, 32, x, y, z);
+def_vec_long!(LVec4, i64, 32, x, y, z, w);
 
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C, align(8))]
@@ -126,16 +153,6 @@ impl From<glam::Mat4> for Mat4 {
             ],
         }
     }
-}
-
-pub trait ArithCmp: Sized {
-    type Output;
-    fn cmplt<T: Into<Self>>(self, rhs: T) -> Self::Output;
-    fn cmple<T: Into<Self>>(self, rhs: T) -> Self::Output;
-    fn cmpgt<T: Into<Self>>(self, rhs: T) -> Self::Output;
-    fn cmpge<T: Into<Self>>(self, rhs: T) -> Self::Output;
-    fn cmpne<T: Into<Self>>(self, rhs: T) -> Self::Output;
-    fn cmpeq<T: Into<Self>>(self, rhs: T) -> Self::Output;
 }
 
 macro_rules! impl_proxy_fields {
@@ -304,7 +321,7 @@ macro_rules! impl_vec_proxy {
             #[inline]
             pub fn new($($comp: Expr<$scalar>), *) -> Self {
                 Self {
-                    node: __compose::<$vec>(&[$(VarTrait::node(&$comp)), *]),
+                    node: __compose::<$vec>(&[$(FromNode::node(&$comp)), *]),
                 }
             }
         }
@@ -415,12 +432,26 @@ impl_vec_proxy!(IVec2, IVec2Expr, IVec2Var, i32, Int32, 2, x, y);
 impl_vec_proxy!(IVec3, IVec3Expr, IVec3Var, i32, Int32, 3, x, y, z);
 impl_vec_proxy!(IVec4, IVec4Expr, IVec4Var, i32, Int32, 4, x, y, z, w);
 
+impl_vec_proxy!(ULVec2, ULVec2Expr, ULVec2Var, u64, Uint64, 2, x, y);
+impl_vec_proxy!(ULVec3, ULVec3Expr, ULVec3Var, u64, Uint64, 3, x, y, z);
+impl_vec_proxy!(ULVec4, ULVec4Expr, ULVec4Var, u64, Uint64, 4, x, y, z, w);
+
+impl_vec_proxy!(LVec2, LVec2Expr, LVec2Var, i64, Int64, 2, x, y);
+impl_vec_proxy!(LVec3, LVec3Expr, LVec3Var, i64, Int64, 3, x, y, z);
+impl_vec_proxy!(LVec4, LVec4Expr, LVec4Var, i64, Int64, 4, x, y, z, w);
+
 impl_mat_proxy!(Mat2, Mat2Expr, Mat2Var, Vec2, Float32, 2, x, y);
 impl_mat_proxy!(Mat3, Mat3Expr, Mat3Var, Vec3, Float32, 3, x, y, z);
 impl_mat_proxy!(Mat4, Mat4Expr, Mat4Var, Vec4, Float32, 4, x, y, z, w);
 
 macro_rules! impl_binop {
-    ($t:ty, $scalar:ty, $proxy:ty, $tr:ident, $m:ident) => {
+    ($t:ty, $scalar:ty, $proxy:ty, $tr:ident, $m:ident, $tr_assign:ident, $m_assign:ident) => {
+        impl std::ops::$tr_assign<$proxy> for $proxy {
+            fn $m_assign(&mut self, rhs: $proxy) {
+                use std::ops::$tr;
+                *self = (*self).$m(rhs);
+            }
+        }
         impl std::ops::$tr for $proxy {
             type Output = $proxy;
             fn $m(self, rhs: $proxy) -> Self::Output {
@@ -470,28 +501,74 @@ macro_rules! impl_binop {
 macro_rules! impl_arith_binop {
     ($t:ty, $scalar:ty, $proxy:ty) => {
         impl_common_op!($t, $scalar, $proxy);
-        impl_binop!($t, $scalar, $proxy, Add, add);
-        impl_binop!($t, $scalar, $proxy, Sub, sub);
-        impl_binop!($t, $scalar, $proxy, Mul, mul);
-        impl_binop!($t, $scalar, $proxy, Div, div);
-        impl_binop!($t, $scalar, $proxy, Rem, rem);
+        impl_binop!($t, $scalar, $proxy, Add, add, AddAssign, add_assign);
+        impl_binop!($t, $scalar, $proxy, Sub, sub, SubAssign, sub_assign);
+        impl_binop!($t, $scalar, $proxy, Mul, mul, MulAssign, mul_assign);
+        impl_binop!($t, $scalar, $proxy, Div, div, DivAssign, div_assign);
+        impl_binop!($t, $scalar, $proxy, Rem, rem, RemAssign, rem_assign);
         impl_reduce!($t, $scalar, $proxy);
+        impl std::ops::Neg for $proxy {
+            type Output = $proxy;
+            fn neg(self) -> Self::Output {
+                <$proxy>::from_node(current_scope(|s| {
+                    s.call(Func::Neg, &[self.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
     };
 }
 macro_rules! impl_int_binop {
     ($t:ty, $scalar:ty, $proxy:ty) => {
-        impl_binop!($t, $scalar, $proxy, BitAnd, bitand);
-        impl_binop!($t, $scalar, $proxy, BitOr, bitor);
-        impl_binop!($t, $scalar, $proxy, BitXor, bitxor);
-        impl_binop!($t, $scalar, $proxy, Shl, shl);
-        impl_binop!($t, $scalar, $proxy, Shr, shr);
+        impl_binop!(
+            $t,
+            $scalar,
+            $proxy,
+            BitAnd,
+            bitand,
+            BitAndAssign,
+            bitand_assign
+        );
+        impl_binop!($t, $scalar, $proxy, BitOr, bitor, BitOrAssign, bitor_assign);
+        impl_binop!(
+            $t,
+            $scalar,
+            $proxy,
+            BitXor,
+            bitxor,
+            BitXorAssign,
+            bitxor_assign
+        );
+        impl_binop!($t, $scalar, $proxy, Shl, shl, ShlAssign, shl_assign);
+        impl_binop!($t, $scalar, $proxy, Shr, shr, ShrAssign, shr_assign);
+        impl std::ops::Not for $proxy {
+            type Output = Expr<$t>;
+            fn not(self) -> Self::Output {
+                self ^ Self::splat(!(0 as $scalar))
+            }
+        }
     };
 }
 macro_rules! impl_bool_binop {
     ($t:ty, $proxy:ty) => {
-        impl_binop!($t, bool, $proxy, BitAnd, bitand);
-        impl_binop!($t, bool, $proxy, BitOr, bitor);
-        impl_binop!($t, bool, $proxy, BitXor, bitxor);
+        impl_binop!(
+            $t,
+            bool,
+            $proxy,
+            BitAnd,
+            bitand,
+            BitAndAssign,
+            bitand_assign
+        );
+        impl_binop!($t, bool, $proxy, BitOr, bitor, BitOrAssign, bitor_assign);
+        impl_binop!(
+            $t,
+            bool,
+            $proxy,
+            BitXor,
+            bitxor,
+            BitXorAssign,
+            bitxor_assign
+        );
         impl $proxy {
             pub fn splat<V: Into<PrimExpr<bool>>>(value: V) -> Self {
                 let value = value.into();
@@ -506,12 +583,12 @@ macro_rules! impl_bool_binop {
                 Self::splat(true)
             }
             pub fn all(&self) -> Expr<bool> {
-                <PrimExpr<bool> as VarTrait>::from_node(current_scope(|s| {
+                Expr::<bool>::from_node(current_scope(|s| {
                     s.call(Func::All, &[self.node], <bool as TypeOf>::type_())
                 }))
             }
             pub fn any(&self) -> Expr<bool> {
-                <PrimExpr<bool> as VarTrait>::from_node(current_scope(|s| {
+                Expr::<bool>::from_node(current_scope(|s| {
                     s.call(Func::Any, &[self.node], <bool as TypeOf>::type_())
                 }))
             }
@@ -553,49 +630,6 @@ macro_rules! impl_reduce {
                         &[self.node, rhs.node],
                         <$scalar as TypeOf>::type_(),
                     )
-                }))
-            }
-        }
-    };
-}
-macro_rules! impl_cmp {
-    ($t:ty, $scalar:ty, $proxy:ty, $mask:ty) => {
-        impl ArithCmp for $proxy {
-            type Output = Expr<$mask>;
-            fn cmplt<T: Into<Self>>(self, rhs: T) -> Self::Output {
-                let rhs = rhs.into();
-                Expr::<$mask>::from_node(current_scope(|s| {
-                    s.call(Func::Lt, &[self.node, rhs.node], <$mask as TypeOf>::type_())
-                }))
-            }
-            fn cmple<T: Into<Self>>(self, rhs: T) -> Self::Output {
-                let rhs = rhs.into();
-                Expr::<$mask>::from_node(current_scope(|s| {
-                    s.call(Func::Le, &[self.node, rhs.node], <$mask as TypeOf>::type_())
-                }))
-            }
-            fn cmpgt<T: Into<Self>>(self, rhs: T) -> Self::Output {
-                let rhs = rhs.into();
-                Expr::<$mask>::from_node(current_scope(|s| {
-                    s.call(Func::Gt, &[self.node, rhs.node], <$mask as TypeOf>::type_())
-                }))
-            }
-            fn cmpge<T: Into<Self>>(self, rhs: T) -> Self::Output {
-                let rhs = rhs.into();
-                Expr::<$mask>::from_node(current_scope(|s| {
-                    s.call(Func::Ge, &[self.node, rhs.node], <$mask as TypeOf>::type_())
-                }))
-            }
-            fn cmpne<T: Into<Self>>(self, rhs: T) -> Self::Output {
-                let rhs = rhs.into();
-                Expr::<$mask>::from_node(current_scope(|s| {
-                    s.call(Func::Ne, &[self.node, rhs.node], <$mask as TypeOf>::type_())
-                }))
-            }
-            fn cmpeq<T: Into<Self>>(self, rhs: T) -> Self::Output {
-                let rhs = rhs.into();
-                Expr::<$mask>::from_node(current_scope(|s| {
-                    s.call(Func::Eq, &[self.node, rhs.node], <$mask as TypeOf>::type_())
                 }))
             }
         }
@@ -687,6 +721,14 @@ impl_arith_binop!(UVec2, u32, UVec2Expr);
 impl_arith_binop!(UVec3, u32, UVec3Expr);
 impl_arith_binop!(UVec4, u32, UVec4Expr);
 
+impl_arith_binop!(LVec2, i64, LVec2Expr);
+impl_arith_binop!(LVec3, i64, LVec3Expr);
+impl_arith_binop!(LVec4, i64, LVec4Expr);
+
+impl_arith_binop!(ULVec2, u64, ULVec2Expr);
+impl_arith_binop!(ULVec3, u64, ULVec3Expr);
+impl_arith_binop!(ULVec4, u64, ULVec4Expr);
+
 impl_int_binop!(IVec2, i32, IVec2Expr);
 impl_int_binop!(IVec3, i32, IVec3Expr);
 impl_int_binop!(IVec4, i32, IVec4Expr);
@@ -695,17 +737,13 @@ impl_int_binop!(UVec2, u32, UVec2Expr);
 impl_int_binop!(UVec3, u32, UVec3Expr);
 impl_int_binop!(UVec4, u32, UVec4Expr);
 
-impl_cmp!(Vec2, f32, Vec2Expr, BVec2);
-impl_cmp!(Vec3, f32, Vec3Expr, BVec3);
-impl_cmp!(Vec4, f32, Vec4Expr, BVec4);
+impl_int_binop!(LVec2, i64, LVec2Expr);
+impl_int_binop!(LVec3, i64, LVec3Expr);
+impl_int_binop!(LVec4, i64, LVec4Expr);
 
-impl_cmp!(IVec2, i32, IVec2Expr, BVec2);
-impl_cmp!(IVec3, i32, IVec3Expr, BVec3);
-impl_cmp!(IVec4, i32, IVec4Expr, BVec4);
-
-impl_cmp!(UVec2, u32, UVec2Expr, BVec2);
-impl_cmp!(UVec3, u32, UVec3Expr, BVec3);
-impl_cmp!(UVec4, u32, UVec4Expr, BVec4);
+impl_int_binop!(ULVec2, u64, ULVec2Expr);
+impl_int_binop!(ULVec3, u64, ULVec3Expr);
+impl_int_binop!(ULVec4, u64, ULVec4Expr);
 
 impl_bool_binop!(BVec2, BVec2Expr);
 impl_bool_binop!(BVec3, BVec3Expr);
@@ -774,9 +812,12 @@ impl_cast!(UVec3Expr, IVec3, as_ivec3);
 impl_cast!(UVec4Expr, Vec4, as_vec4);
 impl_cast!(UVec4Expr, IVec4, as_ivec4);
 macro_rules! impl_permute {
-    ($proxy:ty,$len:expr, $v2:ty, $v3:ty, $v4:ty) => {
-        impl $proxy {
-            pub fn permute2(&self, x: i32, y: i32) -> Expr<$v2> {
+    ($tr:ident, $proxy:ty,$len:expr, $v2:ty, $v3:ty, $v4:ty) => {
+        impl $tr for $proxy {
+            type Vec2 = Expr<$v2>;
+            type Vec3 = Expr<$v3>;
+            type Vec4 = Expr<$v4>;
+            fn permute2(&self, x: i32, y: i32) -> Self::Vec2 {
                 assert!(x < $len);
                 assert!(y < $len);
                 let x: Expr<i32> = x.into();
@@ -784,12 +825,12 @@ macro_rules! impl_permute {
                 Expr::<$v2>::from_node(current_scope(|s| {
                     s.call(
                         Func::Permute,
-                        &[self.node, VarTrait::node(&x), VarTrait::node(&y)],
+                        &[self.node, FromNode::node(&x), FromNode::node(&y)],
                         <$v2 as TypeOf>::type_(),
                     )
                 }))
             }
-            pub fn permute3(&self, x: i32, y: i32, z: i32) -> Expr<$v3> {
+            fn permute3(&self, x: i32, y: i32, z: i32) -> Self::Vec3 {
                 assert!(x < $len);
                 assert!(y < $len);
                 assert!(z < $len);
@@ -801,15 +842,15 @@ macro_rules! impl_permute {
                         Func::Permute,
                         &[
                             self.node,
-                            VarTrait::node(&x),
-                            VarTrait::node(&y),
-                            VarTrait::node(&z),
+                            FromNode::node(&x),
+                            FromNode::node(&y),
+                            FromNode::node(&z),
                         ],
                         <$v3 as TypeOf>::type_(),
                     )
                 }))
             }
-            pub fn permute4(&self, x: i32, y: i32, z: i32, w: i32) -> Expr<$v4> {
+            fn permute4(&self, x: i32, y: i32, z: i32, w: i32) -> Self::Vec4 {
                 assert!(x < $len);
                 assert!(y < $len);
                 assert!(z < $len);
@@ -823,10 +864,10 @@ macro_rules! impl_permute {
                         Func::Permute,
                         &[
                             self.node,
-                            VarTrait::node(&x),
-                            VarTrait::node(&y),
-                            VarTrait::node(&z),
-                            VarTrait::node(&w),
+                            FromNode::node(&x),
+                            FromNode::node(&y),
+                            FromNode::node(&z),
+                            FromNode::node(&w),
                         ],
                         <$v4 as TypeOf>::type_(),
                     )
@@ -835,17 +876,25 @@ macro_rules! impl_permute {
         }
     };
 }
-impl_permute!(Vec2Expr, 2, Vec2, Vec3, Vec4);
-impl_permute!(Vec3Expr, 3, Vec2, Vec3, Vec4);
-impl_permute!(Vec4Expr, 4, Vec2, Vec3, Vec4);
+impl_permute!(Vec2Swizzle, Vec2Expr, 2, Vec2, Vec3, Vec4);
+impl_permute!(Vec3Swizzle, Vec3Expr, 3, Vec2, Vec3, Vec4);
+impl_permute!(Vec4Swizzle, Vec4Expr, 4, Vec2, Vec3, Vec4);
 
-impl_permute!(IVec2Expr, 2, IVec2, IVec3, IVec4);
-impl_permute!(IVec3Expr, 3, IVec2, IVec3, IVec4);
-impl_permute!(IVec4Expr, 4, IVec2, IVec3, IVec4);
+impl_permute!(Vec2Swizzle, IVec2Expr, 2, IVec2, IVec3, IVec4);
+impl_permute!(Vec3Swizzle, IVec3Expr, 3, IVec2, IVec3, IVec4);
+impl_permute!(Vec4Swizzle, IVec4Expr, 4, IVec2, IVec3, IVec4);
 
-impl_permute!(UVec2Expr, 2, UVec2, UVec3, UVec4);
-impl_permute!(UVec3Expr, 3, UVec2, UVec3, UVec4);
-impl_permute!(UVec4Expr, 4, UVec2, UVec3, UVec4);
+impl_permute!(Vec2Swizzle, UVec2Expr, 2, UVec2, UVec3, UVec4);
+impl_permute!(Vec3Swizzle, UVec3Expr, 3, UVec2, UVec3, UVec4);
+impl_permute!(Vec4Swizzle, UVec4Expr, 4, UVec2, UVec3, UVec4);
+
+impl_permute!(Vec2Swizzle, LVec2Expr, 2, LVec2, LVec3, LVec4);
+impl_permute!(Vec3Swizzle, LVec3Expr, 3, LVec2, LVec3, LVec4);
+impl_permute!(Vec4Swizzle, LVec4Expr, 4, LVec2, LVec3, LVec4);
+
+impl_permute!(Vec2Swizzle, ULVec2Expr, 2, ULVec2, ULVec3, ULVec4);
+impl_permute!(Vec3Swizzle, ULVec3Expr, 3, ULVec2, ULVec3, ULVec4);
+impl_permute!(Vec4Swizzle, ULVec4Expr, 4, ULVec2, ULVec3, ULVec4);
 
 impl Vec3Expr {
     #[inline]
@@ -862,6 +911,125 @@ impl Vec3Expr {
 impl_vec_op!(Vec2, f32, Vec2Expr, Mat2);
 impl_vec_op!(Vec3, f32, Vec3Expr, Mat3);
 impl_vec_op!(Vec4, f32, Vec4Expr, Mat4);
+
+macro_rules! impl_var_trait2 {
+    ($t:ty, $v:ty) => {
+        impl VarTrait for $t {
+            type Value = $v;
+            type Int = IVec2Expr;
+            type Uint = UVec2Expr;
+            type Float = Vec2Expr;
+            type Bool = BVec2Expr;
+            // type Double = DVec2Expr;
+            type Long = LVec2Expr;
+            type Ulong = ULVec2Expr;
+        }
+        impl CommonVarOp for $t {}
+        impl VarCmp for $t {}
+        impl From<$v> for $t {
+            fn from(v: $v) -> Self {
+                Self::new(const_(v.x), const_(v.y))
+            }
+        }
+    };
+}
+macro_rules! impl_var_trait3 {
+    ($t:ty, $v:ty) => {
+        impl VarTrait for $t {
+            type Value = $v;
+            type Int = IVec3Expr;
+            type Uint = UVec3Expr;
+            type Float = Vec3Expr;
+            type Bool = BVec3Expr;
+            type Long = LVec3Expr;
+            type Ulong = ULVec3Expr;
+        }
+        impl CommonVarOp for $t {}
+        impl VarCmp for $t {}
+        impl From<$v> for $t {
+            fn from(v: $v) -> Self {
+                Self::new(const_(v.x), const_(v.y), const_(v.z))
+            }
+        }
+    };
+}
+macro_rules! impl_var_trait4 {
+    ($t:ty, $v:ty) => {
+        impl VarTrait for $t {
+            type Value = $v;
+            type Int = IVec2Expr;
+            type Uint = UVec2Expr;
+            type Float = Vec2Expr;
+            type Bool = BVec2Expr;
+            type Long = LVec2Expr;
+            type Ulong = ULVec2Expr;
+        }
+        impl CommonVarOp for $t {}
+        impl VarCmp for $t {}
+        impl From<$v> for $t {
+            fn from(v: $v) -> Self {
+                Self::new(const_(v.x), const_(v.y), const_(v.z), const_(v.w))
+            }
+        }
+    };
+}
+impl_var_trait2!(Vec2Expr, Vec2);
+impl_var_trait2!(IVec2Expr, IVec2);
+impl_var_trait2!(UVec2Expr, UVec2);
+impl_var_trait2!(BVec2Expr, BVec2);
+impl_var_trait2!(LVec2Expr, LVec2);
+impl_var_trait2!(ULVec2Expr, ULVec2);
+
+impl_var_trait3!(Vec3Expr, Vec3);
+impl_var_trait3!(IVec3Expr, IVec3);
+impl_var_trait3!(UVec3Expr, UVec3);
+impl_var_trait3!(BVec3Expr, BVec3);
+impl_var_trait3!(LVec3Expr, LVec3);
+impl_var_trait3!(ULVec3Expr, ULVec3);
+
+impl_var_trait4!(Vec4Expr, Vec4);
+impl_var_trait4!(IVec4Expr, IVec4);
+impl_var_trait4!(UVec4Expr, UVec4);
+impl_var_trait4!(BVec4Expr, BVec4);
+impl_var_trait4!(LVec4Expr, LVec4);
+impl_var_trait4!(ULVec4Expr, ULVec4);
+
+macro_rules! impl_float_trait {
+    ($t:ty) => {
+        impl From<f32> for $t {
+            fn from(v: f32) -> Self {
+                Self::splat(v)
+            }
+        }
+        impl FloatVarTrait for $t {}
+    };
+}
+impl_float_trait!(Vec2Expr);
+impl_float_trait!(Vec3Expr);
+impl_float_trait!(Vec4Expr);
+macro_rules! impl_int_trait {
+    ($t:ty) => {
+        impl From<i64> for $t {
+            fn from(v: i64) -> Self {
+                Self::splat(v)
+            }
+        }
+        impl IntVarTrait for $t {}
+    };
+}
+impl_int_trait!(IVec2Expr);
+impl_int_trait!(IVec3Expr);
+impl_int_trait!(IVec4Expr);
+impl_int_trait!(LVec2Expr);
+impl_int_trait!(LVec3Expr);
+impl_int_trait!(LVec4Expr);
+impl_int_trait!(UVec2Expr);
+impl_int_trait!(UVec3Expr);
+impl_int_trait!(UVec4Expr);
+impl_int_trait!(ULVec2Expr);
+impl_int_trait!(ULVec3Expr);
+impl_int_trait!(ULVec4Expr);
+
 impl Mul<Vec2Expr> for Mat2Expr {
     type Output = Vec2Expr;
     #[inline]

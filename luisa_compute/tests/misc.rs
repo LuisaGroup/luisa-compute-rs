@@ -39,7 +39,78 @@ fn vec_cast() {
         assert_eq!(i_data[i].y, i as i32 + 1);
     }
 }
+#[test]
+fn vec_bit_minmax() {
+    init_once();
+    let device = create_cpu_device().unwrap();
+    let x: Buffer<IVec2> = device.create_buffer(1024).unwrap();
+    let y: Buffer<IVec2> = device.create_buffer(1024).unwrap();
+    let z: Buffer<IVec2> = device.create_buffer(1024).unwrap();
+    let and: Buffer<IVec2> = device.create_buffer(1024).unwrap();
+    let or: Buffer<IVec2> = device.create_buffer(1024).unwrap();
+    let xor: Buffer<IVec2> = device.create_buffer(1024).unwrap();
+    let not: Buffer<IVec2> = device.create_buffer(1024).unwrap();
+    let min = device.create_buffer::<IVec2>(1024).unwrap();
+    let max = device.create_buffer::<IVec2>(1024).unwrap();
+    let clamp = device.create_buffer::<IVec2>(1024).unwrap();
+    let mut rng = rand::thread_rng();
+    x.view(..).fill_fn(|_| IVec2::new(rng.gen(), rng.gen()));
+    y.view(..).fill_fn(|_| IVec2::new(rng.gen(), rng.gen()));
+    z.view(..).fill_fn(|_| IVec2::new(rng.gen(), rng.gen()));
+    let kernel = device
+        .create_kernel::<()>(&|| {
+            let tid = dispatch_id().x();
+            let x = x.var().read(tid);
+            let y = y.var().read(tid);
+            let z = z.var().read(tid);
+            let and = and.var();
+            let or = or.var();
+            let xor = xor.var();
+            let not = not.var();
+            let min = min.var();
+            let max = max.var();
+            let clamp = clamp.var();
+            and.write(tid, x & y);
+            or.write(tid, x | y);
+            xor.write(tid, x ^ y);
+            not.write(tid, !x);
+            min.write(tid, x.min(y));
+            max.write(tid, x.max(y));
+            clamp.write(tid, z.clamp(x.min(y), x.max(y)));
+        })
+        .unwrap();
+    kernel.dispatch([1024, 1, 1]).unwrap();
+    let x = x.view(..).copy_to_vec();
+    let y = y.view(..).copy_to_vec();
+    let z = z.view(..).copy_to_vec();
+    let and = and.view(..).copy_to_vec();
+    let or = or.view(..).copy_to_vec();
+    let xor = xor.view(..).copy_to_vec();
+    let not = not.view(..).copy_to_vec();
+    let min = min.view(..).copy_to_vec();
+    let max = max.view(..).copy_to_vec();
+    let clamp = clamp.view(..).copy_to_vec();
+    for i in 0..1024 {
+        let xi = x[i];
+        let yi = y[i];
+        let zi = z[i];
+        assert_eq!(and[i].x, xi.x & yi.x);
+        assert_eq!(or[i].x, xi.x | yi.x);
+        assert_eq!(xor[i].x, xi.x ^ yi.x);
+        assert_eq!(not[i].x, !xi.x);
+        assert_eq!(min[i].x, xi.x.min(yi.x));
+        assert_eq!(max[i].x, xi.x.max(yi.x));
+        assert_eq!(and[i].y, xi.y & yi.y);
+        assert_eq!(or[i].y, xi.y | yi.y);
+        assert_eq!(xor[i].y, xi.y ^ yi.y);
+        assert_eq!(not[i].y, !xi.y);
+        assert_eq!(min[i].y, xi.y.min(yi.y));
+        assert_eq!(max[i].y, xi.y.max(yi.y));
 
+        assert_eq!(clamp[i].x, zi.x.clamp(min[i].x, max[i].x));
+        assert_eq!(clamp[i].y, zi.y.clamp(min[i].y, max[i].y));
+    }
+}
 #[test]
 fn vec_permute() {
     init_once();
@@ -54,7 +125,7 @@ fn vec_permute() {
             let v3 = v3.var();
             let tid = dispatch_id().x();
             let v = v2.read(tid);
-            v3.write(tid, v.permute3(0, 1, 0));
+            v3.write(tid, v.xyx());
         })
         .unwrap();
     kernel.dispatch([1024, 1, 1]).unwrap();

@@ -36,6 +36,7 @@ use std::cell::RefCell;
 // use self::math::UVec3;
 pub mod math;
 pub mod traits;
+pub mod swizzle;
 
 pub trait Value: Copy + ir::TypeOf {
     type Expr: ExprProxy<Self>;
@@ -185,17 +186,6 @@ macro_rules! impl_prim {
         impl From<$t> for PrimExpr<$t> {
             fn from(v: $t) -> Self {
                 const_(v)
-            }
-        }
-        impl FromNode for PrimExpr<$t> {
-            fn from_node(node: NodeRef) -> Self {
-                Self {
-                    node,
-                    _phantom: std::marker::PhantomData,
-                }
-            }
-            fn node(&self) -> NodeRef {
-                self.node
             }
         }
         impl FromNode for PrimVar<$t> {

@@ -4,16 +4,42 @@ use std::any::Any;
 use std::ops::*;
 
 use super::Expr;
-pub trait VarTrait: Copy + Clone + 'static {
-    type Scalar: Value;
-    fn from_node(node: NodeRef) -> Self;
-    fn node(&self) -> NodeRef;
+pub trait VarTrait: Copy + Clone + 'static + FromNode {
+    type Value: Value;
+    type Int: VarTrait;
+    type Uint: VarTrait;
+    type Long: VarTrait;
+    type Ulong: VarTrait;
+    type Float: VarTrait;
+    // type Double: VarTrait;
+    type Bool: VarTrait;
     fn type_() -> Gc<Type> {
-        <Self::Scalar as TypeOf>::type_()
+        <Self::Value as TypeOf>::type_()
     }
 }
-impl<T: Copy + 'static + Value> VarTrait for PrimExpr<T> {
-    type Scalar = T;
+macro_rules! impl_var_trait {
+    ($t:ty) => {
+        impl VarTrait for PrimExpr<$t> {
+            type Value = $t;
+            type Int = Expr<i32>;
+            type Uint = Expr<u32>;
+            type Long = Expr<i64>;
+            type Ulong = Expr<u64>;
+            type Float = Expr<f32>;
+            // type Double = Expr<f64>;
+            type Bool = Expr<bool>;
+        }
+    };
+}
+impl_var_trait!(f32);
+impl_var_trait!(f64);
+impl_var_trait!(i32);
+impl_var_trait!(u32);
+impl_var_trait!(i64);
+impl_var_trait!(u64);
+impl_var_trait!(bool);
+
+impl<T: Copy + 'static + Value> FromNode for PrimExpr<T> {
     fn from_node(node: NodeRef) -> Self {
         Self {
             node,
@@ -24,7 +50,6 @@ impl<T: Copy + 'static + Value> VarTrait for PrimExpr<T> {
         self.node
     }
 }
-
 pub trait CommonVarOp: VarTrait {
     fn max<A: Into<Self>>(&self, other: A) -> Self {
         let lhs = self.node();
@@ -43,7 +68,12 @@ pub trait CommonVarOp: VarTrait {
         })
     }
     fn clamp<A: Into<Self>, B: Into<Self>>(&self, min: A, max: B) -> Self {
-        self.min(max).max(min)
+        let min = min.into().node();
+        let max = max.into().node();
+        current_scope(|s| {
+            let ret = s.call(Func::Clamp, &[self.node(), min, max], Self::type_());
+            Self::from_node(ret)
+        })
     }
     fn abs(&self) -> Self {
         current_scope(|s| {
@@ -51,57 +81,37 @@ pub trait CommonVarOp: VarTrait {
             Self::from_node(ret)
         })
     }
-    // fn cast<A: VarTrait>(&self) -> A {
-    //     let ty = <A as VarTrait>::type_();
-    //     let node = current_scope(|s| s.cast(self.node(), ty));
-    //     A::from_node(node)
-    // }
-    // fn bitcast<A: VarTrait>(&self) -> A {
-    //     assert_eq!(
-    //         std::mem::size_of::<Self::Scalar>(),
-    //         std::mem::size_of::<A::Scalar>()
-    //     );
-    //     let ty = <A as VarTrait>::type_();
-    //     let node = current_scope(|s| s.bitcast(self.node(), ty));
-    //     A::from_node(node)
-    // }
-    fn cast<T: Value>(&self) -> Expr<T>
-    where
-        Expr<T>: VarTrait,
-    {
-        let ty = <T>::type_();
+    fn _cast<A: VarTrait>(&self) -> A {
+        let ty = <A::Value>::type_();
         let node = current_scope(|s| s.cast(self.node(), ty));
-        VarTrait::from_node(node)
+        FromNode::from_node(node)
     }
     fn bitcast<T: Value>(&self) -> Expr<T> {
-        assert_eq!(
-            std::mem::size_of::<Self::Scalar>(),
-            std::mem::size_of::<T>()
-        );
+        assert_eq!(std::mem::size_of::<Self::Value>(), std::mem::size_of::<T>());
         let ty = <T>::type_();
         let node = current_scope(|s| s.bitcast(self.node(), ty));
         Expr::<T>::from_node(node)
     }
-    fn uint(&self) -> Expr<u32> {
-        self.cast::<u32>()
+    fn uint(&self) -> Self::Uint {
+        self._cast()
     }
-    fn int(&self) -> Expr<i32> {
-        self.cast::<i32>()
+    fn int(&self) -> Self::Int {
+        self._cast()
     }
-    fn ulong(&self) -> Expr<u64> {
-        self.cast::<u64>()
+    fn ulong(&self) -> Self::Ulong {
+        self._cast()
     }
-    fn long(&self) -> Expr<i64> {
-        self.cast::<i64>()
+    fn long(&self) -> Self::Long {
+        self._cast()
     }
-    fn float(&self) -> Expr<f32> {
-        self.cast::<f32>()
+    fn float(&self) -> Self::Float {
+        self._cast()
     }
-    fn double(&self) -> Expr<f64> {
-        self.cast::<f64>()
-    }
-    fn bool_(&self) -> Expr<bool> {
-        self.cast::<bool>()
+    // fn double(&self) -> Self::Double {
+    //     self._cast()
+    // }
+    fn bool_(&self) -> Self::Bool {
+        self._cast()
     }
 }
 pub trait VarCmp: VarTrait {
@@ -110,7 +120,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Lt, &[lhs, rhs], Expr::<bool>::type_());
-            <Expr<bool> as VarTrait>::from_node(ret)
+            Expr::<bool>::from_node(ret)
         })
     }
     fn cmple<A: Into<Self>>(&self, other: A) -> Expr<bool> {
@@ -118,7 +128,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Le, &[lhs, rhs], Expr::<bool>::type_());
-            <Expr<bool> as VarTrait>::from_node(ret)
+            Expr::<bool>::from_node(ret)
         })
     }
     fn cmpgt<A: Into<Self>>(&self, other: A) -> Expr<bool> {
@@ -126,7 +136,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Gt, &[lhs, rhs], Expr::<bool>::type_());
-            <Expr<bool> as VarTrait>::from_node(ret)
+            Expr::<bool>::from_node(ret)
         })
     }
     fn cmpge<A: Into<Self>>(&self, other: A) -> Expr<bool> {
@@ -134,7 +144,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Ge, &[lhs, rhs], Expr::<bool>::type_());
-            <Expr<bool> as VarTrait>::from_node(ret)
+            Expr::<bool>::from_node(ret)
         })
     }
     fn cmpeq<A: Into<Self>>(&self, other: A) -> Expr<bool> {
@@ -142,7 +152,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Eq, &[lhs, rhs], Expr::<bool>::type_());
-            <Expr<bool> as VarTrait>::from_node(ret)
+            Expr::<bool>::from_node(ret)
         })
     }
     fn cmpne<A: Into<Self>>(&self, other: A) -> Expr<bool> {
@@ -150,7 +160,7 @@ pub trait VarCmp: VarTrait {
         let rhs = other.into().node();
         current_scope(|s| {
             let ret = s.call(Func::Ne, &[lhs, rhs], Expr::<bool>::type_());
-            <Expr<bool> as VarTrait>::from_node(ret)
+            Expr::<bool>::from_node(ret)
         })
     }
 }
@@ -181,18 +191,18 @@ pub trait IntVarTrait:
     + Neg<Output = Self>
     + Clone
     + Not<Output = Self>
-    + From<Self::Scalar>
+    + From<Self::Value>
+    + From<i64>
 {
-    fn from_i64(i: i64) -> Self;
     fn one() -> Self {
-        Self::from_i64(1)
+        Self::from(1i64)
     }
     fn zero() -> Self {
-        Self::from_i64(0)
+        Self::from(0i64)
     }
     fn rotate_right(&self, n: Expr<u32>) -> Self {
         let lhs = self.node();
-        let rhs = <Expr<u32> as VarTrait>::node(&n);
+        let rhs = Expr::<u32>::node(&n);
         current_scope(|s| {
             let ret = s.call(Func::RotRight, &[lhs, rhs], Self::type_());
             Self::from_node(ret)
@@ -200,7 +210,7 @@ pub trait IntVarTrait:
     }
     fn rotate_left(&self, n: Expr<u32>) -> Self {
         let lhs = self.node();
-        let rhs = <Expr<u32> as VarTrait>::node(&n);
+        let rhs = Expr::<u32>::node(&n);
         current_scope(|s| {
             let ret = s.call(Func::RotLeft, &[lhs, rhs], Self::type_());
             Self::from_node(ret)
@@ -223,14 +233,14 @@ pub trait FloatVarTrait:
     + DivAssign
     + RemAssign
     + Clone
-    + From<Self::Scalar>
+    + From<Self::Value>
+    + From<f32>
 {
-    fn from_f64(x: f64) -> Self;
     fn one() -> Self {
-        Self::from_f64(1.0)
+        Self::from(1.0f32)
     }
     fn zero() -> Self {
-        Self::from_f64(0.0)
+        Self::from(0.0f32)
     }
     fn mul_add<A: Into<Self>, B: Into<Self>>(&self, a: A, b: B) -> Self {
         let a: Self = a.into();
@@ -381,10 +391,13 @@ pub trait FloatVarTrait:
         })
     }
     fn is_finite(&self) -> Bool {
-        unimplemented!()
+        !self.is_infinite()
     }
     fn is_infinite(&self) -> Bool {
-        unimplemented!()
+        current_scope(|s| {
+            let ret = s.call(Func::IsInf, &[self.node()], Self::type_());
+            FromNode::from_node(ret)
+        })
     }
     fn is_nan(&self) -> Bool {
         let any = self as &dyn Any;
@@ -459,10 +472,10 @@ macro_rules! impl_binop {
             type Output = Expr<$t>;
             fn $method(self, rhs: Expr<$t>) -> Self::Output {
                 current_scope(|s| {
-                    let lhs = VarTrait::node(&self);
-                    let rhs = VarTrait::node(&rhs);
+                    let lhs = FromNode::node(&self);
+                    let rhs = FromNode::node(&rhs);
                     let ret = s.call(Func::$tr, &[lhs, rhs], Self::Output::type_());
-                    <Expr<$t> as VarTrait>::from_node(ret)
+                    Expr::<$t>::from_node(ret)
                 })
             }
         }
@@ -526,8 +539,8 @@ macro_rules! impl_fneg {
             type Output = Expr<$t>;
             fn neg(self) -> Self::Output {
                 current_scope(|s| {
-                    let ret = s.call(Func::Neg, &[VarTrait::node(&self)], Self::Output::type_());
-                    <Expr<$t> as VarTrait>::from_node(ret)
+                    let ret = s.call(Func::Neg, &[FromNode::node(&self)], Self::Output::type_());
+                    Expr::<$t>::from_node(ret)
                 })
             }
         }
@@ -586,16 +599,16 @@ impl_neg!(u32, PrimExpr<u32>);
 impl_neg!(u64, PrimExpr<u64>);
 
 impl_fneg!(f32, PrimExpr<f32>);
-impl_fneg!(f64, PrimExpr<f64>);
+// impl_fneg!(f64, PrimExpr<f64>);
 impl VarCmp for PrimExpr<f32> {}
-impl VarCmp for PrimExpr<f64> {}
+// impl VarCmp for PrimExpr<f64> {}
 impl VarCmp for PrimExpr<i32> {}
 impl VarCmp for PrimExpr<i64> {}
 impl VarCmp for PrimExpr<u32> {}
 impl VarCmp for PrimExpr<u64> {}
 impl VarCmp for PrimExpr<bool> {}
 impl CommonVarOp for PrimExpr<f32> {}
-impl CommonVarOp for PrimExpr<f64> {}
+// impl CommonVarOp for PrimExpr<f64> {}
 impl CommonVarOp for PrimExpr<i32> {}
 impl CommonVarOp for PrimExpr<i64> {}
 impl CommonVarOp for PrimExpr<u32> {}
@@ -608,29 +621,33 @@ impl From<f64> for Float32 {
     }
 }
 
-// impl Expr<f32>VarTrait for Expr<f32> {
-//     fn from_f64(x: f64) -> Self {
-//         const_(x as f32)
-//     }
-// }
+impl FloatVarTrait for PrimExpr<f32> {}
+impl IntVarTrait for PrimExpr<i32> {}
+impl IntVarTrait for PrimExpr<i64> {}
+impl IntVarTrait for PrimExpr<u32> {}
+impl IntVarTrait for PrimExpr<u64> {}
 
-impl IntVarTrait for Expr<i32> {
-    fn from_i64(x: i64) -> Self {
-        const_(x as i32)
-    }
+macro_rules! impl_from {
+    ($from:ty, $to:ty) => {
+        impl From<$from> for PrimExpr<$to> {
+            fn from(x: $from) -> Self {
+                const_::<$to>(x.try_into().unwrap())
+            }
+        }
+    };
 }
-impl IntVarTrait for Expr<i64> {
-    fn from_i64(x: i64) -> Self {
-        const_(x)
-    }
-}
-impl IntVarTrait for Expr<u32> {
-    fn from_i64(x: i64) -> Self {
-        const_(x as u32)
-    }
-}
-impl FloatVarTrait for Expr<f32> {
-    fn from_f64(x: f64) -> Self {
-        const_(x as f32)
-    }
-}
+impl_from!(i32, u32);
+impl_from!(i32, i64);
+impl_from!(i32, u64);
+
+impl_from!(i64, u64);
+impl_from!(i64, i32);
+impl_from!(i64, u32);
+
+impl_from!(u32, i32);
+impl_from!(u32, i64);
+impl_from!(u32, u64);
+
+impl_from!(u64, i64);
+impl_from!(u64, i32);
+impl_from!(u64, u32);

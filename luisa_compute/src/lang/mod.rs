@@ -248,7 +248,7 @@ macro_rules! cpu_dbg {
 }
 pub fn __cpu_dbg<T: Value + Debug>(arg: Expr<T>, file: &'static str, line: u32) {
     let f = CpuFn::new(move |x: &mut T| {
-        println!("[{}]:{} {:?}", file, line, x);
+        println!("[{}:{}] {:?}", file, line, x);
     });
     let _ = f.call(arg);
 }

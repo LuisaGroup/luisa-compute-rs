@@ -288,3 +288,30 @@ fn array_read_write() {
         );
     }
 }
+#[test]
+fn array_read_write_async_compile() {
+    init_once();
+    let device = create_cpu_device().unwrap();
+    let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
+    let kernel = device
+        .create_kernel::<()>(&|| {
+            let buf_x = x.var();
+            let tid = dispatch_id().x();
+            let arr = local_zeroed::<[i32; 4]>();
+            let i = local_zeroed::<i32>();
+            while_!(i.load().cmplt(4), {
+                arr.write(i.load().uint(), tid.int() + i.load());
+                i.store(i.load() + 1);
+            });
+            buf_x.write(tid, arr.load());
+        })
+        .unwrap();
+    kernel.dispatch([1024, 1, 1]).unwrap();
+    let x_data = x.view(..).copy_to_vec();
+    for i in 0..1024 {
+        assert_eq!(
+            x_data[i],
+            [i as i32, i as i32 + 1, i as i32 + 2, i as i32 + 3]
+        );
+    }
+}

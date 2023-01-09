@@ -147,6 +147,7 @@ impl Device {
         let mut builder = KernelBuilder::new(self.clone());
         KernelBuildFn::build(&f, &mut builder)
     }
+    
 }
 #[macro_export]
 macro_rules! fn_n_args {

@@ -40,6 +40,98 @@ fn vec_cast() {
     }
 }
 #[test]
+fn bool_op() {
+    init_once();
+    let device = create_cpu_device().unwrap();
+    let x: Buffer<bool> = device.create_buffer(1024).unwrap();
+    let y: Buffer<bool> = device.create_buffer(1024).unwrap();
+    let and: Buffer<bool> = device.create_buffer(1024).unwrap();
+    let or: Buffer<bool> = device.create_buffer(1024).unwrap();
+    let xor: Buffer<bool> = device.create_buffer(1024).unwrap();
+    let not: Buffer<bool> = device.create_buffer(1024).unwrap();
+    let mut rng = rand::thread_rng();
+    x.view(..).fill_fn(|_| rng.gen());
+    y.view(..).fill_fn(|_| rng.gen());
+    let kernel = device
+        .create_kernel::<()>(&|| {
+            let tid = dispatch_id().x();
+            let x = x.var().read(tid);
+            let y = y.var().read(tid);
+            let and = and.var();
+            let or = or.var();
+            let xor = xor.var();
+            let not = not.var();
+            and.write(tid, x & y);
+            or.write(tid, x | y);
+            xor.write(tid, x ^ y);
+            not.write(tid, !x);
+        })
+        .unwrap();
+    kernel.dispatch([1024, 1, 1]).unwrap();
+    let x = x.view(..).copy_to_vec();
+    let y = y.view(..).copy_to_vec();
+    let and = and.view(..).copy_to_vec();
+    let or = or.view(..).copy_to_vec();
+    let xor = xor.view(..).copy_to_vec();
+    let not = not.view(..).copy_to_vec();
+    for i in 0..1024 {
+        let xi = x[i];
+        let yi = y[i];
+        assert_eq!(and[i], xi & yi);
+        assert_eq!(or[i], xi | yi);
+        assert_eq!(xor[i], xi ^ yi);
+        assert_eq!(not[i], !xi);
+    }
+}
+#[test]
+fn bvec_op() {
+    init_once();
+    let device = create_cpu_device().unwrap();
+    let x: Buffer<BVec2> = device.create_buffer(1024).unwrap();
+    let y: Buffer<BVec2> = device.create_buffer(1024).unwrap();
+    let and: Buffer<BVec2> = device.create_buffer(1024).unwrap();
+    let or: Buffer<BVec2> = device.create_buffer(1024).unwrap();
+    let xor: Buffer<BVec2> = device.create_buffer(1024).unwrap();
+    let not: Buffer<BVec2> = device.create_buffer(1024).unwrap();
+    let mut rng = rand::thread_rng();
+    x.view(..).fill_fn(|_| BVec2::new(rng.gen(), rng.gen()));
+    y.view(..).fill_fn(|_| BVec2::new(rng.gen(), rng.gen()));
+    let kernel = device
+        .create_kernel::<()>(&|| {
+            let tid = dispatch_id().x();
+            let x = x.var().read(tid);
+            let y = y.var().read(tid);
+            let and = and.var();
+            let or = or.var();
+            let xor = xor.var();
+            let not = not.var();
+            and.write(tid, x & y);
+            or.write(tid, x | y);
+            xor.write(tid, x ^ y);
+            not.write(tid, !x);
+        })
+        .unwrap();
+    kernel.dispatch([1024, 1, 1]).unwrap();
+    let x = x.view(..).copy_to_vec();
+    let y = y.view(..).copy_to_vec();
+    let and = and.view(..).copy_to_vec();
+    let or = or.view(..).copy_to_vec();
+    let xor = xor.view(..).copy_to_vec();
+    let not = not.view(..).copy_to_vec();
+    for i in 0..1024 {
+        let xi = x[i];
+        let yi = y[i];
+        assert_eq!(and[i].x, xi.x & yi.x);
+        assert_eq!(or[i].x, xi.x | yi.x);
+        assert_eq!(xor[i].x, xi.x ^ yi.x);
+        assert_eq!(not[i].x, !xi.x);
+        assert_eq!(and[i].y, xi.y & yi.y);
+        assert_eq!(or[i].y, xi.y | yi.y);
+        assert_eq!(xor[i].y, xi.y ^ yi.y);
+        assert_eq!(not[i].y, !xi.y);
+    }
+}
+#[test]
 fn vec_bit_minmax() {
     init_once();
     let device = create_cpu_device().unwrap();

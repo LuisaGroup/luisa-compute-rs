@@ -208,6 +208,10 @@ macro_rules! autodiff_2 {
         }
     };
 }
+autodiff_2!(autodiff_const, 1.0..10.0, |x: Float32, y: Float32| {
+    let k = 2.0 / const_::<f32>(3.0);
+    x * k + y * k
+});
 autodiff_1!(autodiff_sin, -10.0..10.0, |x: Float32| x.sin());
 autodiff_1!(autodiff_cos, -10.0..10.0, |x: Float32| x.cos());
 autodiff_1!(autodiff_sincos, -10.0..10.0, |x: Float32| x.cos() * x.sin());

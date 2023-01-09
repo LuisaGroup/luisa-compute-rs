@@ -29,7 +29,6 @@ pub fn function(attr: TokenStream, item: TokenStream) -> TokenStream {
     compiler.compile_fn(&args, &item).into()
 }
 
-
 #[proc_macro_derive(__Value)]
 pub fn _derive_value(item: TokenStream) -> TokenStream {
     let item: syn::ItemStruct = syn::parse(item).unwrap();

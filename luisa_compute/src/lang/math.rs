@@ -544,7 +544,11 @@ macro_rules! impl_int_binop {
             type Output = Expr<$t>;
             fn not(self) -> Self::Output {
                 current_scope(|s| {
-                    let ret = s.call(Func::BitNot, &[FromNode::node(&self)], Self::Output::type_());
+                    let ret = s.call(
+                        Func::BitNot,
+                        &[FromNode::node(&self)],
+                        Self::Output::type_(),
+                    );
                     Expr::<$t>::from_node(ret)
                 })
             }

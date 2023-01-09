@@ -663,10 +663,14 @@ impl BindlessArrayVar {
                 let expected = T::type_();
                 if *t != Gc::as_ptr(expected) as u64 {
                     let t = unsafe { &*(*t as *const Type) };
-                    eprintln!(
-                            "Bindless buffer type mismatch: expected {:?}, got {:?}; host backtrace:\n {:?}",
-                            expected, t, backtrace
-                        );
+                    {
+                        let mut stderr = std::io::stderr().lock();
+                        use std::io::Write;
+                        writeln!(stderr,
+                                "Bindless buffer type mismatch: expected {:?}, got {:?}; host backtrace:\n {:?}",
+                                expected, t, backtrace
+                        ).unwrap();
+                    }
                     abort();
                 }
             });
@@ -676,10 +680,14 @@ impl BindlessArrayVar {
                 let expected = T::type_();
                 if *t != Gc::as_ptr(expected) as u64 {
                     let t = unsafe { &*(*t as *const Type) };
-                    eprintln!(
-                        "Bindless buffer type mismatch: expected {:?}, got {:?}; set LUISA_BACKTRACE=1 for more info",
-                        expected, t,
-                    );
+                    {
+                        let mut stderr = std::io::stderr().lock();
+                        use std::io::Write;
+                        writeln!(stderr,
+                            "Bindless buffer type mismatch: expected {:?}, got {:?}; set LUISA_BACKTRACE=1 for more info",
+                            expected, t,
+                        ).unwrap();
+                    }
                     abort();
                 }
             });
@@ -793,6 +801,9 @@ macro_rules! impl_atomic {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
                 Expr::<$t>::from_node(current_scope(|b| {
                     b.call(
                         Func::AtomicExchange,
@@ -814,6 +825,9 @@ macro_rules! impl_atomic {
                 let i = i.into();
                 let expected = expected.into();
                 let desired = desired.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
                 Expr::<$t>::from_node(current_scope(|b| {
                     b.call(
                         Func::AtomicCompareExchange,
@@ -834,6 +848,9 @@ macro_rules! impl_atomic {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
                 Expr::<$t>::from_node(current_scope(|b| {
                     b.call(
                         Func::AtomicFetchAdd,
@@ -849,6 +866,9 @@ macro_rules! impl_atomic {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
                 Expr::<$t>::from_node(current_scope(|b| {
                     b.call(
                         Func::AtomicFetchSub,
@@ -870,6 +890,9 @@ macro_rules! impl_atomic_bit {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
                 Expr::<$t>::from_node(current_scope(|b| {
                     b.call(
                         Func::AtomicFetchAnd,
@@ -885,6 +908,9 @@ macro_rules! impl_atomic_bit {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
                 Expr::<$t>::from_node(current_scope(|b| {
                     b.call(
                         Func::AtomicFetchOr,
@@ -900,6 +926,9 @@ macro_rules! impl_atomic_bit {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
                 Expr::<$t>::from_node(current_scope(|b| {
                     b.call(
                         Func::AtomicFetchXor,
@@ -916,6 +945,9 @@ macro_rules! impl_atomic_bit {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
                 Expr::<$t>::from_node(current_scope(|b| {
                     b.call(
                         Func::AtomicFetchMin,
@@ -931,6 +963,9 @@ macro_rules! impl_atomic_bit {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
                 Expr::<$t>::from_node(current_scope(|b| {
                     b.call(
                         Func::AtomicFetchMax,
@@ -1553,7 +1588,14 @@ pub fn assert(cond: Expr<bool>) {
         let backtrace = backtrace::Backtrace::new();
         let assert_fn = CpuFn::new(move |b: &mut bool| {
             if !*b {
-                eprintln!("assertion failed with host backtrace:\n {:?}", backtrace);
+                let mut stderr = std::io::stderr();
+                use std::io::Write;
+                writeln!(
+                    stderr,
+                    "assertion failed with host backtrace:\n {:?}",
+                    backtrace
+                )
+                .unwrap();
             }
         });
         let _ = assert_fn.call(cond);

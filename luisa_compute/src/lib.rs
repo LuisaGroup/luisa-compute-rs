@@ -6,18 +6,18 @@ pub(crate) use luisa_compute_sys as sys;
 pub mod lang;
 pub mod resource;
 pub mod runtime;
-pub use luisa_compute_ir::Gc;
 pub use luisa_compute_backend as backend;
 use luisa_compute_backend::Backend;
+pub use luisa_compute_ir::Gc;
 pub mod prelude {
-    pub use glam;
     pub use crate::*;
+    pub use glam;
     pub use lang::math::*;
     pub use lang::traits::*;
     pub use lang::*;
     pub use luisa_compute_derive::*;
-    pub use runtime::*;
     pub use resource::*;
+    pub use runtime::*;
 }
 use libc;
 use prelude::{Device, DeviceHandle};
@@ -27,15 +27,20 @@ pub fn init() {
     let ctx = luisa_compute_ir::context::luisa_compute_ir_new_context();
     luisa_compute_ir::context::luisa_compute_ir_set_context(ctx);
 }
+pub fn init_logger() {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .format_timestamp_secs()
+        .init();
+}
 pub fn create_cpu_device() -> backend::Result<Device> {
     let backend = backend::rust::RustBackend::new();
     let default_stream = backend.create_stream()?;
-        Ok(Device {
-            inner: Arc::new(DeviceHandle {
-                backend,
-                default_stream,
-            }),
-        })
+    Ok(Device {
+        inner: Arc::new(DeviceHandle {
+            backend,
+            default_stream,
+        }),
+    })
 }
 pub(crate) fn _signal_handler(signal: libc::c_int) {
     if signal == libc::SIGABRT {

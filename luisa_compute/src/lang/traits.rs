@@ -119,7 +119,7 @@ pub trait VarCmpEq: VarTrait {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Eq, &[lhs, rhs],  Self::Bool::type_());
+            let ret = s.call(Func::Eq, &[lhs, rhs], Self::Bool::type_());
             FromNode::from_node(ret)
         })
     }
@@ -127,17 +127,17 @@ pub trait VarCmpEq: VarTrait {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Ne, &[lhs, rhs],  Self::Bool::type_());
+            let ret = s.call(Func::Ne, &[lhs, rhs], Self::Bool::type_());
             FromNode::from_node(ret)
         })
     }
 }
-pub trait VarCmp: VarTrait + VarCmpEq{
+pub trait VarCmp: VarTrait + VarCmpEq {
     fn cmplt<A: Into<Self>>(&self, other: A) -> Self::Bool {
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Lt, &[lhs, rhs],  Self::Bool::type_());
+            let ret = s.call(Func::Lt, &[lhs, rhs], Self::Bool::type_());
             FromNode::from_node(ret)
         })
     }
@@ -145,7 +145,7 @@ pub trait VarCmp: VarTrait + VarCmpEq{
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Le, &[lhs, rhs],  Self::Bool::type_());
+            let ret = s.call(Func::Le, &[lhs, rhs], Self::Bool::type_());
             FromNode::from_node(ret)
         })
     }
@@ -153,7 +153,7 @@ pub trait VarCmp: VarTrait + VarCmpEq{
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Gt, &[lhs, rhs],  Self::Bool::type_());
+            let ret = s.call(Func::Gt, &[lhs, rhs], Self::Bool::type_());
             FromNode::from_node(ret)
         })
     }
@@ -161,7 +161,7 @@ pub trait VarCmp: VarTrait + VarCmpEq{
         let lhs = self.node();
         let rhs = other.into().node();
         current_scope(|s| {
-            let ret = s.call(Func::Ge, &[lhs, rhs],  Self::Bool::type_());
+            let ret = s.call(Func::Ge, &[lhs, rhs], Self::Bool::type_());
             FromNode::from_node(ret)
         })
     }
@@ -525,7 +525,11 @@ macro_rules! impl_not {
             type Output = Expr<$t>;
             fn not(self) -> Self::Output {
                 current_scope(|s| {
-                    let ret = s.call(Func::BitNot, &[FromNode::node(&self)], Self::Output::type_());
+                    let ret = s.call(
+                        Func::BitNot,
+                        &[FromNode::node(&self)],
+                        Self::Output::type_(),
+                    );
                     Expr::<$t>::from_node(ret)
                 })
             }
@@ -562,7 +566,11 @@ impl Not for PrimExpr<bool> {
     type Output = Expr<bool>;
     fn not(self) -> Self::Output {
         current_scope(|s| {
-            let ret = s.call(Func::BitNot, &[FromNode::node(&self)], Self::Output::type_());
+            let ret = s.call(
+                Func::BitNot,
+                &[FromNode::node(&self)],
+                Self::Output::type_(),
+            );
             FromNode::from_node(ret)
         })
     }

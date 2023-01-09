@@ -13,7 +13,7 @@ use crate::{
     },
 };
 pub use ir::ir::NodeRef;
-use ir::ir::{BindlessArrayBinding, SwitchCase};
+use ir::ir::{BindlessArrayBinding, SwitchCase, INVALID_REF};
 use ir::{
     ir::{
         new_node, BasicBlock, Binding, BufferBinding, Capture, Const, CpuCustomOp, Func,
@@ -1457,7 +1457,7 @@ pub fn continue_() {
 // }
 pub fn return_() {
     current_scope(|b| {
-        b.return_(None);
+        b.return_(INVALID_REF);
     });
 }
 struct AdContext {

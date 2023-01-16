@@ -78,8 +78,7 @@ impl Backend for CppProxyBackend {
 
     fn buffer_native_handle(&self, buffer: api::Buffer) -> *mut std::ffi::c_void {
         catch_abort!({
-            // binding::luisa_compute_buffer_native_handle(self.device, binding::LCBuffer { _0: buffer.0 })
-            todo!()
+            binding::luisa_compute_buffer_native_handle(self.device, binding::LCBuffer { _0: buffer.0 })
         })
     }
 

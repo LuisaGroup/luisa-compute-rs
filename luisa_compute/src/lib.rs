@@ -24,8 +24,10 @@ use std::sync::Once;
 static INIT: Once = Once::new();
 pub fn init() {
     INIT.call_once(|| unsafe {
+
         let gc_ctx = luisa_compute_ir::ir::luisa_compute_gc_create_context();
         luisa_compute_ir::ir::luisa_compute_gc_set_context(gc_ctx);
+
         let ctx = luisa_compute_ir::context::luisa_compute_ir_new_context();
         luisa_compute_ir::context::luisa_compute_ir_set_context(ctx);
     });

@@ -7,7 +7,13 @@ use rayon::{
     prelude::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
-
+fn get_device()->Device {
+    let device = match std::env::var("LUISA_TEST_DEVICE"){
+        Ok(device) => device,
+        Err(_) => "cpu".to_string(),
+    };
+    luisa::create_device(&device).unwrap()
+}
 fn finite_difference(inputs: &[Float32], f: impl Fn(&[Float32]) -> Float32) -> Vec<Float32> {
     let eps = 1e-4;
 
@@ -28,7 +34,7 @@ fn autodiff_helper<F: Fn(&[Float32]) -> Float32>(
     n_inputs: usize,
     f: F,
 ) {
-    let device = create_cpu_device().unwrap();
+    let device = get_device();
     let inputs = (0..n_inputs)
         .map(|_| device.create_buffer::<f32>(repeats).unwrap())
         .collect::<Vec<_>>();
@@ -175,19 +181,11 @@ fn autodiff_helper<F: Fn(&[Float32]) -> Float32>(
         kernel_dir,
     );
 }
-use std::sync::Once;
-
-static START: Once = Once::new();
-fn init_once() {
-    START.call_once(|| {
-        init();
-    });
-}
 macro_rules! autodiff_1 {
     ($name:ident, $range:expr, $e:expr) => {
         #[test]
         fn $name() {
-            init_once();
+            init();
             autodiff_helper($range, 1024 * 1024, 1, |inputs| {
                 let x = inputs[0];
                 ($e)(x)
@@ -199,7 +197,7 @@ macro_rules! autodiff_2 {
     ($name:ident, $range:expr, $e:expr) => {
         #[test]
         fn $name() {
-            init_once();
+            init();
             autodiff_helper($range, 1024 * 1024, 2, |inputs| {
                 let x = inputs[0];
                 let y = inputs[1];
@@ -235,7 +233,7 @@ autodiff_2!(autodiff_div, 1.0..10.0, |x: Float32, y: Float32| x / y);
 
 #[test]
 fn autodiff_vec3_reduce_add_manual() {
-    init_once();
+    init();
     autodiff_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
         let x = inputs[0];
         let y = inputs[1];
@@ -247,7 +245,7 @@ fn autodiff_vec3_reduce_add_manual() {
 
 #[test]
 fn autodiff_vec3_reduce_prod_manual() {
-    init_once();
+    init();
     autodiff_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
         let x = inputs[0];
         let y = inputs[1];
@@ -258,7 +256,7 @@ fn autodiff_vec3_reduce_prod_manual() {
 }
 #[test]
 fn autodiff_vec3_reduce_add() {
-    init_once();
+    init();
     autodiff_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
         let x = inputs[0];
         let y = inputs[1];
@@ -269,7 +267,7 @@ fn autodiff_vec3_reduce_add() {
 }
 #[test]
 fn autodiff_vec3_reduce_mul() {
-    init_once();
+    init();
     autodiff_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
         let x = inputs[0];
         let y = inputs[1];
@@ -280,7 +278,7 @@ fn autodiff_vec3_reduce_mul() {
 }
 #[test]
 fn autodiff_vec3_dot() {
-    init_once();
+    init();
     autodiff_helper(-2.0..2.0, 1024 * 1024, 3, |inputs| {
         let x = inputs[0];
         let y = inputs[1];
@@ -291,7 +289,7 @@ fn autodiff_vec3_dot() {
 }
 #[test]
 fn autodiff_vec3_length() {
-    init_once();
+    init();
     autodiff_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
         let x = inputs[0];
         let y = inputs[1];
@@ -302,7 +300,7 @@ fn autodiff_vec3_length() {
 }
 #[test]
 fn autodiff_vec3_length_squared() {
-    init_once();
+    init();
     autodiff_helper(-2.0..2.0, 1024 * 1024, 3, |inputs| {
         let x = inputs[0];
         let y = inputs[1];
@@ -313,7 +311,7 @@ fn autodiff_vec3_length_squared() {
 }
 #[test]
 fn autodiff_vec3_normalize() {
-    init_once();
+    init();
     autodiff_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
         let x = inputs[0];
         let y = inputs[1];
@@ -339,7 +337,7 @@ fn autodiff_vec3_normalize() {
 
 #[test]
 fn autodiff_vec3_cross_x() {
-    init_once();
+    init();
     autodiff_helper(-10.0..10.0, 1024 * 1024, 6, |inputs| {
         let ax = inputs[0];
         let ay = inputs[1];
@@ -355,7 +353,7 @@ fn autodiff_vec3_cross_x() {
 }
 #[test]
 fn autodiff_vec3_cross_y() {
-    init_once();
+    init();
     autodiff_helper(-10.0..10.0, 1024 * 1024, 6, |inputs| {
         let ax = inputs[0];
         let ay = inputs[1];
@@ -372,7 +370,7 @@ fn autodiff_vec3_cross_y() {
 
 #[test]
 fn autodiff_vec3_cross_z() {
-    init_once();
+    init();
     autodiff_helper(-10.0..10.0, 1024 * 1024, 6, |inputs| {
         let ax = inputs[0];
         let ay = inputs[1];
@@ -388,7 +386,7 @@ fn autodiff_vec3_cross_z() {
 }
 #[test]
 fn autodiff_vec3_distance() {
-    init_once();
+    init();
     autodiff_helper(-10.0..10.0, 1024 * 1024, 6, |inputs| {
         let ax = inputs[0];
         let ay = inputs[1];
@@ -403,7 +401,7 @@ fn autodiff_vec3_distance() {
 }
 #[test]
 fn autodiff_vec3_replace() {
-    init_once();
+    init();
     autodiff_helper(-2.0..2.0, 1024 * 1024, 4, |inputs| {
         let ax = inputs[0];
         let ay = inputs[1];
@@ -416,7 +414,7 @@ fn autodiff_vec3_replace() {
 }
 #[test]
 fn autodiff_matmul() {
-    init_once();
+    init();
     autodiff_helper(-4.0..4.0, 1024 * 1024, 12, |inputs| {
         let ax = inputs[0];
         let ay = inputs[1];
@@ -441,7 +439,7 @@ fn autodiff_matmul() {
 }
 #[test]
 fn autodiff_matmul_tranpose() {
-    init_once();
+    init();
     autodiff_helper(-4.0..4.0, 1024 * 1024, 12, |inputs| {
         let ax = inputs[0];
         let ay = inputs[1];
@@ -466,7 +464,7 @@ fn autodiff_matmul_tranpose() {
 }
 #[test]
 fn autodiff_matmul_2() {
-    init_once();
+    init();
     autodiff_helper(-2.0..2.0, 1024 * 1024, 12, |inputs| {
         let ax = inputs[0];
         let ay = inputs[1];
@@ -491,7 +489,7 @@ fn autodiff_matmul_2() {
 }
 #[test]
 fn autodiff_mat_det() {
-    init_once();
+    init();
     autodiff_helper(-2.0..2.0, 1024 * 1024, 9, |inputs| {
         let ax = inputs[0];
         let ay = inputs[1];
@@ -511,7 +509,7 @@ fn autodiff_mat_det() {
 }
 // #[test]
 // fn autodiff_vec3_reduce_min(){
-//     init_once();
+//     init();
 //     autodiff_helper(0.1..1.0, 1024 * 1024, 3, |inputs| {
 //         let x = inputs[0];
 //         let y = inputs[1];
@@ -523,7 +521,7 @@ fn autodiff_mat_det() {
 
 // #[test]
 // fn autodiff_vec3_reduce_max(){
-//     init_once();
+//     init();
 //     autodiff_helper(0.1..1.0, 1024 * 1024, 3, |inputs| {
 //         let x = inputs[0];
 //         let y = inputs[1];
@@ -534,8 +532,8 @@ fn autodiff_mat_det() {
 // }
 #[test]
 fn autodiff_select() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let x: Buffer<f32> = device.create_buffer(1024).unwrap();
     let y: Buffer<f32> = device.create_buffer(1024).unwrap();
     let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
@@ -581,8 +579,8 @@ fn autodiff_select() {
 
 #[test]
 fn autodiff_if_phi() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let x: Buffer<f32> = device.create_buffer(1024).unwrap();
     let y: Buffer<f32> = device.create_buffer(1024).unwrap();
     let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
@@ -632,8 +630,8 @@ fn autodiff_if_phi() {
 
 #[test]
 fn autodiff_if_phi2() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let x: Buffer<f32> = device.create_buffer(1024).unwrap();
     let y: Buffer<f32> = device.create_buffer(1024).unwrap();
     let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
@@ -691,8 +689,8 @@ fn autodiff_if_phi2() {
 }
 #[test]
 fn autodiff_if_phi3() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let x: Buffer<f32> = device.create_buffer(1024).unwrap();
     let y: Buffer<f32> = device.create_buffer(1024).unwrap();
     let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
@@ -750,8 +748,8 @@ fn autodiff_if_phi3() {
 }
 #[test]
 fn autodiff_switch() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let t: Buffer<i32> = device.create_buffer(1024).unwrap();
     let x: Buffer<f32> = device.create_buffer(1024).unwrap();
     let y: Buffer<f32> = device.create_buffer(1024).unwrap();

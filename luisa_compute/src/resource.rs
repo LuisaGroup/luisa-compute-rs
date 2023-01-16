@@ -251,13 +251,11 @@ impl BindlessArray {
         }
     }
     pub unsafe fn update_async<'a>(&'a self) -> Command<'a> {
-        catch_abort! {{
-            Command {
-                inner: api::Command::BindlessArrayUpdate(self.handle.handle),
-                marker: std::marker::PhantomData,
-                resource_tracker: vec![Box::new(self.handle.clone())],
-            }
-        }}
+        Command {
+            inner: api::Command::BindlessArrayUpdate(self.handle.handle),
+            marker: std::marker::PhantomData,
+            resource_tracker: vec![Box::new(self.handle.clone())],
+        }
     }
 }
 pub use api::{PixelFormat, PixelStorage, Sampler, SamplerAddress, SamplerFilter};

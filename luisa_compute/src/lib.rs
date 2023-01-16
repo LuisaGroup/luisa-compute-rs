@@ -19,21 +19,42 @@ pub mod prelude {
     pub use resource::*;
     pub use runtime::*;
 }
-use libc;
 use prelude::{Device, DeviceHandle};
+use std::sync::Once;
+static INIT: Once = Once::new();
 pub fn init() {
-    let gc_ctx = luisa_compute_ir::ir::luisa_compute_gc_create_context();
-    luisa_compute_ir::ir::luisa_compute_gc_set_context(gc_ctx);
-    let ctx = luisa_compute_ir::context::luisa_compute_ir_new_context();
-    luisa_compute_ir::context::luisa_compute_ir_set_context(ctx);
+    INIT.call_once(|| unsafe {
+        let gc_ctx = luisa_compute_ir::ir::luisa_compute_gc_create_context();
+        luisa_compute_ir::ir::luisa_compute_gc_set_context(gc_ctx);
+        let ctx = luisa_compute_ir::context::luisa_compute_ir_new_context();
+        luisa_compute_ir::context::luisa_compute_ir_set_context(ctx);
+    });
 }
 pub fn init_logger() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .format_timestamp_secs()
         .init();
 }
+
 pub fn create_cpu_device() -> backend::Result<Device> {
-    let backend = backend::rust::RustBackend::new();
+    create_device("cpu")
+}
+
+pub fn create_device(device: &str) -> backend::Result<Device> {
+    let backend: Arc<dyn Backend> = match device {
+        "cpu" => backend::rust::RustBackend::new(),
+        "cuda" => {
+            #[cfg(feature = "_cpp")]
+            {
+                sys::cpp_proxy_backend::CppProxyBackend::new(device)
+            }
+            #[cfg(not(feature = "_cpp"))]
+            {
+                panic!("{} backend is not enabled", device)
+            }
+        }
+        _ => panic!("unsupported device: {}", device),
+    };
     let default_stream = backend.create_stream()?;
     Ok(Device {
         inner: Arc::new(DeviceHandle {
@@ -41,20 +62,4 @@ pub fn create_cpu_device() -> backend::Result<Device> {
             default_stream,
         }),
     })
-}
-pub(crate) fn _signal_handler(signal: libc::c_int) {
-    if signal == libc::SIGABRT {
-        panic!("std::abort() called inside LuisaCompute");
-    }
-}
-#[macro_export]
-macro_rules! catch_abort {
-    ($stmts:expr) => {
-        unsafe {
-            let old = libc::signal(libc::SIGABRT, _signal_handler as libc::sighandler_t);
-            let ret = $stmts;
-            libc::signal(libc::SIGABRT, old);
-            ret
-        }
-    };
 }

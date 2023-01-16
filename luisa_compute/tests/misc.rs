@@ -7,17 +7,17 @@ use rayon::{
     prelude::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
-static START: Once = Once::new();
-fn init_once() {
-    START.call_once(|| {
-        init();
-    });
+fn get_device()->Device {
+    let device = match std::env::var("LUISA_TEST_DEVICE"){
+        Ok(device) => device,
+        Err(_) => "cpu".to_string(),
+    };
+    luisa::create_device(&device).unwrap()
 }
-
 #[test]
 fn vec_cast() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let f: Buffer<Vec2> = device.create_buffer(1024).unwrap();
     let i: Buffer<IVec2> = device.create_buffer(1024).unwrap();
     f.view(..)
@@ -41,8 +41,8 @@ fn vec_cast() {
 }
 #[test]
 fn bool_op() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let x: Buffer<bool> = device.create_buffer(1024).unwrap();
     let y: Buffer<bool> = device.create_buffer(1024).unwrap();
     let and: Buffer<bool> = device.create_buffer(1024).unwrap();
@@ -85,8 +85,8 @@ fn bool_op() {
 }
 #[test]
 fn bvec_op() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let x: Buffer<BVec2> = device.create_buffer(1024).unwrap();
     let y: Buffer<BVec2> = device.create_buffer(1024).unwrap();
     let and: Buffer<BVec2> = device.create_buffer(1024).unwrap();
@@ -133,8 +133,8 @@ fn bvec_op() {
 }
 #[test]
 fn vec_bit_minmax() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let x: Buffer<IVec2> = device.create_buffer(1024).unwrap();
     let y: Buffer<IVec2> = device.create_buffer(1024).unwrap();
     let z: Buffer<IVec2> = device.create_buffer(1024).unwrap();
@@ -205,8 +205,8 @@ fn vec_bit_minmax() {
 }
 #[test]
 fn vec_permute() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let v2: Buffer<IVec2> = device.create_buffer(1024).unwrap();
     let v3: Buffer<IVec3> = device.create_buffer(1024).unwrap();
     v2.view(..)
@@ -232,8 +232,8 @@ fn vec_permute() {
 
 #[test]
 fn if_phi() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let x: Buffer<i32> = device.create_buffer(1024).unwrap();
     let even: Buffer<bool> = device.create_buffer(1024).unwrap();
     x.view(..).fill_fn(|i| i as i32);
@@ -257,8 +257,8 @@ fn if_phi() {
 
 #[test]
 fn switch_phi() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let x: Buffer<i32> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
     let z: Buffer<f32> = device.create_buffer(1024).unwrap();
@@ -307,8 +307,8 @@ fn switch_phi() {
 
 #[test]
 fn switch_unreachable() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let x: Buffer<i32> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
     let z: Buffer<f32> = device.create_buffer(1024).unwrap();
@@ -355,8 +355,8 @@ fn switch_unreachable() {
 
 #[test]
 fn array_read_write() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let kernel = device
         .create_kernel::<()>(&|| {
@@ -382,8 +382,8 @@ fn array_read_write() {
 }
 #[test]
 fn array_read_write_async_compile() {
-    init_once();
-    let device = create_cpu_device().unwrap();
+    init();
+    let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let kernel = device
         .create_kernel::<()>(&|| {

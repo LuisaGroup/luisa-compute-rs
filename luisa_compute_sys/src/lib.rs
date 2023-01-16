@@ -4,3 +4,5 @@
 pub mod binding;
 #[cfg(feature = "_cpp")]
 pub use binding::*;
+#[cfg(feature = "_cpp")]
+pub mod cpp_proxy_backend;

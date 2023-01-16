@@ -147,7 +147,7 @@ impl Device {
         let mut builder = KernelBuilder::new(self.clone());
         KernelBuildFn::build(&f, &mut builder)
     }
-    
+
 }
 #[macro_export]
 macro_rules! fn_n_args {
@@ -189,6 +189,7 @@ pub(crate) enum StreamHandle {
     },
 }
 pub struct Stream {
+    #[allow(dead_code)]
     pub(crate) device: Device,
     pub(crate) handle: Arc<StreamHandle>,
 }

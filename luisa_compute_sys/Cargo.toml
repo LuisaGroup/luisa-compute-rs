@@ -6,15 +6,19 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+luisa_compute_api_types = {path = "LuisaCompute/src/rust/luisa_compute_api_types"}
+luisa_compute_backend =  {path = "LuisaCompute/src/rust/luisa_compute_backend"}
+luisa_compute_ir = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_ir"}
+libc = "0.2"
 
 [build-dependencies]
 bindgen = "0.60"
 cmake = "0.1.48"
-luisa_compute_api_types = {path = "LuisaCompute/src/rust/luisa_compute_api_types"}
+
 
 [features]
 default = []
-cuda = []
+cuda = ["_cpp"]
 dx = []
 vk = []
 llvm = []

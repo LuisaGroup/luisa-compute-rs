@@ -1,8 +1,6 @@
 #![allow(unused_unsafe)]
 use std::sync::Arc;
 
-#[cfg(feature = "_cpp")]
-pub(crate) use luisa_compute_sys as sys;
 pub mod lang;
 pub mod resource;
 pub mod runtime;
@@ -19,6 +17,7 @@ pub mod prelude {
     pub use resource::*;
     pub use runtime::*;
 }
+pub use luisa_compute_sys as sys;
 use prelude::{Device, DeviceHandle};
 use std::sync::Once;
 static INIT: Once = Once::new();
@@ -46,11 +45,11 @@ pub fn create_device(device: &str) -> backend::Result<Device> {
     let backend: Arc<dyn Backend> = match device {
         "cpu" => backend::rust::RustBackend::new(),
         "cuda" => {
-            #[cfg(feature = "_cpp")]
+            #[cfg(feature = "cuda")]
             {
                 sys::cpp_proxy_backend::CppProxyBackend::new(device)
             }
-            #[cfg(not(feature = "_cpp"))]
+            #[cfg(not(feature = "cuda"))]
             {
                 panic!("{} backend is not enabled", device)
             }

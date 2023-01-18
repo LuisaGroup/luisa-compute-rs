@@ -10,6 +10,7 @@ luisa_compute_api_types = {path = "LuisaCompute/src/rust/luisa_compute_api_types
 luisa_compute_backend =  {path = "LuisaCompute/src/rust/luisa_compute_backend"}
 luisa_compute_ir = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_ir"}
 libc = "0.2"
+lazy_static = "1.4"
 
 [build-dependencies]
 bindgen = "0.60"
@@ -18,11 +19,10 @@ cmake = "0.1.48"
 
 [features]
 default = []
-cuda = ["_cpp"]
+cuda = []
 dx = []
 vk = []
 llvm = []
 ispc = []
 python = []
-_cpp = []
 

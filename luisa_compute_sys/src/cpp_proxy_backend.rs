@@ -1,4 +1,8 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    env::{current_dir, current_exe},
+    path::PathBuf,
+    sync::Arc, collections::HashSet,
+};
 
 use crate::binding;
 use backend::Backend;
@@ -12,24 +16,54 @@ use std::sync::Once;
 static INIT_CPP: Once = Once::new();
 static mut CPP_CONTEXT: binding::LCContext = binding::LCContext { _0: 0 };
 static mut OLD_SIGABRT_HANDLER: libc::sighandler_t = 0;
+fn restore_signal_handler() {
+    unsafe {
+        libc::signal(libc::SIGABRT, OLD_SIGABRT_HANDLER);
+        libc::signal(libc::SIGSEGV, OLD_SIGABRT_HANDLER);
+    }
+}
 pub(crate) fn _signal_handler(signal: libc::c_int) {
     if signal == libc::SIGABRT {
-        unsafe { libc::signal(libc::SIGABRT, OLD_SIGABRT_HANDLER); }
+        restore_signal_handler();
         panic!("std::abort() called inside LuisaCompute");
+    }
+    if signal == libc::SIGSEGV {
+        restore_signal_handler();
+        panic!("segfault inside LuisaCompute");
     }
 }
 #[macro_export]
 macro_rules! catch_abort {
     ($stmts:expr) => {
         unsafe {
-            OLD_SIGABRT_HANDLER = libc::signal(libc::SIGABRT, _signal_handler as libc::sighandler_t);
+            OLD_SIGABRT_HANDLER =
+                libc::signal(libc::SIGABRT, _signal_handler as libc::sighandler_t);
+                OLD_SIGABRT_HANDLER =
+                libc::signal(libc::SIGSEGV, _signal_handler as libc::sighandler_t);
             let ret = $stmts;
-            libc::signal(libc::SIGABRT, OLD_SIGABRT_HANDLER);
+            restore_signal_handler();
             ret
         }
     };
 }
+pub fn search_path<P: AsRef<std::path::Path>>(path: P) {
+    _init_cpp();
+    let path = path.as_ref();
+    let path_cstr = std::ffi::CString::new(path.to_str().unwrap()).unwrap();
+    unsafe {
+        binding::luisa_compute_context_add_search_path(CPP_CONTEXT, path_cstr.as_ptr());
+    }
+}
+
 fn init_cpp() {
+    _init_cpp();
+    search_path(current_dir().unwrap());
+    if let Ok(path) = current_exe() {
+        let path = path.parent().unwrap();
+        search_path(&path);
+    }
+}
+fn _init_cpp() {
     INIT_CPP.call_once(|| unsafe {
         let gc_ctx = luisa_compute_ir::ir::luisa_compute_gc_context();
         let ir_ctx = luisa_compute_ir::context::luisa_compute_ir_context();
@@ -58,7 +92,7 @@ impl CppProxyBackend {
             binding::luisa_compute_device_create(
                 CPP_CONTEXT,
                 backend_c_str.as_ptr(),
-                b"\0".as_ptr() as *const _,
+                b"{}\0".as_ptr() as *const _,
             )
         });
         Arc::new(Self { device })
@@ -229,7 +263,7 @@ impl Backend for CppProxyBackend {
                     binding::LCKernelModule {
                         ptr: Gc::as_ptr(kernel) as u64,
                     },
-                    std::ptr::null(),
+                    b"\0".as_ptr() as *const i8,
                 )
             })
             ._0,

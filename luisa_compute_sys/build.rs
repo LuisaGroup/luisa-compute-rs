@@ -146,7 +146,6 @@ fn copy_dlls(out_dir: &PathBuf) {
     }
 }
 fn main() {
-    println!("cargo:rerun-if-env-changed=CARGO_FEATURE__CPP");
     let out_dir = cmake_build();
     generate_bindings();
 

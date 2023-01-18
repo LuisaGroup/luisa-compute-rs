@@ -13,7 +13,7 @@ luisa_compute_derive = {path = "../luisa_compute_derive"}
 luisa_compute_derive_impl = {path = "../luisa_compute_derive_impl"}
 luisa_compute_ir = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_ir"}
 luisa_compute_cpu_kernel_defs = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_cpu_kernel_defs"}
-luisa_compute_sys = {path = "../luisa_compute_sys", optional = true}
+luisa_compute_sys = {path = "../luisa_compute_sys"}
 luisa_compute_backend =  {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_backend"}
 parking_lot = "0.12.1"
 rayon = "1.6.0"
@@ -30,10 +30,9 @@ rand = "0.8.5"
 
 
 [features]
-_cpp = ["luisa_compute_sys/_cpp"]
-cuda = ["_cpp", "luisa_compute_sys/cuda"]
-default = []
-dx = ["_cpp"]
-llvm = ["_cpp"]
-metal = ["_cpp"]
-vulkan = ["_cpp"]
+cuda = ["luisa_compute_sys/cuda"]
+
+
+[[bin]]
+name="test_cuda"
+path="src/bin/test_cuda.rs"

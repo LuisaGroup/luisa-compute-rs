@@ -1,8 +1,6 @@
 #![allow(non_snake_case)]
 #![allow(non_camel_case_types)]
-#[cfg(feature = "_cpp")]
 pub mod binding;
-#[cfg(feature = "_cpp")]
 pub use binding::*;
-#[cfg(feature = "_cpp")]
 pub mod cpp_proxy_backend;
+pub use cpp_proxy_backend::search_path;

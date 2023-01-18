@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{ops::Range, env::current_exe};
 
 use luisa::prelude::*;
 use luisa_compute as luisa;
@@ -8,10 +8,12 @@ use rayon::{
     slice::ParallelSliceMut,
 };
 fn get_device()->Device {
+    luisa::sys::init_cpp(current_exe().unwrap().parent().unwrap());
     let device = match std::env::var("LUISA_TEST_DEVICE"){
         Ok(device) => device,
         Err(_) => "cpu".to_string(),
     };
+    let device = "cuda";
     luisa::create_device(&device).unwrap()
 }
 fn finite_difference(inputs: &[Float32], f: impl Fn(&[Float32]) -> Float32) -> Vec<Float32> {

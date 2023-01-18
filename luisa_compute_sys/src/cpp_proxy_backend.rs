@@ -1,7 +1,8 @@
 use std::{
+    collections::HashSet,
     env::{current_dir, current_exe},
-    path::PathBuf,
-    sync::Arc, collections::HashSet,
+    path::{Path, PathBuf},
+    sync::Arc, fs,
 };
 
 use crate::binding;
@@ -38,7 +39,7 @@ macro_rules! catch_abort {
         unsafe {
             OLD_SIGABRT_HANDLER =
                 libc::signal(libc::SIGABRT, _signal_handler as libc::sighandler_t);
-                OLD_SIGABRT_HANDLER =
+            OLD_SIGABRT_HANDLER =
                 libc::signal(libc::SIGSEGV, _signal_handler as libc::sighandler_t);
             let ret = $stmts;
             restore_signal_handler();
@@ -46,24 +47,8 @@ macro_rules! catch_abort {
         }
     };
 }
-pub fn search_path<P: AsRef<std::path::Path>>(path: P) {
-    _init_cpp();
-    let path = path.as_ref();
-    let path_cstr = std::ffi::CString::new(path.to_str().unwrap()).unwrap();
-    unsafe {
-        binding::luisa_compute_context_add_search_path(CPP_CONTEXT, path_cstr.as_ptr());
-    }
-}
 
-fn init_cpp() {
-    _init_cpp();
-    search_path(current_dir().unwrap());
-    if let Ok(path) = current_exe() {
-        let path = path.parent().unwrap();
-        search_path(&path);
-    }
-}
-fn _init_cpp() {
+pub fn init_cpp<P: AsRef<Path>>(bin_path: P) {
     INIT_CPP.call_once(|| unsafe {
         let gc_ctx = luisa_compute_ir::ir::luisa_compute_gc_context();
         let ir_ctx = luisa_compute_ir::context::luisa_compute_ir_context();
@@ -75,18 +60,21 @@ fn _init_cpp() {
             ir_context: ir_ctx as *mut _,
         };
         binding::luisa_compute_set_app_context(ctx);
-        let self_path = std::env::current_exe().unwrap();
-        let self_path_c_str = std::ffi::CString::new(self_path.to_str().unwrap()).unwrap();
-        CPP_CONTEXT = binding::luisa_compute_context_create(self_path_c_str.as_ptr());
+        let bin_path = fs::canonicalize(bin_path).unwrap();
+        let path_c_str = std::ffi::CString::new(bin_path.to_str().unwrap()).unwrap();
+        CPP_CONTEXT = binding::luisa_compute_context_create(path_c_str.as_ptr());
     });
 }
 
 pub struct CppProxyBackend {
     device: binding::LCDevice,
 }
+fn default_path() -> PathBuf {
+    std::env::current_exe().unwrap()
+}
 impl CppProxyBackend {
     pub fn new(backend: &str) -> Arc<Self> {
-        init_cpp();
+        init_cpp(default_path());
         let backend_c_str = std::ffi::CString::new(backend).unwrap();
         let device = catch_abort!({
             binding::luisa_compute_device_create(

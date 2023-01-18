@@ -1,3 +1,5 @@
+use std::env::current_exe;
+
 use luisa::backend::rust::RustBackend;
 use luisa::prelude::*;
 use luisa_compute as luisa;
@@ -11,6 +13,7 @@ pub struct Sphere {
 
 fn main() {
     init();
+    luisa::sys::init_cpp(current_exe().unwrap().parent().unwrap());
     let device = create_cpu_device().unwrap();
     let spheres = device.create_buffer::<Sphere>(1).unwrap();
     spheres.view(..).copy_from(&[Sphere {

@@ -31,8 +31,3 @@ rand = "0.8.5"
 
 [features]
 cuda = ["luisa_compute_sys/cuda"]
-
-
-[[bin]]
-name="test_cuda"
-path="src/bin/test_cuda.rs"

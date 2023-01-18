@@ -1160,7 +1160,7 @@ impl KernelBuilder {
                     block_size: r.block_size.unwrap_or([1, 1, 1]),
                 };
                 // build kernel here
-                let shader = self.device.inner.create_shader(module)?;
+                let shader = self.device.inner.create_shader(Gc::new(module))?;
                 //
                 r.reset();
                 Ok(RawKernel {

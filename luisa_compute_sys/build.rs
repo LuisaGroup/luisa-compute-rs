@@ -83,14 +83,11 @@ fn cmake_build() -> PathBuf {
             }
         };
     }
-    set_from_env!("dx", "LUISA_COMPUTE_ENABLE_DX");
-    set_from_env!("cuda", "LUISA_COMPUTE_ENABLE_CUDA");
-    set_from_env!("llvm", "LUISA_COMPUTE_ENABLE_LLVM");
-    set_from_env!("ispc", "LUISA_COMPUTE_ENABLE_ISPC");
-    set_from_env!("vulkan", "LUISA_COMPUTE_ENABLE_VULKAN");
-    set_from_env!("metal", "LUISA_COMPUTE_ENABLE_METAL");
-    set_from_env!("python", "LUISA_COMPUTE_ENABLE_PYTHON");
-    set_from_env!("gui", "LUISA_COMPUTE_ENABLE_GUI");
+    set_from_env!("DX", "LUISA_COMPUTE_ENABLE_DX");
+    set_from_env!("CUDA", "LUISA_COMPUTE_ENABLE_CUDA");
+    set_from_env!("METAL", "LUISA_COMPUTE_ENABLE_METAL");
+    set_from_env!("PYTHON", "LUISA_COMPUTE_ENABLE_PYTHON");
+    set_from_env!("GUI", "LUISA_COMPUTE_ENABLE_GUI");
     config.define("LUISA_COMPUTE_CHECK_BACKEND_DEPENDENCIES", "OFF");
     config.define("LUISA_COMPUTE_BUILD_TESTS", "OFF");
     config.define("LUISA_COMPUTE_RUST", "ON");
@@ -149,20 +146,20 @@ fn copy_dlls(out_dir: &PathBuf) {
     }
 }
 fn main() {
-    println!("cargo:rerun-if-env-changed=CARGO_FEATURE__cpp");
-    if cfg!(feature = "_cpp") {
-        let out_dir = cmake_build();
-        generate_bindings();
-        // dbg!(&out_dir);
-        println!(
-            "cargo:rustc-link-search=native={}/build/bin/",
-            out_dir.to_str().unwrap()
-        );
-        println!(
-            "cargo:rustc-link-search=native={}/build/lib/",
-            out_dir.to_str().unwrap()
-        );
-        println!("cargo:rustc-link-lib=dylib=luisa-compute-api");
-        copy_dlls(&out_dir);
-    }
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE__CPP");
+    let out_dir = cmake_build();
+    generate_bindings();
+
+    // dbg!(&out_dir);
+    println!(
+        "cargo:rustc-link-search=native={}/build/bin/",
+        out_dir.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-link-search=native={}/build/lib/",
+        out_dir.to_str().unwrap()
+    );
+    println!("cargo:rustc-link-lib=dylib=luisa-compute-api");
+    copy_dlls(&out_dir);
+
 }

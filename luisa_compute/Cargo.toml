@@ -30,8 +30,8 @@ rand = "0.8.5"
 
 
 [features]
-_cpp = ["luisa_compute_sys"]
-cuda = ["_cpp"]
+_cpp = ["luisa_compute_sys/_cpp"]
+cuda = ["_cpp", "luisa_compute_sys/cuda"]
 default = []
 dx = ["_cpp"]
 llvm = ["_cpp"]

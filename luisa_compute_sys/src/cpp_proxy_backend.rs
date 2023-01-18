@@ -11,8 +11,10 @@ use luisa_compute_ir::{
 use std::sync::Once;
 static INIT_CPP: Once = Once::new();
 static mut CPP_CONTEXT: binding::LCContext = binding::LCContext { _0: 0 };
+static mut OLD_SIGABRT_HANDLER: libc::sighandler_t = 0;
 pub(crate) fn _signal_handler(signal: libc::c_int) {
     if signal == libc::SIGABRT {
+        unsafe { libc::signal(libc::SIGABRT, OLD_SIGABRT_HANDLER); }
         panic!("std::abort() called inside LuisaCompute");
     }
 }
@@ -20,9 +22,9 @@ pub(crate) fn _signal_handler(signal: libc::c_int) {
 macro_rules! catch_abort {
     ($stmts:expr) => {
         unsafe {
-            let old = libc::signal(libc::SIGABRT, _signal_handler as libc::sighandler_t);
+            OLD_SIGABRT_HANDLER = libc::signal(libc::SIGABRT, _signal_handler as libc::sighandler_t);
             let ret = $stmts;
-            libc::signal(libc::SIGABRT, old);
+            libc::signal(libc::SIGABRT, OLD_SIGABRT_HANDLER);
             ret
         }
     };
@@ -78,7 +80,10 @@ impl Backend for CppProxyBackend {
 
     fn buffer_native_handle(&self, buffer: api::Buffer) -> *mut std::ffi::c_void {
         catch_abort!({
-            binding::luisa_compute_buffer_native_handle(self.device, binding::LCBuffer { _0: buffer.0 })
+            binding::luisa_compute_buffer_native_handle(
+                self.device,
+                binding::LCBuffer { _0: buffer.0 },
+            )
         })
     }
 
@@ -216,12 +221,14 @@ impl Backend for CppProxyBackend {
         Ok(())
     }
 
-    fn create_shader(&self, kernel: KernelModule) -> backend::Result<api::Shader> {
+    fn create_shader(&self, kernel: Gc<KernelModule>) -> backend::Result<api::Shader> {
         Ok(api::Shader(
             catch_abort!({
                 binding::luisa_compute_shader_create(
                     self.device,
-                    &kernel as *const _ as *const binding::LCKernelModule,
+                    binding::LCKernelModule {
+                        ptr: Gc::as_ptr(kernel) as u64,
+                    },
                     std::ptr::null(),
                 )
             })
@@ -229,7 +236,7 @@ impl Backend for CppProxyBackend {
         ))
     }
 
-    fn create_shader_async(&self, kernel: KernelModule) -> backend::Result<api::Shader> {
+    fn create_shader_async(&self, kernel: Gc<KernelModule>) -> backend::Result<api::Shader> {
         todo!()
     }
 

@@ -4,7 +4,8 @@ use luisa_compute as luisa;
 fn main() {
     init();
     init_logger();
-    let device = create_cpu_device().unwrap();
+    let device = std::env::args().nth(1).unwrap_or("cpu".to_string());
+    let device = create_device(&device).unwrap();
     let x = device.create_buffer::<f32>(1024).unwrap();
     let y = device.create_buffer::<f32>(1024).unwrap();
     let z = device.create_buffer::<f32>(1024).unwrap();

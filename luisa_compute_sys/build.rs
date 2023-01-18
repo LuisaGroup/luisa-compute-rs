@@ -1,6 +1,8 @@
 use std::{env, fs, path::PathBuf};
+use std::path::Path;
 
 use bindgen::{self, CargoCallbacks};
+
 fn generate_bindings() {
     #[derive(Debug)]
     struct ParseCallback {}
@@ -63,6 +65,7 @@ fn generate_bindings() {
         .write_to_file("src/binding.rs")
         .expect("Couldn't write bindings!");
 }
+
 fn cmake_build() -> PathBuf {
     let mut config = cmake::Config::new("./LuisaCompute");
     macro_rules! set_from_env {
@@ -114,37 +117,51 @@ fn cmake_build() -> PathBuf {
 
     config.build()
 }
+
 fn copy_dlls(out_dir: &PathBuf) {
     let mut out_dir = out_dir.clone();
     out_dir.push(&"build/bin");
+
     dbg!(&out_dir);
     for entry in std::fs::read_dir(out_dir).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
         if path.extension().is_some()
-            && (path.extension().unwrap() == "dll" || path.extension().unwrap() == "so")
+            && (path.extension().unwrap() == "dll"
+            || path.extension().unwrap() == "so"
+            || path.extension().unwrap() == "dylib")
         {
             // let target_dir = get_output_path();
             let comps: Vec<_> = path.components().collect();
+            let copy_if_different = |src, dst| {
+                let p_src = Path::new(&src);
+                let p_dst = Path::new(&dst);
+                let should_copy = p_dst.exists();
+                let should_copy = should_copy || {
+                    let src_metadata = fs::metadata(p_src).unwrap();
+                    let dst_metadata = fs::metadata(p_dst).unwrap();
+                    src_metadata.modified().unwrap() != dst_metadata.modified().unwrap()
+                };
+                if should_copy {
+                    std::fs::copy(p_src, p_dst).unwrap();
+                }
+            };
             {
                 let dest = std::path::PathBuf::from_iter(comps[..comps.len() - 6].iter())
                     .join(path.file_name().unwrap());
-                if !std::path::Path::new(&dest).exists() {
-                    std::fs::copy(&path, dest).unwrap();
-                }
+                copy_if_different(&path, dest);
             }
             {
                 let dest = std::path::PathBuf::from_iter(comps[..comps.len() - 6].iter())
                     .join("deps")
                     .join(path.file_name().unwrap());
                 dbg!(&dest);
-                if !std::path::Path::new(&dest).exists() {
-                    std::fs::copy(&path, dest).unwrap();
-                }
+                copy_if_different(&path, dest);
             }
         }
     }
 }
+
 fn main() {
     let out_dir = cmake_build();
     generate_bindings();
@@ -160,5 +177,4 @@ fn main() {
     );
     println!("cargo:rustc-link-lib=dylib=luisa-compute-api");
     copy_dlls(&out_dir);
-
 }

@@ -8,7 +8,7 @@ use rayon::{
     slice::ParallelSliceMut,
 };
 fn get_device()->Device {
-    luisa::sys::init_cpp(current_exe().unwrap().parent().unwrap());
+    luisa::sys::init_cpp(current_exe().unwrap().parent().unwrap().parent().unwrap());
     let device = match std::env::var("LUISA_TEST_DEVICE"){
         Ok(device) => device,
         Err(_) => "cpu".to_string(),

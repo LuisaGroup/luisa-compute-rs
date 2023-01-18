@@ -13,10 +13,12 @@ use luisa_compute_ir::{
     ir::{KernelModule, Type},
     Gc,
 };
+use parking_lot::Mutex;
 use std::sync::Once;
 static INIT_CPP: Once = Once::new();
 static mut CPP_CONTEXT: binding::LCContext = binding::LCContext { _0: 0 };
 static mut OLD_SIGABRT_HANDLER: libc::sighandler_t = 0;
+static CPP_MUTEX: Mutex<()> = Mutex::new(());
 fn restore_signal_handler() {
     unsafe {
         libc::signal(libc::SIGABRT, OLD_SIGABRT_HANDLER);
@@ -37,6 +39,7 @@ pub(crate) fn _signal_handler(signal: libc::c_int) {
 macro_rules! catch_abort {
     ($stmts:expr) => {
         unsafe {
+            let _guard = CPP_MUTEX.lock();
             OLD_SIGABRT_HANDLER =
                 libc::signal(libc::SIGABRT, _signal_handler as libc::sighandler_t);
             OLD_SIGABRT_HANDLER =
@@ -244,6 +247,10 @@ impl Backend for CppProxyBackend {
     }
 
     fn create_shader(&self, kernel: Gc<KernelModule>) -> backend::Result<api::Shader> {
+        //  let debug =
+        //     luisa_compute_ir::ir::debug::luisa_compute_ir_dump_human_readable(&kernel.module);
+        // let debug = std::ffi::CString::new(debug.as_ref()).unwrap();
+        // println!("{}", debug.to_str().unwrap());
         Ok(api::Shader(
             catch_abort!({
                 binding::luisa_compute_shader_create(

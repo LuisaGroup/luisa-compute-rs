@@ -11,6 +11,7 @@ luisa_compute_backend =  {path = "LuisaCompute/src/rust/luisa_compute_backend"}
 luisa_compute_ir = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_ir"}
 libc = "0.2"
 lazy_static = "1.4"
+parking_lot = "0.12.1"
 
 [build-dependencies]
 bindgen = "0.60"

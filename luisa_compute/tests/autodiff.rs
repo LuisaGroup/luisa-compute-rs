@@ -13,7 +13,6 @@ fn get_device()->Device {
         Ok(device) => device,
         Err(_) => "cpu".to_string(),
     };
-    let device = "cuda";
     luisa::create_device(&device).unwrap()
 }
 fn finite_difference(inputs: &[Float32], f: impl Fn(&[Float32]) -> Float32) -> Vec<Float32> {

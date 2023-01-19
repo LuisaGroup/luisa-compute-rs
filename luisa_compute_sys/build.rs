@@ -1,5 +1,5 @@
-use std::{env, fs, path::PathBuf};
 use std::path::Path;
+use std::{env, fs, path::PathBuf};
 
 use bindgen::{self, CargoCallbacks};
 
@@ -128,8 +128,8 @@ fn copy_dlls(out_dir: &PathBuf) {
         let path = entry.path();
         if path.extension().is_some()
             && (path.extension().unwrap() == "dll"
-            || path.extension().unwrap() == "so"
-            || path.extension().unwrap() == "dylib")
+                || path.extension().unwrap() == "so"
+                || path.extension().unwrap() == "dylib")
         {
             // let target_dir = get_output_path();
             let comps: Vec<_> = path.components().collect();
@@ -137,11 +137,12 @@ fn copy_dlls(out_dir: &PathBuf) {
                 let p_src = Path::new(&src);
                 let p_dst = Path::new(&dst);
                 let should_copy = p_dst.exists();
-                let should_copy = should_copy || {
-                    let src_metadata = fs::metadata(p_src).unwrap();
-                    let dst_metadata = fs::metadata(p_dst).unwrap();
-                    src_metadata.modified().unwrap() != dst_metadata.modified().unwrap()
+                let check_should_copy = || -> Option<bool> {
+                    let src_metadata = fs::metadata(p_src).ok()?;
+                    let dst_metadata = fs::metadata(p_dst).ok()?;
+                    Some(src_metadata.modified().ok()? != dst_metadata.modified().ok()?)
                 };
+                let should_copy = should_copy || check_should_copy().unwrap_or(true);
                 if should_copy {
                     std::fs::copy(p_src, p_dst).unwrap();
                 }

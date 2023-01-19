@@ -410,7 +410,7 @@ pub trait FloatVarTrait:
         //     panic!("expect Expr<f32>")
         // }
         current_scope(|s| {
-            let ret = s.call(Func::IsNan, &[self.node()], Self::type_());
+            let ret = s.call(Func::IsNan, &[self.node()], <Self::Bool>::type_());
             FromNode::from_node(ret)
         })
     }

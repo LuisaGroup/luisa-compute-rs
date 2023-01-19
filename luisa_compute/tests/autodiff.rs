@@ -13,6 +13,7 @@ fn get_device()->Device {
         Ok(device) => device,
         Err(_) => "cpu".to_string(),
     };
+    let device = "cuda";
     luisa::create_device(&device).unwrap()
 }
 fn finite_difference(inputs: &[Float32], f: impl Fn(&[Float32]) -> Float32) -> Vec<Float32> {
@@ -207,9 +208,21 @@ macro_rules! autodiff_2 {
         }
     };
 }
+#[derive(Clone, Copy, Debug, Value)]
+#[repr(C)]
+struct Foo {
+    x:f32,
+    y:f32,
+}
+
 autodiff_2!(autodiff_const, 1.0..10.0, |x: Float32, y: Float32| {
     let k = 2.0 / const_::<f32>(3.0);
     x * k + y * k
+});
+autodiff_2!(autodiff_struct, 1.0..10.0, |x: Float32, y: Float32| {
+    let foo = FooExpr::new(x, y);
+    let foo = foo.set_x(1.0 + foo.x());
+    foo.x() + foo.y()
 });
 autodiff_1!(autodiff_sin, -10.0..10.0, |x: Float32| x.sin());
 autodiff_1!(autodiff_cos, -10.0..10.0, |x: Float32| x.cos());

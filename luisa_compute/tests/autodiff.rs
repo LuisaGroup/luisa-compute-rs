@@ -589,7 +589,104 @@ fn autodiff_select() {
         }
     }
 }
-
+#[test]
+fn autodiff_select_nan() {
+    init();
+    let device = get_device();
+    let x: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let y: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let dy: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let mut rng = rand::thread_rng();
+    x.view(..).fill_fn(|_| rng.gen());
+    y.view(..).fill_fn(|_| rng.gen::<f32>() + 10.0);
+    let kernel = device
+        .create_kernel::<()>(&|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_dx = dx.var();
+            let buf_dy = dy.var();
+            let tid = dispatch_id().x();
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            autodiff(|| {
+                requires_grad(x);
+                requires_grad(y);
+                let cond = x.cmpgt(y);
+                let a = (x - y).sqrt();
+                let z = select(cond, a, y * 0.5);
+                backward(z);
+                buf_dx.write(tid, gradient(x));
+                buf_dy.write(tid, gradient(y));
+            });
+        })
+        .unwrap();
+    kernel.dispatch([1024, 1, 1]).unwrap();
+    let dx = dx.view(..).copy_to_vec();
+    let dy = dy.view(..).copy_to_vec();
+    let x = x.view(..).copy_to_vec();
+    let y = y.view(..).copy_to_vec();
+    let cache_dir = kernel.cache_dir().unwrap();
+    for i in 0..1024 {
+        assert!(x[i] < y[i]);
+        assert_eq!(dx[i], 0.0, "{} cache_dir: {:?}", dx[i], cache_dir);
+        assert_eq!(dy[i], 0.5, "{} cache_dir: {:?}", dy[i], cache_dir);
+    }
+}
+#[test]
+fn autodiff_if_nan() {
+    init();
+    let device = get_device();
+    let x: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let y: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let dy: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let mut rng = rand::thread_rng();
+    x.view(..).fill_fn(|_| rng.gen());
+    y.view(..).fill_fn(|_| rng.gen::<f32>() + 10.0);
+    let kernel = device
+        .create_kernel::<()>(&|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_dx = dx.var();
+            let buf_dy = dy.var();
+            let tid = dispatch_id().x();
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            autodiff(|| {
+                requires_grad(x);
+                requires_grad(y);
+                let cond = x.cmpgt(y);
+                let z = if_!(cond, {
+                    let a = (x - y).sqrt();
+                    a
+                }, else {
+                    y * 0.5
+                });
+                // cpu_dbg!(f32, z);
+                backward(z);
+                buf_dx.write(tid, gradient(x));
+                buf_dy.write(tid, gradient(y));
+            });
+        })
+        .unwrap();
+    kernel.dispatch([1024, 1, 1]).unwrap();
+    let dx = dx.view(..).copy_to_vec();
+    let dy = dy.view(..).copy_to_vec();
+    let x = x.view(..).copy_to_vec();
+    let y = y.view(..).copy_to_vec();
+    let cache_dir = kernel.cache_dir().unwrap();
+    for i in 0..1024 {
+        assert!(x[i] < y[i]);
+        // if x[i] > y[i] {
+        //     assert_eq!(dx[i], 4.0, "{} cache_dir: {:?}", dx[i], cache_dir);
+        //     assert_eq!(dy[i], 0.0, "{} cache_dir: {:?}", dy[i], cache_dir);
+        // } else {
+        assert_eq!(dx[i], 0.0, "{} cache_dir: {:?}", dx[i], cache_dir);
+        assert_eq!(dy[i], 0.5, "{} cache_dir: {:?}", dy[i], cache_dir);
+        // }
+    }
+}
 #[test]
 fn autodiff_if_phi() {
     init();

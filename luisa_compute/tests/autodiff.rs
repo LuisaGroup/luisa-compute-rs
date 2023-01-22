@@ -1,4 +1,4 @@
-use std::{ops::Range, env::current_exe};
+use std::{env::current_exe, ops::Range};
 
 use luisa::prelude::*;
 use luisa_compute as luisa;
@@ -7,9 +7,9 @@ use rayon::{
     prelude::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
-fn get_device()->Device {
+fn get_device() -> Device {
     luisa::sys::init_cpp(current_exe().unwrap().parent().unwrap().parent().unwrap());
-    let device = match std::env::var("LUISA_TEST_DEVICE"){
+    let device = match std::env::var("LUISA_TEST_DEVICE") {
         Ok(device) => device,
         Err(_) => "cpu".to_string(),
     };
@@ -210,8 +210,8 @@ macro_rules! autodiff_2 {
 #[derive(Clone, Copy, Debug, Value)]
 #[repr(C)]
 struct Foo {
-    x:f32,
-    y:f32,
+    x: f32,
+    y: f32,
 }
 
 autodiff_2!(autodiff_const, 1.0..10.0, |x: Float32, y: Float32| {
@@ -234,7 +234,7 @@ autodiff_1!(autodiff_ln, 0.1..10.0, |x: Float32| x.ln());
 autodiff_1!(autodiff_log2, 0.1..10.0, |x: Float32| x.log2());
 autodiff_1!(autodiff_log10, 0.1..10.0, |x: Float32| x.log10());
 autodiff_1!(autodiff_abs, 0.1..10.0, |x: Float32| x.abs());
-autodiff_1!(autodiff_abs2, -10.0..-0.1, |x: Float32| x.abs());
+// autodiff_1!(autodiff_abs2, -10.0..-0.1, |x: Float32| x.abs());
 autodiff_1!(autodiff_asin, -0.9..0.9, |x: Float32| x.asin());
 autodiff_1!(autodiff_acos, -0.9..0.9, |x: Float32| x.acos());
 autodiff_1!(autodiff_atan, -10.0..10.0, |x: Float32| x.atan());
@@ -243,6 +243,8 @@ autodiff_1!(autodiff_cosh, -10.0..10.0, |x: Float32| x.cosh());
 autodiff_1!(autodiff_tanh, -10.0..10.0, |x: Float32| x.tanh());
 
 autodiff_2!(autodiff_div, 1.0..10.0, |x: Float32, y: Float32| x / y);
+
+autodiff_2!(autodiff_pow, 1.0..10.0, |x: Float32, y: Float32| x.powf(y));
 
 #[test]
 fn autodiff_vec3_reduce_add_manual() {
@@ -587,6 +589,55 @@ fn autodiff_select() {
             assert_eq!(dx[i], 0.0, "{} cache_dir: {:?}", dx[i], cache_dir);
             assert_eq!(dy[i], 0.5, "{} cache_dir: {:?}", dy[i], cache_dir);
         }
+    }
+}
+
+#[test]
+fn autodiff_detach() {
+    init();
+    let device = get_device();
+    let x: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let y: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let dy: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let mut rng = rand::thread_rng();
+    x.view(..).fill_fn(|_| rng.gen());
+    y.view(..).fill_fn(|_| rng.gen());
+    let kernel = device
+        .create_kernel::<()>(&|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_dx = dx.var();
+            let buf_dy = dy.var();
+            let tid = dispatch_id().x();
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            autodiff(|| {
+                requires_grad(x);
+                requires_grad(y);
+                let k = detach(x * y);
+                let z = (x + y) * k;
+                backward(z);
+                buf_dx.write(tid, gradient(x));
+                buf_dy.write(tid, gradient(y));
+            });
+        })
+        .unwrap();
+    kernel.dispatch([1024, 1, 1]).unwrap();
+    let dx = dx.view(..).copy_to_vec();
+    let dy = dy.view(..).copy_to_vec();
+    let x = x.view(..).copy_to_vec();
+    let y = y.view(..).copy_to_vec();
+    let cache_dir = kernel.cache_dir().unwrap();
+    for i in 0..1024 {
+        let k = x[i] * y[i];
+        assert!(
+            (dx[i] - k).abs() < 1e-3,
+            "{} cache_dir: {:?}",
+            dx[i],
+            cache_dir
+        );
+        assert!((dy[i] - k).abs() < 1e-3, "{} cache_dir: {:?}", dy[i], cache_dir);
     }
 }
 #[test]

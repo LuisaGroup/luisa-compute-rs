@@ -1529,6 +1529,30 @@ pub fn gradient<T: Value, U: ExprProxy<T>>(var: U) -> U {
 pub fn grad<T: Value, U: ExprProxy<T>>(var: U) -> U {
     gradient(var)
 }
+// pub fn detach<R: Aggregate>(body: impl FnOnce() -> R) -> R {
+//     RECORDER.with(|r| {
+//         let mut r = r.borrow_mut();
+//         let s = &mut r.scopes;
+//         s.push(IrBuilder::new());
+//     });
+//     let ret = body();
+//     let fwd = pop_scope();
+//     current_scope(|b| {
+//         let node = new_node(Node::new(Gc::new(Instruction::AdDetach(fwd)), Type::void()));
+//         b.append(node);
+//     });
+//     let nodes = ret.to_vec_nodes();
+//     let nodes: Vec<_> = nodes
+//         .iter()
+//         .map(|n| current_scope(|b| b.call(Func::Detach, &[*n], n.type_())))
+//         .collect();
+//     R::from_vec_nodes(nodes)
+// }
+pub fn detach<T: FromNode>(v: T) -> T {
+    let v = v.node();
+    let node = current_scope(|b| b.call(Func::Detach, &[v], v.type_()));
+    T::from_node(node)
+}
 pub fn autodiff(body: impl FnOnce()) {
     AD_CONTEXT.with(|c| {
         let mut c = c.borrow_mut();

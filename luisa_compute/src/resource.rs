@@ -9,6 +9,7 @@ use api::BufferUploadCommand;
 use lang::BindlessArrayVar;
 use lang::BufferVar;
 use lang::Value;
+use libc::c_void;
 use runtime::*;
 pub struct Buffer<T: Value> {
     pub(crate) device: Device,
@@ -101,6 +102,9 @@ impl<T: Value> Buffer<T> {
     // pub fn copy_from<'a>(&'a self, data: &'a [T]) -> Command<'a> {
     //     self.view(..).copy_from(data)
     // }
+    pub fn native_handle(&self) -> *mut c_void {
+        self.device.inner.buffer_native_handle(self.handle())
+    }
 
     pub fn view<'a, S: RangeBounds<u64>>(&'a self, range: S) -> BufferView<'a, T> {
         let lower = range.start_bound();

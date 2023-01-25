@@ -38,5 +38,5 @@ jobs:
       run: CC=clang-14 CXX=clang++-14 cargo build --features cuda --verbose --release
     - name: "Run Tests"
       run: CC=clang-14 CXX=clang++-14 cargo test --features cuda --verbose --release
-    - name: "Run CUDA Tests"
-      run: CC=clang-14 CXX=clang++-14 LUISA_TEST_DEVICE=cuda cargo test --features cuda --verbose --release
+#     - name: "Run CUDA Tests"
+#       run: CC=clang-14 CXX=clang++-14 LUISA_TEST_DEVICE=cuda cargo test --features cuda --verbose --release

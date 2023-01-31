@@ -4,6 +4,7 @@ use std::sync::Arc;
 pub mod lang;
 pub mod resource;
 pub mod runtime;
+pub mod rtx;
 pub use luisa_compute_backend as backend;
 use luisa_compute_backend::Backend;
 pub use luisa_compute_ir::Gc;
@@ -16,6 +17,7 @@ pub mod prelude {
     pub use luisa_compute_derive::*;
     pub use resource::*;
     pub use runtime::*;
+    pub use rtx::*;
 }
 pub use luisa_compute_sys as sys;
 use prelude::{Device, DeviceHandle};

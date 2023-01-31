@@ -22,6 +22,8 @@ use ir::{
     transform::{self, Transform},
     CRc,
 };
+use luisa_compute_api_types::Accel;
+use luisa_compute_derive::__Value;
 use luisa_compute_ir as ir;
 
 pub use luisa_compute_ir::{
@@ -999,7 +1001,40 @@ pub struct VolumeVar<T: Texel> {
     handle: Option<Arc<TextureHandle>>,
     _marker: std::marker::PhantomData<T>,
 }
+pub struct AccelVar {}
 
+#[repr(C)]
+#[derive(Clone, Copy, __Value)]
+pub struct RtxRay {
+    pub orig_x: f32,
+    pub orig_y: f32,
+    pub orig_z: f32,
+    pub tmin: f32,
+    pub dir_x: f32,
+    pub dir_y: f32,
+    pub dir_z: f32,
+    pub tmax: f32,
+}
+#[repr(C)]
+#[derive(Clone, Copy, __Value)]
+pub struct RtxHit {
+    pub inst_id: u32,
+    pub prim_id: u32,
+    pub u: f32,
+    pub v: f32,
+}
+impl AccelVar {
+    pub fn trace_closest(&self, ray: Expr<RtxRay>) -> Expr<RtxHit> {
+        FromNode::from_node(current_scope(|b| {
+            b.call(Func::TraceClosest, &[ray.node()], RtxHit::type_())
+        }))
+    }
+    pub fn trace_any(&self, ray: Expr<RtxRay>) -> Expr<bool> {
+        FromNode::from_node(current_scope(|b| {
+            b.call(Func::TraceAny, &[ray.node()], bool::type_())
+        }))
+    }
+}
 pub type Tex2DVar<T> = ImageVar<T>;
 pub type Tex3DVar<T> = VolumeVar<T>;
 

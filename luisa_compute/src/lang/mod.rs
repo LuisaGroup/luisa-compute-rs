@@ -1032,12 +1032,12 @@ pub struct RtxHit {
 impl AccelVar {
     pub fn trace_closest(&self, ray: Expr<RtxRay>) -> Expr<RtxHit> {
         FromNode::from_node(current_scope(|b| {
-            b.call(Func::TraceClosest, &[ray.node()], RtxHit::type_())
+            b.call(Func::RayTracingTraceClosest, &[ray.node()], RtxHit::type_())
         }))
     }
     pub fn trace_any(&self, ray: Expr<RtxRay>) -> Expr<bool> {
         FromNode::from_node(current_scope(|b| {
-            b.call(Func::TraceAny, &[ray.node()], bool::type_())
+            b.call(Func::RayTracingTraceAny, &[ray.node()], bool::type_())
         }))
     }
 }

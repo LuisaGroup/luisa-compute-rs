@@ -299,9 +299,44 @@ impl Backend for CppProxyBackend {
         todo!()
     }
 
-    fn is_cpu_backend(&self) -> bool {
-        false
+    fn set_buffer_type(&self, _buffer: api::Buffer, _ty: Gc<Type>) {}
+
+    fn create_mesh(
+        &self,
+        hint: api::AccelUsageHint,
+        ty: api::MeshType,
+        allow_compact: bool,
+        allow_update: bool,
+    ) -> api::Mesh {
+        todo!()
     }
 
-    fn set_buffer_type(&self, _buffer: api::Buffer, _ty: Gc<Type>) {}
+    fn destroy_mesh(&self, mesh: api::Mesh) {
+        todo!()
+    }
+
+    fn create_accel(
+        &self,
+        hint: api::AccelUsageHint,
+        allow_compact: bool,
+        allow_update: bool,
+    ) -> api::Accel {
+        todo!()
+    }
+
+    fn destory_accel(&self, accel: api::Accel) {
+        todo!()
+    }
+
+    fn mesh_native_handle(&self, mesh: api::Mesh) -> *mut libc::c_void {
+        todo!()
+    }
+
+    fn accel_native_handle(&self, accel: api::Accel) -> *mut libc::c_void {
+        todo!()
+    }
+
+    fn query(&self, property: &str) -> Option<String> {
+        todo!()
+    }
 }

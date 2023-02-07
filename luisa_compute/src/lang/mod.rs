@@ -292,7 +292,13 @@ impl<T: Value> CpuFn<T> {
             let mut r = r.borrow_mut();
             assert!(r.lock);
             assert!(
-                r.device.as_ref().unwrap().inner.is_cpu_backend(),
+                r.device
+                    .as_ref()
+                    .unwrap()
+                    .inner
+                    .query("device_name")
+                    .unwrap()
+                    == "cpu",
                 "CpuFn can only be used in cpu backend"
             );
             let addr = CRc::as_ptr(&self.op) as u64;
@@ -1633,7 +1639,13 @@ pub fn autodiff(body: impl FnOnce()) {
 pub fn is_cpu_backend() -> bool {
     RECORDER.with(|r| {
         let r = r.borrow();
-        r.device.as_ref().unwrap().inner.is_cpu_backend()
+        r.device
+            .as_ref()
+            .unwrap()
+            .inner
+            .query("device_name")
+            .map(|s| s == "cpu")
+            .unwrap_or(false)
     })
 }
 pub fn __env_need_backtrace() -> bool {

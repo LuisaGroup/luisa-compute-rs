@@ -1,6 +1,7 @@
 use crate::backend::{Backend, BackendError};
 use crate::*;
 use crate::{lang::Value, resource::*};
+use api::AccelUsageHint;
 use lang::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSigature};
 pub use luisa_compute_api_types as api;
 use std::any::Any;
@@ -126,6 +127,37 @@ impl Device {
             }),
         })
     }
+    pub fn create_mesh(
+        &self,
+        hint: api::AccelUsageHint,
+        ty: api::MeshType,
+        allow_compact: bool,
+        allow_update: bool,
+    ) -> backend::Result<rtx::Mesh> {
+        let mesh = self
+            .inner
+            .create_mesh(hint, ty, allow_compact, allow_update);
+        Ok(rtx::Mesh {
+            handle: Arc::new(rtx::MeshHandle {
+                device: self.clone(),
+                handle: mesh,
+            }),
+        })
+    }
+    pub fn create_accel(
+        &self,
+        hint: api::AccelUsageHint,
+        allow_compact: bool,
+        allow_update: bool,
+    ) -> backend::Result<rtx::Accel> {
+        let accel = self.inner.create_accel(hint, allow_compact, allow_update);
+        Ok(rtx::Accel {
+            handle: Arc::new(rtx::AccelHandle {
+                device: self.clone(),
+                handle: accel,
+            }),
+        })
+    }
     // not recommend to use directly
     pub fn __create_kernel_raw(
         &self,
@@ -147,7 +179,6 @@ impl Device {
         let mut builder = KernelBuilder::new(self.clone());
         KernelBuildFn::build(&f, &mut builder)
     }
-
 }
 #[macro_export]
 macro_rules! fn_n_args {

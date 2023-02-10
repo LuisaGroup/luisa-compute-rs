@@ -18,6 +18,7 @@ pub mod prelude {
     pub use resource::*;
     pub use runtime::*;
     pub use rtx::*;
+    pub use api::{AccelUsageHint, AccelBuildModificationFlags, MeshType};
 }
 pub use luisa_compute_sys as sys;
 use prelude::{Device, DeviceHandle};

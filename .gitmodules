@@ -2,4 +2,4 @@
 [submodule "luisa_compute_sys/LuisaCompute"]
 	path = luisa_compute_sys/LuisaCompute
 	url = https://github.com/LuisaGroup/LuisaCompute.git
-	branch = merge-next
+	branch = next

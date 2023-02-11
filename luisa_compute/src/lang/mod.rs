@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use std::process::abort;
 use std::{any::Any, collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 
-use crate::ResourceTracker;
 use crate::lang::traits::VarCmp;
+use crate::prelude::AccelHandle;
 use crate::{
     backend,
     prelude::{Device, Kernel, KernelArg, RawKernel},
@@ -13,8 +13,9 @@ use crate::{
         TextureHandle,
     },
 };
+use crate::{rtx, ResourceTracker};
 pub use ir::ir::NodeRef;
-use ir::ir::{BindlessArrayBinding, SwitchCase, INVALID_REF};
+use ir::ir::{AccelBinding, BindlessArrayBinding, SwitchCase, INVALID_REF};
 use ir::{
     ir::{
         new_node, BasicBlock, Binding, BufferBinding, Capture, Const, CpuCustomOp, Func,
@@ -133,9 +134,12 @@ impl FromNode for bool {
 unsafe impl _Mask for bool {}
 unsafe impl _Mask for Bool {}
 
-pub trait ExprProxy<T>: Copy + Aggregate + FromNode {}
+pub trait ExprProxy<T>: Copy + Aggregate + FromNode {
+    type Elem: Value;
+}
 
 pub trait VarProxy<T: Value>: Copy + Aggregate + FromNode {
+    type Elem: Value;
     fn store<U: Into<Expr<T>>>(&self, value: U) {
         let value = value.into();
         _store(self, &value);
@@ -203,8 +207,12 @@ macro_rules! impl_prim {
                 self.node
             }
         }
-        impl ExprProxy<$t> for PrimExpr<$t> {}
-        impl VarProxy<$t> for PrimVar<$t> {}
+        impl ExprProxy<$t> for PrimExpr<$t> {
+            type Elem = $t;
+        }
+        impl VarProxy<$t> for PrimVar<$t> {
+            type Elem = $t;
+        }
         impl Value for $t {
             type Expr = PrimExpr<$t>;
             type Var = PrimVar<$t>;
@@ -420,6 +428,19 @@ pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
         _ => todo!(),
     }
 }
+
+#[macro_export]
+macro_rules! var {
+    ($t:ty) => {
+        local_zeroed::<$t>()
+    };
+    ($t:ty, 0) => {
+        local_zeroed::<$t>()
+    };
+    ($t:ty, $init:expr)=>{
+        local::<$t>($init.into())
+    }
+}
 pub fn local<T: Value>(init: Expr<T>) -> Var<T> {
     Var::<T>::from_node(current_scope(|b| b.local(init.node())))
 }
@@ -557,8 +578,12 @@ impl<T: Value, const N: usize> Aggregate for ArrayVar<T, N> {
         Self::from_node(iter.next().unwrap())
     }
 }
-impl<T: Value, const N: usize> ExprProxy<[T; N]> for ArrayExpr<T, N> {}
-impl<T: Value, const N: usize> VarProxy<[T; N]> for ArrayVar<T, N> {}
+impl<T: Value, const N: usize> ExprProxy<[T; N]> for ArrayExpr<T, N> {
+    type Elem = [T; N];
+}
+impl<T: Value, const N: usize> VarProxy<[T; N]> for ArrayVar<T, N> {
+    type Elem = [T; N];
+}
 impl<T: Value, const N: usize> ArrayVar<T, N> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
@@ -1008,7 +1033,11 @@ pub struct VolumeVar<T: Texel> {
     handle: Option<Arc<TextureHandle>>,
     _marker: std::marker::PhantomData<T>,
 }
-pub struct AccelVar {}
+pub struct AccelVar {
+    node: NodeRef,
+    #[allow(dead_code)]
+    handle: Option<Arc<AccelHandle>>,
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, __Value)]
@@ -1040,6 +1069,33 @@ impl AccelVar {
         FromNode::from_node(current_scope(|b| {
             b.call(Func::RayTracingTraceAny, &[ray.node()], bool::type_())
         }))
+    }
+    pub fn new(accel: &rtx::Accel) -> Self {
+        let node = RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            assert!(r.lock, "BufferVar must be created from within a kernel");
+            let handle: u64 = accel.handle().0;
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
+                *node
+            } else {
+                let node = new_node(Node::new(Gc::new(Instruction::Accel), Type::void()));
+                let i = r.captured_buffer.len();
+                r.captured_buffer.insert(
+                    handle,
+                    (
+                        i,
+                        node,
+                        Binding::Accel(AccelBinding { handle }),
+                        accel.handle.clone(),
+                    ),
+                );
+                node
+            }
+        });
+        Self {
+            node,
+            handle: Some(accel.handle.clone()),
+        }
     }
 }
 pub type Tex2DVar<T> = ImageVar<T>;
@@ -1086,6 +1142,12 @@ impl KernelParameter for BindlessArrayVar {
     type Arg = BindlessArray;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.bindless_array()
+    }
+}
+impl KernelParameter for AccelVar {
+    type Arg = rtx::Accel;
+    fn def_param(builder: &mut KernelBuilder) -> Self {
+        builder.accel()
     }
 }
 macro_rules! impl_kernel_param_for_tuple {
@@ -1143,9 +1205,14 @@ impl KernelBuilder {
         todo!()
     }
     pub fn bindless_array(&mut self) -> BindlessArrayVar {
-        let node = new_node(Node::new(Gc::new(Instruction::Bindless), u32::type_()));
+        let node = new_node(Node::new(Gc::new(Instruction::Bindless), Type::void()));
         self.args.push(node);
         BindlessArrayVar { node, handle: None }
+    }
+    pub fn accel(&mut self) -> AccelVar {
+        let node = new_node(Node::new(Gc::new(Instruction::Accel), Type::void()));
+        self.args.push(node);
+        AccelVar { node, handle: None }
     }
     pub(crate) fn build(
         device: crate::runtime::Device,

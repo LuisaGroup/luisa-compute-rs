@@ -102,6 +102,16 @@ pub struct Mat3 {
 pub struct Mat4 {
     pub cols: [Vec4; 4],
 }
+impl Mat4 {
+    pub fn into_affine3x4(&self)->[f32;12] {
+        [
+            self.cols[0].x, self.cols[0].y, self.cols[0].z,
+            self.cols[1].x, self.cols[1].y, self.cols[1].z,
+            self.cols[2].x, self.cols[2].y, self.cols[2].z,
+            self.cols[3].x, self.cols[3].y, self.cols[3].z,
+        ]
+    }
+}
 impl From<Mat2> for glam::Mat2 {
     #[inline]
     fn from(m: Mat2) -> Self {
@@ -302,13 +312,13 @@ macro_rules! impl_vec_proxy {
             }
         }
         impl ExprProxy<$vec> for $expr_proxy {
-
+            type Elem = $vec;
         }
         impl Selectable for $expr_proxy {
 
         }
         impl VarProxy<$vec> for $var_proxy {
-
+            type Elem = $vec;
         }
         impl From<$var_proxy> for $expr_proxy {
             fn from(var: $var_proxy) -> Self {
@@ -383,7 +393,7 @@ macro_rules! impl_mat_proxy {
             }
         }
         impl ExprProxy<$mat> for $expr_proxy {
-
+            type Elem = $mat;
         }
         impl Selectable for $expr_proxy {
         }
@@ -396,6 +406,7 @@ macro_rules! impl_mat_proxy {
             }
         }
         impl VarProxy<$mat> for $var_proxy {
+            type Elem = $mat;
         }
         impl From<$var_proxy> for $expr_proxy {
             fn from(var: $var_proxy) -> Self {

@@ -6,9 +6,7 @@ use luisa_compute as luisa;
 fn main() {
     init();
     init_logger();
-    // sys::init_cpp(current_exe().unwrap().parent().unwrap().parent().unwrap());
-    let device = std::env::args().nth(1).unwrap_or("cpu".to_string());
-    let device = create_device(&device).unwrap();
+    let device = create_cpu_device().unwrap();
     let x = device.create_buffer::<f32>(1024).unwrap();
     let y = device.create_buffer::<f32>(1024).unwrap();
     let z = device.create_buffer::<f32>(1024).unwrap();
@@ -22,7 +20,9 @@ fn main() {
             let tid = dispatch_id().x();
             let x = buf_x.read(tid);
             let y = buf_y.read(tid);
-            buf_z.write(tid, x + y);
+            let vx = var!(f32); // create a local mutable variable
+            vx.store(x);
+            buf_z.write(tid, vx.load() + y);
         })
         .unwrap();
     kernel.dispatch([1024, 1, 1], &z).unwrap();

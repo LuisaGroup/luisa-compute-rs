@@ -28,7 +28,7 @@ fn main() {
                 let o = make_float3(0.0, 0.0, -2.0);
                 let d = make_float3(0.0, 0.0, 1.0);
                 let sphere = spheres.read(0);
-                let t = local::<f32>(Float32::from(0.0));
+                let t = var!(f32);
                 while_!(t.load().cmplt(10.0), {
                     let p = o + d * t.load();
                     let d = (p - sphere.center()).length() - sphere.radius();

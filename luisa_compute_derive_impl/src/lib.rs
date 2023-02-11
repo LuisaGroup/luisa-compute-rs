@@ -184,7 +184,7 @@ impl Compiler {
             }
             impl #crate_path ::Selectable for #expr_proxy_name {}
             impl #crate_path ::ExprProxy<#name> for #expr_proxy_name {
-
+                type Elem = #name;
             }
             impl #crate_path ::FromNode for #var_proxy_name {
                 #[allow(unused_assignments)]
@@ -196,6 +196,7 @@ impl Compiler {
                 }
             }
             impl #crate_path ::VarProxy<#name> for #var_proxy_name {
+                type Elem = #name;
             }
             impl From<#var_proxy_name> for #expr_proxy_name {
                 fn from(var: #var_proxy_name) -> Self {

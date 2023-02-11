@@ -10,7 +10,7 @@ use luisa_compute_backend::Backend;
 pub use luisa_compute_ir::Gc;
 pub mod prelude {
     pub use crate::*;
-    pub use api::{AccelBuildModificationFlags, AccelUsageHint, MeshType};
+    pub use api::{AccelBuildModificationFlags, AccelBuildRequest, AccelUsageHint, MeshType};
     pub use glam;
     pub use lang::math::*;
     pub use lang::traits::*;

@@ -4,6 +4,7 @@ use crate::{lang::Value, resource::*};
 use api::AccelUsageHint;
 use lang::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSigature};
 pub use luisa_compute_api_types as api;
+use rtx::Accel;
 use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -157,8 +158,8 @@ impl Device {
                 device: self.clone(),
                 handle: accel,
             }),
-            mesh_handles: vec![],
-            modifications: HashMap::new(),
+            mesh_handles: RefCell::new(Vec::new()),
+            modifications: RefCell::new(HashMap::new()),
         })
     }
     // not recommend to use directly
@@ -341,6 +342,9 @@ impl ArgEncoder {
         self.args
             .push(api::Argument::BindlessArray(array.handle.handle));
     }
+    pub fn accel(&mut self, accel: &Accel) {
+        self.args.push(api::Argument::Accel(accel.handle.handle));
+    }
 }
 pub trait KernelArg {
     type Parameter: KernelParameter;
@@ -368,6 +372,12 @@ impl KernelArg for BindlessArray {
     type Parameter = lang::BindlessArrayVar;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.bindless_array(self);
+    }
+}
+impl KernelArg for Accel {
+    type Parameter = lang::AccelVar;
+    fn encode(&self, encoder: &mut ArgEncoder) {
+        encoder.accel(self)
     }
 }
 macro_rules! impl_kernel_arg_for_tuple {

@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use std::process::abort;
 use std::{any::Any, collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 
+use crate::ResourceTracker;
 use crate::lang::traits::VarCmp;
 use crate::{
     backend,
@@ -720,7 +721,7 @@ impl BindlessArrayVar {
                         i,
                         node,
                         Binding::BindlessArray(BindlessArrayBinding { handle }),
-                        Arc::new(array.handle.clone()),
+                        array.handle.clone(),
                     ),
                 );
                 node
@@ -753,7 +754,7 @@ impl<T: Value> BufferVar<T> {
                             size: buffer.size_bytes(),
                             offset: 0,
                         }),
-                        Arc::new(buffer.handle.clone()),
+                        buffer.handle.clone(),
                     ),
                 );
                 node
@@ -1161,7 +1162,7 @@ impl KernelBuilder {
         body(self);
         RECORDER.with(
             |r| -> Result<crate::runtime::RawKernel, crate::backend::BackendError> {
-                let mut resource_tracker: Vec<Arc<dyn Any>> = Vec::new();
+                let mut resource_tracker = ResourceTracker::new();
                 let mut r = r.borrow_mut();
                 assert!(r.lock);
                 r.lock = false;
@@ -1177,7 +1178,7 @@ impl KernelBuilder {
                         node: node,
                         binding: binding,
                     });
-                    resource_tracker.push(handle);
+                    resource_tracker.add_any(handle);
                 }
                 let mut cpu_custom_ops: Vec<_> = r.cpu_custom_ops.values().cloned().collect();
                 cpu_custom_ops.sort_by_key(|(i, _)| *i);

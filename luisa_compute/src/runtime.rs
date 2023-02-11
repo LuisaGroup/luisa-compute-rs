@@ -6,6 +6,7 @@ use lang::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSigature};
 pub use luisa_compute_api_types as api;
 use std::any::Any;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::mem::align_of;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -156,6 +157,8 @@ impl Device {
                 device: self.clone(),
                 handle: accel,
             }),
+            mesh_handles: vec![],
+            modifications: HashMap::new(),
         })
     }
     // not recommend to use directly
@@ -300,13 +303,13 @@ pub struct Command<'a> {
     pub(crate) inner: api::Command,
     pub(crate) marker: std::marker::PhantomData<&'a ()>,
     #[allow(dead_code)]
-    pub(crate) resource_tracker: Vec<Box<dyn Any>>,
+    pub(crate) resource_tracker: ResourceTracker,
 }
 pub struct RawKernel {
     pub(crate) device: Device,
     pub(crate) shader: api::Shader, // strange naming, huh?
     #[allow(dead_code)]
-    pub(crate) resource_tracker: Vec<Arc<dyn Any>>,
+    pub(crate) resource_tracker: ResourceTracker,
 }
 pub struct ArgEncoder {
     pub(crate) args: Vec<api::Argument>,
@@ -404,7 +407,7 @@ impl RawKernel {
                 dispatch_size,
             }),
             marker: std::marker::PhantomData,
-            resource_tracker: vec![],
+            resource_tracker: ResourceTracker::new(),
         }
     }
     pub fn dispatch(&self, args: &ArgEncoder, dispatch_size: [u32; 3]) -> backend::Result<()> {

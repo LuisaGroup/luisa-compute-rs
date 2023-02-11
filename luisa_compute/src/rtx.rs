@@ -1,6 +1,6 @@
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashMap, marker::PhantomData};
 
-use crate::prelude::Device;
+use crate::prelude::{Device, Mat4, Command};
 use luisa_compute_api_types as api;
 pub(crate) struct AccelHandle {
     pub(crate) device: Device,
@@ -13,6 +13,8 @@ impl Drop for AccelHandle {
 }
 pub struct Accel {
     pub(crate) handle: Arc<AccelHandle>,
+    pub(crate) mesh_handles: Vec<Arc<MeshHandle>>,
+    pub(crate) modifications: HashMap<usize, api::AccelBuildModification>,
 }
 pub(crate) struct MeshHandle {
     pub(crate) device: Device,
@@ -21,4 +23,28 @@ pub(crate) struct MeshHandle {
 
 pub struct Mesh {
     pub(crate) handle: Arc<MeshHandle>,
+}
+impl Accel {
+    pub fn push_mesh(&self,  mesh:&Mesh, transform:Mat4, visible:bool, opaque:bool) {
+
+    }
+    pub fn set_mesh(&self, index:usize, mesh:&Mesh, transform:Mat4, visible:bool, opaque:bool) {
+
+    }
+    pub fn pop(&self){
+
+    }
+    pub fn update(&self){
+
+    }
+    pub unsafe fn update_async<'a>(&'a self) -> Command<'a> {
+        todo!()
+        // Command{
+        //     marker:PhantomData,
+        //     inner:api::Command::AccelBuild(api::AccelBuildCommand{
+        //         accel:self.handle.handle,
+
+        //     })
+        // }
+    }
 }

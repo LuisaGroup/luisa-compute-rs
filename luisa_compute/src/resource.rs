@@ -35,6 +35,8 @@ pub struct BufferView<'a, T: Value> {
 impl<'a, T: Value> BufferView<'a, T> {
     pub unsafe fn copy_to_async(&'a self, data: &'a mut [T]) -> Command<'a> {
         assert_eq!(data.len(), self.len);
+        let mut rt = ResourceTracker::new();
+        rt.add(self.buffer.handle.clone());
         Command {
             inner: api::Command::BufferDownload(BufferDownloadCommand {
                 buffer: self.buffer.handle.handle,
@@ -43,7 +45,7 @@ impl<'a, T: Value> BufferView<'a, T> {
                 data: data.as_mut_ptr() as *mut u8,
             }),
             marker: std::marker::PhantomData,
-            resource_tracker: vec![Box::new(self.buffer.handle.clone())],
+            resource_tracker: rt,
         }
     }
     pub fn copy_to_vec(&self) -> Vec<T> {
@@ -63,6 +65,8 @@ impl<'a, T: Value> BufferView<'a, T> {
     }
     pub unsafe fn copy_from_async(&'a self, data: &'a [T]) -> Command<'a> {
         assert_eq!(data.len(), self.len);
+        let mut rt = ResourceTracker::new();
+        rt.add(self.buffer.handle.clone());
         Command {
             inner: api::Command::BufferUpload(BufferUploadCommand {
                 buffer: self.buffer.handle.handle,
@@ -71,7 +75,7 @@ impl<'a, T: Value> BufferView<'a, T> {
                 data: data.as_ptr() as *const u8,
             }),
             marker: std::marker::PhantomData,
-            resource_tracker: vec![Box::new(self.buffer.handle.clone())],
+            resource_tracker: rt,
         }
     }
     pub fn copy_from(&self, data: &[T]) {
@@ -255,10 +259,12 @@ impl BindlessArray {
         }
     }
     pub unsafe fn update_async<'a>(&'a self) -> Command<'a> {
+        let mut rt = ResourceTracker::new();
+        rt.add(self.handle.clone());
         Command {
             inner: api::Command::BindlessArrayUpdate(self.handle.handle),
             marker: std::marker::PhantomData,
-            resource_tracker: vec![Box::new(self.handle.clone())],
+            resource_tracker: rt,
         }
     }
 }

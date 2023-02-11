@@ -1,24 +1,24 @@
 #![allow(unused_unsafe)]
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 
 pub mod lang;
 pub mod resource;
-pub mod runtime;
 pub mod rtx;
+pub mod runtime;
 pub use luisa_compute_backend as backend;
 use luisa_compute_backend::Backend;
 pub use luisa_compute_ir::Gc;
 pub mod prelude {
     pub use crate::*;
+    pub use api::{AccelBuildModificationFlags, AccelUsageHint, MeshType};
     pub use glam;
     pub use lang::math::*;
     pub use lang::traits::*;
     pub use lang::*;
     pub use luisa_compute_derive::*;
     pub use resource::*;
-    pub use runtime::*;
     pub use rtx::*;
-    pub use api::{AccelUsageHint, AccelBuildModificationFlags, MeshType};
+    pub use runtime::*;
 }
 pub use luisa_compute_sys as sys;
 use prelude::{Device, DeviceHandle};
@@ -26,7 +26,6 @@ use std::sync::Once;
 static INIT: Once = Once::new();
 pub fn init() {
     INIT.call_once(|| unsafe {
-
         let gc_ctx = luisa_compute_ir::ir::luisa_compute_gc_create_context();
         luisa_compute_ir::ir::luisa_compute_gc_set_context(gc_ctx);
 
@@ -66,4 +65,20 @@ pub fn create_device(device: &str) -> backend::Result<Device> {
             default_stream,
         }),
     })
+}
+pub struct ResourceTracker {
+    resources: Vec<Arc<dyn Any>>,
+}
+impl ResourceTracker {
+    pub fn add<T: Any>(&mut self, ptr: Arc<T>) -> &mut Self {
+        self.resources.push(ptr);
+        self
+    }
+    pub fn add_any(&mut self, ptr: Arc<dyn Any>) -> &mut Self {
+        self.resources.push(ptr);
+        self
+    }
+    pub fn new() -> Self {
+        Self { resources: vec![] }
+    }
 }

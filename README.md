@@ -1,5 +1,5 @@
 # luisa-compute-rs 
-Rust frontend to LuisaCompute and more! (WIP)
+Rust frontend to LuisaCompute and more! (WIP) ⚠ A stable version will be released with the next version of LuisaCompute ⚠. See [next](https://github.com/LuisaGroup/luisa-compute-rs/tree/next) branch for ongoing development.
 
 ## Table of Contents
 * [Overview](#overview)
@@ -151,7 +151,30 @@ v.set_x(v_ld.x() + 1.0);
 
 ```
 ### Polymorphism
-TODO
+We prvoide the similar `Polymorphic<dyn Trait>` construct as in the C++ DSL.
+```rust
+trait Area {
+    fn area(&self) -> Float32;
+}
+#[derive(Value, Clone, Copy)]
+#[repr(C)]
+pub struct Circle {
+    radius: f32,
+}
+impl Area for CircleExpr {
+    fn area(&self) -> Float32 {
+        PI * self.radius() * self.radius()
+    }
+}
+impl_polymorphic!(Area, Circle);
+
+let circles = device.create_buffer(..).unwrap()'
+let mut poly_area: Polymorphic<dyn Area> = Polymorphic::new();
+poly_area.register(&circles);
+let area = poly_area.dispatch(tag, index, |obj|{
+    obj.area()
+});
+```
 
 ### Autodiff
 Autodiff code should be enclosed in the `autodiff` call. The `requires_grad` call is used to mark the variables that need to be differentiated. Any type including user defined ones can receive gradients. The `backward` call triggers the backward pass. Subsequent calls to `gradient` will return the gradient of the variable passed in. User can also supply custom gradients with `backward_with_grad`.

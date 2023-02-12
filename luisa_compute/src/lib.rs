@@ -14,6 +14,7 @@ pub mod prelude {
     pub use glam;
     pub use lang::math::*;
     pub use lang::traits::*;
+    pub use lang::poly::*;
     pub use lang::*;
     pub use luisa_compute_derive::*;
     pub use resource::*;

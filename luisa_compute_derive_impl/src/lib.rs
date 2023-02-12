@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned};
-use syn::{spanned::Spanned, Attribute, Item, ItemEnum, ItemFn, ItemStruct, NestedMeta};
+use syn::{spanned::Spanned, Attribute, Item, ItemEnum, ItemFn, ItemStruct, ItemTrait, NestedMeta};
 pub struct Compiler {
     inside_crate: bool,
 }

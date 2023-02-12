@@ -109,7 +109,14 @@ impl<T: Value> Buffer<T> {
     pub fn native_handle(&self) -> *mut c_void {
         self.device.inner.buffer_native_handle(self.handle())
     }
-
+    pub unsafe fn shallow_clone(&self) -> Buffer<T> {
+        Buffer {
+            device: self.device.clone(),
+            handle: self.handle.clone(),
+            len: self.len,
+            _marker: std::marker::PhantomData,
+        }
+    }
     pub fn view<'a, S: RangeBounds<u64>>(&'a self, range: S) -> BufferView<'a, T> {
         let lower = range.start_bound();
         let upper = range.end_bound();

@@ -41,6 +41,7 @@ use std::cell::RefCell;
 pub mod math;
 pub mod swizzle;
 pub mod traits;
+pub mod poly;
 
 pub trait Value: Copy + ir::TypeOf {
     type Expr: ExprProxy<Self>;

@@ -50,6 +50,20 @@ impl Device {
             len: count,
         })
     }
+    pub fn create_buffer_from_slice<T: Value>(&self, data: &[T]) -> backend::Result<Buffer<T>> {
+        let buffer = self.create_buffer(data.len())?;
+        buffer.view(..).copy_from(data);
+        Ok(buffer)
+    }
+    pub fn create_buffer_from_fn<T: Value>(
+        &self,
+        count: usize,
+        f: impl FnMut(usize) -> T,
+    ) -> backend::Result<Buffer<T>> {
+        let buffer = self.create_buffer(count)?;
+        buffer.view(..).fill_fn(f);
+        Ok(buffer)
+    }
     pub fn create_bindless_array(&self, slots: usize) -> backend::Result<BindlessArray> {
         let array = self.inner.create_bindless_array(slots)?;
         Ok(BindlessArray {

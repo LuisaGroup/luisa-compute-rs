@@ -283,7 +283,7 @@ impl Compiler {
                     }
                 },
                 syn::Fields::Unit => {
-                    quote_spanned! { field_span=> Self::#name => {  nodes.push(#crate_path ::new_user_node(#i)); } }
+                    quote_spanned! { field_span=> Self::#name => {  nodes.push(#crate_path ::__new_user_node(#i)); } }
                 }
             }
         }).collect::<Vec<_>>();

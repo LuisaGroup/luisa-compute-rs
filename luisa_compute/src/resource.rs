@@ -117,6 +117,16 @@ impl<T: Value> Buffer<T> {
             _marker: std::marker::PhantomData,
         }
     }
+    pub fn copy_from(&self, data: &[T]) {
+        self.view(..).copy_from(data);
+    }
+    pub fn copy_to(&self, data: &mut [T]) {
+        self.view(..).copy_to(data);
+    }
+    pub fn copy_to_vec(&self) -> Vec<T> {
+        self.view(..).copy_to_vec()
+    }
+    
     pub fn view<'a, S: RangeBounds<u64>>(&'a self, range: S) -> BufferView<'a, T> {
         let lower = range.start_bound();
         let upper = range.end_bound();

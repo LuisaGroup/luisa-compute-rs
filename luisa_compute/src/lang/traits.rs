@@ -1,6 +1,8 @@
 use crate::prelude::*;
+use luisa_compute_ir::ir::new_user_node;
 use luisa_compute_ir::{ir::Func, ir::Type, TypeOf};
 use std::any::Any;
+use std::cell::{Cell, RefCell};
 use std::ops::*;
 
 use super::Expr;
@@ -681,3 +683,67 @@ impl_from!(u32, u64);
 impl_from!(u64, i64);
 impl_from!(u64, i32);
 impl_from!(u64, u32);
+
+impl<T: Aggregate> Aggregate for Vec<T> {
+    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+        let len_node = new_user_node(nodes.len());
+        nodes.push(len_node);
+        for item in self {
+            item.to_nodes(nodes);
+        }
+    }
+
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+        let len_node = iter.next().unwrap();
+        let len = len_node.unwrap_user_data::<usize>();
+        let mut ret = Vec::with_capacity(*len);
+        for _ in 0..*len {
+            ret.push(T::from_nodes(iter));
+        }
+        ret
+    }
+}
+
+impl<T: Aggregate> Aggregate for RefCell<T> {
+    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+        self.borrow().to_nodes(nodes);
+    }
+
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+        RefCell::new(T::from_nodes(iter))
+    }
+}
+impl<T: Aggregate + Copy> Aggregate for Cell<T> {
+    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+        self.get().to_nodes(nodes);
+    }
+
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+        Cell::new(T::from_nodes(iter))
+    }
+}
+impl<T: Aggregate> Aggregate for Option<T> {
+    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+        match self {
+            Some(x) => {
+                let node = new_user_node(1);
+                nodes.push(node);
+                x.to_nodes(nodes);
+            }
+            None => {
+                let node = new_user_node(0);
+                nodes.push(node);
+            }
+        }
+    }
+
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+        let node = iter.next().unwrap();
+        let tag = node.unwrap_user_data::<usize>();
+        match *tag {
+            0 => None,
+            1 => Some(T::from_nodes(iter)),
+            _ => unreachable!(),
+        }
+    }
+}

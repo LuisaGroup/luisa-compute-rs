@@ -20,6 +20,7 @@ pub mod prelude {
     pub use resource::*;
     pub use rtx::*;
     pub use runtime::*;
+    pub use luisa_compute_ir::ir::UserNodeData;
 }
 pub use luisa_compute_sys as sys;
 use prelude::{Device, DeviceHandle};

@@ -15,7 +15,7 @@ use crate::{
 };
 use crate::{rtx, ResourceTracker};
 pub use ir::ir::NodeRef;
-use ir::ir::{AccelBinding, BindlessArrayBinding, SwitchCase, INVALID_REF};
+use ir::ir::{AccelBinding, BindlessArrayBinding, SwitchCase, UserNodeData, INVALID_REF};
 use ir::{
     ir::{
         new_node, BasicBlock, Binding, BufferBinding, Capture, Const, CpuCustomOp, Func,
@@ -39,9 +39,9 @@ use std::cell::RefCell;
 
 // use self::math::UVec3;
 pub mod math;
+pub mod poly;
 pub mod swizzle;
 pub mod traits;
-pub mod poly;
 
 pub trait Value: Copy + ir::TypeOf {
     type Expr: ExprProxy<Self>;
@@ -64,6 +64,7 @@ pub trait Aggregate: Sized {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>);
     fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self;
 }
+
 pub trait Selectable: Aggregate {}
 pub trait FromNode {
     fn from_node(node: NodeRef) -> Self;
@@ -78,6 +79,11 @@ fn _store<T1: Aggregate, T2: Aggregate>(var: &T1, value: &T2) {
             b.store(self_node, value_node);
         }
     })
+}
+#[inline(always)]
+pub fn __new_user_node<T: UserNodeData>(data: T) -> NodeRef {
+    use luisa_compute_ir::ir::new_user_node;
+    new_user_node(data)
 }
 macro_rules! impl_aggregate_for_tuple {
     ()=>{
@@ -438,9 +444,9 @@ macro_rules! var {
     ($t:ty, 0) => {
         local_zeroed::<$t>()
     };
-    ($t:ty, $init:expr)=>{
+    ($t:ty, $init:expr) => {
         local::<$t>($init.into())
-    }
+    };
 }
 pub fn local<T: Value>(init: Expr<T>) -> Var<T> {
     Var::<T>::from_node(current_scope(|b| b.local(init.node())))

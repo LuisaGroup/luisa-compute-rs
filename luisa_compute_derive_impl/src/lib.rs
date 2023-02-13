@@ -228,10 +228,120 @@ impl Compiler {
         }
     }
     pub fn derive_aggregate_for_struct(&self, struct_: &ItemStruct) -> TokenStream {
-        todo!()
+        let span = struct_.span();
+        let crate_path = self.crate_path();
+        let name = &struct_.ident;
+        let fields: Vec<_> = struct_.fields.iter().map(|f| f).collect();
+        let field_types: Vec<_> = fields.iter().map(|f| &f.ty).collect();
+        let field_names: Vec<_> = fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
+        quote_spanned!(span=>
+            impl #crate_path ::Aggregate for #name {
+                fn to_nodes(&self, nodes: &mut Vec<#crate_path ::NodeRef>) {
+                    #(self.#field_names.to_nodes(nodes);)*
+                }
+                fn from_nodes<I: Iterator<Item = #crate_path ::NodeRef>>(iter: &mut I) -> Self {
+                    #(let #field_names = <#field_types as #crate_path ::Aggregate>::from_nodes(iter);)*
+                    Self{
+                        #(#field_names,)*
+                    }
+                }
+            }
+        )
     }
     pub fn derive_aggregate_for_enum(&self, enum_: &ItemEnum) -> TokenStream {
-        todo!()
+        let span = enum_.span();
+        let crate_path = self.crate_path();
+        let name = &enum_.ident;
+        let variants = &enum_.variants;
+        let to_nodes = variants.iter().enumerate().map(|(i, v)|{
+            let name = &v.ident;
+            let field_span = v.span();
+            match &v.fields {
+                syn::Fields::Named(n) => {
+                    let named = n
+                        .named
+                        .iter()
+                        .map(|f| f.ident.clone().unwrap())
+                        .collect::<Vec<_>>();
+
+                    quote_spanned! {
+                        field_span=>
+                        Self::#name{#(#named),*}=>{
+                            nodes.push(__new_user_node(#i));
+                            #(#named.to_nodes(nodes);)*
+                        }
+                    }
+                }
+                syn::Fields::Unnamed(u) => {
+                    let fields = u.unnamed.iter().enumerate().map(|(i, f)| syn::Ident::new(&format!("f{}", i), f.span())).collect::<Vec<_>>();
+                    quote_spanned! {
+                        field_span=>
+                        Self::#name(#(#fields),*)=>{
+                            nodes.push(__new_user_node(#i));
+                            #(#fields.to_nodes(nodes);)*
+                        }
+                    }
+                },
+                syn::Fields::Unit => {
+                    quote_spanned! { field_span=> Self::#name => {  nodes.push(#crate_path ::new_user_node(#i)); } }
+                }
+            }
+        }).collect::<Vec<_>>();
+        let from_nodes = variants
+            .iter()
+            .enumerate()
+            .map(|(i, v)| {
+                let name = &v.ident;
+                let field_span = v.span();
+                match &v.fields {
+                    syn::Fields::Unnamed(u) => {
+                        let field_types = u.unnamed.iter().map(|f| &f.ty).collect::<Vec<_>>();
+                        let fields = u.unnamed.iter().enumerate().map(|(i, f)| syn::Ident::new(&format!("f{}", i), f.span())).collect::<Vec<_>>();
+                        quote_spanned! { field_span=>
+                            #i=> {
+                                #(let #fields: #field_types = #crate_path :: Aggregate ::from_nodes(iter);)*
+                                Self::#name(#(#fields),*)
+                            },
+                        }
+                    }
+                    syn::Fields::Unit => {
+                        quote_spanned! {  field_span=> #i=>Self::#name, }
+                    }
+                    syn::Fields::Named(n) => {
+                        let named = n
+                            .named
+                            .iter()
+                            .map(|f| f.ident.clone().unwrap())
+                            .collect::<Vec<_>>();
+                        quote_spanned! { field_span=>
+                            #i=> {
+                                #(let #named = #named ::from_nodes(iter);)*
+                                Self::#name{#(#named),*}
+                            },
+                        }
+                    }
+                }
+            })
+            .collect::<Vec<_>>();
+        quote_spanned! {span=>
+            impl #crate_path ::Aggregate for #name{
+                #[allow(non_snake_case)]
+                fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+                    let variant = iter.next().unwrap();
+                    let variant = variant.unwrap_user_data::<usize>();
+                    match variant{
+                        #(#from_nodes)*
+                        _=> panic!("invalid variant"),
+                    }
+                }
+                #[allow(non_snake_case)]
+                fn to_nodes(&self, nodes: &mut Vec<NodeRef>){
+                    match self {
+                        #(#to_nodes)*
+                    }
+                }
+            }
+        }
     }
     pub fn derive_aggregate(&self, item: &Item) -> TokenStream {
         match item {

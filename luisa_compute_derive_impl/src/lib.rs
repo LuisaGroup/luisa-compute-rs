@@ -182,7 +182,6 @@ impl Compiler {
                     self.node
                 }
             }
-            impl #crate_path ::Selectable for #expr_proxy_name {}
             impl #crate_path ::ExprProxy<#name> for #expr_proxy_name {
                 type Elem = #name;
             }

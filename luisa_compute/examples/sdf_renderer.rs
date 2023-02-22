@@ -1,6 +1,3 @@
-use std::env::current_exe;
-
-use luisa::backend::rust::RustBackend;
 use luisa::prelude::*;
 use luisa_compute as luisa;
 

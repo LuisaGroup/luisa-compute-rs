@@ -65,7 +65,6 @@ pub trait Aggregate: Sized {
     fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self;
 }
 
-pub trait Selectable: Aggregate {}
 pub trait FromNode {
     fn from_node(node: NodeRef) -> Self;
     fn node(&self) -> NodeRef;
@@ -115,7 +114,7 @@ impl_aggregate_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15)
 
 pub unsafe trait _Mask: FromNode {}
 
-pub fn select<M: _Mask, A: Selectable>(mask: M, a: A, b: A) -> A {
+pub fn select<M: _Mask, A: Aggregate>(mask: M, a: A, b: A) -> A {
     let a_nodes = a.to_vec_nodes();
     let b_nodes = b.to_vec_nodes();
     assert_eq!(a_nodes.len(), b_nodes.len());
@@ -173,7 +172,6 @@ pub struct PrimVar<T> {
     pub(crate) node: NodeRef,
     pub(crate) _phantom: std::marker::PhantomData<T>,
 }
-impl<T> Selectable for PrimExpr<T> {}
 impl<T> Aggregate for PrimExpr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);

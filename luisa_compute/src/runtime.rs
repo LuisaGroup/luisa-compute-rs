@@ -8,6 +8,7 @@ use rtx::Accel;
 use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::mem::align_of;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -16,6 +17,18 @@ use std::{ffi::CString, path::PathBuf};
 pub struct Device {
     pub(crate) inner: Arc<DeviceHandle>,
 }
+impl Hash for Device {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let ptr = Arc::as_ptr(&self.inner);
+        ptr.hash(state);
+    }
+}
+impl PartialEq for Device {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+impl Eq for Device {}
 pub(crate) struct DeviceHandle {
     pub(crate) backend: Arc<dyn Backend>,
     pub(crate) default_stream: api::Stream,

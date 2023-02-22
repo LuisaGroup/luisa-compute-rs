@@ -84,3 +84,5 @@ impl ResourceTracker {
         Self { resources: vec![] }
     }
 }
+unsafe impl Send for ResourceTracker {}
+unsafe impl Sync for ResourceTracker {}

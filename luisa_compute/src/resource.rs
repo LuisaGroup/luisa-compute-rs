@@ -90,22 +90,34 @@ impl<'a, T: Value> BufferView<'a, T> {
     pub fn fill(&self, value: T) {
         self.fill_fn(|_| value);
     }
+    pub unsafe fn copy_to_buffer_async(&self, dst: &BufferView<'a, T>) -> Command<'a> {
+        assert_eq!(self.len, dst.len);
+        let mut rt = ResourceTracker::new();
+        rt.add(self.buffer.handle.clone());
+        rt.add(dst.buffer.handle.clone());
+        Command {
+            inner: api::Command::BufferCopy(api::BufferCopyCommand {
+                src: self.buffer.handle.handle,
+                src_offset: self.offset * std::mem::size_of::<T>(),
+                dst: dst.buffer.handle.handle,
+                dst_offset: dst.offset * std::mem::size_of::<T>(),
+                size: self.len * std::mem::size_of::<T>(),
+            }),
+            marker: std::marker::PhantomData,
+            resource_tracker: rt,
+        }
+    }
+    pub fn copy_to_buffer(&self, dst: &BufferView<'a, T>) {
+        unsafe {
+            submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_buffer_async(dst)])
+                .unwrap();
+        }
+    }
 }
 impl<T: Value> Buffer<T> {
     pub(crate) fn handle(&self) -> api::Buffer {
         self.handle.handle
     }
-
-    // pub unsafe fn copy_to_async<'a>(&'a self, data: &'a mut [T]) -> Command<'a> {
-    //     self.view(..).copy_to_async(data)
-    // }
-
-    // pub fn copy_to_sync(&self, data: &[T]) {
-    //     self.view(..).copy_to_sync(data)
-    // }
-    // pub fn copy_from<'a>(&'a self, data: &'a [T]) -> Command<'a> {
-    //     self.view(..).copy_from(data)
-    // }
     pub fn native_handle(&self) -> *mut c_void {
         self.device.inner.buffer_native_handle(self.handle())
     }
@@ -126,7 +138,15 @@ impl<T: Value> Buffer<T> {
     pub fn copy_to_vec(&self) -> Vec<T> {
         self.view(..).copy_to_vec()
     }
-    
+    pub fn copy_to_buffer(&self, dst: &Buffer<T>) {
+        self.view(..).copy_to_buffer(&dst.view(..));
+    }
+    pub fn fill_fn<F: FnMut(usize) -> T>(&self, f: F) {
+        self.view(..).fill_fn(f);
+    }
+    pub fn fill(&self, value: T) {
+        self.view(..).fill(value);
+    }
     pub fn view<'a, S: RangeBounds<u64>>(&'a self, range: S) -> BufferView<'a, T> {
         let lower = range.start_bound();
         let upper = range.end_bound();
@@ -156,6 +176,13 @@ impl<T: Value> Buffer<T> {
     }
     pub fn var(&self) -> BufferVar<T> {
         BufferVar::new(self)
+    }
+}
+impl<T: Value> Clone for Buffer<T> {
+    fn clone(&self) -> Self {
+        let cloned = self.device.create_buffer(self.len).unwrap();
+        self.copy_to_buffer(&cloned);
+        cloned
     }
 }
 pub(crate) struct BindlessArrayHandle {

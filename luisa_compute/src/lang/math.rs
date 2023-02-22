@@ -3,7 +3,7 @@ use std::ops::Mul;
 pub use super::swizzle::*;
 use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*, Float32};
 use crate::prelude::FromNode;
-use crate::prelude::{__compose, __insert, const_, current_scope, Expr, PrimExpr, Selectable, Var};
+use crate::prelude::{__compose, __insert, const_, current_scope, Expr, PrimExpr, Var};
 use luisa_compute_ir::{
     context::register_type,
     ir::{Func, MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType},
@@ -314,9 +314,6 @@ macro_rules! impl_vec_proxy {
         impl ExprProxy<$vec> for $expr_proxy {
             type Elem = $vec;
         }
-        impl Selectable for $expr_proxy {
-
-        }
         impl VarProxy<$vec> for $var_proxy {
             type Elem = $vec;
         }
@@ -394,8 +391,6 @@ macro_rules! impl_mat_proxy {
         }
         impl ExprProxy<$mat> for $expr_proxy {
             type Elem = $mat;
-        }
-        impl Selectable for $expr_proxy {
         }
         impl FromNode for $var_proxy {
             fn from_node(node: NodeRef) -> Self {

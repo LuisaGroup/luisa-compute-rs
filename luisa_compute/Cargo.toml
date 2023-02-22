@@ -4,30 +4,30 @@ name = "luisa_compute"
 version = "0.1.0"
 
 [dependencies]
+backtrace = "0.3.67"
 base64ct = {version = "1.5.0", features = ["alloc"]}
+env_logger = "0.10.0"
+exr = "1.5.3"
+glam = "0.22.0"
+image = "0.24.5"
 libc = "0.2"
 libloading = "0.7"
 log = "0.4"
 luisa_compute_api_types = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_api_types"}
+luisa_compute_backend = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_backend"}
+luisa_compute_cpu_kernel_defs = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_cpu_kernel_defs"}
 luisa_compute_derive = {path = "../luisa_compute_derive"}
 luisa_compute_derive_impl = {path = "../luisa_compute_derive_impl"}
 luisa_compute_ir = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_ir"}
-luisa_compute_cpu_kernel_defs = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_cpu_kernel_defs"}
 luisa_compute_sys = {path = "../luisa_compute_sys"}
-luisa_compute_backend =  {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_backend"}
 parking_lot = "0.12.1"
 rayon = "1.6.0"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 sha2 = "0.10"
-glam = "0.22.0"
-backtrace = "0.3.67"
-env_logger = "0.10.0"
 
 [dev-dependencies]
 rand = "0.8.5"
-
-
 
 [features]
 cuda = ["luisa_compute_sys/cuda"]

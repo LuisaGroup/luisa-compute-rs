@@ -42,6 +42,8 @@ impl Compiler {
         let span = struct_.span();
         let name = &struct_.ident;
         let vis = &struct_.vis;
+        let generics = &struct_.generics;
+        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
         let fields: Vec<_> = struct_
             .fields
             .iter()
@@ -76,23 +78,23 @@ impl Compiler {
         let field_names: Vec<_> = fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
         let parameter_name = syn::Ident::new(&format!("{}Var", name), name.span());
         let parameter_def = quote!(
-            #vis struct #parameter_name {
+            #vis struct #parameter_name #generics {
                 #(#field_vis #field_names: <#field_types as luisa_compute::runtime::KernelArg>::Parameter),*
             }
         );
         quote_spanned!(span=>
             #parameter_def
 
-            impl luisa_compute::lang::KernelParameter for #parameter_name {
-                type Arg = #name;
+            impl #impl_generics luisa_compute::lang::KernelParameter for #parameter_name #ty_generics #where_clause{
+                type Arg = #name #ty_generics;
                 fn def_param(builder: &mut KernelBuilder) -> Self {
                     Self{
                         #(#field_names:  luisa_compute::lang::KernelParameter::def_param(builder)),*
                     }
                 }
             }
-            impl luisa_compute::runtime::KernelArg for #name {
-                type Parameter = #parameter_name;
+            impl #impl_generics luisa_compute::runtime::KernelArg for #name #ty_generics #where_clause{
+                type Parameter = #parameter_name #ty_generics;
                 fn encode(&self, encoder: &mut  luisa_compute::prelude::ArgEncoder) {
                     #(self.#field_names.encode(encoder);)*
                 }
@@ -103,6 +105,24 @@ impl Compiler {
         self.check_repr_c(&struct_.attrs);
         let span = struct_.span();
         let crate_path = self.crate_path();
+        let generics = &struct_.generics;
+        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+        let marker_args = generics.params.iter().map(|p|{
+            match p {
+                syn::GenericParam::Type(ty)=>{
+                    let ident = &ty.ident;
+                    quote!(#ident)
+                }
+                syn::GenericParam::Lifetime(lt)=>{
+                    let lt = &lt.lifetime;
+                    quote!(& #lt u32)
+                }
+                syn::GenericParam::Const(_)=>{
+                    panic!("Const generic parameter is not supported")
+                }
+            }
+        }).collect::<Vec<_>>();
+        let marker_args = quote!(#(#marker_args),*);
         let name = &struct_.ident;
         let vis = &struct_.vis;
         let fields: Vec<_> = struct_.fields.iter().map(|f| f).collect();
@@ -126,7 +146,7 @@ impl Compiler {
                     #[allow(dead_code)]
                     #vis fn #set_ident<T:Into<Expr<#ty>>>(&self, value: T) -> Self {
                         let value = value.into();
-                        Self::from_node(#crate_path ::__insert::<#name>(self.node, #i, FromNode::node(&value)))
+                        Self::from_node(#crate_path ::__insert::<#name #ty_generics>(self.node, #i, FromNode::node(&value)))
                     }
                 )
             })
@@ -157,11 +177,11 @@ impl Compiler {
         let expr_proxy_name = syn::Ident::new(&format!("{}Expr", name), name.span());
         let var_proxy_name = syn::Ident::new(&format!("{}Var", name), name.span());
         let type_of_impl = quote_spanned!(span=>
-            impl #crate_path ::TypeOf for #name {
+            impl #impl_generics #crate_path ::TypeOf for #name #ty_generics #where_clause {
                 fn type_() ->  #crate_path ::Gc< #crate_path ::Type> {
                     use #crate_path ::*;
-                    let size = std::mem::size_of::<#name>();
-                    let alignment = std::mem::align_of::<#name>();
+                    let size = std::mem::size_of::<#name #ty_generics>();
+                    let alignment = std::mem::align_of::<#name #ty_generics>();
                     let struct_type = StructType {
                         fields: CBoxedSlice::new(vec![#(<#field_types as TypeOf>::type_(),)*]),
                         size,
@@ -174,59 +194,63 @@ impl Compiler {
         );
         let proxy_def = quote_spanned!(span=>
             #[derive(Clone, Copy, Debug)]
-            #vis struct #expr_proxy_name {
+            #vis struct #expr_proxy_name #generics{
                 node: #crate_path ::NodeRef,
+                _marker: std::marker::PhantomData<(#marker_args)>,
             }
             #[derive(Clone, Copy, Debug)]
-            #vis struct #var_proxy_name {
+            #vis struct #var_proxy_name #generics{
                 node: #crate_path ::NodeRef,
+                _marker: std::marker::PhantomData<(#marker_args)>,
             }
-            impl #crate_path ::Aggregate for #expr_proxy_name {
+            impl #impl_generics #crate_path ::Aggregate for #expr_proxy_name #ty_generics #where_clause {
                 fn to_nodes(&self, nodes: &mut Vec<#crate_path ::NodeRef>) {
                     nodes.push(self.node);
                 }
                 fn from_nodes<I: Iterator<Item = #crate_path ::NodeRef>>(iter: &mut I) -> Self {
                     Self{
-                        node: iter.next().unwrap()
+                        node: iter.next().unwrap(), 
+                        _marker:std::marker::PhantomData
                     }
                 }
             }
-            impl #crate_path ::Aggregate for #var_proxy_name {
+            impl #impl_generics #crate_path ::Aggregate for #var_proxy_name #ty_generics #where_clause {
                 fn to_nodes(&self, nodes: &mut Vec<#crate_path ::NodeRef>) {
                     nodes.push(self.node);
                 }
                 fn from_nodes<I: Iterator<Item = #crate_path ::NodeRef>>(iter: &mut I) -> Self {
                     Self{
-                        node: iter.next().unwrap()
+                        node: iter.next().unwrap(),
+                        _marker:std::marker::PhantomData
                     }
                 }
             }
-            impl #crate_path ::FromNode  for #expr_proxy_name {
+            impl #impl_generics #crate_path ::FromNode  for #expr_proxy_name #ty_generics #where_clause {
                 #[allow(unused_assignments)]
                 fn from_node(node: #crate_path ::NodeRef) -> Self {
-                    Self { node }
+                    Self { node, _marker:std::marker::PhantomData }
                 }
                 fn node(&self) -> #crate_path ::NodeRef {
                     self.node
                 }
             }
-            impl #crate_path ::ExprProxy<#name> for #expr_proxy_name {
-                type Elem = #name;
+            impl #impl_generics #crate_path ::ExprProxy<#name #ty_generics> for #expr_proxy_name #ty_generics #where_clause {
+                type Elem = #name #ty_generics;
             }
-            impl #crate_path ::FromNode for #var_proxy_name {
+            impl #impl_generics #crate_path ::FromNode for #var_proxy_name #ty_generics #where_clause {
                 #[allow(unused_assignments)]
                 fn from_node(node: #crate_path ::NodeRef) -> Self {
-                    Self { node }
+                    Self { node, _marker:std::marker::PhantomData }
                 }
                 fn node(&self) -> #crate_path ::NodeRef {
                     self.node
                 }
             }
-            impl #crate_path ::VarProxy<#name> for #var_proxy_name {
-                type Elem = #name;
+            impl #impl_generics #crate_path ::VarProxy<#name #ty_generics> for #var_proxy_name #ty_generics #where_clause {
+                type Elem = #name #ty_generics;
             }
-            impl From<#var_proxy_name> for #expr_proxy_name {
-                fn from(var: #var_proxy_name) -> Self {
+            impl #impl_generics From<#var_proxy_name #ty_generics> for #expr_proxy_name #ty_generics #where_clause {
+                fn from(var: #var_proxy_name #ty_generics) -> Self {
                     var.load()
                 }
             }
@@ -235,21 +259,21 @@ impl Compiler {
             span=>
             #proxy_def
             #type_of_impl
-            impl #crate_path ::Value for #name {
-                type Expr = #expr_proxy_name;
-                type Var = #var_proxy_name;
+            impl #impl_generics #crate_path ::Value for #name #ty_generics #where_clause{
+                type Expr = #expr_proxy_name #ty_generics;
+                type Var = #var_proxy_name #ty_generics;
                 fn fields() -> Vec<String> {
                     vec![#(stringify!(#field_names).into(),)*]
                 }
             }
-            impl #expr_proxy_name {
+            impl #impl_generics #expr_proxy_name #ty_generics #where_clause {
                 #(#expr_proxy_field_methods)*
                 #vis fn new(#(#field_names: Expr<#field_types>),*) -> Self {
-                    let node = #crate_path ::__compose::<#name>(&[ #( FromNode::node(&#field_names) ),* ]);
-                    Self { node }
+                    let node = #crate_path ::__compose::<#name #ty_generics>(&[ #( FromNode::node(&#field_names) ),* ]);
+                    Self { node, _marker:std::marker::PhantomData }
                 }
             }
-            impl #var_proxy_name {
+            impl #impl_generics  #var_proxy_name #ty_generics #where_clause {
                 #(#var_proxy_field_methods)*
             }
         }

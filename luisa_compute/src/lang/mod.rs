@@ -1055,6 +1055,7 @@ pub struct RtxRay {
     pub dir_z: f32,
     pub tmax: f32,
 }
+
 #[repr(C)]
 #[derive(Clone, Copy, __Value)]
 pub struct RtxHit {

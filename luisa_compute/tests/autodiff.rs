@@ -234,7 +234,7 @@ autodiff_1!(autodiff_ln, 0.1..10.0, |x: Float32| x.ln());
 autodiff_1!(autodiff_log2, 0.1..10.0, |x: Float32| x.log2());
 autodiff_1!(autodiff_log10, 0.1..10.0, |x: Float32| x.log10());
 autodiff_1!(autodiff_abs, 0.1..10.0, |x: Float32| x.abs());
-// autodiff_1!(autodiff_abs2, -10.0..-0.1, |x: Float32| x.abs());
+autodiff_1!(autodiff_abs2, -10.0..-0.1, |x: Float32| x.abs());
 autodiff_1!(autodiff_asin, -0.9..0.9, |x: Float32| x.asin());
 autodiff_1!(autodiff_acos, -0.9..0.9, |x: Float32| x.acos());
 autodiff_1!(autodiff_atan, -10.0..10.0, |x: Float32| x.atan());

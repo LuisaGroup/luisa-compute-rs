@@ -1,12 +1,12 @@
 use luisa::prelude::*;
 use luisa_compute as luisa;
 #[derive(KernelArg)]
-struct MyArgStruct {
-    x: Buffer<f32>,
-    y: Buffer<f32>,
+struct MyArgStruct<T: Value> {
+    x: Buffer<T>,
+    y: Buffer<T>,
     #[allow(dead_code)]
     #[luisa(exclude)]
-    exclude: f32,
+    exclude: T,
 }
 fn main() {
     init();
@@ -20,6 +20,8 @@ fn main() {
         y,
         exclude: 42.0,
     };
-    let kernel = device.create_kernel::<(MyArgStruct,)>(&|_args| {}).unwrap();
+    let kernel = device
+        .create_kernel::<(MyArgStruct<f32>,)>(&|_args| {})
+        .unwrap();
     kernel.dispatch([1024, 1, 1], &my_args).unwrap();
 }

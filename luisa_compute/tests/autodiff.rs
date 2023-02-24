@@ -71,7 +71,7 @@ fn autodiff_helper<F: Fn(&[Float32]) -> Float32>(
     // }
     println!("init time: {:?}", tic.elapsed());
     let kernel = device
-        .create_kernel::<()>(&|| {
+        .create_kernel_async::<()>(&|| {
             let input_vars = inputs.iter().map(|input| input.var()).collect::<Vec<_>>();
             let grad_fd_vars = grad_fd.iter().map(|grad| grad.var()).collect::<Vec<_>>();
             let grad_ad_vars = grad_ad.iter().map(|grad| grad.var()).collect::<Vec<_>>();

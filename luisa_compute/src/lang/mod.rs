@@ -5,6 +5,7 @@ use std::{any::Any, collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 
 use crate::lang::traits::VarCmp;
 use crate::prelude::AccelHandle;
+use crate::runtime::{AsyncShaderArtifact, ShaderArtifact};
 use crate::{
     backend,
     prelude::{Device, Kernel, KernelArg, RawKernel},
@@ -1221,14 +1222,15 @@ impl KernelBuilder {
     }
     pub(crate) fn build(
         device: crate::runtime::Device,
+        options: KernelBuildOptions,
         f: impl FnOnce(&mut Self),
     ) -> Result<crate::runtime::RawKernel, crate::backend::BackendError> {
         let mut builder = Self::new(device);
-
-        builder.build_(f)
+        builder.build_(options, f)
     }
     fn build_(
         &mut self,
+        options: KernelBuildOptions,
         body: impl FnOnce(&mut Self),
     ) -> Result<crate::runtime::RawKernel, crate::backend::BackendError> {
         body(self);
@@ -1274,11 +1276,17 @@ impl KernelBuilder {
                     block_size: r.block_size.unwrap_or([1, 1, 1]),
                 };
                 // build kernel here
-                let shader = self.device.inner.create_shader(Gc::new(module))?;
+                // let shader = self.device.inner.create_shader(Gc::new(module))?;
+                let module = Gc::new(module);
+                let artifact = if options.async_compile {
+                    ShaderArtifact::Async(AsyncShaderArtifact::new(self.device.clone(), module))
+                } else {
+                    ShaderArtifact::Sync(self.device.inner.create_shader(module)?)
+                };
                 //
                 r.reset();
                 Ok(RawKernel {
-                    shader,
+                    artifact,
                     device: self.device.clone(),
                     resource_tracker,
                 })
@@ -1286,10 +1294,24 @@ impl KernelBuilder {
         )
     }
 }
-
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct KernelBuildOptions {
+    pub enable_debug: bool,
+    pub enable_optimization: bool,
+    pub async_compile: bool,
+}
+impl Default for KernelBuildOptions {
+    fn default() -> Self {
+        Self {
+            enable_debug: false,
+            enable_optimization: true,
+            async_compile: false,
+        }
+    }
+}
 pub trait KernelBuildFn {
     type Output;
-    fn build(&self, builder: &mut KernelBuilder) -> Self::Output;
+    fn build(&self, builder: &mut KernelBuilder, options: KernelBuildOptions) -> Self::Output;
 }
 pub trait KernelSigature<'a> {
     type Fn: KernelBuildFn;
@@ -1314,8 +1336,8 @@ macro_rules! impl_kernel_build_for_fn {
     ()=>{
         impl KernelBuildFn for &dyn Fn() {
             type Output = backend::Result<Kernel<()>>;
-            fn build(&self, builder: &mut KernelBuilder) -> backend::Result<Kernel<()>> {
-                let kernel = builder.build_(|_| {
+            fn build(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> backend::Result<Kernel<()>> {
+                let kernel = builder.build_(options, |_| {
                     self()
                 })?;
                 let kernel = Kernel {
@@ -1330,8 +1352,8 @@ macro_rules! impl_kernel_build_for_fn {
         impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelBuildFn for &dyn Fn($first, $($rest,)*) {
             type Output = backend::Result<Kernel<($first::Arg, $($rest::Arg),*)>>;
             #[allow(non_snake_case)]
-            fn build(&self, builder: &mut KernelBuilder) -> backend::Result<Kernel<($first::Arg, $($rest::Arg),*)>> {
-                let kernel = builder.build_(|builder| {
+            fn build(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> backend::Result<Kernel<($first::Arg, $($rest::Arg),*)>> {
+                let kernel = builder.build_(options, |builder| {
                     let $first = $first::def_param(builder);
                     $(let $rest = $rest::def_param(builder);)*
                     self($first, $($rest,)*)

@@ -1,18 +1,20 @@
 use crate::backend::{Backend, BackendError};
+use crate::lang::KernelBuildOptions;
 use crate::*;
 use crate::{lang::Value, resource::*};
-use api::AccelUsageHint;
+
 use lang::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSigature};
 pub use luisa_compute_api_types as api;
+use luisa_compute_ir::ir::KernelModule;
+use parking_lot::{Condvar, Mutex};
 use rtx::Accel;
-use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::mem::align_of;
 use std::ops::Deref;
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::{ffi::CString, path::PathBuf};
 #[derive(Clone)]
 pub struct Device {
     pub(crate) inner: Arc<DeviceHandle>,
@@ -194,21 +196,21 @@ impl Device {
         &self,
         f: impl FnOnce(&mut KernelBuilder),
     ) -> Result<RawKernel, BackendError> {
-        KernelBuilder::build(self.clone(), f)
-    }
-    pub fn create_kernel_old<F>(&self, f: F) -> <F as KernelBuildFn>::Output
-    where
-        F: KernelBuildFn,
-    {
-        let mut builder = KernelBuilder::new(self.clone());
-        KernelBuildFn::build(&f, &mut builder)
+        KernelBuilder::build(self.clone(), KernelBuildOptions::default(), f)
     }
     pub fn create_kernel<'a, S: KernelSigature<'a>>(
         &self,
         f: S::Fn,
     ) -> <S::Fn as KernelBuildFn>::Output {
         let mut builder = KernelBuilder::new(self.clone());
-        KernelBuildFn::build(&f, &mut builder)
+        KernelBuildFn::build(&f, &mut builder, KernelBuildOptions::default())
+    }
+    pub fn create_kernel_async<'a, S: KernelSigature<'a>>(
+        &self,
+        f: S::Fn,
+    ) -> <S::Fn as KernelBuildFn>::Output {
+        let mut builder = KernelBuilder::new(self.clone());
+        KernelBuildFn::build(&f, &mut builder, KernelBuildOptions::default())
     }
 }
 #[macro_export]
@@ -333,9 +335,39 @@ pub struct Command<'a> {
     #[allow(dead_code)]
     pub(crate) resource_tracker: ResourceTracker,
 }
+pub(crate) struct AsyncShaderArtifact {
+    shader: Option<backend::Result<api::Shader>>, // strange naming, huh?
+}
+pub(crate) enum ShaderArtifact {
+    Async(Arc<(Mutex<AsyncShaderArtifact>, Condvar)>),
+    Sync(api::Shader),
+}
+impl AsyncShaderArtifact {
+    pub(crate) fn new(
+        device: Device,
+        kernel: Gc<KernelModule>,
+    ) -> Arc<(Mutex<AsyncShaderArtifact>, Condvar)> {
+        let artifact = Arc::new((
+            Mutex::new(AsyncShaderArtifact { shader: None }),
+            Condvar::new(),
+        ));
+        {
+            let artifact = artifact.clone();
+            rayon::spawn(move || {
+                let shader = device.inner.create_shader(kernel);
+                {
+                    let mut artifact = artifact.0.lock();
+                    artifact.shader = Some(shader);
+                }
+                artifact.1.notify_all();
+            });
+        }
+        artifact
+    }
+}
 pub struct RawKernel {
     pub(crate) device: Device,
-    pub(crate) shader: api::Shader, // strange naming, huh?
+    pub(crate) artifact: ShaderArtifact,
     #[allow(dead_code)]
     pub(crate) resource_tracker: ResourceTracker,
 }
@@ -431,6 +463,20 @@ macro_rules! impl_kernel_arg_for_tuple {
 impl_kernel_arg_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
 impl RawKernel {
+    fn unwrap(&self) -> api::Shader {
+        match &self.artifact {
+            ShaderArtifact::Sync(shader) => *shader,
+            ShaderArtifact::Async(artifact) => {
+                let condvar = &artifact.1;
+                let mut artifact = artifact.0.lock();
+                if let Some(shader) = &artifact.shader {
+                    return *shader.as_ref().unwrap();
+                }
+                condvar.wait(&mut artifact);
+                *artifact.shader.as_ref().unwrap().as_ref().unwrap()
+            }
+        }
+    }
     pub unsafe fn dispatch_async<'a>(
         &'a self,
         args: &ArgEncoder,
@@ -438,7 +484,7 @@ impl RawKernel {
     ) -> Command<'a> {
         Command {
             inner: api::Command::ShaderDispatch(api::ShaderDispatchCommand {
-                shader: self.shader,
+                shader: self.unwrap(),
                 args: args.args.as_ptr(),
                 args_count: args.args.len(),
                 dispatch_size,
@@ -462,7 +508,7 @@ pub struct Kernel<T: KernelArg> {
 }
 impl<T: KernelArg> Kernel<T> {
     pub fn cache_dir(&self) -> Option<PathBuf> {
-        let handle = self.inner.shader;
+        let handle = self.inner.unwrap();
         let device = &self.inner.device;
         device.inner.shader_cache_dir(handle)
     }

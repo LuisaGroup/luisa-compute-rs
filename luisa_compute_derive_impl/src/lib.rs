@@ -42,7 +42,35 @@ impl Compiler {
         let span = struct_.span();
         let name = &struct_.ident;
         let vis = &struct_.vis;
-        let fields: Vec<_> = struct_.fields.iter().map(|f| f).collect();
+        let fields: Vec<_> = struct_
+            .fields
+            .iter()
+            .map(|f| f)
+            .filter(|f| {
+                let attrs = &f.attrs;
+                for attr in attrs {
+                    let meta = attr.parse_meta().unwrap();
+                    match meta {
+                        syn::Meta::List(list) => {
+                            for attr in &list.nested {
+                                match attr {
+                                    NestedMeta::Meta(syn::Meta::Path(path)) => {
+                                        if let Some(ident) = path.get_ident() {
+                                            if ident == "exclude" || ident == "ignore" {
+                                                return false;
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                true
+            })
+            .collect();
         let field_vis: Vec<_> = fields.iter().map(|f| &f.vis).collect();
         let field_types: Vec<_> = fields.iter().map(|f| &f.ty).collect();
         let field_names: Vec<_> = fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();

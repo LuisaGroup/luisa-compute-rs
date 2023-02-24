@@ -916,6 +916,42 @@ macro_rules! impl_atomic {
                     )
                 }))
             }
+            pub fn atomic_fetch_min<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
+                Expr::<$t>::from_node(current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchMin,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_(),
+                    )
+                }))
+            }
+            pub fn atomic_fetch_max<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
+                Expr::<$t>::from_node(current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchMax,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_(),
+                    )
+                }))
+            }
         }
     };
 }
@@ -971,43 +1007,6 @@ macro_rules! impl_atomic_bit {
                 Expr::<$t>::from_node(current_scope(|b| {
                     b.call(
                         Func::AtomicFetchXor,
-                        &[self.node, FromNode::node(&i), v.node()],
-                        <$t>::type_(),
-                    )
-                }))
-            }
-
-            pub fn atomic_fetch_min<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
-                &self,
-                i: I,
-                v: V,
-            ) -> Expr<$t> {
-                let i = i.into();
-                let v = v.into();
-                if __env_need_backtrace() {
-                    assert(i.cmplt(self.len()));
-                }
-                Expr::<$t>::from_node(current_scope(|b| {
-                    b.call(
-                        Func::AtomicFetchMin,
-                        &[self.node, FromNode::node(&i), v.node()],
-                        <$t>::type_(),
-                    )
-                }))
-            }
-            pub fn atomic_fetch_max<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
-                &self,
-                i: I,
-                v: V,
-            ) -> Expr<$t> {
-                let i = i.into();
-                let v = v.into();
-                if __env_need_backtrace() {
-                    assert(i.cmplt(self.len()));
-                }
-                Expr::<$t>::from_node(current_scope(|b| {
-                    b.call(
-                        Func::AtomicFetchMax,
                         &[self.node, FromNode::node(&i), v.node()],
                         <$t>::type_(),
                     )

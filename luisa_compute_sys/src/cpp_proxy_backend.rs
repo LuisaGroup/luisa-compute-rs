@@ -11,7 +11,6 @@ use luisa_compute_api_types as api;
 use luisa_compute_backend as backend;
 use luisa_compute_ir::{
     ir::{KernelModule, Type},
-    Gc,
 };
 use parking_lot::Mutex;
 use std::sync::Once;
@@ -299,7 +298,7 @@ impl Backend for CppProxyBackend {
         todo!()
     }
 
-    fn set_buffer_type(&self, _buffer: api::Buffer, _ty: Gc<Type>) {}
+    fn set_buffer_type(&self, _buffer: api::Buffer, _ty: CArc<Type>) {}
 
     fn create_mesh(
         &self,

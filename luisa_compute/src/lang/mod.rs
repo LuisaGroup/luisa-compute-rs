@@ -16,14 +16,17 @@ use crate::{
 };
 use crate::{rtx, ResourceTracker};
 pub use ir::ir::NodeRef;
-use ir::ir::{AccelBinding, BindlessArrayBinding, SwitchCase, UserNodeData, INVALID_REF};
+use ir::ir::{
+    AccelBinding, BindlessArrayBinding, ModulePools, SwitchCase, UserNodeData, INVALID_REF,
+};
+pub use ir::CArc;
+use ir::Pooled;
 use ir::{
     ir::{
         new_node, BasicBlock, Binding, BufferBinding, Capture, Const, CpuCustomOp, Func,
         Instruction, IrBuilder, KernelModule, Module, ModuleKind, Node, PhiIncoming,
     },
     transform::{self, Transform},
-    CRc,
 };
 use luisa_compute_api_types::Accel;
 use luisa_compute_derive::__Value;
@@ -33,7 +36,7 @@ pub use luisa_compute_ir::{
     context::register_type,
     ffi::CBoxedSlice,
     ir::{StructType, Type},
-    Gc, TypeOf,
+    TypeOf,
 };
 use math::{BVec2Expr, BVec3Expr, BVec4Expr, UVec3};
 use std::cell::RefCell;
@@ -74,7 +77,7 @@ fn _store<T1: Aggregate, T2: Aggregate>(var: &T1, value: &T2) {
     let value_nodes = value.to_vec_nodes();
     let self_nodes = var.to_vec_nodes();
     assert_eq!(value_nodes.len(), self_nodes.len());
-    current_scope(|b| {
+    __current_scope(|b| {
         for (value_node, self_node) in value_nodes.into_iter().zip(self_nodes.into_iter()) {
             b.store(self_node, value_node);
         }
@@ -83,7 +86,7 @@ fn _store<T1: Aggregate, T2: Aggregate>(var: &T1, value: &T2) {
 #[inline(always)]
 pub fn __new_user_node<T: UserNodeData>(data: T) -> NodeRef {
     use luisa_compute_ir::ir::new_user_node;
-    new_user_node(data)
+    new_user_node(__module_pools(), data)
 }
 macro_rules! impl_aggregate_for_tuple {
     ()=>{
@@ -120,12 +123,16 @@ pub fn select<M: _Mask, A: Aggregate>(mask: M, a: A, b: A) -> A {
     let b_nodes = b.to_vec_nodes();
     assert_eq!(a_nodes.len(), b_nodes.len());
     let mut ret = vec![];
-    current_scope(|b| {
+    __current_scope(|b| {
         for (a_node, b_node) in a_nodes.into_iter().zip(b_nodes.into_iter()) {
             assert_eq!(a_node.type_(), b_node.type_());
             assert!(!a_node.is_local(), "cannot select local variables");
             assert!(!b_node.is_local(), "cannot select local variables");
-            ret.push(b.call(Func::Select, &[mask.node(), a_node, b_node], a_node.type_()));
+            ret.push(b.call(
+                Func::Select,
+                &[mask.node(), a_node, b_node],
+                a_node.type_().clone(),
+            ));
         }
     });
     A::from_vec_nodes(ret)
@@ -152,11 +159,11 @@ pub trait VarProxy<T: Value>: Copy + Aggregate + FromNode {
         _store(self, &value);
     }
     fn load(&self) -> Expr<T> {
-        current_scope(|b| {
+        __current_scope(|b| {
             let nodes = self.to_vec_nodes();
             let mut ret = vec![];
             for node in nodes {
-                ret.push(b.call(Func::Load, &[node], node.type_()));
+                ret.push(b.call(Func::Load, &[node], node.type_().clone()));
             }
             Expr::<T>::from_nodes(&mut ret.into_iter())
         })
@@ -254,7 +261,7 @@ pub type Uint32Var = PrimVar<u32>;
 pub type Uint64Var = PrimVar<u64>;
 
 pub struct CpuFn<T: Value> {
-    op: CRc<CpuCustomOp>,
+    op: CArc<CpuCustomOp>,
     _marker: std::marker::PhantomData<T>,
 }
 #[macro_export]
@@ -298,7 +305,7 @@ impl<T: Value> CpuFn<T> {
             arg_type: T::type_(),
         };
         Self {
-            op: CRc::new(op),
+            op: CArc::new(op),
             _marker: std::marker::PhantomData,
         }
     }
@@ -316,15 +323,15 @@ impl<T: Value> CpuFn<T> {
                     == "cpu",
                 "CpuFn can only be used in cpu backend"
             );
-            let addr = CRc::as_ptr(&self.op) as u64;
+            let addr = CArc::as_ptr(&self.op) as u64;
             if let Some((_, op)) = r.cpu_custom_ops.get(&addr) {
-                assert_eq!(CRc::as_ptr(op), CRc::as_ptr(&self.op));
+                assert_eq!(CArc::as_ptr(op), CArc::as_ptr(&self.op));
             } else {
                 let i = r.cpu_custom_ops.len();
                 r.cpu_custom_ops.insert(addr, (i, self.op.clone()));
             }
         });
-        Expr::<T>::from_node(current_scope(|b| {
+        Expr::<T>::from_node(__current_scope(|b| {
             b.call(
                 Func::CpuCustomOp(self.op.clone()),
                 &[arg.node()],
@@ -337,9 +344,10 @@ pub(crate) struct Recorder {
     scopes: Vec<IrBuilder>,
     lock: bool,
     captured_buffer: HashMap<u64, (usize, NodeRef, Binding, Arc<dyn Any>)>,
-    cpu_custom_ops: HashMap<u64, (usize, CRc<CpuCustomOp>)>,
+    cpu_custom_ops: HashMap<u64, (usize, CArc<CpuCustomOp>)>,
     device: Option<Device>,
     block_size: Option<[u32; 3]>,
+    pools: Option<CArc<ModulePools>>,
 }
 impl Recorder {
     fn reset(&mut self) {
@@ -359,29 +367,38 @@ thread_local! {
         cpu_custom_ops: HashMap::new(),
         device:None,
         block_size: None,
+        pools: None,
     });
 }
 
 // Don't call this function directly unless you know what you are doing
-pub fn current_scope<F: FnOnce(&mut IrBuilder) -> R, R>(f: F) -> R {
+pub fn __current_scope<F: FnOnce(&mut IrBuilder) -> R, R>(f: F) -> R {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
-        assert!(r.lock, "current_scope must be called within a kernel");
+        assert!(r.lock, "__current_scope must be called within a kernel");
         let s = &mut r.scopes;
         f(s.last_mut().unwrap())
     })
 }
 // Don't call this function directly unless you know what you are doing
-pub fn pop_scope() -> Gc<BasicBlock> {
+pub fn __pop_scope() -> Pooled<BasicBlock> {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
         let s = &mut r.scopes;
         s.pop().unwrap().finish()
     })
 }
+pub fn __module_pools() -> &'static CArc<ModulePools> {
+    RECORDER.with(|r| {
+        let r = r.borrow();
+        assert!(r.lock, "__module_pools must be called within a kernel");
+        let pool = r.pools.as_ref().unwrap();
+        unsafe { std::mem::transmute(pool) }
+    })
+}
 pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
     let inst = &node.get().instruction;
-    current_scope(|b| {
+    __current_scope(|b| {
         let i = b.const_(Const::Int32(index as i32));
         let op = match inst.as_ref() {
             Instruction::Local { .. } => Func::GetElementPtr,
@@ -393,7 +410,7 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
 }
 pub fn __insert<T: Value>(node: NodeRef, index: usize, value: NodeRef) -> NodeRef {
     let inst = &node.get().instruction;
-    current_scope(|b| {
+    __current_scope(|b| {
         let i = b.const_(Const::Int32(index as i32));
         let op = match inst.as_ref() {
             Instruction::Local { .. } => panic!("Can't insert into local variable"),
@@ -408,7 +425,7 @@ pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
     match ty.as_ref() {
         Type::Struct(st) => {
             assert_eq!(st.fields.as_ref().len(), nodes.len());
-            current_scope(|b| b.call(Func::Struct, nodes, <T as TypeOf>::type_()))
+            __current_scope(|b| b.call(Func::Struct, nodes, <T as TypeOf>::type_()))
         }
         Type::Primitive(_) => panic!("Can't compose primitive type"),
         Type::Vector(vt) => {
@@ -419,7 +436,7 @@ pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
                 4 => Func::Vec4,
                 _ => panic!("Can't compose vector with length {}", length),
             };
-            current_scope(|b| b.call(func, nodes, <T as TypeOf>::type_()))
+            __current_scope(|b| b.call(func, nodes, <T as TypeOf>::type_()))
         }
         Type::Matrix(vt) => {
             let length = vt.dimension;
@@ -429,7 +446,7 @@ pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
                 4 => Func::Mat4,
                 _ => panic!("Can't compose vector with length {}", length),
             };
-            current_scope(|b| b.call(func, nodes, <T as TypeOf>::type_()))
+            __current_scope(|b| b.call(func, nodes, <T as TypeOf>::type_()))
         }
         _ => todo!(),
     }
@@ -448,29 +465,31 @@ macro_rules! var {
     };
 }
 pub fn local<T: Value>(init: Expr<T>) -> Var<T> {
-    Var::<T>::from_node(current_scope(|b| b.local(init.node())))
+    Var::<T>::from_node(__current_scope(|b| b.local(init.node())))
 }
 pub fn local_zeroed<T: Value>() -> Var<T> {
-    Var::<T>::from_node(current_scope(|b| b.local_zero_init(<T as TypeOf>::type_())))
+    Var::<T>::from_node(__current_scope(|b| {
+        b.local_zero_init(<T as TypeOf>::type_())
+    }))
 }
 pub fn thread_id() -> Expr<UVec3> {
-    Expr::<UVec3>::from_node(current_scope(|b| {
+    Expr::<UVec3>::from_node(__current_scope(|b| {
         b.call(Func::ThreadId, &[], UVec3::type_())
     }))
 }
 
 pub fn block_id() -> Expr<UVec3> {
-    Expr::<UVec3>::from_node(current_scope(|b| {
+    Expr::<UVec3>::from_node(__current_scope(|b| {
         b.call(Func::BlockId, &[], UVec3::type_())
     }))
 }
 pub fn dispatch_id() -> Expr<UVec3> {
-    Expr::<UVec3>::from_node(current_scope(|b| {
+    Expr::<UVec3>::from_node(__current_scope(|b| {
         b.call(Func::DispatchId, &[], UVec3::type_())
     }))
 }
 pub fn dispatch_size() -> Expr<UVec3> {
-    Expr::<UVec3>::from_node(current_scope(|b| {
+    Expr::<UVec3>::from_node(__current_scope(|b| {
         b.call(Func::DispatchSize, &[], UVec3::type_())
     }))
 }
@@ -492,7 +511,7 @@ pub type Expr<T> = <T as Value>::Expr;
 pub type Var<T> = <T as Value>::Var;
 
 pub fn const_<T: Value + Copy + 'static>(value: T) -> T::Expr {
-    let node = current_scope(|s| -> NodeRef {
+    let node = __current_scope(|s| -> NodeRef {
         let any = &value as &dyn Any;
         if let Some(value) = any.downcast_ref::<bool>() {
             s.const_(Const::Bool(*value))
@@ -524,7 +543,7 @@ pub fn const_<T: Value + Copy + 'static>(value: T) -> T::Expr {
 }
 pub fn bitcast<From: Value, To: Value>(expr: Expr<From>) -> Expr<To> {
     assert_eq!(std::mem::size_of::<From>(), std::mem::size_of::<To>());
-    Expr::<To>::from_node(current_scope(|b| {
+    Expr::<To>::from_node(__current_scope(|b| {
         b.call(Func::Bitcast, &[expr.node()], <To as TypeOf>::type_())
     }))
 }
@@ -596,7 +615,7 @@ impl<T: Value, const N: usize> ArrayVar<T, N> {
         if __env_need_backtrace() {
             assert(i.cmplt(const_(N as u32)));
         }
-        Expr::<T>::from_node(current_scope(|b| {
+        Expr::<T>::from_node(__current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
             b.call(Func::Load, &[gep], T::type_())
         }))
@@ -610,7 +629,7 @@ impl<T: Value, const N: usize> ArrayVar<T, N> {
         if __env_need_backtrace() {
             assert(i.cmplt(const_(N as u32)));
         }
-        current_scope(|b| {
+        __current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
             b.update(gep, value.node());
         });
@@ -618,7 +637,7 @@ impl<T: Value, const N: usize> ArrayVar<T, N> {
 }
 impl<T: Value, const N: usize> ArrayExpr<T, N> {
     pub fn zero() -> Self {
-        let node = current_scope(|b| b.call(Func::ZeroInitializer, &[], <[T; N]>::type_()));
+        let node = __current_scope(|b| b.call(Func::ZeroInitializer, &[], <[T; N]>::type_()));
         Self::from_node(node)
     }
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
@@ -626,7 +645,7 @@ impl<T: Value, const N: usize> ArrayExpr<T, N> {
         if __env_need_backtrace() {
             assert(i.cmplt(const_(N as u32)));
         }
-        Expr::<T>::from_node(current_scope(|b| {
+        Expr::<T>::from_node(__current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
             b.call(Func::Load, &[gep], T::type_())
         }))
@@ -662,7 +681,7 @@ impl<T: Value> BindlessBufferVar<T> {
         if __env_need_backtrace() {
             assert(i.cmplt(self.len()));
         }
-        Expr::<T>::from_node(current_scope(|b| {
+        Expr::<T>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessBufferRead,
                 &[self.array, self.buffer_index.node(), FromNode::node(&i)],
@@ -671,7 +690,7 @@ impl<T: Value> BindlessBufferVar<T> {
         }))
     }
     pub fn len(&self) -> Expr<u32> {
-        Expr::<u32>::from_node(current_scope(|b| {
+        Expr::<u32>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessBufferSize(T::type_()),
                 &[self.array, self.buffer_index.node()],
@@ -680,7 +699,7 @@ impl<T: Value> BindlessBufferVar<T> {
         }))
     }
     pub fn __type(&self) -> Expr<u64> {
-        Expr::<u64>::from_node(current_scope(|b| {
+        Expr::<u64>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessBufferType,
                 &[self.array, self.buffer_index.node()],
@@ -701,7 +720,7 @@ impl BindlessArrayVar {
             let backtrace = backtrace::Backtrace::new();
             let check_type = CpuFn::new(move |t: &mut u64| {
                 let expected = T::type_();
-                if *t != Gc::as_ptr(expected) as u64 {
+                if *t != CArc::as_ptr(&expected) as u64 {
                     let t = unsafe { &*(*t as *const Type) };
                     {
                         let mut stderr = std::io::stderr().lock();
@@ -718,7 +737,7 @@ impl BindlessArrayVar {
         } else {
             let check_type = CpuFn::new(move |t: &mut u64| {
                 let expected = T::type_();
-                if *t != Gc::as_ptr(expected) as u64 {
+                if *t != CArc::as_ptr(&expected) as u64 {
                     let t = unsafe { &*(*t as *const Type) };
                     {
                         let mut stderr = std::io::stderr().lock();
@@ -744,7 +763,10 @@ impl BindlessArrayVar {
             if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
                 *node
             } else {
-                let node = new_node(Node::new(Gc::new(Instruction::Bindless), Type::void()));
+                let node = new_node(
+                    r.pools.as_ref().unwrap(),
+                    Node::new(CArc::new(Instruction::Bindless), Type::void()),
+                );
                 let i = r.captured_buffer.len();
                 r.captured_buffer.insert(
                     handle,
@@ -773,7 +795,10 @@ impl<T: Value> BufferVar<T> {
             if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
                 *node
             } else {
-                let node = new_node(Node::new(Gc::new(Instruction::Buffer), T::type_()));
+                let node = new_node(
+                    r.pools.as_ref().unwrap(),
+                    Node::new(CArc::new(Instruction::Buffer), T::type_()),
+                );
                 let i = r.captured_buffer.len();
                 r.captured_buffer.insert(
                     handle,
@@ -799,7 +824,7 @@ impl<T: Value> BufferVar<T> {
     }
     pub fn len(&self) -> Expr<u32> {
         FromNode::from_node(
-            current_scope(|b| b.call(Func::BufferSize, &[self.node], u32::type_())).into(),
+            __current_scope(|b| b.call(Func::BufferSize, &[self.node], u32::type_())).into(),
         )
     }
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
@@ -807,7 +832,7 @@ impl<T: Value> BufferVar<T> {
         if __env_need_backtrace() {
             assert(i.cmplt(self.len()));
         }
-        current_scope(|b| {
+        __current_scope(|b| {
             FromNode::from_node(b.call(
                 Func::BufferRead,
                 &[self.node, FromNode::node(&i)],
@@ -821,7 +846,7 @@ impl<T: Value> BufferVar<T> {
         if __env_need_backtrace() {
             assert(i.cmplt(self.len()));
         }
-        current_scope(|b| {
+        __current_scope(|b| {
             b.call(
                 Func::BufferWrite,
                 &[self.node, FromNode::node(&i), v.node()],
@@ -844,7 +869,7 @@ macro_rules! impl_atomic {
                 if __env_need_backtrace() {
                     assert(i.cmplt(self.len()));
                 }
-                Expr::<$t>::from_node(current_scope(|b| {
+                Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicExchange,
                         &[self.node, FromNode::node(&i), v.node()],
@@ -868,7 +893,7 @@ macro_rules! impl_atomic {
                 if __env_need_backtrace() {
                     assert(i.cmplt(self.len()));
                 }
-                Expr::<$t>::from_node(current_scope(|b| {
+                Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicCompareExchange,
                         &[
@@ -891,7 +916,7 @@ macro_rules! impl_atomic {
                 if __env_need_backtrace() {
                     assert(i.cmplt(self.len()));
                 }
-                Expr::<$t>::from_node(current_scope(|b| {
+                Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicFetchAdd,
                         &[self.node, FromNode::node(&i), v.node()],
@@ -909,7 +934,7 @@ macro_rules! impl_atomic {
                 if __env_need_backtrace() {
                     assert(i.cmplt(self.len()));
                 }
-                Expr::<$t>::from_node(current_scope(|b| {
+                Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicFetchSub,
                         &[self.node, FromNode::node(&i), v.node()],
@@ -927,7 +952,7 @@ macro_rules! impl_atomic {
                 if __env_need_backtrace() {
                     assert(i.cmplt(self.len()));
                 }
-                Expr::<$t>::from_node(current_scope(|b| {
+                Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicFetchMin,
                         &[self.node, FromNode::node(&i), v.node()],
@@ -945,7 +970,7 @@ macro_rules! impl_atomic {
                 if __env_need_backtrace() {
                     assert(i.cmplt(self.len()));
                 }
-                Expr::<$t>::from_node(current_scope(|b| {
+                Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicFetchMax,
                         &[self.node, FromNode::node(&i), v.node()],
@@ -969,7 +994,7 @@ macro_rules! impl_atomic_bit {
                 if __env_need_backtrace() {
                     assert(i.cmplt(self.len()));
                 }
-                Expr::<$t>::from_node(current_scope(|b| {
+                Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicFetchAnd,
                         &[self.node, FromNode::node(&i), v.node()],
@@ -987,7 +1012,7 @@ macro_rules! impl_atomic_bit {
                 if __env_need_backtrace() {
                     assert(i.cmplt(self.len()));
                 }
-                Expr::<$t>::from_node(current_scope(|b| {
+                Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicFetchOr,
                         &[self.node, FromNode::node(&i), v.node()],
@@ -1005,7 +1030,7 @@ macro_rules! impl_atomic_bit {
                 if __env_need_backtrace() {
                     assert(i.cmplt(self.len()));
                 }
-                Expr::<$t>::from_node(current_scope(|b| {
+                Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicFetchXor,
                         &[self.node, FromNode::node(&i), v.node()],
@@ -1067,12 +1092,12 @@ pub struct RtxHit {
 }
 impl AccelVar {
     pub fn trace_closest(&self, ray: Expr<RtxRay>) -> Expr<RtxHit> {
-        FromNode::from_node(current_scope(|b| {
+        FromNode::from_node(__current_scope(|b| {
             b.call(Func::RayTracingTraceClosest, &[ray.node()], RtxHit::type_())
         }))
     }
     pub fn trace_any(&self, ray: Expr<RtxRay>) -> Expr<bool> {
-        FromNode::from_node(current_scope(|b| {
+        FromNode::from_node(__current_scope(|b| {
             b.call(Func::RayTracingTraceAny, &[ray.node()], bool::type_())
         }))
     }
@@ -1084,7 +1109,10 @@ impl AccelVar {
             if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
                 *node
             } else {
-                let node = new_node(Node::new(Gc::new(Instruction::Accel), Type::void()));
+                let node = new_node(
+                    r.pools.as_ref().unwrap(),
+                    Node::new(CArc::new(Instruction::Accel), Type::void()),
+                );
                 let i = r.captured_buffer.len();
                 r.captured_buffer.insert(
                     handle,
@@ -1187,8 +1215,10 @@ impl KernelBuilder {
             );
             r.lock = true;
             r.device = Some(device.clone());
+            r.pools = Some(CArc::new(ModulePools::new()));
             r.scopes.clear();
-            r.scopes.push(IrBuilder::new());
+            let pools = r.pools.clone().unwrap();
+            r.scopes.push(IrBuilder::new(pools));
         });
         Self {
             device,
@@ -1196,7 +1226,10 @@ impl KernelBuilder {
         }
     }
     pub fn buffer<T: Value>(&mut self) -> BufferVar<T> {
-        let node = new_node(Node::new(Gc::new(Instruction::Buffer), T::type_()));
+        let node = new_node(
+            __module_pools(),
+            Node::new(CArc::new(Instruction::Buffer), T::type_()),
+        );
         self.args.push(node);
         BufferVar {
             node,
@@ -1211,12 +1244,18 @@ impl KernelBuilder {
         todo!()
     }
     pub fn bindless_array(&mut self) -> BindlessArrayVar {
-        let node = new_node(Node::new(Gc::new(Instruction::Bindless), Type::void()));
+        let node = new_node(
+            __module_pools(),
+            Node::new(CArc::new(Instruction::Bindless), Type::void()),
+        );
         self.args.push(node);
         BindlessArrayVar { node, handle: None }
     }
     pub fn accel(&mut self) -> AccelVar {
-        let node = new_node(Node::new(Gc::new(Instruction::Accel), Type::void()));
+        let node = new_node(
+            __module_pools(),
+            Node::new(CArc::new(Instruction::Accel), Type::void()),
+        );
         self.args.push(node);
         AccelVar { node, handle: None }
     }
@@ -1268,16 +1307,18 @@ impl KernelBuilder {
                     module: Module {
                         entry,
                         kind: ModuleKind::Kernel,
+                        pools: r.pools.clone().unwrap(),
                     },
                     cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
                     captures: CBoxedSlice::new(captured),
                     shared: CBoxedSlice::new(vec![]),
                     args: CBoxedSlice::new(self.args.clone()),
                     block_size: r.block_size.unwrap_or([1, 1, 1]),
+                    pools: r.pools.clone().unwrap(),
                 };
                 // build kernel here
-                // let shader = self.device.inner.create_shader(Gc::new(module))?;
-                let module = Gc::new(module);
+                // let shader = self.device.inner.create_shader(CArc::new(module))?;
+                let module = CArc::new(module);
                 let artifact = if options.async_compile {
                     ShaderArtifact::Async(AsyncShaderArtifact::new(self.device.clone(), module))
                 } else {
@@ -1377,15 +1418,17 @@ pub fn if_<R: Aggregate>(
 ) -> R {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
+        let pools = r.pools.clone().unwrap();
         let s = &mut r.scopes;
-        s.push(IrBuilder::new());
+        s.push(IrBuilder::new(pools));
     });
     let then = then();
     let then_block = RECORDER.with(|r| {
         let mut r = r.borrow_mut();
+        let pools = r.pools.clone().unwrap();
         let s = &mut r.scopes;
         let then_block = s.pop().unwrap().finish();
-        s.push(IrBuilder::new());
+        s.push(IrBuilder::new(pools));
         then_block
     });
     let else_ = else_();
@@ -1396,11 +1439,11 @@ pub fn if_<R: Aggregate>(
     });
     let then_nodes = then.to_vec_nodes();
     let else_nodes = else_.to_vec_nodes();
-    current_scope(|b| {
+    __current_scope(|b| {
         b.if_(cond.node(), then_block, else_block);
     });
     assert_eq!(then_nodes.len(), else_nodes.len());
-    let phis = current_scope(|b| {
+    let phis = __current_scope(|b| {
         then_nodes
             .iter()
             .zip(else_nodes.iter())
@@ -1416,7 +1459,7 @@ pub fn if_<R: Aggregate>(
                     },
                 ];
                 assert_eq!(then.type_(), else_.type_());
-                let phi = b.phi(&incomings, then.type_());
+                let phi = b.phi(&incomings, then.type_().clone());
                 phi
             })
             .collect::<Vec<_>>()
@@ -1426,23 +1469,26 @@ pub fn if_<R: Aggregate>(
 pub fn generic_loop(cond: impl FnOnce() -> Bool, body: impl FnOnce(), update: impl FnOnce()) {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
+        let pools = r.pools.clone().unwrap();
         let s = &mut r.scopes;
-        s.push(IrBuilder::new());
+        s.push(IrBuilder::new(pools));
     });
     let cond_v = cond().node();
     let prepare = RECORDER.with(|r| {
         let mut r = r.borrow_mut();
+        let pools = r.pools.clone().unwrap();
         let s = &mut r.scopes;
         let prepare = s.pop().unwrap().finish();
-        s.push(IrBuilder::new());
+        s.push(IrBuilder::new(pools));
         prepare
     });
     body();
     let body = RECORDER.with(|r| {
         let mut r = r.borrow_mut();
+        let pools = r.pools.clone().unwrap();
         let s = &mut r.scopes;
         let body = s.pop().unwrap().finish();
-        s.push(IrBuilder::new());
+        s.push(IrBuilder::new(pools));
         body
     });
     update();
@@ -1451,13 +1497,13 @@ pub fn generic_loop(cond: impl FnOnce() -> Bool, body: impl FnOnce(), update: im
         let s = &mut r.scopes;
         s.pop().unwrap().finish()
     });
-    current_scope(|b| {
+    __current_scope(|b| {
         b.generic_loop(prepare, cond_v, body, update);
     });
 }
 pub struct SwitchBuilder<R: Aggregate> {
-    cases: Vec<(i32, Gc<BasicBlock>, Vec<NodeRef>)>,
-    default: Option<(Gc<BasicBlock>, Vec<NodeRef>)>,
+    cases: Vec<(i32, Pooled<BasicBlock>, Vec<NodeRef>)>,
+    default: Option<(Pooled<BasicBlock>, Vec<NodeRef>)>,
     value: NodeRef,
     _marker: PhantomData<R>,
     depth: usize,
@@ -1478,24 +1524,26 @@ impl<R: Aggregate> SwitchBuilder<R> {
     pub fn case(mut self, value: i32, then: impl FnOnce() -> R) -> Self {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
+            let pools = r.pools.clone().unwrap();
             let s = &mut r.scopes;
             assert_eq!(s.len(), self.depth);
-            s.push(IrBuilder::new());
+            s.push(IrBuilder::new(pools));
         });
         let then = then();
-        let block = pop_scope();
+        let block = __pop_scope();
         self.cases.push((value, block, then.to_vec_nodes()));
         self
     }
     pub fn default(mut self, then: impl FnOnce() -> R) -> Self {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
+            let pools = r.pools.clone().unwrap();
             let s = &mut r.scopes;
             assert_eq!(s.len(), self.depth);
-            s.push(IrBuilder::new());
+            s.push(IrBuilder::new(pools));
         });
         let then = then();
-        let block = pop_scope();
+        let block = __pop_scope();
         self.default = Some((block, then.to_vec_nodes()));
         self
     }
@@ -1523,21 +1571,23 @@ impl<R: Aggregate> SwitchBuilder<R> {
         let default_block = if self.default.is_none() {
             RECORDER.with(|r| {
                 let mut r = r.borrow_mut();
+                let pools = r.pools.clone().unwrap();
                 let s = &mut r.scopes;
                 assert_eq!(s.len(), self.depth);
-                s.push(IrBuilder::new());
+                s.push(IrBuilder::new(pools));
             });
             for i in 0..phi_count {
-                let default_node =
-                    current_scope(|b| b.call(Func::Unreachable, &[], case_phis[0][i].type_()));
+                let default_node = __current_scope(|b| {
+                    b.call(Func::Unreachable, &[], case_phis[0][i].type_().clone())
+                });
                 default_nodes.push(default_node);
             }
-            pop_scope()
+            __pop_scope()
         } else {
             default_nodes = self.default.as_ref().unwrap().1.clone();
             self.default.as_ref().unwrap().0
         };
-        current_scope(|b| {
+        __current_scope(|b| {
             b.switch(self.value, &cases, default_block);
         });
         let mut phis = vec![];
@@ -1553,7 +1603,7 @@ impl<R: Aggregate> SwitchBuilder<R> {
                 value: default_nodes[i],
                 block: default_block,
             });
-            let phi = current_scope(|b| b.phi(&incomings, case_phis[0][i].type_()));
+            let phi = __current_scope(|b| b.phi(&incomings, case_phis[0][i].type_().clone()));
             phis.push(phi);
         }
         R::from_vec_nodes(phis)
@@ -1577,29 +1627,29 @@ macro_rules! while_ {
 }
 
 pub fn break_() {
-    current_scope(|b| {
+    __current_scope(|b| {
         b.break_();
     });
 }
 pub fn continue_() {
-    current_scope(|b| {
+    __current_scope(|b| {
         b.continue_();
     });
 }
 // pub fn return_v<T: FromNode>(v: T) {
-//     current_scope(|b| {
+//     __current_scope(|b| {
 //         b.return_(Some(v.node()));
 //     });
 // }
 pub fn return_() {
-    current_scope(|b| {
+    __current_scope(|b| {
         b.return_(INVALID_REF);
     });
 }
 struct AdContext {
     started: bool,
     backward_called: bool,
-    forward: Option<Gc<BasicBlock>>,
+    forward: Option<Pooled<BasicBlock>>,
 }
 impl AdContext {
     fn new() -> Self {
@@ -1617,18 +1667,21 @@ thread_local! {
     static AD_CONTEXT:RefCell<AdContext> = RefCell::new(AdContext::new());
 }
 pub fn requires_grad<T: Value>(var: impl ExprProxy<T>) {
-    current_scope(|b| {
+    __current_scope(|b| {
         b.call(Func::RequiresGradient, &[var.node()], Type::void());
     });
 }
 pub fn backward<T: Value>(out: impl ExprProxy<T>) {
     backward_with_grad(
         out,
-        FromNode::from_node(current_scope(|b| {
-            let one = new_node(Node::new(
-                Gc::new(Instruction::Const(Const::One(T::type_()))),
-                T::type_(),
-            ));
+        FromNode::from_node(__current_scope(|b| {
+            let one = new_node(
+                b.pools(),
+                Node::new(
+                    CArc::new(Instruction::Const(Const::One(T::type_()))),
+                    T::type_(),
+                ),
+            );
             b.append(one);
             one
         })),
@@ -1643,23 +1696,24 @@ pub fn backward_with_grad<T: Value, U: ExprProxy<T>>(out: U, grad: U) {
     });
     let out = out.node();
     let grad = grad.node();
-    current_scope(|b| {
+    __current_scope(|b| {
         b.call(Func::GradientMarker, &[out, grad], Type::void());
     });
-    let fwd = pop_scope();
+    let fwd = __pop_scope();
     AD_CONTEXT.with(|c| {
         let mut c = c.borrow_mut();
         c.forward = Some(fwd);
     });
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
+        let pools = r.pools.clone().unwrap();
         let s = &mut r.scopes;
-        s.push(IrBuilder::new());
+        s.push(IrBuilder::new(pools));
     });
 }
 pub fn gradient<T: Value, U: ExprProxy<T>>(var: U) -> U {
-    U::from_node(current_scope(|b| {
-        b.call(Func::Gradient, &[var.node()], var.node().type_())
+    U::from_node(__current_scope(|b| {
+        b.call(Func::Gradient, &[var.node()], var.node().type_().clone())
     }))
 }
 pub fn grad<T: Value, U: ExprProxy<T>>(var: U) -> U {
@@ -1673,20 +1727,20 @@ pub fn grad<T: Value, U: ExprProxy<T>>(var: U) -> U {
 //     });
 //     let ret = body();
 //     let fwd = pop_scope();
-//     current_scope(|b| {
-//         let node = new_node(Node::new(Gc::new(Instruction::AdDetach(fwd)), Type::void()));
+//     __current_scope(|b| {
+//         let node = new_node(Node::new(CArc::new(Instruction::AdDetach(fwd)), Type::void()));
 //         b.append(node);
 //     });
 //     let nodes = ret.to_vec_nodes();
 //     let nodes: Vec<_> = nodes
 //         .iter()
-//         .map(|n| current_scope(|b| b.call(Func::Detach, &[*n], n.type_())))
+//         .map(|n| __current_scope(|b| b.call(Func::Detach, &[*n], n.type_())))
 //         .collect();
 //     R::from_vec_nodes(nodes)
 // }
 pub fn detach<T: FromNode>(v: T) -> T {
     let v = v.node();
-    let node = current_scope(|b| b.call(Func::Detach, &[v], v.type_()));
+    let node = __current_scope(|b| b.call(Func::Detach, &[v], v.type_().clone()));
     T::from_node(node)
 }
 pub fn autodiff(body: impl FnOnce()) {
@@ -1697,8 +1751,9 @@ pub fn autodiff(body: impl FnOnce()) {
     });
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
+        let pools = r.pools.clone().unwrap();
         let s = &mut r.scopes;
-        s.push(IrBuilder::new());
+        s.push(IrBuilder::new(pools));
     });
     body();
     let fwd = AD_CONTEXT.with(|c| {
@@ -1710,6 +1765,7 @@ pub fn autodiff(body: impl FnOnce()) {
     let fwd_module = Module {
         kind: ModuleKind::Block,
         entry: fwd,
+        pools: __module_pools().clone(),
     };
     let ad_transform = transform::autodiff::Autodiff;
     let ad_module = ad_transform.transform(fwd_module);
@@ -1726,7 +1782,7 @@ pub fn autodiff(body: impl FnOnce()) {
         assert!(c.backward_called, "backward is not called");
         c.reset();
     });
-    current_scope(|b| {
+    __current_scope(|b| {
         b.append_block(fwd_bwd);
         b.append_block(epilogue);
     })
@@ -1766,7 +1822,7 @@ pub fn assert(cond: Expr<bool>) {
         });
         let _ = assert_fn.call(cond);
     }
-    current_scope(|b| {
+    __current_scope(|b| {
         b.call(Func::Assert, &[cond.node()], Type::void());
     });
 }

@@ -5,6 +5,7 @@ use crate::{lang::Value, resource::*};
 
 use lang::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSigature};
 pub use luisa_compute_api_types as api;
+use luisa_compute_ir::CArc;
 use luisa_compute_ir::ir::KernelModule;
 use parking_lot::{Condvar, Mutex};
 use rtx::Accel;
@@ -345,7 +346,7 @@ pub(crate) enum ShaderArtifact {
 impl AsyncShaderArtifact {
     pub(crate) fn new(
         device: Device,
-        kernel: Gc<KernelModule>,
+        kernel: CArc<KernelModule>,
     ) -> Arc<(Mutex<AsyncShaderArtifact>, Condvar)> {
         let artifact = Arc::new((
             Mutex::new(AsyncShaderArtifact { shader: None }),

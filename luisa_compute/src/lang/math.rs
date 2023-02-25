@@ -3,7 +3,7 @@ use std::ops::Mul;
 pub use super::swizzle::*;
 use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*, Float32};
 use crate::prelude::FromNode;
-use crate::prelude::{__compose, __insert, const_, current_scope, Expr, PrimExpr, Var};
+use crate::prelude::{__compose, __insert, const_, __current_scope, Expr, PrimExpr, Var};
 use luisa_compute_ir::{
     context::register_type,
     ir::{Func, MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType},
@@ -267,7 +267,7 @@ macro_rules! impl_vec_proxy {
             }
         }
         impl TypeOf for $vec {
-            fn type_() -> luisa_compute_ir::Gc<luisa_compute_ir::ir::Type> {
+            fn type_() -> luisa_compute_ir::CArc<luisa_compute_ir::ir::Type> {
                 let type_ = Type::Vector(VectorType {
                     element: VectorElementType::Scalar(Primitive::$scalar_ty),
                     length: $length,
@@ -353,7 +353,7 @@ macro_rules! impl_mat_proxy {
             }
         }
         impl TypeOf for $mat {
-            fn type_() -> luisa_compute_ir::Gc<luisa_compute_ir::ir::Type> {
+            fn type_() -> luisa_compute_ir::CArc<luisa_compute_ir::ir::Type> {
                 let type_ = Type::Matrix(MatrixType {
                     element: VectorElementType::Scalar(Primitive::$scalar_ty),
                     dimension: $length,
@@ -461,7 +461,7 @@ macro_rules! impl_binop {
         impl std::ops::$tr for $proxy {
             type Output = $proxy;
             fn $m(self, rhs: $proxy) -> Self::Output {
-                <$proxy>::from_node(current_scope(|s| {
+                <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::$tr, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
             }
@@ -470,7 +470,7 @@ macro_rules! impl_binop {
             type Output = $proxy;
             fn $m(self, rhs: $scalar) -> Self::Output {
                 let rhs = Self::splat(rhs);
-                <$proxy>::from_node(current_scope(|s| {
+                <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::$tr, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
             }
@@ -479,7 +479,7 @@ macro_rules! impl_binop {
             type Output = $proxy;
             fn $m(self, rhs: $proxy) -> Self::Output {
                 let lhs = <$proxy>::splat(self);
-                <$proxy>::from_node(current_scope(|s| {
+                <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::$tr, &[lhs.node, rhs.node], <$t as TypeOf>::type_())
                 }))
             }
@@ -488,7 +488,7 @@ macro_rules! impl_binop {
             type Output = $proxy;
             fn $m(self, rhs: PrimExpr<$scalar>) -> Self::Output {
                 let rhs = Self::splat(rhs);
-                <$proxy>::from_node(current_scope(|s| {
+                <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::$tr, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
             }
@@ -497,7 +497,7 @@ macro_rules! impl_binop {
             type Output = $proxy;
             fn $m(self, rhs: $proxy) -> Self::Output {
                 let lhs = <$proxy>::splat(self);
-                <$proxy>::from_node(current_scope(|s| {
+                <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::$tr, &[lhs.node, rhs.node], <$t as TypeOf>::type_())
                 }))
             }
@@ -516,7 +516,7 @@ macro_rules! impl_arith_binop {
         impl std::ops::Neg for $proxy {
             type Output = $proxy;
             fn neg(self) -> Self::Output {
-                <$proxy>::from_node(current_scope(|s| {
+                <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Neg, &[self.node], <$t as TypeOf>::type_())
                 }))
             }
@@ -549,7 +549,7 @@ macro_rules! impl_int_binop {
         impl std::ops::Not for $proxy {
             type Output = Expr<$t>;
             fn not(self) -> Self::Output {
-                current_scope(|s| {
+                __current_scope(|s| {
                     let ret = s.call(
                         Func::BitNot,
                         &[FromNode::node(&self)],
@@ -585,7 +585,7 @@ macro_rules! impl_bool_binop {
         impl $proxy {
             pub fn splat<V: Into<PrimExpr<bool>>>(value: V) -> Self {
                 let value = value.into();
-                <$proxy>::from_node(current_scope(|s| {
+                <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Vec, &[value.node], <$t as TypeOf>::type_())
                 }))
             }
@@ -596,12 +596,12 @@ macro_rules! impl_bool_binop {
                 Self::splat(true)
             }
             pub fn all(&self) -> Expr<bool> {
-                Expr::<bool>::from_node(current_scope(|s| {
+                Expr::<bool>::from_node(__current_scope(|s| {
                     s.call(Func::All, &[self.node], <bool as TypeOf>::type_())
                 }))
             }
             pub fn any(&self) -> Expr<bool> {
-                Expr::<bool>::from_node(current_scope(|s| {
+                Expr::<bool>::from_node(__current_scope(|s| {
                     s.call(Func::Any, &[self.node], <bool as TypeOf>::type_())
                 }))
             }
@@ -619,31 +619,31 @@ macro_rules! impl_reduce {
         impl $proxy {
             #[inline]
             pub fn reduce_sum(&self) -> Expr<$scalar> {
-                FromNode::from_node(current_scope(|s| {
+                FromNode::from_node(__current_scope(|s| {
                     s.call(Func::ReduceSum, &[self.node], <$scalar as TypeOf>::type_())
                 }))
             }
             #[inline]
             pub fn reduce_prod(&self) -> Expr<$scalar> {
-                FromNode::from_node(current_scope(|s| {
+                FromNode::from_node(__current_scope(|s| {
                     s.call(Func::ReduceProd, &[self.node], <$scalar as TypeOf>::type_())
                 }))
             }
             #[inline]
             pub fn reduce_min(&self) -> Expr<$scalar> {
-                FromNode::from_node(current_scope(|s| {
+                FromNode::from_node(__current_scope(|s| {
                     s.call(Func::ReduceMin, &[self.node], <$scalar as TypeOf>::type_())
                 }))
             }
             #[inline]
             pub fn reduce_max(&self) -> Expr<$scalar> {
-                FromNode::from_node(current_scope(|s| {
+                FromNode::from_node(__current_scope(|s| {
                     s.call(Func::ReduceMax, &[self.node], <$scalar as TypeOf>::type_())
                 }))
             }
             #[inline]
             pub fn dot(&self, rhs: $proxy) -> Expr<$scalar> {
-                FromNode::from_node(current_scope(|s| {
+                FromNode::from_node(__current_scope(|s| {
                     s.call(
                         Func::Dot,
                         &[self.node, rhs.node],
@@ -659,7 +659,7 @@ macro_rules! impl_common_op {
         impl $proxy {
             pub fn splat<V: Into<PrimExpr<$scalar>>>(value: V) -> Self {
                 let value = value.into();
-                <$proxy>::from_node(current_scope(|s| {
+                <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Vec, &[value.node], <$t as TypeOf>::type_())
                 }))
             }
@@ -677,19 +677,19 @@ macro_rules! impl_vec_op {
         impl $proxy {
             #[inline]
             pub fn length(&self) -> Expr<$scalar> {
-                FromNode::from_node(current_scope(|s| {
+                FromNode::from_node(__current_scope(|s| {
                     s.call(Func::Length, &[self.node], <$scalar as TypeOf>::type_())
                 }))
             }
             #[inline]
             pub fn normalize(&self) -> Self {
-                <$proxy>::from_node(current_scope(|s| {
+                <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Normalize, &[self.node], <$t as TypeOf>::type_())
                 }))
             }
             #[inline]
             pub fn length_squared(&self) -> Expr<$scalar> {
-                FromNode::from_node(current_scope(|s| {
+                FromNode::from_node(__current_scope(|s| {
                     s.call(
                         Func::LengthSquared,
                         &[self.node],
@@ -707,7 +707,7 @@ macro_rules! impl_vec_op {
             }
             #[inline]
             pub fn fma(&self, a: $proxy, b: $proxy) -> Self {
-                <$proxy>::from_node(current_scope(|s| {
+                <$proxy>::from_node(__current_scope(|s| {
                     s.call(
                         Func::Fma,
                         &[self.node, a.node, b.node],
@@ -717,7 +717,7 @@ macro_rules! impl_vec_op {
             }
             #[inline]
             pub fn outer_product(&self, rhs: $proxy) -> Expr<$mat> {
-                Expr::<$mat>::from_node(current_scope(|s| {
+                Expr::<$mat>::from_node(__current_scope(|s| {
                     s.call(
                         Func::OuterProduct,
                         &[self.node, rhs.node],
@@ -771,7 +771,7 @@ macro_rules! impl_select {
     ($bvec:ty, $vec:ty, $proxy:ty) => {
         impl $proxy {
             pub fn select(mask: Expr<$bvec>, a: Expr<$vec>, b: Expr<$vec>) -> Expr<$vec> {
-                Expr::<$vec>::from_node(current_scope(|s| {
+                Expr::<$vec>::from_node(__current_scope(|s| {
                     s.call(
                         Func::Select,
                         &[mask.node(), a.node(), b.node()],
@@ -803,7 +803,7 @@ macro_rules! impl_cast {
     ($proxy:ty, $to:ty, $m:ident) => {
         impl $proxy {
             pub fn $m(&self) -> Expr<$to> {
-                Expr::<$to>::from_node(current_scope(|s| {
+                Expr::<$to>::from_node(__current_scope(|s| {
                     s.call(Func::Cast, &[self.node], <$to as TypeOf>::type_())
                 }))
             }
@@ -841,7 +841,7 @@ macro_rules! impl_permute {
                 assert!(y < $len);
                 let x: Expr<i32> = x.into();
                 let y: Expr<i32> = y.into();
-                Expr::<$v2>::from_node(current_scope(|s| {
+                Expr::<$v2>::from_node(__current_scope(|s| {
                     s.call(
                         Func::Permute,
                         &[self.node, FromNode::node(&x), FromNode::node(&y)],
@@ -856,7 +856,7 @@ macro_rules! impl_permute {
                 let x: Expr<i32> = x.into();
                 let y: Expr<i32> = y.into();
                 let z: Expr<i32> = z.into();
-                Expr::<$v3>::from_node(current_scope(|s| {
+                Expr::<$v3>::from_node(__current_scope(|s| {
                     s.call(
                         Func::Permute,
                         &[
@@ -878,7 +878,7 @@ macro_rules! impl_permute {
                 let y: Expr<i32> = y.into();
                 let z: Expr<i32> = z.into();
                 let w: Expr<i32> = w.into();
-                Expr::<$v4>::from_node(current_scope(|s| {
+                Expr::<$v4>::from_node(__current_scope(|s| {
                     s.call(
                         Func::Permute,
                         &[
@@ -918,7 +918,7 @@ impl_permute!(Vec4Swizzle, ULVec4Expr, 4, ULVec2, ULVec3, ULVec4);
 impl Vec3Expr {
     #[inline]
     pub fn cross(&self, rhs: Vec3Expr) -> Self {
-        Vec3Expr::from_node(current_scope(|s| {
+        Vec3Expr::from_node(__current_scope(|s| {
             s.call(
                 Func::Cross,
                 &[self.node, rhs.node],
@@ -1056,24 +1056,24 @@ impl Mul<Vec2Expr> for Mat2Expr {
     type Output = Vec2Expr;
     #[inline]
     fn mul(self, rhs: Vec2Expr) -> Self::Output {
-        Vec2Expr::from_node(current_scope(|s| {
+        Vec2Expr::from_node(__current_scope(|s| {
             s.call(Func::Mul, &[self.node, rhs.node], <Vec2 as TypeOf>::type_())
         }))
     }
 }
 impl Mat2Expr {
     pub fn inverse(&self) -> Self {
-        Mat2Expr::from_node(current_scope(|s| {
+        Mat2Expr::from_node(__current_scope(|s| {
             s.call(Func::Inverse, &[self.node], <Mat2 as TypeOf>::type_())
         }))
     }
     pub fn transpose(&self) -> Self {
-        Mat2Expr::from_node(current_scope(|s| {
+        Mat2Expr::from_node(__current_scope(|s| {
             s.call(Func::Transpose, &[self.node], <Mat2 as TypeOf>::type_())
         }))
     }
     pub fn determinant(&self) -> Float32 {
-        FromNode::from_node(current_scope(|s| {
+        FromNode::from_node(__current_scope(|s| {
             s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
         }))
     }
@@ -1082,24 +1082,24 @@ impl Mul<Vec3Expr> for Mat3Expr {
     type Output = Vec3Expr;
     #[inline]
     fn mul(self, rhs: Vec3Expr) -> Self::Output {
-        Vec3Expr::from_node(current_scope(|s| {
+        Vec3Expr::from_node(__current_scope(|s| {
             s.call(Func::Mul, &[self.node, rhs.node], <Vec3 as TypeOf>::type_())
         }))
     }
 }
 impl Mat3Expr {
     pub fn inverse(&self) -> Self {
-        Self::from_node(current_scope(|s| {
+        Self::from_node(__current_scope(|s| {
             s.call(Func::Inverse, &[self.node], <Mat3 as TypeOf>::type_())
         }))
     }
     pub fn transpose(&self) -> Self {
-        Self::from_node(current_scope(|s| {
+        Self::from_node(__current_scope(|s| {
             s.call(Func::Transpose, &[self.node], <Mat3 as TypeOf>::type_())
         }))
     }
     pub fn determinant(&self) -> Float32 {
-        FromNode::from_node(current_scope(|s| {
+        FromNode::from_node(__current_scope(|s| {
             s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
         }))
     }
@@ -1108,7 +1108,7 @@ impl Mul<Vec4Expr> for Mat4Expr {
     type Output = Vec4Expr;
     #[inline]
     fn mul(self, rhs: Vec4Expr) -> Self::Output {
-        Vec4Expr::from_node(current_scope(|s| {
+        Vec4Expr::from_node(__current_scope(|s| {
             s.call(Func::Mul, &[self.node, rhs.node], <Vec4 as TypeOf>::type_())
         }))
     }
@@ -1117,7 +1117,7 @@ impl Mul for Mat2Expr {
     type Output = Self;
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
-        Self::from_node(current_scope(|s| {
+        Self::from_node(__current_scope(|s| {
             s.call(Func::Mul, &[self.node, rhs.node], <Mat2 as TypeOf>::type_())
         }))
     }
@@ -1126,7 +1126,7 @@ impl Mul for Mat3Expr {
     type Output = Self;
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
-        Self::from_node(current_scope(|s| {
+        Self::from_node(__current_scope(|s| {
             s.call(Func::Mul, &[self.node, rhs.node], <Mat3 as TypeOf>::type_())
         }))
     }
@@ -1135,24 +1135,24 @@ impl Mul for Mat4Expr {
     type Output = Self;
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
-        Self::from_node(current_scope(|s| {
+        Self::from_node(__current_scope(|s| {
             s.call(Func::Mul, &[self.node, rhs.node], <Mat4 as TypeOf>::type_())
         }))
     }
 }
 impl Mat4Expr {
     pub fn inverse(&self) -> Self {
-        Self::from_node(current_scope(|s| {
+        Self::from_node(__current_scope(|s| {
             s.call(Func::Inverse, &[self.node], <Mat4 as TypeOf>::type_())
         }))
     }
     pub fn transpose(&self) -> Self {
-        Self::from_node(current_scope(|s| {
+        Self::from_node(__current_scope(|s| {
             s.call(Func::Transpose, &[self.node], <Mat4 as TypeOf>::type_())
         }))
     }
     pub fn determinant(&self) -> Float32 {
-        FromNode::from_node(current_scope(|s| {
+        FromNode::from_node(__current_scope(|s| {
             s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
         }))
     }

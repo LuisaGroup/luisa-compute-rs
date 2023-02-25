@@ -178,7 +178,7 @@ impl Compiler {
         let var_proxy_name = syn::Ident::new(&format!("{}Var", name), name.span());
         let type_of_impl = quote_spanned!(span=>
             impl #impl_generics #crate_path ::TypeOf for #name #ty_generics #where_clause {
-                fn type_() ->  #crate_path ::Gc< #crate_path ::Type> {
+                fn type_() ->  #crate_path ::CArc< #crate_path ::Type> {
                     use #crate_path ::*;
                     let size = std::mem::size_of::<#name #ty_generics>();
                     let alignment = std::mem::align_of::<#name #ty_generics>();

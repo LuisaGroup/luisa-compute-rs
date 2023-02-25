@@ -7,32 +7,27 @@ pub mod rtx;
 pub mod runtime;
 pub use luisa_compute_backend as backend;
 use luisa_compute_backend::Backend;
-pub use luisa_compute_ir::Gc;
 pub mod prelude {
     pub use crate::*;
     pub use api::{AccelBuildModificationFlags, AccelBuildRequest, AccelUsageHint, MeshType};
     pub use glam;
     pub use lang::math::*;
-    pub use lang::traits::*;
     pub use lang::poly::*;
+    pub use lang::traits::*;
     pub use lang::*;
     pub use luisa_compute_derive::*;
+    pub use luisa_compute_ir::ir::UserNodeData;
     pub use resource::*;
     pub use rtx::*;
     pub use runtime::*;
-    pub use luisa_compute_ir::ir::UserNodeData;
 }
 pub use luisa_compute_sys as sys;
 use prelude::{Device, DeviceHandle};
 use std::sync::Once;
 static INIT: Once = Once::new();
 pub fn init() {
-    INIT.call_once(|| unsafe {
-        let gc_ctx = luisa_compute_ir::ir::luisa_compute_gc_create_context();
-        luisa_compute_ir::ir::luisa_compute_gc_set_context(gc_ctx);
-
-        let ctx = luisa_compute_ir::context::luisa_compute_ir_new_context();
-        luisa_compute_ir::context::luisa_compute_ir_set_context(ctx);
+    INIT.call_once(|| {
+        // do nothing?
     });
 }
 pub fn init_logger() {

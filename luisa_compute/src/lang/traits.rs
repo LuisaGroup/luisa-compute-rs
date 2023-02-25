@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use luisa_compute_ir::CArc;
 use luisa_compute_ir::ir::new_user_node;
 use luisa_compute_ir::{ir::Func, ir::Type, TypeOf};
 use std::any::Any;
@@ -15,7 +16,7 @@ pub trait VarTrait: Copy + Clone + 'static + FromNode {
     type Float: VarTrait;
     // type Double: VarTrait;
     type Bool: VarTrait + Not<Output = Self::Bool>;
-    fn type_() -> Gc<Type> {
+    fn type_() -> CArc<Type> {
         <Self::Value as TypeOf>::type_()
     }
 }
@@ -56,7 +57,7 @@ pub trait CommonVarOp: VarTrait {
     fn max<A: Into<Self>>(&self, other: A) -> Self {
         let lhs = self.node();
         let rhs = other.into().node();
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Max, &[lhs, rhs], Self::type_());
             Self::from_node(ret)
         })
@@ -64,7 +65,7 @@ pub trait CommonVarOp: VarTrait {
     fn min<A: Into<Self>>(&self, other: A) -> Self {
         let lhs = self.node();
         let rhs = other.into().node();
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Min, &[lhs, rhs], Self::type_());
             Self::from_node(ret)
         })
@@ -72,26 +73,26 @@ pub trait CommonVarOp: VarTrait {
     fn clamp<A: Into<Self>, B: Into<Self>>(&self, min: A, max: B) -> Self {
         let min = min.into().node();
         let max = max.into().node();
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Clamp, &[self.node(), min, max], Self::type_());
             Self::from_node(ret)
         })
     }
     fn abs(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Abs, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn _cast<A: VarTrait>(&self) -> A {
         let ty = <A::Value>::type_();
-        let node = current_scope(|s| s.cast(self.node(), ty));
+        let node = __current_scope(|s| s.cast(self.node(), ty));
         FromNode::from_node(node)
     }
     fn bitcast<T: Value>(&self) -> Expr<T> {
         assert_eq!(std::mem::size_of::<Self::Value>(), std::mem::size_of::<T>());
         let ty = <T>::type_();
-        let node = current_scope(|s| s.bitcast(self.node(), ty));
+        let node = __current_scope(|s| s.bitcast(self.node(), ty));
         Expr::<T>::from_node(node)
     }
     fn uint(&self) -> Self::Uint {
@@ -120,7 +121,7 @@ pub trait VarCmpEq: VarTrait {
     fn cmpeq<A: Into<Self>>(&self, other: A) -> Self::Bool {
         let lhs = self.node();
         let rhs = other.into().node();
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Eq, &[lhs, rhs], Self::Bool::type_());
             FromNode::from_node(ret)
         })
@@ -128,7 +129,7 @@ pub trait VarCmpEq: VarTrait {
     fn cmpne<A: Into<Self>>(&self, other: A) -> Self::Bool {
         let lhs = self.node();
         let rhs = other.into().node();
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Ne, &[lhs, rhs], Self::Bool::type_());
             FromNode::from_node(ret)
         })
@@ -138,7 +139,7 @@ pub trait VarCmp: VarTrait + VarCmpEq {
     fn cmplt<A: Into<Self>>(&self, other: A) -> Self::Bool {
         let lhs = self.node();
         let rhs = other.into().node();
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Lt, &[lhs, rhs], Self::Bool::type_());
             FromNode::from_node(ret)
         })
@@ -146,7 +147,7 @@ pub trait VarCmp: VarTrait + VarCmpEq {
     fn cmple<A: Into<Self>>(&self, other: A) -> Self::Bool {
         let lhs = self.node();
         let rhs = other.into().node();
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Le, &[lhs, rhs], Self::Bool::type_());
             FromNode::from_node(ret)
         })
@@ -154,7 +155,7 @@ pub trait VarCmp: VarTrait + VarCmpEq {
     fn cmpgt<A: Into<Self>>(&self, other: A) -> Self::Bool {
         let lhs = self.node();
         let rhs = other.into().node();
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Gt, &[lhs, rhs], Self::Bool::type_());
             FromNode::from_node(ret)
         })
@@ -162,7 +163,7 @@ pub trait VarCmp: VarTrait + VarCmpEq {
     fn cmpge<A: Into<Self>>(&self, other: A) -> Self::Bool {
         let lhs = self.node();
         let rhs = other.into().node();
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Ge, &[lhs, rhs], Self::Bool::type_());
             FromNode::from_node(ret)
         })
@@ -207,7 +208,7 @@ pub trait IntVarTrait:
     fn rotate_right(&self, n: Expr<u32>) -> Self {
         let lhs = self.node();
         let rhs = Expr::<u32>::node(&n);
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::RotRight, &[lhs, rhs], Self::type_());
             Self::from_node(ret)
         })
@@ -215,7 +216,7 @@ pub trait IntVarTrait:
     fn rotate_left(&self, n: Expr<u32>) -> Self {
         let lhs = self.node();
         let rhs = Expr::<u32>::node(&n);
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::RotLeft, &[lhs, rhs], Self::type_());
             Self::from_node(ret)
         })
@@ -250,35 +251,35 @@ pub trait FloatVarTrait:
         let a: Self = a.into();
         let b: Self = b.into();
         let node =
-            current_scope(|s| s.call(Func::Fma, &[self.node(), a.node(), b.node()], Self::type_()));
+            __current_scope(|s| s.call(Func::Fma, &[self.node(), a.node(), b.node()], Self::type_()));
         Self::from_node(node)
     }
     fn ceil(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Ceil, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn floor(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Floor, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn round(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Round, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn trunc(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Trunc, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn copysign<A: Into<Self>>(&self, other: A) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(
                 Func::Copysign,
                 &[self.node(), other.into().node()],
@@ -288,13 +289,13 @@ pub trait FloatVarTrait:
         })
     }
     fn sqrt(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Sqrt, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn rsqrt(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Rsqrt, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
@@ -303,93 +304,93 @@ pub trait FloatVarTrait:
         self.clone() - self.clone().floor()
     }
     fn sin(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Sin, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
         // crate::math::approx_sin_cos(self.clone(), true, false).0
     }
     fn cos(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Cos, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
         // crate::math::approx_sin_cos(self.clone(), false, true).1
     }
     fn tan(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Tan, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn asin(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Asin, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn acos(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Acos, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn atan(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Atan, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn atan2(&self, other: Self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Atan2, &[self.node(), other.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn sinh(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Sinh, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn cosh(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Cosh, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn tanh(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Tanh, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn asinh(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Asinh, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn acosh(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Acosh, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn atanh(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Atanh, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn exp(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Exp, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn exp2(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Exp2, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
@@ -398,7 +399,7 @@ pub trait FloatVarTrait:
         !self.is_infinite()
     }
     fn is_infinite(&self) -> Self::Bool {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::IsInf, &[self.node()], <Self::Bool>::type_());
             FromNode::from_node(ret)
         })
@@ -411,13 +412,13 @@ pub trait FloatVarTrait:
         // } else {
         //     panic!("expect Expr<f32>")
         // }
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::IsNan, &[self.node()], <Self::Bool>::type_());
             FromNode::from_node(ret)
         })
     }
     fn ln(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Log, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
@@ -426,13 +427,13 @@ pub trait FloatVarTrait:
         self.ln() / base.ln()
     }
     fn log2(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Log2, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
     }
     fn log10(&self) -> Self {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(Func::Log10, &[self.node()], Self::type_());
             Self::from_node(ret)
         })
@@ -479,7 +480,7 @@ macro_rules! impl_binop {
         impl $tr<Expr<$t>> for $proxy {
             type Output = Expr<$t>;
             fn $method(self, rhs: Expr<$t>) -> Self::Output {
-                current_scope(|s| {
+                __current_scope(|s| {
                     let lhs = FromNode::node(&self);
                     let rhs = FromNode::node(&rhs);
                     let ret = s.call(Func::$tr, &[lhs, rhs], Self::Output::type_());
@@ -526,7 +527,7 @@ macro_rules! impl_not {
         impl Not for $proxy {
             type Output = Expr<$t>;
             fn not(self) -> Self::Output {
-                current_scope(|s| {
+                __current_scope(|s| {
                     let ret = s.call(
                         Func::BitNot,
                         &[FromNode::node(&self)],
@@ -543,7 +544,7 @@ macro_rules! impl_neg {
         impl Neg for $proxy {
             type Output = Expr<$t>;
             fn neg(self) -> Self::Output {
-                current_scope(|s| {
+                __current_scope(|s| {
                     let ret = s.call(Func::Neg, &[FromNode::node(&self)], Self::Output::type_());
                     Expr::<$t>::from_node(ret)
                 })
@@ -556,7 +557,7 @@ macro_rules! impl_fneg {
         impl Neg for $proxy {
             type Output = Expr<$t>;
             fn neg(self) -> Self::Output {
-                current_scope(|s| {
+                __current_scope(|s| {
                     let ret = s.call(Func::Neg, &[FromNode::node(&self)], Self::Output::type_());
                     Expr::<$t>::from_node(ret)
                 })
@@ -567,7 +568,7 @@ macro_rules! impl_fneg {
 impl Not for PrimExpr<bool> {
     type Output = Expr<bool>;
     fn not(self) -> Self::Output {
-        current_scope(|s| {
+        __current_scope(|s| {
             let ret = s.call(
                 Func::BitNot,
                 &[FromNode::node(&self)],
@@ -686,7 +687,7 @@ impl_from!(u64, u32);
 
 impl<T: Aggregate> Aggregate for Vec<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
-        let len_node = new_user_node(nodes.len());
+        let len_node = new_user_node(__module_pools(), nodes.len());
         nodes.push(len_node);
         for item in self {
             item.to_nodes(nodes);
@@ -726,12 +727,12 @@ impl<T: Aggregate> Aggregate for Option<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         match self {
             Some(x) => {
-                let node = new_user_node(1);
+                let node = new_user_node(__module_pools(), 1);
                 nodes.push(node);
                 x.to_nodes(nodes);
             }
             None => {
-                let node = new_user_node(0);
+                let node = new_user_node(__module_pools(), 0);
                 nodes.push(node);
             }
         }

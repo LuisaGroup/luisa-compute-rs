@@ -268,10 +268,10 @@ fn switch_phi() {
             let tid = dispatch_id().x();
             let x = buf_x.read(tid);
             let (y, z) = switch::<(Expr<i32>, Expr<f32>)>(x)
-                .case(0, || (Int32::from(0), Float32::from(1.0)))
-                .case(1, || (Int32::from(1), Float32::from(2.0)))
-                .case(2, || (Int32::from(2), Float32::from(3.0)))
-                .default(|| (Int32::from(3), Float32::from(4.0)))
+                .case(0, || (Int::from(0), Float::from(1.0)))
+                .case(1, || (Int::from(1), Float::from(2.0)))
+                .case(2, || (Int::from(2), Float::from(3.0)))
+                .default(|| (Int::from(3), Float::from(4.0)))
                 .finish();
             buf_y.write(tid, y);
             buf_z.write(tid, z);
@@ -318,9 +318,9 @@ fn switch_unreachable() {
             let tid = dispatch_id().x();
             let x = buf_x.read(tid);
             let (y, z) = switch::<(Expr<i32>, Expr<f32>)>(x)
-                .case(0, || (Int32::from(0), Float32::from(1.0)))
-                .case(1, || (Int32::from(1), Float32::from(2.0)))
-                .case(2, || (Int32::from(2), Float32::from(3.0)))
+                .case(0, || (Int::from(0), Float::from(1.0)))
+                .case(1, || (Int::from(1), Float::from(2.0)))
+                .case(2, || (Int::from(2), Float::from(3.0)))
                 .finish();
             buf_y.write(tid, y);
             buf_z.write(tid, z);

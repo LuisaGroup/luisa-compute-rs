@@ -33,7 +33,7 @@ fn main() {
             let tid = dispatch_id().x();
             let x = buf_x.read(tid);
             let y = buf_y.read(tid);
-            let args = MyAddArgsExpr::new(x, y, Float32::zero());
+            let args = MyAddArgsExpr::new(x, y, Float::zero());
             let result = my_add.call(args);
             let _ = my_print.call(tid);
             if_!(tid.cmpeq(0), {

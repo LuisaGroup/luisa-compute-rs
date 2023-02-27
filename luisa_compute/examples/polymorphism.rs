@@ -4,7 +4,7 @@ use luisa::prelude::{poly::Polymorphic, *};
 use luisa_compute as luisa;
 
 trait Area {
-    fn area(&self) -> Float32;
+    fn area(&self) -> Float;
 }
 #[derive(Value, Clone, Copy)]
 #[repr(C)]
@@ -12,7 +12,7 @@ pub struct Circle {
     radius: f32,
 }
 impl Area for CircleExpr {
-    fn area(&self) -> Float32 {
+    fn area(&self) -> Float {
         PI * self.radius() * self.radius()
     }
 }
@@ -23,7 +23,7 @@ pub struct Square {
     side: f32,
 }
 impl Area for SquareExpr {
-    fn area(&self) -> Float32 {
+    fn area(&self) -> Float {
         self.side() * self.side()
     }
 }

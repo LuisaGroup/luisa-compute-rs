@@ -4,13 +4,13 @@ use std::process::abort;
 use std::{any::Any, collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 
 use crate::lang::traits::VarCmp;
-use crate::prelude::{AccelHandle, Tex2DView, Tex3DView};
+use crate::prelude::{AccelHandle, Tex2dView, Tex3dView};
 use crate::runtime::{AsyncShaderArtifact, ShaderArtifact};
 use crate::{
     backend,
     prelude::{Device, Kernel, KernelArg, RawKernel},
     resource::{
-        BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, Tex2D, Tex3D, Texel,
+        BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, Tex2d, Tex3d, Texel,
         TextureHandle,
     },
 };
@@ -42,7 +42,7 @@ pub use luisa_compute_ir::{
 use math::{BVec2Expr, BVec3Expr, BVec4Expr, UVec3};
 use std::cell::RefCell;
 
-use self::math::{UVec2, Vec2, Vec4, Vec3};
+use self::math::{UVec2, Vec2, Vec3, Vec4};
 
 // use self::math::UVec3;
 pub mod math;
@@ -244,24 +244,48 @@ impl_prim!(u32);
 impl_prim!(u64);
 impl_prim!(i32);
 impl_prim!(i64);
+impl_prim!(i16);
+impl_prim!(u16);
 impl_prim!(f32);
 impl_prim!(f64);
 
 pub type Bool = PrimExpr<bool>;
-pub type Float32 = PrimExpr<f32>;
-pub type Float64 = PrimExpr<f64>;
-pub type Int32 = PrimExpr<i32>;
-pub type Int64 = PrimExpr<i64>;
-pub type Uint32 = PrimExpr<u32>;
-pub type Uint64 = PrimExpr<u64>;
+pub type F32 = PrimExpr<f32>;
+pub type F64 = PrimExpr<f64>;
+pub type I16 = PrimExpr<i16>;
+pub type I32 = PrimExpr<i32>;
+pub type I64 = PrimExpr<i64>;
+pub type U16 = PrimExpr<u16>;
+pub type U32 = PrimExpr<u32>;
+pub type U64 = PrimExpr<u64>;
+
+pub type F32Var = PrimVar<f32>;
+pub type F64Var = PrimVar<f64>;
+pub type I16Var = PrimVar<i16>;
+pub type I32Var = PrimVar<i32>;
+pub type I64Var = PrimVar<i64>;
+pub type U16Var = PrimVar<u16>;
+pub type U32Var = PrimVar<u32>;
+pub type U64Var = PrimVar<u64>;
+
+pub type Float = PrimExpr<f32>;
+pub type Double = PrimExpr<f64>;
+pub type Int = PrimExpr<i32>;
+pub type Long = PrimExpr<i64>;
+pub type Uint = PrimExpr<u32>;
+pub type Ulong = PrimExpr<u64>;
+pub type Short = PrimExpr<i16>;
+pub type Ushort = PrimExpr<u16>;
 
 pub type BoolVar = PrimVar<bool>;
-pub type Float32Var = PrimVar<f32>;
-pub type Float64Var = PrimVar<f64>;
-pub type Int32Var = PrimVar<i32>;
-pub type Int64Var = PrimVar<i64>;
-pub type Uint32Var = PrimVar<u32>;
-pub type Uint64Var = PrimVar<u64>;
+pub type FloatVar = PrimVar<f32>;
+pub type DoubleVar = PrimVar<f64>;
+pub type IntVar = PrimVar<i32>;
+pub type LongVar = PrimVar<i64>;
+pub type UintVar = PrimVar<u32>;
+pub type UlongVar = PrimVar<u64>;
+pub type ShortVar = PrimVar<i16>;
+pub type UshortVar = PrimVar<u16>;
 
 pub struct CpuFn<T: Value> {
     op: CArc<CpuCustomOp>,
@@ -711,12 +735,12 @@ impl<T: Value> BindlessBufferVar<T> {
         }))
     }
 }
-pub struct BindlessTex2DVar<T: Texel> {
+pub struct BindlessTex2dVar<T: Texel> {
     array: NodeRef,
     tex2d_index: Expr<u32>,
     _marker: std::marker::PhantomData<T>,
 }
-impl<T: Texel> BindlessTex2DVar<T> {
+impl<T: Texel> BindlessTex2dVar<T> {
     pub fn sample(&self, uv: Expr<Vec2>) -> Expr<Vec4> {
         Expr::<Vec4>::from_node(__current_scope(|b| {
             b.call(
@@ -793,12 +817,12 @@ impl<T: Texel> BindlessTex2DVar<T> {
     }
 }
 
-pub struct BindlessTex3DVar<T: Texel> {
+pub struct BindlessTex3dVar<T: Texel> {
     array: NodeRef,
     tex3d_index: Expr<u32>,
     _marker: std::marker::PhantomData<T>,
 }
-impl<T: Texel> BindlessTex3DVar<T> {
+impl<T: Texel> BindlessTex3dVar<T> {
     pub fn sample(&self, uv: Expr<Vec3>) -> Expr<Vec4> {
         Expr::<Vec4>::from_node(__current_scope(|b| {
             b.call(
@@ -875,16 +899,16 @@ impl<T: Texel> BindlessTex3DVar<T> {
     }
 }
 impl BindlessArrayVar {
-    pub fn tex2d<T: Texel>(&self, tex2d_index: Expr<u32>) -> BindlessTex2DVar<T> {
-        let v = BindlessTex2DVar {
+    pub fn tex2d<T: Texel>(&self, tex2d_index: Expr<u32>) -> BindlessTex2dVar<T> {
+        let v = BindlessTex2dVar {
             array: self.node,
             tex2d_index,
             _marker: std::marker::PhantomData,
         };
         v
     }
-    pub fn tex3d<T: Texel>(&self, tex3d_index: Expr<u32>) -> BindlessTex3DVar<T> {
-        let v = BindlessTex3DVar {
+    pub fn tex3d<T: Texel>(&self, tex3d_index: Expr<u32>) -> BindlessTex3dVar<T> {
+        let v = BindlessTex3dVar {
             array: self.node,
             tex3d_index,
             _marker: std::marker::PhantomData,
@@ -1230,23 +1254,20 @@ impl_atomic_bit!(u32);
 impl_atomic_bit!(u64);
 impl_atomic_bit!(i32);
 impl_atomic_bit!(i64);
-pub struct Tex2DVar<T: Texel> {
+pub struct Tex2dVar<T: Texel> {
     node: NodeRef,
     #[allow(dead_code)]
     handle: Option<Arc<TextureHandle>>,
     marker: std::marker::PhantomData<T>,
+    #[allow(dead_code)]
     level: Option<u32>,
 }
 
-impl <T:Texel> Tex2DVar<T> {
+impl<T: Texel> Tex2dVar<T> {
     pub fn read(&self, uv: impl Into<Expr<UVec2>>) -> Expr<T> {
         let uv = uv.into();
         Expr::<T>::from_node(__current_scope(|b| {
-            b.call(
-                Func::Texture2dRead,
-                &[self.node, uv.node()],
-                T::type_(),
-            )
+            b.call(Func::Texture2dRead, &[self.node, uv.node()], T::type_())
         }))
     }
     pub fn write(&self, uv: impl Into<Expr<UVec2>>, v: impl Into<Expr<T>>) {
@@ -1261,15 +1282,11 @@ impl <T:Texel> Tex2DVar<T> {
         })
     }
 }
-impl <T:Texel> Tex3DVar<T> {
+impl<T: Texel> Tex3dVar<T> {
     pub fn read(&self, uv: impl Into<Expr<UVec3>>) -> Expr<T> {
         let uv = uv.into();
         Expr::<T>::from_node(__current_scope(|b| {
-            b.call(
-                Func::Texture3dRead,
-                &[self.node, uv.node()],
-                T::type_(),
-            )
+            b.call(Func::Texture3dRead, &[self.node, uv.node()], T::type_())
         }))
     }
     pub fn write(&self, uv: impl Into<Expr<UVec3>>, v: impl Into<Expr<T>>) {
@@ -1284,11 +1301,12 @@ impl <T:Texel> Tex3DVar<T> {
         })
     }
 }
-pub struct Tex3DVar<T: Texel> {
+pub struct Tex3dVar<T: Texel> {
     node: NodeRef,
     #[allow(dead_code)]
     handle: Option<Arc<TextureHandle>>,
     marker: std::marker::PhantomData<T>,
+    #[allow(dead_code)]
     level: Option<u32>,
 }
 pub struct AccelVar {
@@ -1386,14 +1404,14 @@ impl<T: Value> KernelParameter for BufferVar<T> {
         builder.buffer()
     }
 }
-impl<T: Texel> KernelParameter for Tex2DVar<T> {
-    type Arg = Tex2DView<T>;
+impl<T: Texel> KernelParameter for Tex2dVar<T> {
+    type Arg = Tex2dView<T>;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.tex2d()
     }
 }
-impl<T: Texel> KernelParameter for Tex3DVar<T> {
-    type Arg = Tex3DView<T>;
+impl<T: Texel> KernelParameter for Tex3dVar<T> {
+    type Arg = Tex3dView<T>;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.tex3d()
     }
@@ -1463,26 +1481,26 @@ impl KernelBuilder {
             handle: None,
         }
     }
-    pub fn tex2d<T: Texel>(&mut self) -> Tex2DVar<T> {
+    pub fn tex2d<T: Texel>(&mut self) -> Tex2dVar<T> {
         let node = new_node(
             __module_pools(),
             Node::new(CArc::new(Instruction::Texture2D), T::type_()),
         );
         self.args.push(node);
-        Tex2DVar {
+        Tex2dVar {
             node,
             marker: std::marker::PhantomData,
             handle: None,
             level: None,
         }
     }
-    pub fn tex3d<T: Texel>(&mut self) -> Tex3DVar<T> {
+    pub fn tex3d<T: Texel>(&mut self) -> Tex3dVar<T> {
         let node = new_node(
             __module_pools(),
             Node::new(CArc::new(Instruction::Texture3D), T::type_()),
         );
         self.args.push(node);
-        Tex3DVar {
+        Tex3dVar {
             node,
             marker: std::marker::PhantomData,
             handle: None,

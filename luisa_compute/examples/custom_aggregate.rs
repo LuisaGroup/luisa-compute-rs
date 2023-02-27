@@ -3,7 +3,7 @@ use luisa_compute as luisa;
 
 #[derive(Aggregate)]
 pub struct Spectrum {
-    samples: Vec<Float32>,
+    samples: Vec<Float>,
 }
 
 #[derive(Aggregate)]

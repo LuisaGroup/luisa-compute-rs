@@ -2,15 +2,15 @@ use std::{any::TypeId, collections::HashMap};
 
 use crate::resource::Buffer;
 
-use super::{switch, traits::CommonVarOp, Aggregate, Uint32, Value};
+use super::{switch, traits::CommonVarOp, Aggregate, Uint, Value};
 
 pub struct PolyArray<T: ?Sized + 'static> {
     tag: i32,
-    get: Box<dyn Fn(&Self, Uint32) -> Box<T>>,
+    get: Box<dyn Fn(&Self, Uint) -> Box<T>>,
     _marker: std::marker::PhantomData<T>,
 }
 impl<T: ?Sized + 'static> PolyArray<T> {
-    pub fn new(tag: i32, get: Box<dyn Fn(&Self, Uint32) -> Box<T>>) -> Self {
+    pub fn new(tag: i32, get: Box<dyn Fn(&Self, Uint) -> Box<T>>) -> Self {
         Self {
             tag,
             get,
@@ -59,7 +59,7 @@ impl<T: ?Sized + 'static> Polymorphic<T> {
     }
 
     #[inline]
-    pub fn dispatch<R: Aggregate>(&self, tag: Uint32, index: Uint32, f: impl Fn(&T) -> R) -> R {
+    pub fn dispatch<R: Aggregate>(&self, tag: Uint, index: Uint, f: impl Fn(&T) -> R) -> R {
         let mut sw = switch::<R>(tag.int());
         for array in &self.arrays {
             sw = sw.case(array.tag, || {

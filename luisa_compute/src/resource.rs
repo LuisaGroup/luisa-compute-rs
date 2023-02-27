@@ -218,7 +218,7 @@ impl BindlessArray {
     pub unsafe fn set_tex2d_async<T: Texel>(
         &self,
         index: usize,
-        texture: &Tex2D<T>,
+        texture: &Tex2d<T>,
         sampler: Sampler,
     ) {
         self.device.inner.emplace_tex2d_in_bindless_array(
@@ -232,7 +232,7 @@ impl BindlessArray {
     pub unsafe fn set_tex3d_async<T: Texel>(
         &self,
         index: usize,
-        texture: &Tex3D<T>,
+        texture: &Tex3d<T>,
         sampler: Sampler,
     ) {
         self.device.inner.emplace_tex3d_in_bindless_array(
@@ -267,13 +267,13 @@ impl BindlessArray {
             submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
         }
     }
-    pub fn set_tex2d<T: Texel>(&self, index: usize, texture: &Tex2D<T>, sampler: Sampler) {
+    pub fn set_tex2d<T: Texel>(&self, index: usize, texture: &Tex2d<T>, sampler: Sampler) {
         unsafe {
             self.set_tex2d_async(index, texture, sampler);
             submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
         }
     }
-    pub fn set_tex3d<T: Texel>(&self, index: usize, texture: &Tex3D<T>, sampler: Sampler) {
+    pub fn set_tex3d<T: Texel>(&self, index: usize, texture: &Tex3d<T>, sampler: Sampler) {
         unsafe {
             self.set_tex3d_async(index, texture, sampler);
             submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
@@ -324,30 +324,30 @@ pub trait Texel: Value {
     // acceptable pixel format
     fn pixel_formats() -> &'static [api::PixelFormat];
 }
-pub struct Tex2D<T: Texel> {
+pub struct Tex2d<T: Texel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
 }
-pub struct Tex3D<T: Texel> {
+pub struct Tex3d<T: Texel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
 }
-pub struct Tex2DView<T: Texel> {
-    pub(crate) handle: Arc<TextureHandle>,
-    pub(crate) marker: std::marker::PhantomData<T>,
-    pub(crate) level: u32,
-}
-pub struct Tex3DView<T: Texel> {
+pub struct Tex2dView<T: Texel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
     pub(crate) level: u32,
 }
-impl<T: Texel> Tex2D<T> {
+pub struct Tex3dView<T: Texel> {
+    pub(crate) handle: Arc<TextureHandle>,
+    pub(crate) marker: std::marker::PhantomData<T>,
+    pub(crate) level: u32,
+}
+impl<T: Texel> Tex2d<T> {
     pub(crate) fn handle(&self) -> api::Texture {
         self.handle.handle
     }
 }
-impl<T: Texel> Tex3D<T> {
+impl<T: Texel> Tex3d<T> {
     pub(crate) fn handle(&self) -> api::Texture {
         self.handle.handle
     }
@@ -493,7 +493,7 @@ macro_rules! impl_tex_view {
         }
     };
 }
-impl<T: Texel> Tex2DView<T> {
+impl<T: Texel> Tex2dView<T> {
     pub(crate) fn handle(&self) -> api::Texture {
         self.handle.handle
     }
@@ -509,8 +509,8 @@ impl<T: Texel> Tex2DView<T> {
         ]
     }
 }
-impl_tex_view!(Tex2DView);
-impl<T: Texel> Tex3DView<T> {
+impl_tex_view!(Tex2dView);
+impl<T: Texel> Tex3dView<T> {
     pub(crate) fn handle(&self) -> api::Texture {
         self.handle.handle
     }
@@ -526,7 +526,7 @@ impl<T: Texel> Tex3DView<T> {
         ]
     }
 }
-impl_tex_view!(Tex3DView);
+impl_tex_view!(Tex3dView);
 impl Drop for TextureHandle {
     fn drop(&mut self) {
         self.device.inner.destroy_texture(self.handle);

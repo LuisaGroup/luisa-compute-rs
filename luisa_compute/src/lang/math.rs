@@ -1,7 +1,7 @@
 use std::ops::Mul;
 
 pub use super::swizzle::*;
-use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*, Float32};
+use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*, Float};
 use crate::prelude::FromNode;
 use crate::prelude::{__compose, __insert, const_, __current_scope, Expr, PrimExpr, Var};
 use luisa_compute_ir::{
@@ -1072,7 +1072,7 @@ impl Mat2Expr {
             s.call(Func::Transpose, &[self.node], <Mat2 as TypeOf>::type_())
         }))
     }
-    pub fn determinant(&self) -> Float32 {
+    pub fn determinant(&self) -> Float {
         FromNode::from_node(__current_scope(|s| {
             s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
         }))
@@ -1098,7 +1098,7 @@ impl Mat3Expr {
             s.call(Func::Transpose, &[self.node], <Mat3 as TypeOf>::type_())
         }))
     }
-    pub fn determinant(&self) -> Float32 {
+    pub fn determinant(&self) -> Float {
         FromNode::from_node(__current_scope(|s| {
             s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
         }))
@@ -1151,7 +1151,7 @@ impl Mat4Expr {
             s.call(Func::Transpose, &[self.node], <Mat4 as TypeOf>::type_())
         }))
     }
-    pub fn determinant(&self) -> Float32 {
+    pub fn determinant(&self) -> Float {
         FromNode::from_node(__current_scope(|s| {
             s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
         }))

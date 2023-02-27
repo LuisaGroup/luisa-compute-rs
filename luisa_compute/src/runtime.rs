@@ -99,7 +99,7 @@ impl Device {
         width: u32,
         height: u32,
         mips: u32,
-    ) -> backend::Result<Tex2D<T>> {
+    ) -> backend::Result<Tex2d<T>> {
         assert!(T::pixel_formats().contains(&format));
 
         let texture = self
@@ -115,7 +115,7 @@ impl Device {
             depth: 1,
             storage: format.storage(),
         });
-        Ok(Tex2D {
+        Ok(Tex2d {
             handle,
             marker: std::marker::PhantomData {},
         })
@@ -127,7 +127,7 @@ impl Device {
         height: u32,
         depth: u32,
         mips: u32,
-    ) -> backend::Result<Tex3D<T>> {
+    ) -> backend::Result<Tex3d<T>> {
         assert!(T::pixel_formats().contains(&format));
 
         let texture = self
@@ -143,7 +143,7 @@ impl Device {
             depth,
             storage: format.storage(),
         });
-        Ok(Tex3D {
+        Ok(Tex3d {
             handle,
             marker: std::marker::PhantomData {},
         })
@@ -398,13 +398,13 @@ impl ArgEncoder {
             size: buffer.len * std::mem::size_of::<T>(),
         }));
     }
-    pub fn tex2d<T: Texel>(&mut self, tex:&Tex2DView<T>) {
+    pub fn tex2d<T: Texel>(&mut self, tex:&Tex2dView<T>) {
         self.args.push(api::Argument::Texture(api::TextureArgument {
             texture: tex.handle.handle,
             level:tex.level
         }));
     }
-    pub fn tex3d<T: Texel>(&mut self, tex:&Tex3DView<T>) {
+    pub fn tex3d<T: Texel>(&mut self, tex:&Tex3dView<T>) {
         self.args.push(api::Argument::Texture(api::TextureArgument {
             texture: tex.handle.handle,
             level:tex.level
@@ -429,14 +429,14 @@ impl<T: Value> KernelArg for Buffer<T> {
         encoder.buffer(self);
     }
 }
-impl<T: Texel> KernelArg for Tex2DView<T> {
-    type Parameter = lang::Tex2DVar<T>;
+impl<T: Texel> KernelArg for Tex2dView<T> {
+    type Parameter = lang::Tex2dVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.tex2d(self);
     }
 }
-impl<T: Texel> KernelArg for Tex3DView<T> {
-    type Parameter = lang::Tex3DVar<T>;
+impl<T: Texel> KernelArg for Tex3dView<T> {
+    type Parameter = lang::Tex3dVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.tex3d(self);
     }

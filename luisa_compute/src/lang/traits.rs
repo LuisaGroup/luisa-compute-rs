@@ -2,7 +2,6 @@ use crate::prelude::*;
 use luisa_compute_ir::CArc;
 use luisa_compute_ir::ir::new_user_node;
 use luisa_compute_ir::{ir::Func, ir::Type, TypeOf};
-use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::ops::*;
 
@@ -648,7 +647,7 @@ impl CommonVarOp for PrimExpr<u32> {}
 impl CommonVarOp for PrimExpr<u64> {}
 impl CommonVarOp for PrimExpr<bool> {}
 
-impl From<f64> for Float32 {
+impl From<f64> for Float {
     fn from(x: f64) -> Self {
         (x as f32).into()
     }

@@ -15,7 +15,7 @@ fn get_device() -> Device {
     };
     luisa::create_device(&device).unwrap()
 }
-fn finite_difference(inputs: &[Float32], f: impl Fn(&[Float32]) -> Float32) -> Vec<Float32> {
+fn finite_difference(inputs: &[Float], f: impl Fn(&[Float]) -> Float) -> Vec<Float> {
     let eps = 1e-4;
 
     let mut outputs = vec![];
@@ -24,12 +24,12 @@ fn finite_difference(inputs: &[Float32], f: impl Fn(&[Float32]) -> Float32) -> V
         inputs_add[i] += eps;
         let mut inputs_sub = inputs.to_vec();
         inputs_sub[i] -= eps;
-        outputs.push((f(&inputs_add) - f(&inputs_sub)) / Float32::from(2.0 * eps));
+        outputs.push((f(&inputs_add) - f(&inputs_sub)) / Float::from(2.0 * eps));
     }
     outputs
 }
 
-fn autodiff_helper<F: Fn(&[Float32]) -> Float32>(
+fn autodiff_helper<F: Fn(&[Float]) -> Float>(
     range: Range<f32>,
     repeats: usize,
     n_inputs: usize,
@@ -214,37 +214,37 @@ struct Foo {
     y: f32,
 }
 
-autodiff_2!(autodiff_const, 1.0..10.0, |x: Float32, y: Float32| {
+autodiff_2!(autodiff_const, 1.0..10.0, |x: Float, y: Float| {
     let k = 2.0 / const_::<f32>(3.0);
     x * k + y * k
 });
-autodiff_2!(autodiff_struct, 1.0..10.0, |x: Float32, y: Float32| {
+autodiff_2!(autodiff_struct, 1.0..10.0, |x: Float, y: Float| {
     let foo = FooExpr::new(x, y);
     let foo = foo.set_x(1.0 + foo.x());
     foo.x() + foo.y()
 });
-autodiff_1!(autodiff_sin, -10.0..10.0, |x: Float32| x.sin());
-autodiff_1!(autodiff_cos, -10.0..10.0, |x: Float32| x.cos());
-autodiff_1!(autodiff_sincos, -10.0..10.0, |x: Float32| x.cos() * x.sin());
-autodiff_1!(autodiff_sqrt, 0.1..10.0, |x: Float32| x.sqrt());
-autodiff_1!(autodiff_rsqrt, 0.1..10.0, |x: Float32| x.rsqrt());
-autodiff_1!(autodiff_exp, -10.0..3.0, |x: Float32| x.exp());
-autodiff_1!(autodiff_exp2, -10.0..3.0, |x: Float32| x.exp2());
-autodiff_1!(autodiff_ln, 0.1..10.0, |x: Float32| x.ln());
-autodiff_1!(autodiff_log2, 0.1..10.0, |x: Float32| x.log2());
-autodiff_1!(autodiff_log10, 0.1..10.0, |x: Float32| x.log10());
-autodiff_1!(autodiff_abs, 0.1..10.0, |x: Float32| x.abs());
-autodiff_1!(autodiff_abs2, -10.0..-0.1, |x: Float32| x.abs());
-autodiff_1!(autodiff_asin, -0.9..0.9, |x: Float32| x.asin());
-autodiff_1!(autodiff_acos, -0.9..0.9, |x: Float32| x.acos());
-autodiff_1!(autodiff_atan, -10.0..10.0, |x: Float32| x.atan());
-autodiff_1!(autodiff_sinh, -10.0..10.0, |x: Float32| x.sinh());
-autodiff_1!(autodiff_cosh, -10.0..10.0, |x: Float32| x.cosh());
-autodiff_1!(autodiff_tanh, -10.0..10.0, |x: Float32| x.tanh());
+autodiff_1!(autodiff_sin, -10.0..10.0, |x: Float| x.sin());
+autodiff_1!(autodiff_cos, -10.0..10.0, |x: Float| x.cos());
+autodiff_1!(autodiff_sincos, -10.0..10.0, |x: Float| x.cos() * x.sin());
+autodiff_1!(autodiff_sqrt, 0.1..10.0, |x: Float| x.sqrt());
+autodiff_1!(autodiff_rsqrt, 0.1..10.0, |x: Float| x.rsqrt());
+autodiff_1!(autodiff_exp, -10.0..3.0, |x: Float| x.exp());
+autodiff_1!(autodiff_exp2, -10.0..3.0, |x: Float| x.exp2());
+autodiff_1!(autodiff_ln, 0.1..10.0, |x: Float| x.ln());
+autodiff_1!(autodiff_log2, 0.1..10.0, |x: Float| x.log2());
+autodiff_1!(autodiff_log10, 0.1..10.0, |x: Float| x.log10());
+autodiff_1!(autodiff_abs, 0.1..10.0, |x: Float| x.abs());
+autodiff_1!(autodiff_abs2, -10.0..-0.1, |x: Float| x.abs());
+autodiff_1!(autodiff_asin, -0.9..0.9, |x: Float| x.asin());
+autodiff_1!(autodiff_acos, -0.9..0.9, |x: Float| x.acos());
+autodiff_1!(autodiff_atan, -10.0..10.0, |x: Float| x.atan());
+autodiff_1!(autodiff_sinh, -10.0..10.0, |x: Float| x.sinh());
+autodiff_1!(autodiff_cosh, -10.0..10.0, |x: Float| x.cosh());
+autodiff_1!(autodiff_tanh, -10.0..10.0, |x: Float| x.tanh());
 
-autodiff_2!(autodiff_div, 1.0..10.0, |x: Float32, y: Float32| x / y);
+autodiff_2!(autodiff_div, 1.0..10.0, |x: Float, y: Float| x / y);
 
-autodiff_2!(autodiff_pow, 1.0..10.0, |x: Float32, y: Float32| x.powf(y));
+autodiff_2!(autodiff_pow, 1.0..10.0, |x: Float, y: Float| x.powf(y));
 
 #[test]
 fn autodiff_vec3_reduce_add_manual() {

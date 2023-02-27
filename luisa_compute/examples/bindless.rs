@@ -16,8 +16,8 @@ fn main() {
         .create_kernel::<(Buffer<f32>,)>(&|buf_z| {
             let bindless = bindless.var();
             let tid = dispatch_id().x();
-            let buf_x = bindless.buffer::<f32>(Uint32::from(0));
-            let buf_y = bindless.buffer::<f32>(Uint32::from(1));
+            let buf_x = bindless.buffer::<f32>(Uint::from(0));
+            let buf_y = bindless.buffer::<f32>(Uint::from(1));
             let x = buf_x.read(tid).uint().float();
             let y = buf_y.read(tid);
             buf_z.write(tid, x + y);

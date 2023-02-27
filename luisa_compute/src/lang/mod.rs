@@ -10,7 +10,7 @@ use crate::{
     backend,
     prelude::{Device, Kernel, KernelArg, RawKernel},
     resource::{
-        BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, Tex2d, Tex3d, Texel,
+        BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, Tex2d, Tex3d, IoTexel,
         TextureHandle,
     },
 };
@@ -735,12 +735,12 @@ impl<T: Value> BindlessBufferVar<T> {
         }))
     }
 }
-pub struct BindlessTex2dVar<T: Texel> {
+pub struct BindlessTex2dVar<T: IoTexel> {
     array: NodeRef,
     tex2d_index: Expr<u32>,
     _marker: std::marker::PhantomData<T>,
 }
-impl<T: Texel> BindlessTex2dVar<T> {
+impl<T: IoTexel> BindlessTex2dVar<T> {
     pub fn sample(&self, uv: Expr<Float2>) -> Expr<Float4> {
         Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
@@ -817,12 +817,12 @@ impl<T: Texel> BindlessTex2dVar<T> {
     }
 }
 
-pub struct BindlessTex3dVar<T: Texel> {
+pub struct BindlessTex3dVar<T: IoTexel> {
     array: NodeRef,
     tex3d_index: Expr<u32>,
     _marker: std::marker::PhantomData<T>,
 }
-impl<T: Texel> BindlessTex3dVar<T> {
+impl<T: IoTexel> BindlessTex3dVar<T> {
     pub fn sample(&self, uv: Expr<Float3>) -> Expr<Float4> {
         Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
@@ -899,7 +899,7 @@ impl<T: Texel> BindlessTex3dVar<T> {
     }
 }
 impl BindlessArrayVar {
-    pub fn tex2d<T: Texel>(&self, tex2d_index: Expr<u32>) -> BindlessTex2dVar<T> {
+    pub fn tex2d<T: IoTexel>(&self, tex2d_index: Expr<u32>) -> BindlessTex2dVar<T> {
         let v = BindlessTex2dVar {
             array: self.node,
             tex2d_index,
@@ -907,7 +907,7 @@ impl BindlessArrayVar {
         };
         v
     }
-    pub fn tex3d<T: Texel>(&self, tex3d_index: Expr<u32>) -> BindlessTex3dVar<T> {
+    pub fn tex3d<T: IoTexel>(&self, tex3d_index: Expr<u32>) -> BindlessTex3dVar<T> {
         let v = BindlessTex3dVar {
             array: self.node,
             tex3d_index,
@@ -1254,7 +1254,7 @@ impl_atomic_bit!(u32);
 impl_atomic_bit!(u64);
 impl_atomic_bit!(i32);
 impl_atomic_bit!(i64);
-pub struct Tex2dVar<T: Texel> {
+pub struct Tex2dVar<T: IoTexel> {
     node: NodeRef,
     #[allow(dead_code)]
     handle: Option<Arc<TextureHandle>>,
@@ -1263,7 +1263,7 @@ pub struct Tex2dVar<T: Texel> {
     level: Option<u32>,
 }
 
-impl<T: Texel> Tex2dVar<T> {
+impl<T: IoTexel> Tex2dVar<T> {
     pub fn read(&self, uv: impl Into<Expr<Uint2>>) -> Expr<T> {
         let uv = uv.into();
         Expr::<T>::from_node(__current_scope(|b| {
@@ -1282,7 +1282,7 @@ impl<T: Texel> Tex2dVar<T> {
         })
     }
 }
-impl<T: Texel> Tex3dVar<T> {
+impl<T: IoTexel> Tex3dVar<T> {
     pub fn read(&self, uv: impl Into<Expr<Uint3>>) -> Expr<T> {
         let uv = uv.into();
         Expr::<T>::from_node(__current_scope(|b| {
@@ -1301,7 +1301,7 @@ impl<T: Texel> Tex3dVar<T> {
         })
     }
 }
-pub struct Tex3dVar<T: Texel> {
+pub struct Tex3dVar<T: IoTexel> {
     node: NodeRef,
     #[allow(dead_code)]
     handle: Option<Arc<TextureHandle>>,
@@ -1404,13 +1404,13 @@ impl<T: Value> KernelParameter for BufferVar<T> {
         builder.buffer()
     }
 }
-impl<T: Texel> KernelParameter for Tex2dVar<T> {
+impl<T: IoTexel> KernelParameter for Tex2dVar<T> {
     type Arg = Tex2dView<T>;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.tex2d()
     }
 }
-impl<T: Texel> KernelParameter for Tex3dVar<T> {
+impl<T: IoTexel> KernelParameter for Tex3dVar<T> {
     type Arg = Tex3dView<T>;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.tex3d()
@@ -1481,7 +1481,7 @@ impl KernelBuilder {
             handle: None,
         }
     }
-    pub fn tex2d<T: Texel>(&mut self) -> Tex2dVar<T> {
+    pub fn tex2d<T: IoTexel>(&mut self) -> Tex2dVar<T> {
         let node = new_node(
             __module_pools(),
             Node::new(CArc::new(Instruction::Texture2D), T::type_()),
@@ -1494,7 +1494,7 @@ impl KernelBuilder {
             level: None,
         }
     }
-    pub fn tex3d<T: Texel>(&mut self) -> Tex3dVar<T> {
+    pub fn tex3d<T: IoTexel>(&mut self) -> Tex3dVar<T> {
         let node = new_node(
             __module_pools(),
             Node::new(CArc::new(Instruction::Texture3D), T::type_()),

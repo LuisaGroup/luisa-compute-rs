@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use std::ops::RangeBounds;
 use std::sync::Arc;
 
+use crate::prelude::*;
 use crate::*;
 use api::BufferDownloadCommand;
 use api::BufferUploadCommand;
@@ -215,7 +216,7 @@ impl BindlessArray {
         );
         self.buffers.borrow_mut()[index] = Some(Box::new(buffer.handle.clone()));
     }
-    pub unsafe fn set_tex2d_async<T: Texel>(
+    pub unsafe fn set_tex2d_async<T: IoTexel>(
         &self,
         index: usize,
         texture: &Tex2d<T>,
@@ -229,7 +230,7 @@ impl BindlessArray {
         );
         self.tex_2ds.borrow_mut()[index] = Some(Box::new(texture.handle.clone()));
     }
-    pub unsafe fn set_tex3d_async<T: Texel>(
+    pub unsafe fn set_tex3d_async<T: IoTexel>(
         &self,
         index: usize,
         texture: &Tex3d<T>,
@@ -267,13 +268,13 @@ impl BindlessArray {
             submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
         }
     }
-    pub fn set_tex2d<T: Texel>(&self, index: usize, texture: &Tex2d<T>, sampler: Sampler) {
+    pub fn set_tex2d<T: IoTexel>(&self, index: usize, texture: &Tex2d<T>, sampler: Sampler) {
         unsafe {
             self.set_tex2d_async(index, texture, sampler);
             submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
         }
     }
-    pub fn set_tex3d<T: Texel>(&self, index: usize, texture: &Tex3d<T>, sampler: Sampler) {
+    pub fn set_tex3d<T: IoTexel>(&self, index: usize, texture: &Tex3d<T>, sampler: Sampler) {
         unsafe {
             self.set_tex3d_async(index, texture, sampler);
             submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
@@ -319,42 +320,71 @@ pub(crate) struct TextureHandle {
     pub(crate) depth: u32,
     pub(crate) levels: u32,
 }
-
-pub trait Texel: Value {
+// Type that can be converted from a pixel format
+// This is the type that is read from/written to a texture
+pub trait IoTexel: Value {
     // acceptable pixel format
     fn pixel_formats() -> &'static [api::PixelFormat];
 }
-pub struct Tex2d<T: Texel> {
+// Types that is stored in a texture
+pub trait StorageTexel {
+    fn pixel_formats() -> &'static [api::PixelFormat];
+}
+// macro_rules! impl_texel {
+//     ($t:ty, $($formats:ident),*) => {
+//         impl Texel for $t {
+//             fn pixel_formats() -> &'static [api::PixelFormat] {
+//                 &[$(api::PixelFormat::$formats),*]
+//             }
+//         }
+//     };
+// }
+// impl_texel!(f32, R32f);
+// impl_texel!(u32, R32Uint);
+// impl_texel!(i32, R32Sint);
+// impl_texel!(u16, R16Uint);
+// impl_texel!(i16, R16Sint);
+// impl_texel!(Float2, Rg32f);
+// impl_texel!(Float4, Rgba32f);
+// impl_texel!(Int4, Rgba32Sint);
+// impl_texel!(Uint4, Rgba32Uint);
+
+// `T` is the read out type of the texture, which is not necessarily the same as the storage type
+// In fact, the texture can be stored in any format as long as it can be converted to `T`
+pub struct Tex2d<T: IoTexel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
 }
-pub struct Tex3d<T: Texel> {
+
+// `T` is the read out type of the texture, which is not necessarily the same as the storage type
+// In fact, the texture can be stored in any format as long as it can be converted to `T`
+pub struct Tex3d<T: IoTexel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
 }
-pub struct Tex2dView<T: Texel> {
+pub struct Tex2dView<T: IoTexel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
     pub(crate) level: u32,
 }
-pub struct Tex3dView<T: Texel> {
+pub struct Tex3dView<T: IoTexel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
     pub(crate) level: u32,
 }
-impl<T: Texel> Tex2d<T> {
+impl<T: IoTexel> Tex2d<T> {
     pub(crate) fn handle(&self) -> api::Texture {
         self.handle.handle
     }
 }
-impl<T: Texel> Tex3d<T> {
+impl<T: IoTexel> Tex3d<T> {
     pub(crate) fn handle(&self) -> api::Texture {
         self.handle.handle
     }
 }
 macro_rules! impl_tex_view {
     ($name:ident) => {
-        impl<T: Texel> $name<T> {
+        impl<T: IoTexel> $name<T> {
             pub fn copy_to_async<'a>(&'a self, data: &'a mut [T]) -> Command<'a> {
                 assert_eq!(data.len(), self.texel_count() as usize);
                 let mut rt = ResourceTracker::new();
@@ -402,11 +432,8 @@ macro_rules! impl_tex_view {
                 }
             }
             pub fn copy_from<'a>(&'a self, data: &[T]) {
-                submit_default_stream_and_sync(
-                    &self.handle.device,
-                    [self.copy_from_async(data)],
-                )
-                .unwrap();
+                submit_default_stream_and_sync(&self.handle.device, [self.copy_from_async(data)])
+                    .unwrap();
             }
             pub fn copy_to_buffer_async<'a>(
                 &'a self,
@@ -493,7 +520,7 @@ macro_rules! impl_tex_view {
         }
     };
 }
-impl<T: Texel> Tex2dView<T> {
+impl<T: IoTexel> Tex2dView<T> {
     pub(crate) fn handle(&self) -> api::Texture {
         self.handle.handle
     }
@@ -510,7 +537,7 @@ impl<T: Texel> Tex2dView<T> {
     }
 }
 impl_tex_view!(Tex2dView);
-impl<T: Texel> Tex3dView<T> {
+impl<T: IoTexel> Tex3dView<T> {
     pub(crate) fn handle(&self) -> api::Texture {
         self.handle.handle
     }

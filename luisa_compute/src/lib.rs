@@ -5,11 +5,12 @@ pub mod lang;
 pub mod resource;
 pub mod rtx;
 pub mod runtime;
+pub mod util;
 pub use luisa_compute_backend as backend;
 use luisa_compute_backend::Backend;
 pub mod prelude {
     pub use crate::*;
-    pub use api::{AccelBuildModificationFlags, AccelBuildRequest, AccelUsageHint, MeshType};
+    pub use api::{AccelBuildModificationFlags, AccelBuildRequest, AccelUsageHint, MeshType, PixelFormat, PixelStorage};
     pub use glam;
     pub use lang::math::*;
     pub use lang::poly::*;

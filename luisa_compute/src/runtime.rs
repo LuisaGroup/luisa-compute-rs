@@ -93,7 +93,7 @@ impl Device {
             tex_3ds: RefCell::new((0..slots).map(|_| None).collect()),
         })
     }
-    pub fn create_tex2d<T: Texel>(
+    pub fn create_tex2d<T: IoTexel>(
         &self,
         format: PixelFormat,
         width: u32,
@@ -120,7 +120,7 @@ impl Device {
             marker: std::marker::PhantomData {},
         })
     }
-    pub fn create_tex3d<T: Texel>(
+    pub fn create_tex3d<T: IoTexel>(
         &self,
         format: PixelFormat,
         width: u32,
@@ -398,13 +398,13 @@ impl ArgEncoder {
             size: buffer.len * std::mem::size_of::<T>(),
         }));
     }
-    pub fn tex2d<T: Texel>(&mut self, tex:&Tex2dView<T>) {
+    pub fn tex2d<T: IoTexel>(&mut self, tex:&Tex2dView<T>) {
         self.args.push(api::Argument::Texture(api::TextureArgument {
             texture: tex.handle.handle,
             level:tex.level
         }));
     }
-    pub fn tex3d<T: Texel>(&mut self, tex:&Tex3dView<T>) {
+    pub fn tex3d<T: IoTexel>(&mut self, tex:&Tex3dView<T>) {
         self.args.push(api::Argument::Texture(api::TextureArgument {
             texture: tex.handle.handle,
             level:tex.level
@@ -429,13 +429,13 @@ impl<T: Value> KernelArg for Buffer<T> {
         encoder.buffer(self);
     }
 }
-impl<T: Texel> KernelArg for Tex2dView<T> {
+impl<T: IoTexel> KernelArg for Tex2dView<T> {
     type Parameter = lang::Tex2dVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.tex2d(self);
     }
 }
-impl<T: Texel> KernelArg for Tex3dView<T> {
+impl<T: IoTexel> KernelArg for Tex3dView<T> {
     type Parameter = lang::Tex3dVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.tex3d(self);

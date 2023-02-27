@@ -4,7 +4,7 @@ use luisa_compute as luisa;
 #[derive(Copy, Clone, Debug, Value)]
 #[repr(C)]
 pub struct Sphere {
-    pub center: Vec3,
+    pub center: Float3,
     pub radius: f32,
 }
 
@@ -14,7 +14,7 @@ fn main() {
     let device = create_cpu_device().unwrap();
     let spheres = device.create_buffer::<Sphere>(1).unwrap();
     spheres.view(..).copy_from(&[Sphere {
-        center: Vec3::new(0.0, 0.0, 0.0),
+        center: Float3::new(0.0, 0.0, 0.0),
         radius: 1.0,
     }]);
     let x = device.create_buffer::<f32>(1024).unwrap();

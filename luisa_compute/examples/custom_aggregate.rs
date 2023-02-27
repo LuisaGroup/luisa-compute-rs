@@ -8,7 +8,7 @@ pub struct Spectrum {
 
 #[derive(Aggregate)]
 pub enum Color {
-    Rgb(Expr<Vec3>),
+    Rgb(Expr<Float3>),
     Spectrum(Spectrum)
 }
 

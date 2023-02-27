@@ -15,17 +15,17 @@ fn get_device() -> Device {
 fn vec_cast() {
     init();
     let device = get_device();
-    let f: Buffer<Vec2> = device.create_buffer(1024).unwrap();
-    let i: Buffer<IVec2> = device.create_buffer(1024).unwrap();
+    let f: Buffer<Float2> = device.create_buffer(1024).unwrap();
+    let i: Buffer<Int2> = device.create_buffer(1024).unwrap();
     f.view(..)
-        .fill_fn(|i| Vec2::new(i as f32 + 0.5, i as f32 + 1.5));
+        .fill_fn(|i| Float2::new(i as f32 + 0.5, i as f32 + 1.5));
     let kernel = device
         .create_kernel::<()>(&|| {
             let f = f.var();
             let i = i.var();
             let tid = dispatch_id().x();
             let v = f.read(tid);
-            i.write(tid, v.as_ivec2());
+            i.write(tid, v.int());
         })
         .unwrap();
     kernel.dispatch([1024, 1, 1]).unwrap();
@@ -84,15 +84,15 @@ fn bool_op() {
 fn bvec_op() {
     init();
     let device = get_device();
-    let x: Buffer<BVec2> = device.create_buffer(1024).unwrap();
-    let y: Buffer<BVec2> = device.create_buffer(1024).unwrap();
-    let and: Buffer<BVec2> = device.create_buffer(1024).unwrap();
-    let or: Buffer<BVec2> = device.create_buffer(1024).unwrap();
-    let xor: Buffer<BVec2> = device.create_buffer(1024).unwrap();
-    let not: Buffer<BVec2> = device.create_buffer(1024).unwrap();
+    let x: Buffer<Bool2> = device.create_buffer(1024).unwrap();
+    let y: Buffer<Bool2> = device.create_buffer(1024).unwrap();
+    let and: Buffer<Bool2> = device.create_buffer(1024).unwrap();
+    let or: Buffer<Bool2> = device.create_buffer(1024).unwrap();
+    let xor: Buffer<Bool2> = device.create_buffer(1024).unwrap();
+    let not: Buffer<Bool2> = device.create_buffer(1024).unwrap();
     let mut rng = rand::thread_rng();
-    x.view(..).fill_fn(|_| BVec2::new(rng.gen(), rng.gen()));
-    y.view(..).fill_fn(|_| BVec2::new(rng.gen(), rng.gen()));
+    x.view(..).fill_fn(|_| Bool2::new(rng.gen(), rng.gen()));
+    y.view(..).fill_fn(|_| Bool2::new(rng.gen(), rng.gen()));
     let kernel = device
         .create_kernel::<()>(&|| {
             let tid = dispatch_id().x();
@@ -132,20 +132,20 @@ fn bvec_op() {
 fn vec_bit_minmax() {
     init();
     let device = get_device();
-    let x: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let y: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let z: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let and: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let or: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let xor: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let not: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let min = device.create_buffer::<IVec2>(1024).unwrap();
-    let max = device.create_buffer::<IVec2>(1024).unwrap();
-    let clamp = device.create_buffer::<IVec2>(1024).unwrap();
+    let x: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let y: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let z: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let and: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let or: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let xor: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let not: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let min = device.create_buffer::<Int2>(1024).unwrap();
+    let max = device.create_buffer::<Int2>(1024).unwrap();
+    let clamp = device.create_buffer::<Int2>(1024).unwrap();
     let mut rng = rand::thread_rng();
-    x.view(..).fill_fn(|_| IVec2::new(rng.gen(), rng.gen()));
-    y.view(..).fill_fn(|_| IVec2::new(rng.gen(), rng.gen()));
-    z.view(..).fill_fn(|_| IVec2::new(rng.gen(), rng.gen()));
+    x.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
+    y.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
+    z.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
     let kernel = device
         .create_kernel::<()>(&|| {
             let tid = dispatch_id().x();
@@ -204,10 +204,10 @@ fn vec_bit_minmax() {
 fn vec_permute() {
     init();
     let device = get_device();
-    let v2: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let v3: Buffer<IVec3> = device.create_buffer(1024).unwrap();
+    let v2: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let v3: Buffer<Int3> = device.create_buffer(1024).unwrap();
     v2.view(..)
-        .fill_fn(|i| IVec2::new(i as i32 + 0, i as i32 + 1));
+        .fill_fn(|i| Int2::new(i as i32 + 0, i as i32 + 1));
     let kernel = device
         .create_kernel::<()>(&|| {
             let v2 = v2.var();

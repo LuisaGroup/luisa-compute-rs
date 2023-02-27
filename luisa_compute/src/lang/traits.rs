@@ -8,6 +8,8 @@ use std::ops::*;
 use super::Expr;
 pub trait VarTrait: Copy + Clone + 'static + FromNode {
     type Value: Value;
+    type Short: VarTrait;
+    type Ushort: VarTrait;
     type Int: VarTrait;
     type Uint: VarTrait;
     type Long: VarTrait;
@@ -23,6 +25,8 @@ macro_rules! impl_var_trait {
     ($t:ty) => {
         impl VarTrait for PrimExpr<$t> {
             type Value = $t;
+            type Short = Expr<i16>;
+            type Ushort = Expr<u16>;
             type Int = Expr<i32>;
             type Uint = Expr<u32>;
             type Long = Expr<i64>;
@@ -35,6 +39,8 @@ macro_rules! impl_var_trait {
 }
 impl_var_trait!(f32);
 impl_var_trait!(f64);
+impl_var_trait!(i16);
+impl_var_trait!(u16);
 impl_var_trait!(i32);
 impl_var_trait!(u32);
 impl_var_trait!(i64);
@@ -107,6 +113,12 @@ pub trait CommonVarOp: VarTrait {
         self._cast()
     }
     fn float(&self) -> Self::Float {
+        self._cast()
+    }
+    fn short(&self) -> Self::Short {
+        self._cast()
+    }
+    fn ushort(&self) -> Self::Ushort {
         self._cast()
     }
     // fn double(&self) -> Self::Double {

@@ -39,12 +39,12 @@ pub use luisa_compute_ir::{
     ir::{StructType, Type},
     TypeOf,
 };
-use math::{BVec2Expr, BVec3Expr, BVec4Expr, UVec3};
+use math::{Bool2Expr, Bool3Expr, Bool4Expr, Uint3};
 use std::cell::RefCell;
 
-use self::math::{UVec2, Vec2, Vec3, Vec4};
+use self::math::{Uint2, Float2, Float3, Float4};
 
-// use self::math::UVec3;
+// use self::math::Uint3;
 pub mod math;
 pub mod poly;
 pub mod swizzle;
@@ -499,25 +499,25 @@ pub fn local_zeroed<T: Value>() -> Var<T> {
         b.local_zero_init(<T as TypeOf>::type_())
     }))
 }
-pub fn thread_id() -> Expr<UVec3> {
-    Expr::<UVec3>::from_node(__current_scope(|b| {
-        b.call(Func::ThreadId, &[], UVec3::type_())
+pub fn thread_id() -> Expr<Uint3> {
+    Expr::<Uint3>::from_node(__current_scope(|b| {
+        b.call(Func::ThreadId, &[], Uint3::type_())
     }))
 }
 
-pub fn block_id() -> Expr<UVec3> {
-    Expr::<UVec3>::from_node(__current_scope(|b| {
-        b.call(Func::BlockId, &[], UVec3::type_())
+pub fn block_id() -> Expr<Uint3> {
+    Expr::<Uint3>::from_node(__current_scope(|b| {
+        b.call(Func::BlockId, &[], Uint3::type_())
     }))
 }
-pub fn dispatch_id() -> Expr<UVec3> {
-    Expr::<UVec3>::from_node(__current_scope(|b| {
-        b.call(Func::DispatchId, &[], UVec3::type_())
+pub fn dispatch_id() -> Expr<Uint3> {
+    Expr::<Uint3>::from_node(__current_scope(|b| {
+        b.call(Func::DispatchId, &[], Uint3::type_())
     }))
 }
-pub fn dispatch_size() -> Expr<UVec3> {
-    Expr::<UVec3>::from_node(__current_scope(|b| {
-        b.call(Func::DispatchSize, &[], UVec3::type_())
+pub fn dispatch_size() -> Expr<Uint3> {
+    Expr::<Uint3>::from_node(__current_scope(|b| {
+        b.call(Func::DispatchSize, &[], Uint3::type_())
     }))
 }
 pub fn set_block_size(size: [u32; 3]) {
@@ -527,11 +527,11 @@ pub fn set_block_size(size: [u32; 3]) {
         r.block_size = Some(size);
     });
 }
-pub fn block_size() -> Expr<UVec3> {
+pub fn block_size() -> Expr<Uint3> {
     RECORDER.with(|r| {
         let r = r.borrow();
         let s = r.block_size.unwrap_or_else(|| panic!("Block size not set"));
-        const_::<UVec3>(UVec3::new(s[0], s[1], s[2]))
+        const_::<Uint3>(Uint3::new(s[0], s[1], s[2]))
     })
 }
 pub type Expr<T> = <T as Value>::Expr;
@@ -741,26 +741,26 @@ pub struct BindlessTex2dVar<T: Texel> {
     _marker: std::marker::PhantomData<T>,
 }
 impl<T: Texel> BindlessTex2dVar<T> {
-    pub fn sample(&self, uv: Expr<Vec2>) -> Expr<Vec4> {
-        Expr::<Vec4>::from_node(__current_scope(|b| {
+    pub fn sample(&self, uv: Expr<Float2>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture2dSample,
                 &[self.array, self.tex2d_index.node(), uv.node()],
-                Vec4::type_(),
+                Float4::type_(),
             )
         }))
     }
-    pub fn sample_level(&self, uv: Expr<Vec2>, level: Expr<f32>) -> Expr<Vec4> {
-        Expr::<Vec4>::from_node(__current_scope(|b| {
+    pub fn sample_level(&self, uv: Expr<Float2>, level: Expr<f32>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture2dSampleLevel,
                 &[self.array, self.tex2d_index.node(), uv.node(), level.node()],
-                Vec4::type_(),
+                Float4::type_(),
             )
         }))
     }
-    pub fn sample_grad(&self, uv: Expr<Vec2>, ddx: Expr<Vec2>, ddy: Expr<Vec2>) -> Expr<Vec4> {
-        Expr::<Vec4>::from_node(__current_scope(|b| {
+    pub fn sample_grad(&self, uv: Expr<Float2>, ddx: Expr<Float2>, ddy: Expr<Float2>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture2dSampleLevel,
                 &[
@@ -770,21 +770,21 @@ impl<T: Texel> BindlessTex2dVar<T> {
                     ddx.node(),
                     ddy.node(),
                 ],
-                Vec4::type_(),
+                Float4::type_(),
             )
         }))
     }
-    pub fn read(&self, coord: Expr<UVec2>) -> Expr<Vec4> {
-        Expr::<Vec4>::from_node(__current_scope(|b| {
+    pub fn read(&self, coord: Expr<Uint2>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture2dRead,
                 &[self.array, self.tex2d_index.node(), coord.node()],
-                Vec4::type_(),
+                Float4::type_(),
             )
         }))
     }
-    pub fn read_level(&self, coord: Expr<UVec2>, level: Expr<u32>) -> Expr<Vec4> {
-        Expr::<Vec4>::from_node(__current_scope(|b| {
+    pub fn read_level(&self, coord: Expr<Uint2>, level: Expr<u32>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture2dReadLevel,
                 &[
@@ -793,25 +793,25 @@ impl<T: Texel> BindlessTex2dVar<T> {
                     coord.node(),
                     level.node(),
                 ],
-                Vec4::type_(),
+                Float4::type_(),
             )
         }))
     }
-    pub fn size(&self) -> Expr<UVec2> {
-        Expr::<UVec2>::from_node(__current_scope(|b| {
+    pub fn size(&self) -> Expr<Uint2> {
+        Expr::<Uint2>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture2dSize,
                 &[self.array, self.tex2d_index.node()],
-                UVec2::type_(),
+                Uint2::type_(),
             )
         }))
     }
-    pub fn size_level(&self, level: Expr<u32>) -> Expr<UVec2> {
-        Expr::<UVec2>::from_node(__current_scope(|b| {
+    pub fn size_level(&self, level: Expr<u32>) -> Expr<Uint2> {
+        Expr::<Uint2>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture2dSizeLevel,
                 &[self.array, self.tex2d_index.node(), level.node()],
-                UVec2::type_(),
+                Uint2::type_(),
             )
         }))
     }
@@ -823,26 +823,26 @@ pub struct BindlessTex3dVar<T: Texel> {
     _marker: std::marker::PhantomData<T>,
 }
 impl<T: Texel> BindlessTex3dVar<T> {
-    pub fn sample(&self, uv: Expr<Vec3>) -> Expr<Vec4> {
-        Expr::<Vec4>::from_node(__current_scope(|b| {
+    pub fn sample(&self, uv: Expr<Float3>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture3dSample,
                 &[self.array, self.tex3d_index.node(), uv.node()],
-                Vec4::type_(),
+                Float4::type_(),
             )
         }))
     }
-    pub fn sample_level(&self, uv: Expr<Vec3>, level: Expr<f32>) -> Expr<Vec4> {
-        Expr::<Vec4>::from_node(__current_scope(|b| {
+    pub fn sample_level(&self, uv: Expr<Float3>, level: Expr<f32>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture3dSampleLevel,
                 &[self.array, self.tex3d_index.node(), uv.node(), level.node()],
-                Vec4::type_(),
+                Float4::type_(),
             )
         }))
     }
-    pub fn sample_grad(&self, uv: Expr<Vec3>, ddx: Expr<Vec3>, ddy: Expr<Vec3>) -> Expr<Vec4> {
-        Expr::<Vec4>::from_node(__current_scope(|b| {
+    pub fn sample_grad(&self, uv: Expr<Float3>, ddx: Expr<Float3>, ddy: Expr<Float3>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture3dSampleLevel,
                 &[
@@ -852,21 +852,21 @@ impl<T: Texel> BindlessTex3dVar<T> {
                     ddx.node(),
                     ddy.node(),
                 ],
-                Vec4::type_(),
+                Float4::type_(),
             )
         }))
     }
-    pub fn read(&self, coord: Expr<UVec3>) -> Expr<Vec4> {
-        Expr::<Vec4>::from_node(__current_scope(|b| {
+    pub fn read(&self, coord: Expr<Uint3>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture3dRead,
                 &[self.array, self.tex3d_index.node(), coord.node()],
-                Vec4::type_(),
+                Float4::type_(),
             )
         }))
     }
-    pub fn read_level(&self, coord: Expr<UVec3>, level: Expr<u32>) -> Expr<Vec4> {
-        Expr::<Vec4>::from_node(__current_scope(|b| {
+    pub fn read_level(&self, coord: Expr<Uint3>, level: Expr<u32>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture3dReadLevel,
                 &[
@@ -875,25 +875,25 @@ impl<T: Texel> BindlessTex3dVar<T> {
                     coord.node(),
                     level.node(),
                 ],
-                Vec4::type_(),
+                Float4::type_(),
             )
         }))
     }
-    pub fn size(&self) -> Expr<UVec3> {
-        Expr::<UVec3>::from_node(__current_scope(|b| {
+    pub fn size(&self) -> Expr<Uint3> {
+        Expr::<Uint3>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture3dSize,
                 &[self.array, self.tex3d_index.node()],
-                UVec3::type_(),
+                Uint3::type_(),
             )
         }))
     }
-    pub fn size_level(&self, level: Expr<u32>) -> Expr<UVec3> {
-        Expr::<UVec3>::from_node(__current_scope(|b| {
+    pub fn size_level(&self, level: Expr<u32>) -> Expr<Uint3> {
+        Expr::<Uint3>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture3dSizeLevel,
                 &[self.array, self.tex3d_index.node(), level.node()],
-                UVec3::type_(),
+                Uint3::type_(),
             )
         }))
     }
@@ -1264,13 +1264,13 @@ pub struct Tex2dVar<T: Texel> {
 }
 
 impl<T: Texel> Tex2dVar<T> {
-    pub fn read(&self, uv: impl Into<Expr<UVec2>>) -> Expr<T> {
+    pub fn read(&self, uv: impl Into<Expr<Uint2>>) -> Expr<T> {
         let uv = uv.into();
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(Func::Texture2dRead, &[self.node, uv.node()], T::type_())
         }))
     }
-    pub fn write(&self, uv: impl Into<Expr<UVec2>>, v: impl Into<Expr<T>>) {
+    pub fn write(&self, uv: impl Into<Expr<Uint2>>, v: impl Into<Expr<T>>) {
         let uv = uv.into();
         let v = v.into();
         __current_scope(|b| {
@@ -1283,13 +1283,13 @@ impl<T: Texel> Tex2dVar<T> {
     }
 }
 impl<T: Texel> Tex3dVar<T> {
-    pub fn read(&self, uv: impl Into<Expr<UVec3>>) -> Expr<T> {
+    pub fn read(&self, uv: impl Into<Expr<Uint3>>) -> Expr<T> {
         let uv = uv.into();
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(Func::Texture3dRead, &[self.node, uv.node()], T::type_())
         }))
     }
-    pub fn write(&self, uv: impl Into<Expr<UVec3>>, v: impl Into<Expr<T>>) {
+    pub fn write(&self, uv: impl Into<Expr<Uint3>>, v: impl Into<Expr<T>>) {
         let uv = uv.into();
         let v = v.into();
         __current_scope(|b| {

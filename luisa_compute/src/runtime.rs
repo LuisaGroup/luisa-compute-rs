@@ -5,8 +5,8 @@ use crate::{lang::Value, resource::*};
 
 use lang::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSigature};
 pub use luisa_compute_api_types as api;
-use luisa_compute_ir::CArc;
 use luisa_compute_ir::ir::KernelModule;
+use luisa_compute_ir::CArc;
 use parking_lot::{Condvar, Mutex};
 use rtx::Accel;
 use std::cell::RefCell;
@@ -109,7 +109,11 @@ impl Device {
             device: self.clone(),
             handle: texture,
             format,
-            level: mips,
+            levels: mips,
+            width,
+            height,
+            depth: 1,
+            storage: format.storage(),
         });
         Ok(Tex2D {
             handle,
@@ -133,7 +137,11 @@ impl Device {
             device: self.clone(),
             handle: texture,
             format,
-            level: mips,
+            levels: mips,
+            width,
+            height,
+            depth,
+            storage: format.storage(),
         });
         Ok(Tex3D {
             handle,
@@ -296,6 +304,15 @@ impl Stream {
             commands: Vec::new(),
         }
     }
+    pub fn submit_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
+        &self,
+        commands: I,
+    ) -> backend::Result<()> {
+        let mut command_buffer = self.command_buffer();
+        command_buffer.extend(commands);
+        command_buffer.commit()?;
+        self.synchronize()
+    }
 }
 pub struct CommandBuffer<'a> {
     stream: Arc<StreamHandle>,
@@ -322,12 +339,7 @@ pub fn submit_default_stream_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
     commands: I,
 ) -> backend::Result<()> {
     let default_stream = device.default_stream();
-    let mut cmd_buffer = default_stream.command_buffer();
-
-    cmd_buffer.extend(commands);
-
-    cmd_buffer.commit()?;
-    default_stream.synchronize()
+    default_stream.submit_and_sync(commands)
 }
 pub struct Command<'a> {
     #[allow(dead_code)]
@@ -386,17 +398,18 @@ impl ArgEncoder {
             size: buffer.len * std::mem::size_of::<T>(),
         }));
     }
-    pub fn tex2d<T: Texel>(&mut self, tex: &Tex2D<T>) {
+    pub fn tex2d<T: Texel>(&mut self, tex:&Tex2DView<T>) {
         self.args.push(api::Argument::Texture(api::TextureArgument {
             texture: tex.handle.handle,
-            level: tex.handle.level,
+            level:tex.level
         }));
     }
-    pub fn tex3d<T: Texel>(&mut self, tex: &Tex3D<T>) {
+    pub fn tex3d<T: Texel>(&mut self, tex:&Tex3DView<T>) {
         self.args.push(api::Argument::Texture(api::TextureArgument {
             texture: tex.handle.handle,
-            level: tex.handle.level,
+            level:tex.level
         }));
+
     }
     pub fn bindless_array(&mut self, array: &BindlessArray) {
         self.args
@@ -416,13 +429,13 @@ impl<T: Value> KernelArg for Buffer<T> {
         encoder.buffer(self);
     }
 }
-impl<T: Texel> KernelArg for Tex2D<T> {
+impl<T: Texel> KernelArg for Tex2DView<T> {
     type Parameter = lang::Tex2DVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.tex2d(self);
     }
 }
-impl<T: Texel> KernelArg for Tex3D<T> {
+impl<T: Texel> KernelArg for Tex3DView<T> {
     type Parameter = lang::Tex3DVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.tex3d(self);
@@ -478,11 +491,7 @@ impl RawKernel {
             }
         }
     }
-    pub unsafe fn dispatch_async<'a>(
-        &'a self,
-        args: &ArgEncoder,
-        dispatch_size: [u32; 3],
-    ) -> Command<'a> {
+    pub fn dispatch_async<'a>(&'a self, args: &ArgEncoder, dispatch_size: [u32; 3]) -> Command<'a> {
         Command {
             inner: api::Command::ShaderDispatch(api::ShaderDispatchCommand {
                 shader: self.unwrap(),
@@ -495,12 +504,7 @@ impl RawKernel {
         }
     }
     pub fn dispatch(&self, args: &ArgEncoder, dispatch_size: [u32; 3]) -> backend::Result<()> {
-        unsafe {
-            submit_default_stream_and_sync(
-                &self.device,
-                vec![self.dispatch_async(args, dispatch_size)],
-            )
-        }
+        submit_default_stream_and_sync(&self.device, vec![self.dispatch_async(args, dispatch_size)])
     }
 }
 pub struct Kernel<T: KernelArg> {
@@ -526,7 +530,7 @@ macro_rules! impl_dispatch_for_kernel {
                 self.inner.dispatch(&encoder, dispatch_size)
             }
             #[allow(non_snake_case)]
-            pub unsafe fn dispatch_async<'a>(
+            pub fn dispatch_async<'a>(
                 &'a self,
                 dispatch_size: [u32; 3], $first:&$first, $($rest:&$rest),*
             ) -> Command<'a> {
@@ -543,7 +547,7 @@ macro_rules! impl_dispatch_for_kernel {
         pub fn dispatch(&self, dispatch_size: [u32; 3]) -> backend::Result<()> {
             self.inner.dispatch(&ArgEncoder::new(), dispatch_size)
         }
-        pub unsafe fn dispatch_async<'a>(
+        pub fn dispatch_async<'a>(
             &'a self,
             dispatch_size: [u32; 3],
         ) -> Command<'a> {

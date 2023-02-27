@@ -4,7 +4,7 @@ use std::process::abort;
 use std::{any::Any, collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 
 use crate::lang::traits::VarCmp;
-use crate::prelude::AccelHandle;
+use crate::prelude::{AccelHandle, Tex2DView, Tex3DView};
 use crate::runtime::{AsyncShaderArtifact, ShaderArtifact};
 use crate::{
     backend,
@@ -15,6 +15,7 @@ use crate::{
     },
 };
 use crate::{rtx, ResourceTracker};
+use ir::context::type_hash;
 pub use ir::ir::NodeRef;
 use ir::ir::{
     AccelBinding, BindlessArrayBinding, ModulePools, SwitchCase, UserNodeData, INVALID_REF,
@@ -40,6 +41,8 @@ pub use luisa_compute_ir::{
 };
 use math::{BVec2Expr, BVec3Expr, BVec4Expr, UVec3};
 use std::cell::RefCell;
+
+use self::math::{UVec2, Vec2, Vec4, Vec3};
 
 // use self::math::UVec3;
 pub mod math;
@@ -708,7 +711,186 @@ impl<T: Value> BindlessBufferVar<T> {
         }))
     }
 }
+pub struct BindlessTex2DVar<T: Texel> {
+    array: NodeRef,
+    tex2d_index: Expr<u32>,
+    _marker: std::marker::PhantomData<T>,
+}
+impl<T: Texel> BindlessTex2DVar<T> {
+    pub fn sample(&self, uv: Expr<Vec2>) -> Expr<Vec4> {
+        Expr::<Vec4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture2dSample,
+                &[self.array, self.tex2d_index.node(), uv.node()],
+                Vec4::type_(),
+            )
+        }))
+    }
+    pub fn sample_level(&self, uv: Expr<Vec2>, level: Expr<f32>) -> Expr<Vec4> {
+        Expr::<Vec4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture2dSampleLevel,
+                &[self.array, self.tex2d_index.node(), uv.node(), level.node()],
+                Vec4::type_(),
+            )
+        }))
+    }
+    pub fn sample_grad(&self, uv: Expr<Vec2>, ddx: Expr<Vec2>, ddy: Expr<Vec2>) -> Expr<Vec4> {
+        Expr::<Vec4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture2dSampleLevel,
+                &[
+                    self.array,
+                    self.tex2d_index.node(),
+                    uv.node(),
+                    ddx.node(),
+                    ddy.node(),
+                ],
+                Vec4::type_(),
+            )
+        }))
+    }
+    pub fn read(&self, coord: Expr<UVec2>) -> Expr<Vec4> {
+        Expr::<Vec4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture2dRead,
+                &[self.array, self.tex2d_index.node(), coord.node()],
+                Vec4::type_(),
+            )
+        }))
+    }
+    pub fn read_level(&self, coord: Expr<UVec2>, level: Expr<u32>) -> Expr<Vec4> {
+        Expr::<Vec4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture2dReadLevel,
+                &[
+                    self.array,
+                    self.tex2d_index.node(),
+                    coord.node(),
+                    level.node(),
+                ],
+                Vec4::type_(),
+            )
+        }))
+    }
+    pub fn size(&self) -> Expr<UVec2> {
+        Expr::<UVec2>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture2dSize,
+                &[self.array, self.tex2d_index.node()],
+                UVec2::type_(),
+            )
+        }))
+    }
+    pub fn size_level(&self, level: Expr<u32>) -> Expr<UVec2> {
+        Expr::<UVec2>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture2dSizeLevel,
+                &[self.array, self.tex2d_index.node(), level.node()],
+                UVec2::type_(),
+            )
+        }))
+    }
+}
+
+pub struct BindlessTex3DVar<T: Texel> {
+    array: NodeRef,
+    tex3d_index: Expr<u32>,
+    _marker: std::marker::PhantomData<T>,
+}
+impl<T: Texel> BindlessTex3DVar<T> {
+    pub fn sample(&self, uv: Expr<Vec3>) -> Expr<Vec4> {
+        Expr::<Vec4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture3dSample,
+                &[self.array, self.tex3d_index.node(), uv.node()],
+                Vec4::type_(),
+            )
+        }))
+    }
+    pub fn sample_level(&self, uv: Expr<Vec3>, level: Expr<f32>) -> Expr<Vec4> {
+        Expr::<Vec4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture3dSampleLevel,
+                &[self.array, self.tex3d_index.node(), uv.node(), level.node()],
+                Vec4::type_(),
+            )
+        }))
+    }
+    pub fn sample_grad(&self, uv: Expr<Vec3>, ddx: Expr<Vec3>, ddy: Expr<Vec3>) -> Expr<Vec4> {
+        Expr::<Vec4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture3dSampleLevel,
+                &[
+                    self.array,
+                    self.tex3d_index.node(),
+                    uv.node(),
+                    ddx.node(),
+                    ddy.node(),
+                ],
+                Vec4::type_(),
+            )
+        }))
+    }
+    pub fn read(&self, coord: Expr<UVec3>) -> Expr<Vec4> {
+        Expr::<Vec4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture3dRead,
+                &[self.array, self.tex3d_index.node(), coord.node()],
+                Vec4::type_(),
+            )
+        }))
+    }
+    pub fn read_level(&self, coord: Expr<UVec3>, level: Expr<u32>) -> Expr<Vec4> {
+        Expr::<Vec4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture3dReadLevel,
+                &[
+                    self.array,
+                    self.tex3d_index.node(),
+                    coord.node(),
+                    level.node(),
+                ],
+                Vec4::type_(),
+            )
+        }))
+    }
+    pub fn size(&self) -> Expr<UVec3> {
+        Expr::<UVec3>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture3dSize,
+                &[self.array, self.tex3d_index.node()],
+                UVec3::type_(),
+            )
+        }))
+    }
+    pub fn size_level(&self, level: Expr<u32>) -> Expr<UVec3> {
+        Expr::<UVec3>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture3dSizeLevel,
+                &[self.array, self.tex3d_index.node(), level.node()],
+                UVec3::type_(),
+            )
+        }))
+    }
+}
 impl BindlessArrayVar {
+    pub fn tex2d<T: Texel>(&self, tex2d_index: Expr<u32>) -> BindlessTex2DVar<T> {
+        let v = BindlessTex2DVar {
+            array: self.node,
+            tex2d_index,
+            _marker: std::marker::PhantomData,
+        };
+        v
+    }
+    pub fn tex3d<T: Texel>(&self, tex3d_index: Expr<u32>) -> BindlessTex3DVar<T> {
+        let v = BindlessTex3DVar {
+            array: self.node,
+            tex3d_index,
+            _marker: std::marker::PhantomData,
+        };
+        v
+    }
     pub fn buffer<T: Value>(&self, buffer_index: Expr<u32>) -> BindlessBufferVar<T> {
         let v = BindlessBufferVar {
             array: self.node,
@@ -719,14 +901,13 @@ impl BindlessArrayVar {
         if __env_need_backtrace() {
             let backtrace = backtrace::Backtrace::new();
             let check_type = CpuFn::new(move |t: &mut u64| {
-                let expected = T::type_();
-                if *t != CArc::as_ptr(&expected) as u64 {
-                    let t = unsafe { &*(*t as *const Type) };
+                let expected = type_hash(&T::type_());
+                if *t != expected {
                     {
                         let mut stderr = std::io::stderr().lock();
                         use std::io::Write;
                         writeln!(stderr,
-                                "Bindless buffer type mismatch: expected {:?}, got {:?}; host backtrace:\n {:?}",
+                                "Bindless buffer type mismatch: expected hash {:?}, got {:?}; host backtrace:\n {:?}",
                                 expected, t, backtrace
                         ).unwrap();
                     }
@@ -736,14 +917,13 @@ impl BindlessArrayVar {
             let _ = check_type.call(vt);
         } else {
             let check_type = CpuFn::new(move |t: &mut u64| {
-                let expected = T::type_();
-                if *t != CArc::as_ptr(&expected) as u64 {
-                    let t = unsafe { &*(*t as *const Type) };
+                let expected = type_hash(&T::type_());
+                if *t != expected as u64 {
                     {
                         let mut stderr = std::io::stderr().lock();
                         use std::io::Write;
                         writeln!(stderr,
-                            "Bindless buffer type mismatch: expected {:?}, got {:?}; set LUISA_BACKTRACE=1 for more info",
+                            "Bindless buffer type mismatch: expected hash {:?}, got {:?}; set LUISA_BACKTRACE=1 for more info",
                             expected, t,
                         ).unwrap();
                     }
@@ -1050,18 +1230,66 @@ impl_atomic_bit!(u32);
 impl_atomic_bit!(u64);
 impl_atomic_bit!(i32);
 impl_atomic_bit!(i64);
-pub struct ImageVar<T: Texel> {
+pub struct Tex2DVar<T: Texel> {
     node: NodeRef,
     #[allow(dead_code)]
     handle: Option<Arc<TextureHandle>>,
-    _marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<T>,
+    level: Option<u32>,
 }
 
-pub struct VolumeVar<T: Texel> {
+impl <T:Texel> Tex2DVar<T> {
+    pub fn read(&self, uv: impl Into<Expr<UVec2>>) -> Expr<T> {
+        let uv = uv.into();
+        Expr::<T>::from_node(__current_scope(|b| {
+            b.call(
+                Func::Texture2dRead,
+                &[self.node, uv.node()],
+                T::type_(),
+            )
+        }))
+    }
+    pub fn write(&self, uv: impl Into<Expr<UVec2>>, v: impl Into<Expr<T>>) {
+        let uv = uv.into();
+        let v = v.into();
+        __current_scope(|b| {
+            b.call(
+                Func::Texture2dWrite,
+                &[self.node, uv.node(), v.node()],
+                Type::void(),
+            );
+        })
+    }
+}
+impl <T:Texel> Tex3DVar<T> {
+    pub fn read(&self, uv: impl Into<Expr<UVec3>>) -> Expr<T> {
+        let uv = uv.into();
+        Expr::<T>::from_node(__current_scope(|b| {
+            b.call(
+                Func::Texture3dRead,
+                &[self.node, uv.node()],
+                T::type_(),
+            )
+        }))
+    }
+    pub fn write(&self, uv: impl Into<Expr<UVec3>>, v: impl Into<Expr<T>>) {
+        let uv = uv.into();
+        let v = v.into();
+        __current_scope(|b| {
+            b.call(
+                Func::Texture3dWrite,
+                &[self.node, uv.node(), v.node()],
+                Type::void(),
+            );
+        })
+    }
+}
+pub struct Tex3DVar<T: Texel> {
     node: NodeRef,
     #[allow(dead_code)]
     handle: Option<Arc<TextureHandle>>,
-    _marker: std::marker::PhantomData<T>,
+    marker: std::marker::PhantomData<T>,
+    level: Option<u32>,
 }
 pub struct AccelVar {
     node: NodeRef,
@@ -1132,8 +1360,6 @@ impl AccelVar {
         }
     }
 }
-pub type Tex2DVar<T> = ImageVar<T>;
-pub type Tex3DVar<T> = VolumeVar<T>;
 
 #[macro_export]
 macro_rules! struct_ {
@@ -1161,13 +1387,13 @@ impl<T: Value> KernelParameter for BufferVar<T> {
     }
 }
 impl<T: Texel> KernelParameter for Tex2DVar<T> {
-    type Arg = Tex2D<T>;
+    type Arg = Tex2DView<T>;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.tex2d()
     }
 }
 impl<T: Texel> KernelParameter for Tex3DVar<T> {
-    type Arg = Tex3D<T>;
+    type Arg = Tex3DView<T>;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.tex3d()
     }
@@ -1237,11 +1463,31 @@ impl KernelBuilder {
             handle: None,
         }
     }
-    pub fn tex2d<T: Texel>(&mut self) -> ImageVar<T> {
-        todo!()
+    pub fn tex2d<T: Texel>(&mut self) -> Tex2DVar<T> {
+        let node = new_node(
+            __module_pools(),
+            Node::new(CArc::new(Instruction::Texture2D), T::type_()),
+        );
+        self.args.push(node);
+        Tex2DVar {
+            node,
+            marker: std::marker::PhantomData,
+            handle: None,
+            level: None,
+        }
     }
-    pub fn tex3d<T: Texel>(&mut self) -> VolumeVar<T> {
-        todo!()
+    pub fn tex3d<T: Texel>(&mut self) -> Tex3DVar<T> {
+        let node = new_node(
+            __module_pools(),
+            Node::new(CArc::new(Instruction::Texture3D), T::type_()),
+        );
+        self.args.push(node);
+        Tex3DVar {
+            node,
+            marker: std::marker::PhantomData,
+            handle: None,
+            level: None,
+        }
     }
     pub fn bindless_array(&mut self) -> BindlessArrayVar {
         let node = new_node(

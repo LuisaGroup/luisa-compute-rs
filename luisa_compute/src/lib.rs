@@ -7,6 +7,8 @@ pub mod rtx;
 pub mod runtime;
 pub mod util;
 pub use luisa_compute_backend as backend;
+pub use half::f16;
+
 use luisa_compute_backend::Backend;
 pub mod prelude {
     pub use crate::*;

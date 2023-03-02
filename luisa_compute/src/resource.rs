@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::ops::RangeBounds;
 use std::sync::Arc;
 
@@ -10,6 +11,7 @@ use api::BufferUploadCommand;
 use lang::BindlessArrayVar;
 use lang::BufferVar;
 use lang::Value;
+use lazy_static::lazy_static;
 use libc::c_void;
 use runtime::*;
 pub struct Buffer<T: Value> {
@@ -28,19 +30,24 @@ impl Drop for BufferHandle {
         self.device.inner.destroy_buffer(self.handle);
     }
 }
-pub struct BufferView<'a, T: Value> {
-    buffer: &'a Buffer<T>,
-    offset: usize,
-    len: usize,
+pub struct BufferView<T: Value> {
+    pub(crate) handle: Arc<BufferHandle>,
+    pub(crate) device: Device,
+    pub(crate) offset: usize,
+    pub(crate) len: usize,
+    _marker: std::marker::PhantomData<T>,
 }
-impl<'a, T: Value> BufferView<'a, T> {
-    pub fn copy_to_async(&'a self, data: &'a mut [T]) -> Command<'a> {
+impl<T: Value> BufferView<T> {
+    pub(crate) fn handle(&self) -> api::Buffer {
+        self.handle.handle
+    }
+    pub fn copy_to_async<'a>(&'a self, data: &'a mut [T]) -> Command<'a> {
         assert_eq!(data.len(), self.len);
         let mut rt = ResourceTracker::new();
-        rt.add(self.buffer.handle.clone());
+        rt.add(self.handle.clone());
         Command {
             inner: api::Command::BufferDownload(BufferDownloadCommand {
-                buffer: self.buffer.handle.handle,
+                buffer: self.handle.handle,
                 offset: self.offset * std::mem::size_of::<T>(),
                 size: data.len() * std::mem::size_of::<T>(),
                 data: data.as_mut_ptr() as *mut u8,
@@ -60,17 +67,16 @@ impl<'a, T: Value> BufferView<'a, T> {
     }
     pub fn copy_to(&self, data: &mut [T]) {
         unsafe {
-            submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_async(data)])
-                .unwrap();
+            submit_default_stream_and_sync(&self.device, [self.copy_to_async(data)]).unwrap();
         }
     }
-    pub fn copy_from_async(&'a self, data: &'a [T]) -> Command<'a> {
+    pub fn copy_from_async<'a>(&'a self, data: &'a [T]) -> Command<'a> {
         assert_eq!(data.len(), self.len);
         let mut rt = ResourceTracker::new();
-        rt.add(self.buffer.handle.clone());
+        rt.add(self.handle.clone());
         Command {
             inner: api::Command::BufferUpload(BufferUploadCommand {
-                buffer: self.buffer.handle.handle,
+                buffer: self.handle.handle,
                 offset: self.offset * std::mem::size_of::<T>(),
                 size: data.len() * std::mem::size_of::<T>(),
                 data: data.as_ptr() as *const u8,
@@ -80,7 +86,7 @@ impl<'a, T: Value> BufferView<'a, T> {
         }
     }
     pub fn copy_from(&self, data: &[T]) {
-        submit_default_stream_and_sync(&self.buffer.device, [self.copy_from_async(data)]).unwrap();
+        submit_default_stream_and_sync(&self.device, [self.copy_from_async(data)]).unwrap();
     }
     pub fn fill_fn<F: FnMut(usize) -> T>(&self, f: F) {
         self.copy_from(&(0..self.len).map(f).collect::<Vec<_>>());
@@ -88,16 +94,16 @@ impl<'a, T: Value> BufferView<'a, T> {
     pub fn fill(&self, value: T) {
         self.fill_fn(|_| value);
     }
-    pub fn copy_to_buffer_async(&self, dst: &BufferView<'a, T>) -> Command<'a> {
+    pub fn copy_to_buffer_async<'a>(&self, dst: &'a BufferView<T>) -> Command<'a> {
         assert_eq!(self.len, dst.len);
         let mut rt = ResourceTracker::new();
-        rt.add(self.buffer.handle.clone());
-        rt.add(dst.buffer.handle.clone());
+        rt.add(self.handle.clone());
+        rt.add(dst.handle.clone());
         Command {
             inner: api::Command::BufferCopy(api::BufferCopyCommand {
-                src: self.buffer.handle.handle,
+                src: self.handle.handle,
                 src_offset: self.offset * std::mem::size_of::<T>(),
-                dst: dst.buffer.handle.handle,
+                dst: dst.handle.handle,
                 dst_offset: dst.offset * std::mem::size_of::<T>(),
                 size: self.len * std::mem::size_of::<T>(),
             }),
@@ -105,9 +111,8 @@ impl<'a, T: Value> BufferView<'a, T> {
             resource_tracker: rt,
         }
     }
-    pub fn copy_to_buffer(&self, dst: &BufferView<'a, T>) {
-        submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_buffer_async(dst)])
-            .unwrap();
+    pub fn copy_to_buffer(&self, dst: &BufferView<T>) {
+        submit_default_stream_and_sync(&self.device, [self.copy_to_buffer_async(dst)]).unwrap();
     }
 }
 impl<T: Value> Buffer<T> {
@@ -143,7 +148,7 @@ impl<T: Value> Buffer<T> {
     pub fn fill(&self, value: T) {
         self.view(..).fill(value);
     }
-    pub fn view<'a, S: RangeBounds<u64>>(&'a self, range: S) -> BufferView<'a, T> {
+    pub fn view<S: RangeBounds<u64>>(&self, range: S) -> BufferView<T> {
         let lower = range.start_bound();
         let upper = range.end_bound();
         let lower = match lower {
@@ -159,9 +164,11 @@ impl<T: Value> Buffer<T> {
         assert!(lower <= upper);
         assert!(upper <= self.len);
         BufferView {
-            buffer: self,
+            device: self.device.clone(),
+            handle: self.handle.clone(),
             offset: lower,
             len: (upper - lower) as usize,
+            _marker: std::marker::PhantomData,
         }
     }
     pub fn len(&self) -> usize {
@@ -318,36 +325,139 @@ pub(crate) struct TextureHandle {
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) depth: u32,
+    #[allow(dead_code)]
     pub(crate) levels: u32,
 }
 // Type that can be converted from a pixel format
 // This is the type that is read from/written to a texture
 pub trait IoTexel: Value {
     // acceptable pixel format
-    fn pixel_formats() -> &'static [api::PixelFormat];
+    fn pixel_formats() -> &'static HashSet<api::PixelFormat>;
+    fn pixel_storage() -> &'static HashSet<api::PixelStorage>;
 }
+
+macro_rules! impl_io_texel {
+    ($t:ty, $($formats:ident),*) => {
+        impl IoTexel for $t {
+            fn pixel_formats() -> &'static HashSet<api::PixelFormat> {
+                lazy_static!{
+                    static ref FORMATS: HashSet<api::PixelFormat> = {
+                        let mut set = HashSet::new();
+                        $(
+                            set.insert(api::PixelFormat::$formats);
+                        )*
+                        set = set.union(<$t as IoTexel>::pixel_formats()).cloned().collect();
+                        set
+                    };
+                }
+                &FORMATS
+            }
+            fn pixel_storage() -> &'static HashSet<api::PixelStorage> {
+                lazy_static! {
+                    static ref STORAGES: HashSet<api::PixelStorage> = {
+                       <$t as IoTexel>::pixel_formats().iter().map(|f| f.storage()).collect()
+                    };
+                }
+                &STORAGES
+            }
+        }
+    };
+}
+impl_io_texel!(
+    f32, R8Sint, R8Uint, R8Unorm, R16Sint, R16Uint, R16Unorm, R32Sint, R32Uint, R16f, R32f
+);
+impl_io_texel!(Float2, Rg16Sint, Rg16Uint, Rg16Unorm, Rg32Sint, Rg32Uint, Rg16f, Rg32f);
+impl_io_texel!(
+    Float4,
+    Rgba8Sint,
+    Rgba8Uint,
+    Rgba8Unorm,
+    Rgba16Sint,
+    Rgba16Uint,
+    Rgba16Unorm,
+    Rgba32Sint,
+    Rgba32Uint,
+    Rgba16f,
+    Rgba32f
+);
+
+impl_io_texel!(u16,);
+impl_io_texel!(i16,);
+impl_io_texel!(Ushort2,);
+impl_io_texel!(Short2,);
+impl_io_texel!(Ushort4,);
+impl_io_texel!(Short4,);
+impl_io_texel!(u32,);
+impl_io_texel!(i32,);
+impl_io_texel!(Uint2,);
+impl_io_texel!(Int2,);
+impl_io_texel!(Uint4,);
+impl_io_texel!(Int4,);
+
 // Types that is stored in a texture
 pub trait StorageTexel {
-    fn pixel_formats() -> &'static [api::PixelFormat];
+    fn pixel_formats() -> &'static HashSet<api::PixelFormat>;
+    fn pixel_storage() -> &'static HashSet<api::PixelStorage>;
 }
-// macro_rules! impl_texel {
-//     ($t:ty, $($formats:ident),*) => {
-//         impl Texel for $t {
-//             fn pixel_formats() -> &'static [api::PixelFormat] {
-//                 &[$(api::PixelFormat::$formats),*]
-//             }
-//         }
-//     };
-// }
-// impl_texel!(f32, R32f);
-// impl_texel!(u32, R32Uint);
-// impl_texel!(i32, R32Sint);
-// impl_texel!(u16, R16Uint);
-// impl_texel!(i16, R16Sint);
-// impl_texel!(Float2, Rg32f);
-// impl_texel!(Float4, Rgba32f);
-// impl_texel!(Int4, Rgba32Sint);
-// impl_texel!(Uint4, Rgba32Uint);
+macro_rules! impl_storage_texel {
+    ($t:ty, $($formats:ident),*) => {
+        impl StorageTexel for $t {
+            fn pixel_formats() -> &'static HashSet<api::PixelFormat> {
+                lazy_static!{
+                    static ref FORMATS: HashSet<api::PixelFormat> = {
+                        let mut set = HashSet::new();
+                        $(
+                            set.insert(api::PixelFormat::$formats);
+                        )*
+                        set
+                    };
+                }
+                &FORMATS
+            }
+            fn pixel_storage() -> &'static HashSet<api::PixelStorage> {
+                lazy_static! {
+                    static ref STORAGES: HashSet<api::PixelStorage> = {
+                       <$t as StorageTexel>::pixel_formats().iter().map(|f| f.storage()).collect()
+                    };
+                }
+                &STORAGES
+            }
+        }
+    };
+}
+
+impl_storage_texel!(u8, R8Uint, R8Unorm);
+impl_storage_texel!(i8, R8Sint);
+impl_storage_texel!(Ubyte3, Rgb8Uint, Rgb8Unorm);
+impl_storage_texel!(Byte3, Rgb8Sint);
+impl_storage_texel!(Ubyte4, Rgba8Uint, Rgba8Unorm);
+impl_storage_texel!(Byte4, Rgba8Sint);
+
+impl_storage_texel!(u16, R16Uint, R16Unorm);
+impl_storage_texel!(i16, R16Sint);
+
+impl_storage_texel!(Ushort2, Rg16Uint, Rg16Unorm);
+impl_storage_texel!(Short2, Rg16Sint);
+
+impl_storage_texel!(Ushort4, Rgba16Uint, Rgba16Unorm);
+impl_storage_texel!(Short4, Rgba16Sint);
+
+impl_storage_texel!(u32, R32Uint);
+impl_storage_texel!(i32, R32Sint);
+
+impl_storage_texel!(Uint2, Rg32Uint);
+impl_storage_texel!(Int2, Rg32Sint);
+
+impl_storage_texel!(Uint4, Rgba32Uint);
+impl_storage_texel!(Int4, Rgba32Sint);
+
+impl_storage_texel!(f16, R16f);
+impl_storage_texel!(Half2, Rg16f);
+impl_storage_texel!(Half4, Rgba16f);
+
+impl_storage_texel!(f32, R32f);
+impl_storage_texel!(Float2, Rg32f);
+impl_storage_texel!(Float4, Rgba32f);
 
 // `T` is the read out type of the texture, which is not necessarily the same as the storage type
 // In fact, the texture can be stored in any format as long as it can be converted to `T`
@@ -385,8 +495,9 @@ impl<T: IoTexel> Tex3d<T> {
 macro_rules! impl_tex_view {
     ($name:ident) => {
         impl<T: IoTexel> $name<T> {
-            pub fn copy_to_async<'a>(&'a self, data: &'a mut [T]) -> Command<'a> {
+            pub fn copy_to_async<'a, U: StorageTexel>(&'a self, data: &'a mut [U]) -> Command<'a> {
                 assert_eq!(data.len(), self.texel_count() as usize);
+                assert!(U::pixel_storage().contains(&self.handle.storage));
                 let mut rt = ResourceTracker::new();
                 rt.add(self.handle.clone());
                 Command {
@@ -401,13 +512,13 @@ macro_rules! impl_tex_view {
                     marker: std::marker::PhantomData,
                 }
             }
-            pub fn copy_to<'a>(&'a self, data: &'a mut [T]) {
+            pub fn copy_to<'a, U: StorageTexel>(&'a self, data: &'a mut [U]) {
                 assert_eq!(data.len(), self.texel_count() as usize);
 
                 submit_default_stream_and_sync(&self.handle.device, [self.copy_to_async(data)])
                     .unwrap();
             }
-            pub fn copy_to_vec<'a>(&'a self) -> Vec<T> {
+            pub fn copy_to_vec<'a, U: StorageTexel>(&'a self) -> Vec<U> {
                 let mut data = Vec::with_capacity(self.texel_count() as usize);
                 self.copy_to(&mut data);
                 unsafe {
@@ -415,8 +526,9 @@ macro_rules! impl_tex_view {
                 }
                 data
             }
-            pub fn copy_from_async<'a>(&'a self, data: &'a [T]) -> Command<'a> {
+            pub fn copy_from_async<'a, U: StorageTexel>(&'a self, data: &'a [U]) -> Command<'a> {
                 assert_eq!(data.len(), self.texel_count() as usize);
+                assert!(U::pixel_storage().contains(&self.handle.storage));
                 let mut rt = ResourceTracker::new();
                 rt.add(self.handle.clone());
                 Command {
@@ -431,60 +543,68 @@ macro_rules! impl_tex_view {
                     marker: std::marker::PhantomData,
                 }
             }
-            pub fn copy_from<'a>(&'a self, data: &[T]) {
+            pub fn copy_from<'a, U: StorageTexel>(&'a self, data: &[U]) {
                 submit_default_stream_and_sync(&self.handle.device, [self.copy_from_async(data)])
                     .unwrap();
             }
-            pub fn copy_to_buffer_async<'a>(
+            pub fn copy_to_buffer_async<'a, U: StorageTexel + Value>(
                 &'a self,
-                buffer_view: BufferView<'a, T>,
+                buffer_view: &'a BufferView<U>,
             ) -> Command<'a> {
                 let mut rt = ResourceTracker::new();
                 rt.add(self.handle.clone());
-                rt.add(buffer_view.buffer.handle.clone());
+                rt.add(buffer_view.handle.clone());
                 assert_eq!(buffer_view.len, self.texel_count() as usize);
+                assert!(U::pixel_storage().contains(&self.handle.storage));
                 Command {
                     inner: api::Command::TextureToBufferCopy(api::TextureToBufferCopyCommand {
                         texture: self.handle(),
                         storage: self.handle.storage,
                         texture_level: self.level,
                         texture_size: self.size(),
-                        buffer: buffer_view.buffer.handle(),
+                        buffer: buffer_view.handle(),
                         buffer_offset: buffer_view.offset,
                     }),
                     resource_tracker: rt,
                     marker: std::marker::PhantomData,
                 }
             }
-            pub fn copy_to_buffer<'a>(&'a self, buffer_view: BufferView<'a, T>) {
+            pub fn copy_to_buffer<'a, U: StorageTexel + Value>(
+                &'a self,
+                buffer_view: &BufferView<U>,
+            ) {
                 submit_default_stream_and_sync(
                     &self.handle.device,
                     [self.copy_to_buffer_async(buffer_view)],
                 )
                 .unwrap();
             }
-            pub fn copy_from_buffer_async<'a>(
+            pub fn copy_from_buffer_async<'a, U: StorageTexel + Value>(
                 &'a self,
-                buffer_view: BufferView<'a, T>,
+                buffer_view: &BufferView<U>,
             ) -> Command<'a> {
                 let mut rt = ResourceTracker::new();
                 rt.add(self.handle.clone());
-                rt.add(buffer_view.buffer.handle.clone());
+                rt.add(buffer_view.handle.clone());
                 assert_eq!(buffer_view.len, self.texel_count() as usize);
+                assert!(U::pixel_storage().contains(&self.handle.storage));
                 Command {
                     inner: api::Command::BufferToTextureCopy(api::BufferToTextureCopyCommand {
                         texture: self.handle(),
                         storage: self.handle.storage,
                         texture_level: self.level,
                         texture_size: self.size(),
-                        buffer: buffer_view.buffer.handle(),
+                        buffer: buffer_view.handle(),
                         buffer_offset: buffer_view.offset,
                     }),
                     resource_tracker: rt,
                     marker: std::marker::PhantomData,
                 }
             }
-            pub fn copy_from_buffer<'a>(&'a self, buffer_view: BufferView<'a, T>) {
+            pub fn copy_from_buffer<'a, U: StorageTexel + Value>(
+                &'a self,
+                buffer_view: &BufferView<U>,
+            ) {
                 submit_default_stream_and_sync(
                     &self.handle.device,
                     [self.copy_from_buffer_async(buffer_view)],

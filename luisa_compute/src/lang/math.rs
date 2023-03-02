@@ -4,6 +4,7 @@ pub use super::swizzle::*;
 use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*, Float};
 use crate::prelude::FromNode;
 use crate::prelude::{__compose, __insert, const_, Expr, PrimExpr, Var, __current_scope};
+use half::f16;
 use luisa_compute_ir::{
     context::register_type,
     ir::{Func, MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType},
@@ -87,13 +88,25 @@ def_vec_no_glam!(Long2, i64, 16, x, y);
 def_vec_no_glam!(Long3, i64, 32, x, y, z);
 def_vec_no_glam!(Long4, i64, 32, x, y, z, w);
 
-def_vec_no_glam!(Ushort2, u16, 16, x, y);
-def_vec_no_glam!(Ushort3, u16, 32, x, y, z);
-def_vec_no_glam!(Ushort4, u16, 32, x, y, z, w);
+def_vec_no_glam!(Ushort2, u16, 4, x, y);
+def_vec_no_glam!(Ushort3, u16, 8, x, y, z);
+def_vec_no_glam!(Ushort4, u16, 8, x, y, z, w);
 
-def_vec_no_glam!(Short2, i16, 16, x, y);
-def_vec_no_glam!(Short3, i16, 32, x, y, z);
-def_vec_no_glam!(Short4, i16, 32, x, y, z, w);
+def_vec_no_glam!(Short2, i16, 4, x, y);
+def_vec_no_glam!(Short3, i16, 8, x, y, z);
+def_vec_no_glam!(Short4, i16, 8, x, y, z, w);
+
+def_vec_no_glam!(Half2, f16, 4, x, y);
+def_vec_no_glam!(Half3, f16, 8, x, y, z);
+def_vec_no_glam!(Half4, f16, 8, x, y, z, w);
+
+def_vec_no_glam!(Ubyte2, u8, 2, x, y);
+def_vec_no_glam!(Ubyte3, u8, 4, x, y, z);
+def_vec_no_glam!(Ubyte4, u8, 4, x, y, z, w);
+
+def_vec_no_glam!(Byte2, u8, 2, x, y);
+def_vec_no_glam!(Byte3, u8, 4, x, y, z);
+def_vec_no_glam!(Byte4, u8, 4, x, y, z, w);
 
 
 #[derive(Clone, Copy, Debug, Default)]

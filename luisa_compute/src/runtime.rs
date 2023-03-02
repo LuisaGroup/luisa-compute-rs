@@ -398,18 +398,24 @@ impl ArgEncoder {
             size: buffer.len * std::mem::size_of::<T>(),
         }));
     }
-    pub fn tex2d<T: IoTexel>(&mut self, tex:&Tex2dView<T>) {
-        self.args.push(api::Argument::Texture(api::TextureArgument {
-            texture: tex.handle.handle,
-            level:tex.level
+    pub fn buffer_view<T: Value>(&mut self, buffer: &BufferView<T>) {
+        self.args.push(api::Argument::Buffer(api::BufferArgument {
+            buffer: buffer.handle.handle,
+            offset: buffer.offset,
+            size: buffer.len * std::mem::size_of::<T>(),
         }));
     }
-    pub fn tex3d<T: IoTexel>(&mut self, tex:&Tex3dView<T>) {
+    pub fn tex2d<T: IoTexel>(&mut self, tex: &Tex2dView<T>) {
         self.args.push(api::Argument::Texture(api::TextureArgument {
             texture: tex.handle.handle,
-            level:tex.level
+            level: tex.level,
         }));
-
+    }
+    pub fn tex3d<T: IoTexel>(&mut self, tex: &Tex3dView<T>) {
+        self.args.push(api::Argument::Texture(api::TextureArgument {
+            texture: tex.handle.handle,
+            level: tex.level,
+        }));
     }
     pub fn bindless_array(&mut self, array: &BindlessArray) {
         self.args
@@ -427,6 +433,12 @@ impl<T: Value> KernelArg for Buffer<T> {
     type Parameter = lang::BufferVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.buffer(self);
+    }
+}
+impl<T:Value> KernelArg for BufferView<T> {
+    type Parameter = lang::BufferVar<T>;
+    fn encode(&self, encoder: &mut ArgEncoder) {
+        encoder.buffer_view(self);
     }
 }
 impl<T: IoTexel> KernelArg for Tex2dView<T> {

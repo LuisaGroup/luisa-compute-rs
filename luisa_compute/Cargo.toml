@@ -6,6 +6,7 @@ version = "0.1.0"
 [dependencies]
 backtrace = "0.3.67"
 base64ct = {version = "1.5.0", features = ["alloc"]}
+bumpalo = "3.12.0"
 env_logger = "0.10.0"
 exr = "1.5.3"
 glam = "0.22.0"

@@ -99,6 +99,16 @@ impl Compiler {
                     #(self.#field_names.encode(encoder);)*
                 }
             }
+            impl #impl_generics luisa_compute::runtime::AsKernelArg<#name #ty_generics> for #name #ty_generics #where_clause {
+                fn as_arg(&self) -> &#name #ty_generics {
+                    self
+                }
+            }
+            impl #impl_generics luisa_compute::runtime::AsKernelArg<#name #ty_generics> for &#name #ty_generics #where_clause {
+                fn as_arg(&self) -> &#name #ty_generics {
+                    *self
+                }
+            }
         )
     }
     pub fn derive_value(&self, struct_: &ItemStruct) -> TokenStream {
@@ -209,7 +219,7 @@ impl Compiler {
                 }
                 fn from_nodes<I: Iterator<Item = #crate_path ::NodeRef>>(iter: &mut I) -> Self {
                     Self{
-                        node: iter.next().unwrap(), 
+                        node: iter.next().unwrap(),
                         _marker:std::marker::PhantomData
                     }
                 }

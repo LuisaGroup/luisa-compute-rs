@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::cell::RefCell;
+use std::cell::UnsafeCell;
 use std::collections::HashSet;
 use std::ops::RangeBounds;
 use std::sync::Arc;
@@ -19,6 +20,7 @@ pub struct Buffer<T: Value> {
     pub(crate) handle: Arc<BufferHandle>,
     pub(crate) len: usize,
     pub(crate) _marker: std::marker::PhantomData<T>,
+    pub(crate) view: Option<BufferView<T>>,
 }
 pub(crate) struct BufferHandle {
     pub(crate) device: Device,
@@ -30,6 +32,7 @@ impl Drop for BufferHandle {
         self.device.inner.destroy_buffer(self.handle);
     }
 }
+#[derive(Clone)]
 pub struct BufferView<T: Value> {
     pub(crate) handle: Arc<BufferHandle>,
     pub(crate) device: Device,
@@ -128,6 +131,7 @@ impl<T: Value> Buffer<T> {
             handle: self.handle.clone(),
             len: self.len,
             _marker: std::marker::PhantomData,
+            view: self.view.clone(),
         }
     }
     pub fn copy_from(&self, data: &[T]) {
@@ -205,9 +209,7 @@ pub struct BindlessArray {
     pub(crate) tex_3ds: RefCell<Vec<Option<Box<dyn Any>>>>,
 }
 impl BindlessArray {
-    // pub fn buffer<T:Value>(&self, index: usize)->BufferVar<T> {
-    //     todo!()
-    // }
+
     pub fn var(&self) -> BindlessArrayVar {
         BindlessArrayVar::new(self)
     }
@@ -464,6 +466,7 @@ impl_storage_texel!(Float4, Rgba32f);
 pub struct Tex2d<T: IoTexel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
+    pub(crate) view: Option<Tex2dView<T>>,
 }
 
 // `T` is the read out type of the texture, which is not necessarily the same as the storage type
@@ -471,12 +474,15 @@ pub struct Tex2d<T: IoTexel> {
 pub struct Tex3d<T: IoTexel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
+    pub(crate) view: Option<Tex3dView<T>>,
 }
+#[derive(Clone)]
 pub struct Tex2dView<T: IoTexel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
     pub(crate) level: u32,
 }
+#[derive(Clone)]
 pub struct Tex3dView<T: IoTexel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
@@ -677,5 +683,24 @@ impl_tex_view!(Tex3dView);
 impl Drop for TextureHandle {
     fn drop(&mut self) {
         self.device.inner.destroy_texture(self.handle);
+    }
+}
+
+impl<T: IoTexel> Tex2d<T> {
+    pub fn view(&self, level: u32) -> Tex2dView<T> {
+        Tex2dView {
+            handle: self.handle.clone(),
+            marker: std::marker::PhantomData,
+            level,
+        }
+    }
+}
+impl<T: IoTexel> Tex3d<T> {
+    pub fn view(&self, level: u32) -> Tex3dView<T> {
+        Tex3dView {
+            handle: self.handle.clone(),
+            marker: std::marker::PhantomData,
+            level,
+        }
     }
 }

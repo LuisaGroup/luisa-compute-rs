@@ -31,7 +31,7 @@ fn main() {
             },
         )
         .unwrap();
-    kernel.dispatch([1024, 1, 1], &x, &y, &dx, &dy).unwrap();
+    kernel.dispatch([1024, 1, 1], &x.view(..), &y, &dx, &dy).unwrap();
     let dx = dx.copy_to_vec();
     println!("{:?}", &dx[0..16]);
     let dy = dy.copy_to_vec();

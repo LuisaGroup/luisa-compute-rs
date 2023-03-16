@@ -9,7 +9,7 @@ use luisa_compute_ir::ir::KernelModule;
 use luisa_compute_ir::CArc;
 use parking_lot::{Condvar, Mutex};
 use rtx::Accel;
-use std::cell::RefCell;
+use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::mem::align_of;
@@ -56,7 +56,7 @@ impl Device {
             .inner
             .create_buffer(std::mem::size_of::<T>() * count, align_of::<T>())?;
         self.inner.set_buffer_type(buffer, T::type_());
-        Ok(Buffer {
+        let mut buffer = Buffer {
             device: self.clone(),
             handle: Arc::new(BufferHandle {
                 device: self.clone(),
@@ -64,7 +64,11 @@ impl Device {
             }),
             _marker: std::marker::PhantomData {},
             len: count,
-        })
+            view: None
+        };
+        let view = buffer.view(..);
+        buffer.view.replace(view);
+        Ok(buffer)
     }
     pub fn create_buffer_from_slice<T: Value>(&self, data: &[T]) -> backend::Result<Buffer<T>> {
         let buffer = self.create_buffer(data.len())?;
@@ -115,10 +119,14 @@ impl Device {
             depth: 1,
             storage: format.storage(),
         });
-        Ok(Tex2d {
+        let mut tex = Tex2d {
             handle,
             marker: std::marker::PhantomData {},
-        })
+            view: None
+        };
+        let view = tex.view(0);
+        tex.view.replace(view);
+        Ok(tex)
     }
     pub fn create_tex3d<T: IoTexel>(
         &self,
@@ -143,10 +151,14 @@ impl Device {
             depth,
             storage: format.storage(),
         });
-        Ok(Tex3d {
+        let mut tex = Tex3d {
             handle,
             marker: std::marker::PhantomData {},
-        })
+            view: None,
+        };
+        let view = tex.view(0);
+        tex.view.replace(view);
+        Ok(tex)
     }
     pub fn default_stream(&self) -> Stream {
         Stream {
@@ -199,13 +211,6 @@ impl Device {
             mesh_handles: RefCell::new(Vec::new()),
             modifications: RefCell::new(HashMap::new()),
         })
-    }
-    // not recommend to use directly
-    pub fn __create_kernel_raw(
-        &self,
-        f: impl FnOnce(&mut KernelBuilder),
-    ) -> Result<RawKernel, BackendError> {
-        KernelBuilder::build(self.clone(), KernelBuildOptions::default(), f)
     }
     pub fn create_kernel<'a, S: KernelSigature<'a>>(
         &self,
@@ -435,7 +440,7 @@ impl<T: Value> KernelArg for Buffer<T> {
         encoder.buffer(self);
     }
 }
-impl<T:Value> KernelArg for BufferView<T> {
+impl<T: Value> KernelArg for BufferView<T> {
     type Parameter = lang::BufferVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.buffer_view(self);
@@ -530,25 +535,99 @@ impl<T: KernelArg> Kernel<T> {
         device.inner.shader_cache_dir(handle)
     }
 }
+pub trait AsKernelArg<P> {
+    fn as_arg(&self) -> &P;
+}
+impl<T: Value> AsKernelArg<BufferView<T>> for Buffer<T> {
+    fn as_arg(&self) -> &BufferView<T> {
+        self.view.as_ref().unwrap()
+    }
+}
+impl<T: Value> AsKernelArg<BufferView<T>> for &Buffer<T> {
+    fn as_arg(&self) -> &BufferView<T> {
+        (*self).view.as_ref().unwrap()
+    }
+}
+
+impl<T: Value> AsKernelArg<BufferView<T>> for BufferView<T> {
+    fn as_arg(&self) -> &BufferView<T> {
+        self
+    }
+}
+impl<T: Value> AsKernelArg<BufferView<T>> for &BufferView<T> {
+    fn as_arg(&self) -> &BufferView<T> {
+        *self
+    }
+}
+impl<T: IoTexel> AsKernelArg<Tex2dView<T>> for Tex2dView<T> {
+    fn as_arg(&self) -> &Tex2dView<T> {
+        self
+    }
+}
+impl<T: IoTexel> AsKernelArg<Tex2dView<T>> for &Tex2dView<T> {
+    fn as_arg(&self) -> &Tex2dView<T> {
+        *self
+    }
+}
+impl<T: IoTexel> AsKernelArg<Tex3dView<T>> for Tex3dView<T> {
+    fn as_arg(&self) -> &Tex3dView<T> {
+        self
+    }
+}
+impl<T: IoTexel> AsKernelArg<Tex3dView<T>> for &Tex3dView<T> {
+    fn as_arg(&self) -> &Tex3dView<T> {
+        *self
+    }
+}
+impl<T: IoTexel> AsKernelArg<Tex2dView<T>> for Tex2d<T> {
+    fn as_arg(&self) -> &Tex2dView<T> {
+        self.view.as_ref().unwrap()
+    }
+}
+impl<T: IoTexel> AsKernelArg<Tex2dView<T>> for &Tex2d<T> {
+    fn as_arg(&self) -> &Tex2dView<T> {
+        self.view.as_ref().unwrap()
+    }
+}
+impl<T: IoTexel> AsKernelArg<Tex3dView<T>> for Tex3d<T> {
+    fn as_arg(&self) -> &Tex3dView<T> {
+        self.view.as_ref().unwrap()
+    }
+}
+impl<T: IoTexel> AsKernelArg<Tex3dView<T>> for &Tex3d<T> {
+    fn as_arg(&self) -> &Tex3dView<T> {
+        self.view.as_ref().unwrap()
+    }
+}
+impl AsKernelArg<BindlessArray> for &BindlessArray {
+    fn as_arg(&self) -> &BindlessArray {
+        *self
+    }
+}
+impl AsKernelArg<BindlessArray> for BindlessArray {
+    fn as_arg(&self) -> &BindlessArray {
+        self
+    }
+}
 macro_rules! impl_dispatch_for_kernel {
 
    ($first:ident  $($rest:ident)*) => {
         impl <$first:KernelArg, $($rest: KernelArg),*> Kernel<($first, $($rest,)*)> {
             #[allow(non_snake_case)]
-            pub fn dispatch(&self, dispatch_size: [u32; 3], $first:&$first, $($rest:&$rest),*) -> backend::Result<()> {
+            pub fn dispatch(&self, dispatch_size: [u32; 3], $first: impl AsKernelArg<$first>, $($rest:impl AsKernelArg<$rest>),*) -> backend::Result<()> {
                 let mut encoder = ArgEncoder::new();
-                $first.encode(&mut encoder);
-                $($rest.encode(&mut encoder);)*
+                $first.as_arg().encode(&mut encoder);
+                $($rest.as_arg().encode(&mut encoder);)*
                 self.inner.dispatch(&encoder, dispatch_size)
             }
             #[allow(non_snake_case)]
             pub fn dispatch_async<'a>(
                 &'a self,
-                dispatch_size: [u32; 3], $first:&$first, $($rest:&$rest),*
+                dispatch_size: [u32; 3], $first: impl AsKernelArg<$first>, $($rest:impl AsKernelArg<$rest>),*
             ) -> Command<'a> {
                 let mut encoder = ArgEncoder::new();
-                $first.encode(&mut encoder);
-                $($rest.encode(&mut encoder);)*
+                $first.as_arg().encode(&mut encoder);
+                $($rest.as_arg().encode(&mut encoder);)*
                 self.inner.dispatch_async(&encoder, dispatch_size)
             }
         }

@@ -5,16 +5,18 @@ use std::{any::Any, collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 
 use crate::lang::traits::VarCmp;
 use crate::prelude::{AccelHandle, Tex2dView, Tex3dView};
+use crate::resource::BufferView;
 use crate::runtime::{AsyncShaderArtifact, ShaderArtifact};
 use crate::{
     backend,
     prelude::{Device, Kernel, KernelArg, RawKernel},
     resource::{
-        BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, Tex2d, Tex3d, IoTexel,
+        BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, IoTexel, Tex2d, Tex3d,
         TextureHandle,
     },
 };
 use crate::{rtx, ResourceTracker};
+use bumpalo::Bump;
 use ir::context::type_hash;
 pub use ir::ir::NodeRef;
 use ir::ir::{
@@ -42,7 +44,7 @@ pub use luisa_compute_ir::{
 use math::{Bool2Expr, Bool3Expr, Bool4Expr, Uint3};
 use std::cell::RefCell;
 
-use self::math::{Uint2, Float2, Float3, Float4};
+use self::math::{Float2, Float3, Float4, Uint2};
 
 // use self::math::Uint3;
 pub mod math;
@@ -375,6 +377,7 @@ pub(crate) struct Recorder {
     device: Option<Device>,
     block_size: Option<[u32; 3]>,
     pools: Option<CArc<ModulePools>>,
+    arena: Bump,
 }
 impl Recorder {
     fn reset(&mut self) {
@@ -384,6 +387,7 @@ impl Recorder {
         self.lock = false;
         self.device = None;
         self.block_size = None;
+        self.arena.reset();
     }
 }
 thread_local! {
@@ -395,6 +399,7 @@ thread_local! {
         device:None,
         block_size: None,
         pools: None,
+        arena:Bump::new()
     });
 }
 
@@ -759,7 +764,12 @@ impl<T: IoTexel> BindlessTex2dVar<T> {
             )
         }))
     }
-    pub fn sample_grad(&self, uv: Expr<Float2>, ddx: Expr<Float2>, ddy: Expr<Float2>) -> Expr<Float4> {
+    pub fn sample_grad(
+        &self,
+        uv: Expr<Float2>,
+        ddx: Expr<Float2>,
+        ddy: Expr<Float2>,
+    ) -> Expr<Float4> {
         Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture2dSampleLevel,
@@ -841,7 +851,12 @@ impl<T: IoTexel> BindlessTex3dVar<T> {
             )
         }))
     }
-    pub fn sample_grad(&self, uv: Expr<Float3>, ddx: Expr<Float3>, ddy: Expr<Float3>) -> Expr<Float4> {
+    pub fn sample_grad(
+        &self,
+        uv: Expr<Float3>,
+        ddx: Expr<Float3>,
+        ddy: Expr<Float3>,
+    ) -> Expr<Float4> {
         Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessTexture3dSampleLevel,
@@ -1399,7 +1414,7 @@ pub trait KernelParameter {
     fn def_param(builder: &mut KernelBuilder) -> Self;
 }
 impl<T: Value> KernelParameter for BufferVar<T> {
-    type Arg = Buffer<T>;
+    type Arg = BufferView<T>;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.buffer()
     }

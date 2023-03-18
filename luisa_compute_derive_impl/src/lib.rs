@@ -244,8 +244,8 @@ impl Compiler {
                     self.node
                 }
             }
-            impl #impl_generics #crate_path ::ExprProxy<#name #ty_generics> for #expr_proxy_name #ty_generics #where_clause {
-                type Elem = #name #ty_generics;
+            impl #impl_generics #crate_path ::ExprProxy for #expr_proxy_name #ty_generics #where_clause {
+                type Value = #name #ty_generics;
             }
             impl #impl_generics #crate_path ::FromNode for #var_proxy_name #ty_generics #where_clause {
                 #[allow(unused_assignments)]
@@ -256,8 +256,8 @@ impl Compiler {
                     self.node
                 }
             }
-            impl #impl_generics #crate_path ::VarProxy<#name #ty_generics> for #var_proxy_name #ty_generics #where_clause {
-                type Elem = #name #ty_generics;
+            impl #impl_generics #crate_path ::VarProxy for #var_proxy_name #ty_generics #where_clause {
+                type Value = #name #ty_generics;
             }
             impl #impl_generics From<#var_proxy_name #ty_generics> for #expr_proxy_name #ty_generics #where_clause {
                 fn from(var: #var_proxy_name #ty_generics) -> Self {

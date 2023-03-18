@@ -37,7 +37,7 @@ fn main() {
             let result = my_add.call(args);
             let _ = my_print.call(tid);
             if_!(tid.cmpeq(0), {
-                cpu_dbg!(MyAddArgs, args);
+                cpu_dbg!(args);
             });
             buf_z.write(tid, result.result());
         })

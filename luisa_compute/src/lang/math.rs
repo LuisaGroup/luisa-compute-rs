@@ -341,11 +341,11 @@ macro_rules! impl_vec_proxy {
                 self.node
             }
         }
-        impl ExprProxy<$vec> for $expr_proxy {
-            type Elem = $vec;
+        impl ExprProxy for $expr_proxy {
+            type Value = $vec;
         }
-        impl VarProxy<$vec> for $var_proxy {
-            type Elem = $vec;
+        impl VarProxy for $var_proxy {
+            type Value = $vec;
         }
         impl From<$var_proxy> for $expr_proxy {
             fn from(var: $var_proxy) -> Self {
@@ -419,8 +419,8 @@ macro_rules! impl_mat_proxy {
                 self.node
             }
         }
-        impl ExprProxy<$mat> for $expr_proxy {
-            type Elem = $mat;
+        impl ExprProxy for $expr_proxy {
+            type Value = $mat;
         }
         impl FromNode for $var_proxy {
             fn from_node(node: NodeRef) -> Self {
@@ -430,8 +430,8 @@ macro_rules! impl_mat_proxy {
                 self.node
             }
         }
-        impl VarProxy<$mat> for $var_proxy {
-            type Elem = $mat;
+        impl VarProxy for $var_proxy {
+            type Value = $mat;
         }
         impl From<$var_proxy> for $expr_proxy {
             fn from(var: $var_proxy) -> Self {

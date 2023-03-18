@@ -53,8 +53,8 @@ pub mod swizzle;
 pub mod traits;
 
 pub trait Value: Copy + ir::TypeOf {
-    type Expr: ExprProxy<Self>;
-    type Var: VarProxy<Self>;
+    type Expr: ExprProxy<Value = Self>;
+    type Var: VarProxy<Value = Self>;
     fn fields() -> Vec<String>;
 }
 
@@ -153,24 +153,24 @@ impl FromNode for bool {
 unsafe impl _Mask for bool {}
 unsafe impl _Mask for Bool {}
 
-pub trait ExprProxy<T>: Copy + Aggregate + FromNode {
-    type Elem: Value;
+pub trait ExprProxy: Copy + Aggregate + FromNode {
+    type Value: Value;
 }
 
-pub trait VarProxy<T: Value>: Copy + Aggregate + FromNode {
-    type Elem: Value;
-    fn store<U: Into<Expr<T>>>(&self, value: U) {
+pub trait VarProxy: Copy + Aggregate + FromNode {
+    type Value: Value;
+    fn store<U: Into<Expr<Self::Value>>>(&self, value: U) {
         let value = value.into();
         _store(self, &value);
     }
-    fn load(&self) -> Expr<T> {
+    fn load(&self) -> Expr<Self::Value> {
         __current_scope(|b| {
             let nodes = self.to_vec_nodes();
             let mut ret = vec![];
             for node in nodes {
                 ret.push(b.call(Func::Load, &[node], node.type_().clone()));
             }
-            Expr::<T>::from_nodes(&mut ret.into_iter())
+            Expr::<Self::Value>::from_nodes(&mut ret.into_iter())
         })
     }
 }
@@ -225,11 +225,11 @@ macro_rules! impl_prim {
                 self.node
             }
         }
-        impl ExprProxy<$t> for PrimExpr<$t> {
-            type Elem = $t;
+        impl ExprProxy for PrimExpr<$t> {
+            type Value = $t;
         }
-        impl VarProxy<$t> for PrimVar<$t> {
-            type Elem = $t;
+        impl VarProxy for PrimVar<$t> {
+            type Value = $t;
         }
         impl Value for $t {
             type Expr = PrimExpr<$t>;
@@ -295,12 +295,15 @@ pub struct CpuFn<T: Value> {
 }
 #[macro_export]
 macro_rules! cpu_dbg {
-    ($t:ty, $arg:expr) => {{
-        __cpu_dbg::<$t>($arg, file!(), line!())
+    ($arg:expr) => {{
+        __cpu_dbg($arg, file!(), line!())
     }};
 }
-pub fn __cpu_dbg<T: Value + Debug>(arg: Expr<T>, file: &'static str, line: u32) {
-    let f = CpuFn::new(move |x: &mut T| {
+pub fn __cpu_dbg<T: ExprProxy>(arg: T, file: &'static str, line: u32)
+where
+    T::Value: Debug,
+{
+    let f = CpuFn::new(move |x: &mut T::Value| {
         println!("[{}:{}] {:?}", file, line, x);
     });
     let _ = f.call(arg);
@@ -338,7 +341,7 @@ impl<T: Value> CpuFn<T> {
             _marker: std::marker::PhantomData,
         }
     }
-    pub fn call(&self, arg: Expr<T>) -> Expr<T> {
+    pub fn call(&self, arg: impl ExprProxy<Value = T>) -> Expr<T> {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(r.lock);
@@ -635,11 +638,11 @@ impl<T: Value, const N: usize> Aggregate for ArrayVar<T, N> {
         Self::from_node(iter.next().unwrap())
     }
 }
-impl<T: Value, const N: usize> ExprProxy<[T; N]> for ArrayExpr<T, N> {
-    type Elem = [T; N];
+impl<T: Value, const N: usize> ExprProxy for ArrayExpr<T, N> {
+    type Value = [T; N];
 }
-impl<T: Value, const N: usize> VarProxy<[T; N]> for ArrayVar<T, N> {
-    type Elem = [T; N];
+impl<T: Value, const N: usize> VarProxy for ArrayVar<T, N> {
+    type Value = [T; N];
 }
 impl<T: Value, const N: usize> ArrayVar<T, N> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
@@ -1945,20 +1948,20 @@ impl AdContext {
 thread_local! {
     static AD_CONTEXT:RefCell<AdContext> = RefCell::new(AdContext::new());
 }
-pub fn requires_grad<T: Value>(var: impl ExprProxy<T>) {
+pub fn requires_grad(var: impl ExprProxy) {
     __current_scope(|b| {
         b.call(Func::RequiresGradient, &[var.node()], Type::void());
     });
 }
-pub fn backward<T: Value>(out: impl ExprProxy<T>) {
+pub fn backward<T: ExprProxy>(out: T) {
     backward_with_grad(
         out,
         FromNode::from_node(__current_scope(|b| {
             let one = new_node(
                 b.pools(),
                 Node::new(
-                    CArc::new(Instruction::Const(Const::One(T::type_()))),
-                    T::type_(),
+                    CArc::new(Instruction::Const(Const::One(<T::Value>::type_()))),
+                    <T::Value>::type_(),
                 ),
             );
             b.append(one);
@@ -1966,7 +1969,7 @@ pub fn backward<T: Value>(out: impl ExprProxy<T>) {
         })),
     );
 }
-pub fn backward_with_grad<T: Value, U: ExprProxy<T>>(out: U, grad: U) {
+pub fn backward_with_grad<T: ExprProxy>(out: T, grad: T) {
     AD_CONTEXT.with(|c| {
         let mut c = c.borrow_mut();
         assert!(c.started, "autodiff section is not started");
@@ -1990,12 +1993,12 @@ pub fn backward_with_grad<T: Value, U: ExprProxy<T>>(out: U, grad: U) {
         s.push(IrBuilder::new(pools));
     });
 }
-pub fn gradient<T: Value, U: ExprProxy<T>>(var: U) -> U {
-    U::from_node(__current_scope(|b| {
+pub fn gradient<T: ExprProxy>(var: T) -> T {
+    T::from_node(__current_scope(|b| {
         b.call(Func::Gradient, &[var.node()], var.node().type_().clone())
     }))
 }
-pub fn grad<T: Value, U: ExprProxy<T>>(var: U) -> U {
+pub fn grad<T: ExprProxy>(var: T) -> T {
     gradient(var)
 }
 // pub fn detach<R: Aggregate>(body: impl FnOnce() -> R) -> R {

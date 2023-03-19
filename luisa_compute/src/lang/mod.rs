@@ -1598,8 +1598,7 @@ impl KernelBuilder {
                     block_size: r.block_size.unwrap_or([1, 1, 1]),
                     pools: r.pools.clone().unwrap(),
                 };
-                // build kernel here
-                // let shader = self.device.inner.create_shader(CArc::new(module))?;
+
                 let module = CArc::new(module);
                 let artifact = if options.async_compile {
                     ShaderArtifact::Async(AsyncShaderArtifact::new(self.device.clone(), module))

@@ -323,7 +323,7 @@ impl Backend for CppProxyBackend {
         todo!()
     }
 
-    fn destory_accel(&self, accel: api::Accel) {
+    fn destroy_accel(&self, accel: api::Accel) {
         todo!()
     }
 

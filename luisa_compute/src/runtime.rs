@@ -52,19 +52,17 @@ impl Drop for DeviceHandle {
 }
 impl Device {
     pub fn create_buffer<T: Value>(&self, count: usize) -> backend::Result<Buffer<T>> {
-        let buffer = self
-            .inner
-            .create_buffer(std::mem::size_of::<T>() * count, align_of::<T>())?;
-        self.inner.set_buffer_type(buffer, T::type_());
+        let buffer = self.inner.create_buffer(&T::type_(), count)?;
         let mut buffer = Buffer {
             device: self.clone(),
             handle: Arc::new(BufferHandle {
                 device: self.clone(),
-                handle: buffer,
+                handle: api::Buffer(buffer.resource.handle),
+                native_handle: buffer.resource.native_handle,
             }),
             _marker: std::marker::PhantomData {},
             len: count,
-            view: None
+            view: None,
         };
         let view = buffer.view(..);
         buffer.view.replace(view);
@@ -90,11 +88,11 @@ impl Device {
             device: self.clone(),
             handle: Arc::new(BindlessArrayHandle {
                 device: self.clone(),
-                handle: array,
+                handle: api::BindlessArray(array.handle),
+                native_handle: array.native_handle,
             }),
-            buffers: RefCell::new((0..slots).map(|_| None).collect()),
-            tex_2ds: RefCell::new((0..slots).map(|_| None).collect()),
-            tex_3ds: RefCell::new((0..slots).map(|_| None).collect()),
+            modifications: RefCell::new(Vec::new()),
+            resource_tracker: RefCell::new(ResourceTracker::new()),
         })
     }
     pub fn create_tex2d<T: IoTexel>(
@@ -111,7 +109,8 @@ impl Device {
             .create_texture(format, 2, width, height, 1, mips)?;
         let handle = Arc::new(TextureHandle {
             device: self.clone(),
-            handle: texture,
+            handle: api::Texture(texture.handle),
+            native_handle: texture.native_handle,
             format,
             levels: mips,
             width,
@@ -122,7 +121,7 @@ impl Device {
         let mut tex = Tex2d {
             handle,
             marker: std::marker::PhantomData {},
-            view: None
+            view: None,
         };
         let view = tex.view(0);
         tex.view.replace(view);
@@ -143,7 +142,8 @@ impl Device {
             .create_texture(format, 3, width, height, depth, mips)?;
         let handle = Arc::new(TextureHandle {
             device: self.clone(),
-            handle: texture,
+            handle: api::Texture(texture.handle),
+            native_handle: texture.native_handle,
             format,
             levels: mips,
             width,
@@ -175,38 +175,28 @@ impl Device {
             device: self.clone(),
             handle: Arc::new(StreamHandle::NonDefault {
                 device: self.inner.clone(),
-                handle: stream,
+                handle: api::Stream(stream.handle),
+                native_handle: stream.native_handle,
             }),
         })
     }
-    pub fn create_mesh(
-        &self,
-        hint: api::AccelUsageHint,
-        ty: api::MeshType,
-        allow_compact: bool,
-        allow_update: bool,
-    ) -> backend::Result<rtx::Mesh> {
-        let mesh = self
-            .inner
-            .create_mesh(hint, ty, allow_compact, allow_update);
+    pub fn create_mesh(&self, option: api::AccelOption) -> backend::Result<rtx::Mesh> {
+        let mesh = self.inner.create_mesh(option)?;
         Ok(rtx::Mesh {
             handle: Arc::new(rtx::MeshHandle {
                 device: self.clone(),
-                handle: mesh,
+                handle: api::Mesh(mesh.handle),
+                native_handle: mesh.native_handle,
             }),
         })
     }
-    pub fn create_accel(
-        &self,
-        hint: api::AccelUsageHint,
-        allow_compact: bool,
-        allow_update: bool,
-    ) -> backend::Result<rtx::Accel> {
-        let accel = self.inner.create_accel(hint, allow_compact, allow_update);
+    pub fn create_accel(&self, option: api::AccelOption) -> backend::Result<rtx::Accel> {
+        let accel = self.inner.create_accel(option)?;
         Ok(rtx::Accel {
             handle: Arc::new(rtx::AccelHandle {
                 device: self.clone(),
-                handle: accel,
+                handle: api::Accel(accel.handle),
+                native_handle: accel.native_handle,
             }),
             mesh_handles: RefCell::new(Vec::new()),
             modifications: RefCell::new(HashMap::new()),
@@ -264,6 +254,7 @@ pub(crate) enum StreamHandle {
     NonDefault {
         device: Arc<DeviceHandle>,
         handle: api::Stream,
+        native_handle: *mut std::ffi::c_void,
     },
 }
 pub struct Stream {
@@ -289,7 +280,7 @@ impl Drop for StreamHandle {
     fn drop(&mut self) {
         match self {
             StreamHandle::Default(_, _) => {}
-            StreamHandle::NonDefault { device, handle } => {
+            StreamHandle::NonDefault { device, handle, .. } => {
                 device.destroy_stream(*handle);
             }
         }
@@ -298,6 +289,12 @@ impl Drop for StreamHandle {
 impl Stream {
     pub fn handle(&self) -> api::Stream {
         self.handle.handle()
+    }
+    pub fn native_handle(&self) -> *mut std::ffi::c_void {
+        match self.handle.as_ref() {
+            StreamHandle::Default(_, _) => todo!(),
+            StreamHandle::NonDefault { native_handle, .. } => *native_handle,
+        }
     }
     pub fn synchronize(&self) -> backend::Result<()> {
         self.handle.device().synchronize_stream(self.handle())
@@ -324,6 +321,10 @@ pub struct CommandBuffer<'a> {
     marker: std::marker::PhantomData<&'a ()>,
     commands: Vec<Command<'a>>,
 }
+struct CommandCallbackCtx<'a, F: FnOnce() + Send + 'static> {
+    commands: Vec<Command<'a>>,
+    f: F,
+}
 impl<'a> CommandBuffer<'a> {
     pub fn extend<I: IntoIterator<Item = Command<'a>>>(&mut self, commands: I) {
         self.commands.extend(commands);
@@ -331,11 +332,28 @@ impl<'a> CommandBuffer<'a> {
     pub fn push(&mut self, command: Command<'a>) {
         self.commands.push(command);
     }
-    pub fn commit(self) -> backend::Result<()> {
+    pub fn commit_with_callback<F: FnOnce() + Send + 'static>(
+        self,
+        callback: F,
+    ) -> backend::Result<()> {
         let commands = self.commands.iter().map(|c| c.inner).collect::<Vec<_>>();
-        self.stream
-            .device()
-            .dispatch(self.stream.handle(), &commands)
+        let ctx = CommandCallbackCtx {
+            commands: self.commands,
+            f: callback,
+        };
+        let ptr = Box::into_raw(Box::new(ctx));
+        fn trampoline<'a, F: FnOnce() + Send + 'static>(ptr: *mut u8) {
+            let ctx = unsafe { *Box::from_raw(ptr as *mut CommandCallbackCtx<'a, F>) };
+            (ctx.f)();
+        }
+        self.stream.device().dispatch(
+            self.stream.handle(),
+            &commands,
+            (trampoline::<F>, ptr as *mut u8),
+        )
+    }
+    pub fn commit(self) -> backend::Result<()> {
+        self.commit_with_callback(|| {})
     }
 }
 
@@ -354,11 +372,11 @@ pub struct Command<'a> {
     pub(crate) resource_tracker: ResourceTracker,
 }
 pub(crate) struct AsyncShaderArtifact {
-    shader: Option<backend::Result<api::Shader>>, // strange naming, huh?
+    shader: Option<backend::Result<api::CreatedShaderInfo>>, // strange naming, huh?
 }
 pub(crate) enum ShaderArtifact {
     Async(Arc<(Mutex<AsyncShaderArtifact>, Condvar)>),
-    Sync(api::Shader),
+    Sync(api::CreatedShaderInfo),
 }
 impl AsyncShaderArtifact {
     pub(crate) fn new(
@@ -496,15 +514,24 @@ impl_kernel_arg_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15
 impl RawKernel {
     fn unwrap(&self) -> api::Shader {
         match &self.artifact {
-            ShaderArtifact::Sync(shader) => *shader,
+            ShaderArtifact::Sync(shader) => api::Shader(shader.resource.handle),
             ShaderArtifact::Async(artifact) => {
                 let condvar = &artifact.1;
                 let mut artifact = artifact.0.lock();
                 if let Some(shader) = &artifact.shader {
-                    return *shader.as_ref().unwrap();
+                    return api::Shader(shader.as_ref().unwrap().resource.handle);
                 }
                 condvar.wait(&mut artifact);
-                *artifact.shader.as_ref().unwrap().as_ref().unwrap()
+                api::Shader(
+                    artifact
+                        .shader
+                        .as_ref()
+                        .unwrap()
+                        .as_ref()
+                        .unwrap()
+                        .resource
+                        .handle,
+                )
             }
         }
     }

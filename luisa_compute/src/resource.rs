@@ -9,6 +9,7 @@ use crate::prelude::*;
 use crate::*;
 use api::BufferDownloadCommand;
 use api::BufferUploadCommand;
+use api::INVALID_RESOURCE_HANDLE;
 use lang::BindlessArrayVar;
 use lang::BufferVar;
 use lang::Value;
@@ -18,6 +19,7 @@ use runtime::*;
 pub struct Buffer<T: Value> {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BufferHandle>,
+
     pub(crate) len: usize,
     pub(crate) _marker: std::marker::PhantomData<T>,
     pub(crate) view: Option<BufferView<T>>,
@@ -25,6 +27,7 @@ pub struct Buffer<T: Value> {
 pub(crate) struct BufferHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::Buffer,
+    pub(crate) native_handle: *mut c_void,
 }
 
 impl Drop for BufferHandle {
@@ -122,9 +125,6 @@ impl<T: Value> Buffer<T> {
     pub(crate) fn handle(&self) -> api::Buffer {
         self.handle.handle
     }
-    pub fn native_handle(&self) -> *mut c_void {
-        self.device.inner.buffer_native_handle(self.handle())
-    }
     pub unsafe fn shallow_clone(&self) -> Buffer<T> {
         Buffer {
             device: self.device.clone(),
@@ -133,6 +133,9 @@ impl<T: Value> Buffer<T> {
             _marker: std::marker::PhantomData,
             view: self.view.clone(),
         }
+    }
+    pub fn native_handle(&self) -> *mut c_void {
+        self.handle.native_handle
     }
     pub fn copy_from(&self, data: &[T]) {
         self.view(..).copy_from(data);
@@ -195,6 +198,7 @@ impl<T: Value> Clone for Buffer<T> {
 pub(crate) struct BindlessArrayHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::BindlessArray,
+    pub(crate) native_handle: *mut c_void,
 }
 impl Drop for BindlessArrayHandle {
     fn drop(&mut self) {
@@ -204,116 +208,184 @@ impl Drop for BindlessArrayHandle {
 pub struct BindlessArray {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BindlessArrayHandle>,
-    pub(crate) buffers: RefCell<Vec<Option<Box<dyn Any>>>>,
-    pub(crate) tex_2ds: RefCell<Vec<Option<Box<dyn Any>>>>,
-    pub(crate) tex_3ds: RefCell<Vec<Option<Box<dyn Any>>>>,
+    pub(crate) modifications: RefCell<Vec<api::BindlessArrayUpdateModification>>,
+    pub(crate) resource_tracker: RefCell<ResourceTracker>,
 }
 impl BindlessArray {
-
     pub fn var(&self) -> BindlessArrayVar {
         BindlessArrayVar::new(self)
     }
     pub fn handle(&self) -> api::BindlessArray {
         self.handle.handle
     }
-    pub unsafe fn set_buffer_async<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
-        self.device.inner.emplace_buffer_in_bindless_array(
-            self.handle.handle,
-            index,
-            buffer.handle(),
-            0,
-        );
-        self.buffers.borrow_mut()[index] = Some(Box::new(buffer.handle.clone()));
+    pub fn emplace_buffer_async<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
+        self.modifications
+            .borrow_mut()
+            .push(api::BindlessArrayUpdateModification {
+                slot: index,
+                buffer: api::BindlessArrayUpdateBuffer {
+                    op: api::BindlessArrayUpdateOperation::Emplace,
+                    handle: buffer.handle.handle,
+                    offset: 0,
+                },
+                tex2d: api::BindlessArrayUpdateTexture::default(),
+                tex3d: api::BindlessArrayUpdateTexture::default(),
+            });
+        self.resource_tracker
+            .borrow_mut()
+            .add(buffer.handle.clone());
     }
-    pub unsafe fn set_tex2d_async<T: IoTexel>(
+    pub fn emplace_bufferview_async<T: Value>(&self, index: usize, buffer: &BufferView<T>) {
+        self.modifications
+            .borrow_mut()
+            .push(api::BindlessArrayUpdateModification {
+                slot: index,
+                buffer: api::BindlessArrayUpdateBuffer {
+                    op: api::BindlessArrayUpdateOperation::Emplace,
+                    handle: buffer.handle.handle,
+                    offset: buffer.offset,
+                },
+                tex2d: api::BindlessArrayUpdateTexture::default(),
+                tex3d: api::BindlessArrayUpdateTexture::default(),
+            });
+        self.resource_tracker
+            .borrow_mut()
+            .add(buffer.handle.clone());
+    }
+    pub fn emplace_tex2d_async<T: IoTexel>(
         &self,
         index: usize,
         texture: &Tex2d<T>,
         sampler: Sampler,
     ) {
-        self.device.inner.emplace_tex2d_in_bindless_array(
-            self.handle.handle,
-            index,
-            texture.handle(),
-            sampler,
-        );
-        self.tex_2ds.borrow_mut()[index] = Some(Box::new(texture.handle.clone()));
+        self.modifications
+            .borrow_mut()
+            .push(api::BindlessArrayUpdateModification {
+                slot: index,
+                buffer: api::BindlessArrayUpdateBuffer::default(),
+                tex2d: api::BindlessArrayUpdateTexture {
+                    op: api::BindlessArrayUpdateOperation::Emplace,
+                    handle: texture.handle(),
+                    sampler,
+                },
+                tex3d: api::BindlessArrayUpdateTexture::default(),
+            });
+        self.resource_tracker
+            .borrow_mut()
+            .add(texture.handle.clone());
     }
-    pub unsafe fn set_tex3d_async<T: IoTexel>(
+    pub fn emplace_tex3d_async<T: IoTexel>(
         &self,
         index: usize,
         texture: &Tex3d<T>,
         sampler: Sampler,
     ) {
-        self.device.inner.emplace_tex3d_in_bindless_array(
-            self.handle.handle,
-            index,
-            texture.handle(),
-            sampler,
-        );
-        self.tex_3ds.borrow_mut()[index] = Some(Box::new(texture.handle.clone()));
+        self.modifications
+            .borrow_mut()
+            .push(api::BindlessArrayUpdateModification {
+                slot: index,
+                buffer: api::BindlessArrayUpdateBuffer::default(),
+                tex2d: api::BindlessArrayUpdateTexture::default(),
+                tex3d: api::BindlessArrayUpdateTexture {
+                    op: api::BindlessArrayUpdateOperation::Emplace,
+                    handle: texture.handle(),
+                    sampler,
+                },
+            });
+        self.resource_tracker
+            .borrow_mut()
+            .add(texture.handle.clone());
     }
-    pub unsafe fn remove_buffer_async(&self, index: usize) {
-        self.device
-            .inner
-            .remove_buffer_from_bindless_array(self.handle.handle, index);
-        self.buffers.borrow_mut()[index] = None;
+    pub fn remove_buffer_async(&self, index: usize) {
+        self.modifications
+            .borrow_mut()
+            .push(api::BindlessArrayUpdateModification {
+                slot: index,
+                buffer: api::BindlessArrayUpdateBuffer {
+                    op: api::BindlessArrayUpdateOperation::Remove,
+                    handle: api::Buffer(INVALID_RESOURCE_HANDLE),
+                    offset: 0,
+                },
+                tex2d: api::BindlessArrayUpdateTexture::default(),
+                tex3d: api::BindlessArrayUpdateTexture::default(),
+            });
     }
-    pub unsafe fn remove_tex2d_async(&self, index: usize) {
-        self.device
-            .inner
-            .remove_tex2d_from_bindless_array(self.handle.handle, index);
-        self.tex_2ds.borrow_mut()[index] = None;
+    pub fn remove_tex2d_async(&self, index: usize) {
+        self.modifications
+            .borrow_mut()
+            .push(api::BindlessArrayUpdateModification {
+                slot: index,
+                buffer: api::BindlessArrayUpdateBuffer::default(),
+                tex2d: api::BindlessArrayUpdateTexture {
+                    op: api::BindlessArrayUpdateOperation::Remove,
+                    handle: api::Texture(INVALID_RESOURCE_HANDLE),
+                    sampler: Sampler::default(),
+                },
+                tex3d: api::BindlessArrayUpdateTexture::default(),
+            })
     }
-    pub unsafe fn remove_tex3d_async(&self, index: usize) {
-        self.device
-            .inner
-            .remove_tex3d_from_bindless_array(self.handle.handle, index);
-        self.tex_3ds.borrow_mut()[index] = None;
+    pub fn remove_tex3d_async(&self, index: usize) {
+        self.modifications
+            .borrow_mut()
+            .push(api::BindlessArrayUpdateModification {
+                slot: index,
+                buffer: api::BindlessArrayUpdateBuffer::default(),
+                tex2d: api::BindlessArrayUpdateTexture::default(),
+                tex3d: api::BindlessArrayUpdateTexture {
+                    op: api::BindlessArrayUpdateOperation::Remove,
+                    handle: api::Texture(INVALID_RESOURCE_HANDLE),
+                    sampler: Sampler::default(),
+                },
+            })
     }
-    pub fn set_buffer<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
-        unsafe {
-            self.set_buffer_async(index, buffer);
-            submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
-        }
+    pub fn emplace_buffer<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
+        self.emplace_buffer_async(index, buffer);
+        self.update();
+    }
+    pub fn emplace_buffer_view<T: Value>(&self, index: usize, buffer: &BufferView<T>) {
+        self.emplace_bufferview_async(index, buffer);
+        self.update();
     }
     pub fn set_tex2d<T: IoTexel>(&self, index: usize, texture: &Tex2d<T>, sampler: Sampler) {
-        unsafe {
-            self.set_tex2d_async(index, texture, sampler);
-            submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
-        }
+        self.emplace_tex2d_async(index, texture, sampler);
+        self.update();
     }
     pub fn set_tex3d<T: IoTexel>(&self, index: usize, texture: &Tex3d<T>, sampler: Sampler) {
-        unsafe {
-            self.set_tex3d_async(index, texture, sampler);
-            submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
-        }
+        self.emplace_tex3d_async(index, texture, sampler);
+        self.update();
     }
     pub fn remove_buffer(&self, index: usize) {
-        unsafe {
-            self.remove_buffer_async(index);
-            submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
-        }
+        self.remove_buffer_async(index);
+        self.update();
     }
     pub fn remove_tex2d(&self, index: usize) {
-        unsafe {
-            self.remove_tex2d_async(index);
-            submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
-        }
+        self.remove_tex2d_async(index);
+        self.update();
     }
     pub fn remove_tex3d(&self, index: usize) {
-        unsafe {
-            self.remove_tex3d_async(index);
-            submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
-        }
+        self.remove_tex3d_async(index);
+        self.update();
+    }
+    pub fn update(&self) {
+        submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
     }
     pub fn update_async<'a>(&'a self) -> Command<'a> {
-        let mut rt = ResourceTracker::new();
-        rt.add(self.handle.clone());
+        let mut rt = self.resource_tracker.borrow_mut();
+        let mut new_rt = std::mem::replace(&mut *rt, ResourceTracker::new());
+        new_rt.add(self.handle.clone());
+        let modifications = Arc::new(std::mem::replace(
+            &mut *self.modifications.borrow_mut(),
+            Vec::new(),
+        ));
+        new_rt.add(modifications.clone());
         Command {
-            inner: api::Command::BindlessArrayUpdate(self.handle.handle),
+            inner: api::Command::BindlessArrayUpdate(api::BindlessArrayUpdateCommand {
+                handle: self.handle.handle,
+                modifications: modifications.as_ptr(),
+                modifications_count: modifications.len(),
+            }),
             marker: std::marker::PhantomData,
-            resource_tracker: rt,
+            resource_tracker: new_rt,
         }
     }
 }
@@ -321,6 +393,7 @@ pub use api::{PixelFormat, PixelStorage, Sampler, SamplerAddress, SamplerFilter}
 pub(crate) struct TextureHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::Texture,
+    pub(crate) native_handle: *mut std::ffi::c_void,
     #[allow(dead_code)]
     pub(crate) format: PixelFormat,
     pub(crate) storage: PixelStorage,
@@ -694,6 +767,9 @@ impl<T: IoTexel> Tex2d<T> {
             level,
         }
     }
+    pub fn native_handle(&self) -> *mut std::ffi::c_void {
+        self.handle.native_handle
+    }
 }
 impl<T: IoTexel> Tex3d<T> {
     pub fn view(&self, level: u32) -> Tex3dView<T> {
@@ -702,5 +778,8 @@ impl<T: IoTexel> Tex3d<T> {
             marker: std::marker::PhantomData,
             level,
         }
+    }
+    pub fn native_handle(&self) -> *mut std::ffi::c_void {
+        self.handle.native_handle
     }
 }

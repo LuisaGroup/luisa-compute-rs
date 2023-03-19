@@ -1,5 +1,3 @@
-use std::env::{current_dir, current_exe};
-
 use luisa::prelude::*;
 use luisa_compute as luisa;
 

@@ -8,7 +8,7 @@ pub mod runtime;
 pub mod util;
 pub use luisa_compute_backend as backend;
 pub use half::f16;
-
+use luisa_compute_api_types as api;
 use luisa_compute_backend::Backend;
 pub mod prelude {
     pub use crate::*;
@@ -58,7 +58,7 @@ pub fn create_device(device: &str) -> backend::Result<Device> {
         }
         _ => panic!("unsupported device: {}", device),
     };
-    let default_stream = backend.create_stream()?;
+    let default_stream = api::Stream(backend.create_stream()?.handle);
     Ok(Device {
         inner: Arc::new(DeviceHandle {
             backend,

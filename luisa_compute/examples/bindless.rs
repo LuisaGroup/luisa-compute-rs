@@ -10,8 +10,9 @@ fn main() {
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
     let bindless = device.create_bindless_array(2).unwrap();
-    bindless.set_buffer(0, &x);
-    bindless.set_buffer(1, &y);
+    bindless.emplace_buffer_async(0, &x);
+    bindless.emplace_buffer_async(1, &y);
+    bindless.update();
     let kernel = device
         .create_kernel::<(Buffer<f32>,)>(&|buf_z| {
             let bindless = bindless.var();

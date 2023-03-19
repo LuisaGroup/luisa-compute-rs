@@ -1,10 +1,10 @@
-use std::{env::current_exe, ops::Range};
+use std::ops::Range;
 
 use luisa::prelude::*;
 use luisa_compute as luisa;
 use rand::prelude::*;
 use rayon::{
-    prelude::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
+    prelude::{IntoParallelIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
 fn get_device() -> Device {
@@ -637,7 +637,12 @@ fn autodiff_detach() {
             dx[i],
             cache_dir
         );
-        assert!((dy[i] - k).abs() < 1e-3, "{} cache_dir: {:?}", dy[i], cache_dir);
+        assert!(
+            (dy[i] - k).abs() < 1e-3,
+            "{} cache_dir: {:?}",
+            dy[i],
+            cache_dir
+        );
     }
 }
 #[test]

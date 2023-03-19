@@ -108,7 +108,6 @@ def_vec_no_glam!(Byte2, u8, 2, x, y);
 def_vec_no_glam!(Byte3, u8, 4, x, y, z);
 def_vec_no_glam!(Byte4, u8, 4, x, y, z, w);
 
-
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C, align(8))]
 pub struct Mat2 {
@@ -468,7 +467,6 @@ impl_vec_proxy!(Short2, Short2Expr, Short2Var, i16, Int16, 2, x, y);
 impl_vec_proxy!(Short3, Short3Expr, Short3Var, i16, Int16, 3, x, y, z);
 impl_vec_proxy!(Short4, Short4Expr, Short4Var, i16, Int16, 4, x, y, z, w);
 
-
 impl_vec_proxy!(Uint2, Uint2Expr, Uint2Var, u32, Uint32, 2, x, y);
 impl_vec_proxy!(Uint3, Uint3Expr, Uint3Var, u32, Uint32, 3, x, y, z);
 impl_vec_proxy!(Uint4, Uint4Expr, Uint4Var, u32, Uint32, 4, x, y, z, w);
@@ -771,7 +769,6 @@ impl_arith_binop!(Float2, f32, Float2Expr);
 impl_arith_binop!(Float3, f32, Float3Expr);
 impl_arith_binop!(Float4, f32, Float4Expr);
 
-
 impl_arith_binop!(Short2, i16, Short2Expr);
 impl_arith_binop!(Short3, i16, Short3Expr);
 impl_arith_binop!(Short4, i16, Short4Expr);
@@ -779,7 +776,6 @@ impl_arith_binop!(Short4, i16, Short4Expr);
 impl_arith_binop!(Ushort2, u16, Ushort2Expr);
 impl_arith_binop!(Ushort3, u16, Ushort3Expr);
 impl_arith_binop!(Ushort4, u16, Ushort4Expr);
-
 
 impl_arith_binop!(Int2, i32, Int2Expr);
 impl_arith_binop!(Int3, i32, Int3Expr);
@@ -797,7 +793,6 @@ impl_arith_binop!(Ulong2, u64, Ulong2Expr);
 impl_arith_binop!(Ulong3, u64, Ulong3Expr);
 impl_arith_binop!(Ulong4, u64, Ulong4Expr);
 
-
 impl_int_binop!(Short2, i16, Short2Expr);
 impl_int_binop!(Short3, i16, Short3Expr);
 impl_int_binop!(Short4, i16, Short4Expr);
@@ -805,7 +800,6 @@ impl_int_binop!(Short4, i16, Short4Expr);
 impl_int_binop!(Ushort2, u16, Ushort2Expr);
 impl_int_binop!(Ushort3, u16, Ushort3Expr);
 impl_int_binop!(Ushort4, u16, Ushort4Expr);
-
 
 impl_int_binop!(Int2, i32, Int2Expr);
 impl_int_binop!(Int3, i32, Int3Expr);
@@ -951,7 +945,6 @@ impl_permute!(Vec4Swizzle, Short4Expr, 4, Short2, Short3, Short4);
 impl_permute!(Vec2Swizzle, Ushort2Expr, 2, Ushort2, Ushort3, Ushort4);
 impl_permute!(Vec3Swizzle, Ushort3Expr, 3, Ushort2, Ushort3, Ushort4);
 impl_permute!(Vec4Swizzle, Ushort4Expr, 4, Ushort2, Ushort3, Ushort4);
-
 
 impl_permute!(Vec2Swizzle, Int2Expr, 2, Int2, Int3, Int4);
 impl_permute!(Vec3Swizzle, Int3Expr, 3, Int2, Int3, Int4);
@@ -1313,4 +1306,26 @@ pub fn make_uint4<
     w: W,
 ) -> Expr<Uint4> {
     Expr::<Uint4>::new(x.into(), y.into(), z.into(), w.into())
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_size() {
+        use crate::prelude::*;
+        macro_rules! assert_size {
+            ($ty:ty) => {
+                {assert_eq!(std::mem::size_of::<$ty>(), <$ty as TypeOf>::type_().size());}
+            };
+            ($ty:ty, $($rest:ty),*) => {
+                assert_size!($ty);
+                assert_size!($($rest),*);
+            };
+        }
+        assert_size!(f32, f64, bool, u16, u32, u64, i16, i32, i64);
+        assert_size!(Float2, Float3, Float4, Int2, Int3, Int4, Uint2, Uint3, Uint4);
+        assert_size!(Short2, Short3, Short4, Ushort2, Ushort3, Ushort4);
+        assert_size!(Long2, Long3, Long4, Ulong2, Ulong3, Ulong4);
+        assert_size!(Mat2, Mat3, Mat4);
+    }
 }

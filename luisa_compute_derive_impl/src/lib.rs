@@ -117,21 +117,23 @@ impl Compiler {
         let crate_path = self.crate_path();
         let generics = &struct_.generics;
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-        let marker_args = generics.params.iter().map(|p|{
-            match p {
-                syn::GenericParam::Type(ty)=>{
+        let marker_args = generics
+            .params
+            .iter()
+            .map(|p| match p {
+                syn::GenericParam::Type(ty) => {
                     let ident = &ty.ident;
                     quote!(#ident)
                 }
-                syn::GenericParam::Lifetime(lt)=>{
+                syn::GenericParam::Lifetime(lt) => {
                     let lt = &lt.lifetime;
                     quote!(& #lt u32)
                 }
-                syn::GenericParam::Const(_)=>{
+                syn::GenericParam::Const(_) => {
                     panic!("Const generic parameter is not supported")
                 }
-            }
-        }).collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>();
         let marker_args = quote!(#(#marker_args),*);
         let name = &struct_.ident;
         let vis = &struct_.vis;
@@ -264,7 +266,20 @@ impl Compiler {
                     var.load()
                 }
             }
+
         );
+        let test_name = syn::Ident::new(&format!("test_{}", name), name.span());
+        let test = quote! {
+            #[allow(non_snake_case)]
+            #[cfg(test)]
+            mod #test_name {
+                #[test]
+                fn test_size() {
+                    use std::mem::size_of;
+                    assert_eq!(size_of::<super:: #name #ty_generics>(), <super:: #name #ty_generics as #crate_path ::TypeOf>::type_().size());
+                }
+            }
+        };
         quote_spanned! {
             span=>
             #proxy_def
@@ -286,6 +301,7 @@ impl Compiler {
             impl #impl_generics  #var_proxy_name #ty_generics #where_clause {
                 #(#var_proxy_field_methods)*
             }
+            #test
         }
     }
     pub fn derive_aggregate_for_struct(&self, struct_: &ItemStruct) -> TokenStream {

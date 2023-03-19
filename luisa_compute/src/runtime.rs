@@ -568,14 +568,20 @@ impl<T: ShaderArg> Shader<T> {
     }
 }
 pub trait AsShaderArg<T: ShaderArg>: ShaderArg {}
-impl<T:Value> AsShaderArg<Buffer<T>> for Buffer<T>{}
-impl<'a, T:Value> AsShaderArg<Buffer<T>> for BufferView<'a, T>{}
-impl<'a, T:IoTexel> AsShaderArg<Tex2d<T>> for Tex2dView<'a, T>{}
-impl<'a, T:IoTexel> AsShaderArg<Tex3d<T>> for Tex3dView<'a, T>{}
-impl<T:IoTexel> AsShaderArg<Tex2d<T>> for Tex2d<T>{}
-impl<T:IoTexel> AsShaderArg<Tex3d<T>> for Tex3d<T>{}
-impl AsShaderArg<BindlessArray> for BindlessArray{}
-impl AsShaderArg<Accel> for Accel{}
+impl<T: Value> AsShaderArg<Buffer<T>> for Buffer<T> {}
+impl<'a, T: Value> AsShaderArg<Buffer<T>> for BufferView<'a, T> {}
+impl<'a, T: Value> AsShaderArg<BufferView<'a, T>> for BufferView<'a, T> {}
+impl<'a, T: Value> AsShaderArg<BufferView<'a, T>> for Buffer<T> {}
+impl<'a, T: IoTexel> AsShaderArg<Tex2d<T>> for Tex2dView<'a, T> {}
+impl<'a, T: IoTexel> AsShaderArg<Tex3d<T>> for Tex3dView<'a, T> {}
+impl<'a, T: IoTexel> AsShaderArg<Tex3dView<'a, T>> for Tex2dView<'a, T> {}
+impl<'a, T: IoTexel> AsShaderArg<Tex3dView<'a, T>> for Tex3dView<'a, T> {}
+impl<'a, T: IoTexel> AsShaderArg<Tex3dView<'a, T>> for Tex2d<T> {}
+impl<'a, T: IoTexel> AsShaderArg<Tex3dView<'a, T>> for Tex3d<T> {}
+impl<T: IoTexel> AsShaderArg<Tex2d<T>> for Tex2d<T> {}
+impl<T: IoTexel> AsShaderArg<Tex3d<T>> for Tex3d<T> {}
+impl AsShaderArg<BindlessArray> for BindlessArray {}
+impl AsShaderArg<Accel> for Accel {}
 macro_rules! impl_dispatch_for_kernel {
 
    ($first:ident  $($rest:ident)*) => {

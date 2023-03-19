@@ -14,7 +14,7 @@ fn main() {
     bindless.emplace_buffer_async(1, &y);
     bindless.update();
     let shader = device
-        .create_shader::<(Buffer<f32>,)>(&|buf_z| {
+        .create_shader::<(BufferView<f32>,)>(&|buf_z| {
             let bindless = bindless.var();
             let tid = dispatch_id().x();
             let buf_x = bindless.buffer::<f32>(Uint::from(0));

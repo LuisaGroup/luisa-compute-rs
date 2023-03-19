@@ -342,7 +342,7 @@ impl<'a> CommandBuffer<'a> {
             f: callback,
         };
         let ptr = Box::into_raw(Box::new(ctx));
-        fn trampoline<'a, F: FnOnce() + Send + 'static>(ptr: *mut u8) {
+        extern "C" fn trampoline<'a, F: FnOnce() + Send + 'static>(ptr: *mut u8) {
             let ctx = unsafe { *Box::from_raw(ptr as *mut CommandCallbackCtx<'a, F>) };
             (ctx.f)();
         }

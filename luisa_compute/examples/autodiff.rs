@@ -11,8 +11,8 @@ fn main() {
     let dy = device.create_buffer::<f32>(1024).unwrap();
     x.fill_fn(|i| i as f32);
     y.fill_fn(|i| 1.0 + i as f32);
-    let kernel = device
-        .create_kernel::<(Buffer<f32>, Buffer<f32>, Buffer<f32>, Buffer<f32>)>(
+    let shader = device
+        .create_shader::<(Buffer<f32>, Buffer<f32>, Buffer<f32>, Buffer<f32>)>(
             &|buf_x: BufferVar<f32>,
               buf_y: BufferVar<f32>,
               buf_dx: BufferVar<f32>,
@@ -31,7 +31,7 @@ fn main() {
             },
         )
         .unwrap();
-    kernel.dispatch([1024, 1, 1], &x.view(..), &y, &dx, &dy).unwrap();
+    shader.dispatch([1024, 1, 1], &x.view(..), &y, &dx, &dy).unwrap();
     let dx = dx.copy_to_vec();
     println!("{:?}", &dx[0..16]);
     let dy = dy.copy_to_vec();

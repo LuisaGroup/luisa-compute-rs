@@ -43,7 +43,7 @@ fn main() {
     poly_area.register(&circles);
     poly_area.register(&squares);
     let areas = device.create_buffer::<f32>(4).unwrap();
-    let kernel = device.create_kernel::<()>(&|| {
+    let shader = device.create_shader::<()>(&|| {
         let tid = dispatch_id().x();
         let tag = tid / 2;
         let index = tid % 2;
@@ -52,7 +52,7 @@ fn main() {
         });
         areas.var().write(tid, area);
     }).unwrap();
-    kernel.dispatch([4,1,1]).unwrap();
+    shader.dispatch([4,1,1]).unwrap();
     let areas = areas.view(..).copy_to_vec();
     println!("{:?}", areas);
 }

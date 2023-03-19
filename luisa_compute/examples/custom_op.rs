@@ -25,8 +25,8 @@ fn main() {
             println!("Hello from thread 0!");
         }
     });
-    let kernel = device
-        .create_kernel::<(BufferView<f32>,)>(&|buf_z: BufferVar<f32>| {
+    let shader = device
+        .create_shader::<(Buffer<f32>,)>(&|buf_z: BufferVar<f32>| {
             // z is pass by arg
             let buf_x = x.var(); // x and y are captured
             let buf_y = y.var();
@@ -42,7 +42,7 @@ fn main() {
             buf_z.write(tid, result.result());
         })
         .unwrap();
-    kernel.dispatch([1024, 1, 1], &z).unwrap();
+    shader.dispatch([1024, 1, 1], &z).unwrap();
     let mut z_data = vec![0.0; 1024];
     z.view(..).copy_to(&mut z_data);
     println!("{:?}", &z_data[0..16]);

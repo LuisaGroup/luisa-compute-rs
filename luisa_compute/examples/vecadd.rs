@@ -10,8 +10,8 @@ fn main() {
     let z = device.create_buffer::<f32>(1024).unwrap();
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
-    let kernel = device
-        .create_kernel::<(BufferView<f32>,)>(&|buf_z| {
+    let shader = device
+        .create_shader::<(Buffer<f32>,)>(&|buf_z| {
             // z is pass by arg
             let buf_x = x.var(); // x and y are captured
             let buf_y = y.var();
@@ -23,7 +23,7 @@ fn main() {
             buf_z.write(tid, vx.load() + y);
         })
         .unwrap();
-    kernel.dispatch([1024, 1, 1], &z).unwrap();
+    shader.dispatch([1024, 1, 1], &z).unwrap();
     let z_data = z.view(..).copy_to_vec();
     println!("{:?}", &z_data[0..16]);
 }

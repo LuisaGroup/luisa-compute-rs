@@ -420,7 +420,7 @@ macro_rules! impl_io_texel {
                         $(
                             set.insert(api::PixelFormat::$formats);
                         )*
-                        set = set.union(<$t as IoTexel>::pixel_formats()).cloned().collect();
+                        set = set.union(<$t as StorageTexel>::pixel_formats()).cloned().collect();
                         set
                     };
                 }
@@ -429,7 +429,7 @@ macro_rules! impl_io_texel {
             fn pixel_storage() -> &'static HashSet<api::PixelStorage> {
                 lazy_static! {
                     static ref STORAGES: HashSet<api::PixelStorage> = {
-                       <$t as IoTexel>::pixel_formats().iter().map(|f| f.storage()).collect()
+                       <$t as StorageTexel>::pixel_formats().iter().map(|f| f.storage()).collect()
                     };
                 }
                 &STORAGES

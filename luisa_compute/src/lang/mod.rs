@@ -9,7 +9,7 @@ use crate::resource::BufferView;
 use crate::runtime::{AsyncShaderArtifact, ShaderArtifact};
 use crate::{
     backend,
-    prelude::{Device, Shader, ShaderArg, RawShader},
+    prelude::{Device, RawShader, Shader, ShaderArg},
     resource::{
         BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, IoTexel, Tex2d, Tex3d,
         TextureHandle,
@@ -743,12 +743,11 @@ impl<T: Value> BindlessBufferVar<T> {
         }))
     }
 }
-pub struct BindlessTex2dVar<T: IoTexel> {
+pub struct BindlessTex2dVar{
     array: NodeRef,
     tex2d_index: Expr<u32>,
-    _marker: std::marker::PhantomData<T>,
 }
-impl<T: IoTexel> BindlessTex2dVar<T> {
+impl BindlessTex2dVar{
     pub fn sample(&self, uv: Expr<Float2>) -> Expr<Float4> {
         Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
@@ -830,12 +829,11 @@ impl<T: IoTexel> BindlessTex2dVar<T> {
     }
 }
 
-pub struct BindlessTex3dVar<T: IoTexel> {
+pub struct BindlessTex3dVar {
     array: NodeRef,
     tex3d_index: Expr<u32>,
-    _marker: std::marker::PhantomData<T>,
 }
-impl<T: IoTexel> BindlessTex3dVar<T> {
+impl BindlessTex3dVar {
     pub fn sample(&self, uv: Expr<Float3>) -> Expr<Float4> {
         Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
@@ -917,26 +915,24 @@ impl<T: IoTexel> BindlessTex3dVar<T> {
     }
 }
 impl BindlessArrayVar {
-    pub fn tex2d<T: IoTexel>(&self, tex2d_index: Expr<u32>) -> BindlessTex2dVar<T> {
+    pub fn tex2d(&self, tex2d_index: impl Into<Expr<u32>>) -> BindlessTex2dVar {
         let v = BindlessTex2dVar {
             array: self.node,
-            tex2d_index,
-            _marker: std::marker::PhantomData,
+            tex2d_index: tex2d_index.into(),
         };
         v
     }
-    pub fn tex3d<T: IoTexel>(&self, tex3d_index: Expr<u32>) -> BindlessTex3dVar<T> {
+    pub fn tex3d(&self, tex3d_index: impl Into<Expr<u32>>) -> BindlessTex3dVar {
         let v = BindlessTex3dVar {
             array: self.node,
-            tex3d_index,
-            _marker: std::marker::PhantomData,
+            tex3d_index: tex3d_index.into(),
         };
         v
     }
-    pub fn buffer<T: Value>(&self, buffer_index: Expr<u32>) -> BindlessBufferVar<T> {
+    pub fn buffer<T: Value>(&self, buffer_index: impl Into<Expr<u32>>) -> BindlessBufferVar<T> {
         let v = BindlessBufferVar {
             array: self.node,
-            buffer_index,
+            buffer_index: buffer_index.into(),
             _marker: std::marker::PhantomData,
         };
         let vt = v.__type();

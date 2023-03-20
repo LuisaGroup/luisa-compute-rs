@@ -20,8 +20,8 @@ use bumpalo::Bump;
 use ir::context::type_hash;
 pub use ir::ir::NodeRef;
 use ir::ir::{
-    AccelBinding, BindlessArrayBinding, ModulePools, SwitchCase, TextureBinding, UserNodeData,
-    INVALID_REF,
+    AccelBinding, ArrayType, BindlessArrayBinding, ModulePools, SwitchCase, TextureBinding,
+    UserNodeData, INVALID_REF,
 };
 pub use ir::CArc;
 use ir::Pooled;
@@ -590,6 +590,144 @@ impl<T: Value, const N: usize> Value for [T; N] {
     type Var = ArrayVar<T, N>;
     fn fields() -> Vec<String> {
         todo!("why this method exists?")
+    }
+}
+#[derive(Clone, Copy, Debug)]
+pub struct VLArrayExpr<T: Value> {
+    marker: std::marker::PhantomData<T>,
+    node: NodeRef,
+}
+impl<T: Value> FromNode for VLArrayExpr<T> {
+    fn from_node(node: NodeRef) -> Self {
+        Self {
+            marker: std::marker::PhantomData,
+            node,
+        }
+    }
+    fn node(&self) -> NodeRef {
+        self.node
+    }
+}
+impl<T: Value> Aggregate for VLArrayExpr<T> {
+    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+        nodes.push(self.node);
+    }
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+        Self::from_node(iter.next().unwrap())
+    }
+}
+#[derive(Clone, Copy, Debug)]
+pub struct VLArrayVar<T: Value> {
+    marker: std::marker::PhantomData<T>,
+    node: NodeRef,
+}
+impl<T: Value> FromNode for VLArrayVar<T> {
+    fn from_node(node: NodeRef) -> Self {
+        Self {
+            marker: std::marker::PhantomData,
+            node,
+        }
+    }
+    fn node(&self) -> NodeRef {
+        self.node
+    }
+}
+impl<T: Value> Aggregate for VLArrayVar<T> {
+    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+        nodes.push(self.node);
+    }
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+        Self::from_node(iter.next().unwrap())
+    }
+}
+impl<T: Value> VLArrayVar<T> {
+    pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
+        let i = i.into();
+        if __env_need_backtrace() {
+            assert(i.cmplt(self.len()));
+        }
+        Expr::<T>::from_node(__current_scope(|b| {
+            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
+            b.call(Func::Load, &[gep], T::type_())
+        }))
+    }
+    pub fn len(&self) -> Expr<u32> {
+        match self.node.type_().as_ref() {
+            Type::Array(ArrayType { element: _, length }) => const_(*length as u32),
+            _ => unreachable!(),
+        }
+    }
+    pub fn static_len(&self) -> usize {
+        match self.node.type_().as_ref() {
+            Type::Array(ArrayType { element: _, length }) => *length,
+            _ => unreachable!(),
+        }
+    }
+    pub fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, value: V) {
+        let i = i.into();
+        let value = value.into();
+        if __env_need_backtrace() {
+            assert(i.cmplt(self.len()));
+        }
+        __current_scope(|b| {
+            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
+            b.update(gep, value.node());
+        });
+    }
+    pub fn load(&self) -> VLArrayExpr<T> {
+        VLArrayExpr::from_node(__current_scope(|b| {
+            b.call(Func::Load, &[self.node], self.node.type_().clone())
+        }))
+    }
+    pub fn store(&self, value: VLArrayExpr<T>) {
+        __current_scope(|b| {
+            b.update(self.node, value.node);
+        });
+    }
+    pub fn zero(length: usize) -> Self {
+        FromNode::from_node(__current_scope(|b| {
+            b.local_zero_init(ir::context::register_type(Type::Array(ArrayType {
+                element: T::type_(),
+                length,
+            })))
+        }))
+    }
+}
+impl<T: Value> VLArrayExpr<T> {
+    pub fn zero(length: usize) -> Self {
+        let node = __current_scope(|b| {
+            b.call(
+                Func::ZeroInitializer,
+                &[],
+                ir::context::register_type(Type::Array(ArrayType {
+                    element: T::type_(),
+                    length,
+                })),
+            )
+        });
+        Self::from_node(node)
+    }
+    pub fn static_len(&self) -> usize {
+        match self.node.type_().as_ref() {
+            Type::Array(ArrayType { element: _, length }) => *length,
+            _ => unreachable!(),
+        }
+    }
+    pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
+        let i = i.into();
+        if __env_need_backtrace() {
+            assert(i.cmplt(self.len()));
+        }
+        Expr::<T>::from_node(__current_scope(|b| {
+            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
+            b.call(Func::Load, &[gep], T::type_())
+        }))
+    }
+    pub fn len(&self) -> Expr<u32> {
+        match self.node.type_().as_ref() {
+            Type::Array(ArrayType { element: _, length }) => const_(*length as u32),
+            _ => unreachable!(),
+        }
     }
 }
 #[derive(Clone, Copy, Debug)]
@@ -1427,7 +1565,7 @@ pub struct RtxHit {
 }
 impl RtxHitExpr {
     pub fn valid(&self) -> Expr<bool> {
-       self.inst_id().cmpne(u32::MAX) & self.prim_id().cmpne(u32::MAX)
+        self.inst_id().cmpne(u32::MAX) & self.prim_id().cmpne(u32::MAX)
     }
 }
 impl AccelVar {

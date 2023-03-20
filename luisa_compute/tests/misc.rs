@@ -411,6 +411,45 @@ fn array_read_write2() {
     }
 }
 #[test]
+fn array_read_write_vla() {
+    init();
+    let device = get_device();
+    let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
+    let y: Buffer<i32> = device.create_buffer(1024).unwrap();
+    let kernel = device
+        .create_kernel::<()>(&|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let tid = dispatch_id().x();
+            let vl = VLArrayVar::<i32>::zero(4);
+            let i = local_zeroed::<i32>();
+            while_!(i.load().cmplt(4), {
+                vl.write(i.load().uint(), tid.int() + i.load());
+                i.store(i.load() + 1);
+            });
+            let arr = local_zeroed::<[i32; 4]>();
+            let i = local_zeroed::<i32>();
+            while_!(i.load().cmplt(4), {
+                arr.write(i.load().uint(), vl.read(i.load().uint()));
+                i.store(i.load() + 1);
+            });
+            let arr = arr.load();
+            buf_x.write(tid, arr);
+            buf_y.write(tid, arr.read(0));
+        })
+        .unwrap();
+    kernel.dispatch([1024, 1, 1]).unwrap();
+    let x_data = x.view(..).copy_to_vec();
+    let y_data = y.view(..).copy_to_vec();
+    for i in 0..1024 {
+        assert_eq!(
+            x_data[i],
+            [i as i32, i as i32 + 1, i as i32 + 2, i as i32 + 3]
+        );
+        assert_eq!(y_data[i], i as i32);
+    }
+}
+#[test]
 fn array_read_write_async_compile() {
     init();
     let device = get_device();

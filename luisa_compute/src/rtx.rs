@@ -1,11 +1,13 @@
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, sync::Arc};
 
 use crate::{
-    lang::AccelVar,
+    lang::{AccelVar, Value},
     prelude::{Command, Device, Mat4},
+    resource::Buffer,
     runtime::submit_default_stream_and_sync,
     ResourceTracker,
 };
+use api::AccelBuildRequest;
 use luisa_compute_api_types as api;
 pub(crate) struct AccelHandle {
     pub(crate) device: Device,
@@ -32,21 +34,52 @@ impl Drop for MeshHandle {
         self.device.inner.destroy_mesh(self.handle);
     }
 }
+pub struct Mesh {
+    pub(crate) handle: Arc<MeshHandle>,
+    pub(crate) vertex_buffer: api::Buffer,
+    pub(crate) vertex_buffer_offset: usize,
+    pub(crate) vertex_buffer_size: usize,
+    pub(crate) vertex_stride: usize,
+    pub(crate) index_buffer: api::Buffer,
+    pub(crate) index_buffer_offset: usize,
+    pub(crate) index_buffer_size: usize,
+    pub(crate) index_stride: usize,
+}
 impl Mesh {
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         self.handle.native_handle
     }
+    pub fn build_async<'a>(&self, request: AccelBuildRequest) -> Command<'a> {
+        let mut rt = ResourceTracker::new();
+        rt.add(self.handle.clone());
+        Command {
+            inner: api::Command::MeshBuild(api::MeshBuildCommand {
+                mesh: self.handle.handle,
+                request,
+                vertex_buffer: self.vertex_buffer,
+                vertex_buffer_offset: self.vertex_buffer_offset,
+                vertex_buffer_size: self.vertex_buffer_size,
+                vertex_stride: self.vertex_stride,
+                index_buffer: self.index_buffer,
+                index_buffer_offset: self.index_buffer_offset,
+                index_buffer_size: self.index_buffer_size,
+                index_stride: self.index_stride,
+            }),
+            marker: PhantomData,
+            resource_tracker: rt,
+        }
+    }
+    pub fn build(&self, request: AccelBuildRequest) {
+        submit_default_stream_and_sync(&self.handle.device, [self.build_async(request)]).unwrap();
+    }
 }
 
-pub struct Mesh {
-    pub(crate) handle: Arc<MeshHandle>,
-}
 impl Accel {
-    fn push_handle(&self, handle: Arc<MeshHandle>, transform: Mat4, visible: bool, opaque: bool) {
-        let mut flags = api::AccelBuildModificationFlags::EMPTY;
-        if visible {
-            flags |= api::AccelBuildModificationFlags::VISIBILITY_ON;
-        }
+    fn push_handle(&self, handle: Arc<MeshHandle>, transform: Mat4, visible: u8, opaque: bool) {
+        let mut flags = api::AccelBuildModificationFlags::PRIMITIVE;
+
+        flags |= api::AccelBuildModificationFlags::VISIBILITY;
+
         if opaque {
             flags |= api::AccelBuildModificationFlags::OPAQUE;
         }
@@ -59,6 +92,7 @@ impl Accel {
                 mesh: handle.handle.0,
                 affine: transform.into_affine3x4(),
                 flags,
+                visibility: visible,
                 index,
             },
         );
@@ -70,15 +104,15 @@ impl Accel {
         index: usize,
         handle: Arc<MeshHandle>,
         transform: Mat4,
-        visible: bool,
+        visible: u8,
         opaque: bool,
     ) {
-        let mut flags = api::AccelBuildModificationFlags::EMPTY;
-        if visible {
-            flags |= api::AccelBuildModificationFlags::VISIBILITY_ON;
-        }
+        let mut flags = api::AccelBuildModificationFlags::PRIMITIVE;
+        dbg!(flags);
+        flags |= api::AccelBuildModificationFlags::VISIBILITY;
+
         if opaque {
-            flags |= api::AccelBuildModificationFlags::OPAQUE;
+            flags |= api::AccelBuildModificationFlags::OPAQUE_ON;
         }
         let mut modifications = self.modifications.borrow_mut();
         modifications.insert(
@@ -87,23 +121,17 @@ impl Accel {
                 mesh: handle.handle.0,
                 affine: transform.into_affine3x4(),
                 flags,
+                visibility: visible,
                 index: index as u32,
             },
         );
         let mut mesh_handles = self.mesh_handles.borrow_mut();
         mesh_handles[index] = Some(handle.clone());
     }
-    pub fn push_mesh(&self, mesh: &Mesh, transform: Mat4, visible: bool, opaque: bool) {
+    pub fn push_mesh(&self, mesh: &Mesh, transform: Mat4, visible: u8, opaque: bool) {
         self.push_handle(mesh.handle.clone(), transform, visible, opaque)
     }
-    pub fn set_mesh(
-        &self,
-        index: usize,
-        mesh: &Mesh,
-        transform: Mat4,
-        visible: bool,
-        opaque: bool,
-    ) {
+    pub fn set_mesh(&self, index: usize, mesh: &Mesh, transform: Mat4, visible: u8, opaque: bool) {
         self.set_handle(index, mesh.handle.clone(), transform, visible, opaque)
     }
     pub fn pop(&self) {
@@ -113,18 +141,10 @@ impl Accel {
         modifications.remove(&n);
         mesh_handles.pop().unwrap();
     }
-    pub fn update(&self, build_accel: bool, request: api::AccelBuildRequest) {
-        submit_default_stream_and_sync(
-            &self.handle.device,
-            [self.update_async(build_accel, request)],
-        )
-        .unwrap()
+    pub fn build(&self, request: api::AccelBuildRequest) {
+        submit_default_stream_and_sync(&self.handle.device, [self.build_async(request)]).unwrap()
     }
-    pub fn update_async<'a>(
-        &'a self,
-        build_accel: bool,
-        request: api::AccelBuildRequest,
-    ) -> Command<'a> {
+    pub fn build_async<'a>(&'a self, request: api::AccelBuildRequest) -> Command<'a> {
         let mut rt = ResourceTracker::new();
         let mesh_handles = self.mesh_handles.borrow();
         rt.add(self.handle.clone());
@@ -140,7 +160,7 @@ impl Accel {
                 instance_count: mesh_handles.len() as u32,
                 modifications: m.as_ptr(),
                 modifications_count: m.len(),
-                build_accel,
+                build_accel: true,
             }),
             resource_tracker: rt,
         }

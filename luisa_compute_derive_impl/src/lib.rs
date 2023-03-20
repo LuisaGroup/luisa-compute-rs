@@ -284,8 +284,8 @@ impl Compiler {
             }
             impl #impl_generics #expr_proxy_name #ty_generics #where_clause {
                 #(#expr_proxy_field_methods)*
-                #vis fn new(#(#field_names: Expr<#field_types>),*) -> Self {
-                    let node = #crate_path ::__compose::<#name #ty_generics>(&[ #( FromNode::node(&#field_names) ),* ]);
+                #vis fn new(#(#field_names: impl Into<Expr<#field_types>>),*) -> Self {
+                    let node = #crate_path ::__compose::<#name #ty_generics>(&[ #( FromNode::node(&#field_names.into()) ),* ]);
                     Self { node, _marker:std::marker::PhantomData }
                 }
             }

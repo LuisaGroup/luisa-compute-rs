@@ -3,15 +3,17 @@ use crate::lang::ShaderBuildOptions;
 use crate::*;
 use crate::{lang::Value, resource::*};
 
-use lang::{KernelBuildFn, ShaderBuilder, KernelParameter, KernelSignature};
+use api::AccelOption;
+use lang::{KernelBuildFn, KernelParameter, KernelSignature, ShaderBuilder};
 pub use luisa_compute_api_types as api;
 use luisa_compute_ir::ir::KernelModule;
 use luisa_compute_ir::CArc;
 use parking_lot::{Condvar, Mutex};
-use rtx::Accel;
-use std::cell::{RefCell, UnsafeCell};
+use rtx::{Accel, Mesh, MeshHandle};
+use std::cell::{Cell, RefCell, UnsafeCell};
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::marker::PhantomData;
 use std::mem::align_of;
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -94,13 +96,12 @@ impl Device {
     }
     pub fn create_tex2d<T: IoTexel>(
         &self,
-        format: PixelFormat,
+        storage: PixelStorage,
         width: u32,
         height: u32,
         mips: u32,
     ) -> backend::Result<Tex2d<T>> {
-        assert!(T::pixel_formats().contains(&format));
-
+        let format = T::pixel_format(storage);
         let texture = self
             .inner
             .create_texture(format, 2, width, height, 1, mips)?;
@@ -123,14 +124,13 @@ impl Device {
     }
     pub fn create_tex3d<T: IoTexel>(
         &self,
-        format: PixelFormat,
+        storage: PixelStorage,
         width: u32,
         height: u32,
         depth: u32,
         mips: u32,
     ) -> backend::Result<Tex3d<T>> {
-        assert!(T::pixel_formats().contains(&format));
-
+        let format = T::pixel_format(storage);
         let texture = self
             .inner
             .create_texture(format, 3, width, height, depth, mips)?;
@@ -151,6 +151,7 @@ impl Device {
         };
         Ok(tex)
     }
+
     pub fn default_stream(&self) -> Stream {
         Stream {
             device: self.clone(),
@@ -171,15 +172,31 @@ impl Device {
             }),
         })
     }
-    pub fn create_mesh(&self, option: api::AccelOption) -> backend::Result<rtx::Mesh> {
+    pub fn create_mesh<V: Value, T: Value>(
+        &self,
+        vbuffer: BufferView<'_, V>,
+        tbuffer: BufferView<'_, T>,
+        option: AccelOption,
+    ) -> backend::Result<Mesh> {
         let mesh = self.inner.create_mesh(option)?;
-        Ok(rtx::Mesh {
-            handle: Arc::new(rtx::MeshHandle {
+        let handle = mesh.handle;
+        let native_handle = mesh.native_handle;
+        let mesh = Mesh {
+            handle: Arc::new(MeshHandle {
                 device: self.clone(),
-                handle: api::Mesh(mesh.handle),
-                native_handle: mesh.native_handle,
+                handle: api::Mesh(handle),
+                native_handle,
             }),
-        })
+            vertex_buffer: vbuffer.handle(),
+            vertex_buffer_offset: vbuffer.offset * std::mem::size_of::<V>() as usize,
+            vertex_buffer_size: vbuffer.len * std::mem::size_of::<V>() as usize,
+            vertex_stride: std::mem::size_of::<V>() as usize,
+            index_buffer: tbuffer.handle(),
+            index_buffer_offset: tbuffer.offset * std::mem::size_of::<T>() as usize,
+            index_buffer_size: tbuffer.len * std::mem::size_of::<T>() as usize,
+            index_stride: std::mem::size_of::<T>() as usize,
+        };
+        Ok(mesh)
     }
     pub fn create_accel(&self, option: api::AccelOption) -> backend::Result<rtx::Accel> {
         let accel = self.inner.create_accel(option)?;
@@ -299,14 +316,19 @@ impl Stream {
             commands: Vec::new(),
         }
     }
+    pub fn submit<'a>(
+        &self,
+        commands: impl IntoIterator<Item = Command<'a>>,
+    ) -> backend::Result<SyncHandle<'a>> {
+        let mut command_buffer = self.command_buffer();
+        command_buffer.extend(commands);
+        command_buffer.commit()
+    }
     pub fn submit_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
         &self,
         commands: I,
     ) -> backend::Result<()> {
-        let mut command_buffer = self.command_buffer();
-        command_buffer.extend(commands);
-        command_buffer.commit()?;
-        self.synchronize()
+        self.submit(commands)?.synchronize()
     }
 }
 pub struct CommandBuffer<'a> {
@@ -315,8 +337,28 @@ pub struct CommandBuffer<'a> {
     commands: Vec<Command<'a>>,
 }
 struct CommandCallbackCtx<'a, F: FnOnce() + Send + 'static> {
+    #[allow(dead_code)]
     commands: Vec<Command<'a>>,
     f: F,
+}
+pub struct SyncHandle<'a> {
+    stream: Cell<Option<Arc<StreamHandle>>>,
+    marker: PhantomData<&'a ()>,
+}
+impl<'a> SyncHandle<'a> {
+    pub fn synchronize(&mut self) -> backend::Result<()> {
+        self.stream
+            .take()
+            .map(|stream| stream.device().synchronize_stream(stream.handle()))
+            .unwrap()
+    }
+}
+impl<'a> Drop for SyncHandle<'a> {
+    fn drop(&mut self) {
+        self.stream
+            .take()
+            .map(|stream| stream.device().synchronize_stream(stream.handle()));
+    }
 }
 impl<'a> CommandBuffer<'a> {
     pub fn extend<I: IntoIterator<Item = Command<'a>>>(&mut self, commands: I) {
@@ -328,7 +370,7 @@ impl<'a> CommandBuffer<'a> {
     pub fn commit_with_callback<F: FnOnce() + Send + 'static>(
         self,
         callback: F,
-    ) -> backend::Result<()> {
+    ) -> backend::Result<SyncHandle<'a>> {
         let commands = self.commands.iter().map(|c| c.inner).collect::<Vec<_>>();
         let ctx = CommandCallbackCtx {
             commands: self.commands,
@@ -343,9 +385,13 @@ impl<'a> CommandBuffer<'a> {
             self.stream.handle(),
             &commands,
             (trampoline::<F>, ptr as *mut u8),
-        )
+        )?;
+        Ok(SyncHandle {
+            stream: Cell::new(Some(self.stream.clone())),
+            marker: PhantomData,
+        })
     }
-    pub fn commit(self) -> backend::Result<()> {
+    pub fn commit(self) -> backend::Result<SyncHandle<'a>> {
         self.commit_with_callback(|| {})
     }
 }

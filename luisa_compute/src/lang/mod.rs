@@ -9,7 +9,7 @@ use crate::resource::BufferView;
 use crate::runtime::{AsyncShaderArtifact, ShaderArtifact};
 use crate::{
     backend,
-    prelude::{Device, RawShader, Kernel, KernelArg},
+    prelude::{Device, Kernel, KernelArg, RawShader},
     resource::{
         BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, IoTexel, Tex2d, Tex3d,
         TextureHandle,
@@ -20,7 +20,8 @@ use bumpalo::Bump;
 use ir::context::type_hash;
 pub use ir::ir::NodeRef;
 use ir::ir::{
-    AccelBinding, BindlessArrayBinding, ModulePools, SwitchCase, UserNodeData, INVALID_REF,
+    AccelBinding, BindlessArrayBinding, ModulePools, SwitchCase, TextureBinding, UserNodeData,
+    INVALID_REF,
 };
 pub use ir::CArc;
 use ir::Pooled;
@@ -45,6 +46,7 @@ use math::{Bool2Expr, Bool3Expr, Bool4Expr, Uint3};
 use std::cell::RefCell;
 
 use self::math::{Float2, Float3, Float4, Uint2};
+use self::traits::VarCmpEq;
 
 // use self::math::Uint3;
 pub mod math;
@@ -743,11 +745,11 @@ impl<T: Value> BindlessBufferVar<T> {
         }))
     }
 }
-pub struct BindlessTex2dVar{
+pub struct BindlessTex2dVar {
     array: NodeRef,
     tex2d_index: Expr<u32>,
 }
-impl BindlessTex2dVar{
+impl BindlessTex2dVar {
     pub fn sample(&self, uv: Expr<Float2>) -> Expr<Float4> {
         Expr::<Float4>::from_node(__current_scope(|b| {
             b.call(
@@ -976,7 +978,10 @@ impl BindlessArrayVar {
     pub fn new(array: &BindlessArray) -> Self {
         let node = RECORDER.with(|r| {
             let mut r = r.borrow_mut();
-            assert!(r.lock, "BufferVar must be created from within a kernel");
+            assert!(
+                r.lock,
+                "BindlessArrayVar must be created from within a kernel"
+            );
             let handle: u64 = array.handle().0;
             if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
                 *node
@@ -1278,6 +1283,41 @@ pub struct Tex2dVar<T: IoTexel> {
 }
 
 impl<T: IoTexel> Tex2dVar<T> {
+    pub fn new(view: Tex2dView<'_, T>) -> Self {
+        let node = RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            assert!(r.lock, "Tex2dVar<T> must be created from within a kernel");
+            let handle: u64 = view.tex.handle().0;
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
+                *node
+            } else {
+                let node = new_node(
+                    r.pools.as_ref().unwrap(),
+                    Node::new(CArc::new(Instruction::Texture2D), Type::void()),
+                );
+                let i = r.captured_buffer.len();
+                r.captured_buffer.insert(
+                    handle,
+                    (
+                        i,
+                        node,
+                        Binding::Texture(TextureBinding {
+                            handle,
+                            level: view.level,
+                        }),
+                        view.tex.handle.clone(),
+                    ),
+                );
+                node
+            }
+        });
+        Self {
+            node,
+            handle: Some(view.tex.handle.clone()),
+            level: Some(view.level),
+            marker: std::marker::PhantomData,
+        }
+    }
     pub fn read(&self, uv: impl Into<Expr<Uint2>>) -> Expr<T> {
         let uv = uv.into();
         Expr::<T>::from_node(__current_scope(|b| {
@@ -1297,6 +1337,41 @@ impl<T: IoTexel> Tex2dVar<T> {
     }
 }
 impl<T: IoTexel> Tex3dVar<T> {
+    pub fn new(view: Tex3dView<'_, T>) -> Self {
+        let node = RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            assert!(r.lock, "Tex3dVar<T> must be created from within a kernel");
+            let handle: u64 = view.tex.handle().0;
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
+                *node
+            } else {
+                let node = new_node(
+                    r.pools.as_ref().unwrap(),
+                    Node::new(CArc::new(Instruction::Texture3D), Type::void()),
+                );
+                let i = r.captured_buffer.len();
+                r.captured_buffer.insert(
+                    handle,
+                    (
+                        i,
+                        node,
+                        Binding::Texture(TextureBinding {
+                            handle,
+                            level: view.level,
+                        }),
+                        view.tex.handle.clone(),
+                    ),
+                );
+                node
+            }
+        });
+        Self {
+            node,
+            handle: Some(view.tex.handle.clone()),
+            level: Some(view.level),
+            marker: std::marker::PhantomData,
+        }
+    }
     pub fn read(&self, uv: impl Into<Expr<Uint3>>) -> Expr<T> {
         let uv = uv.into();
         Expr::<T>::from_node(__current_scope(|b| {
@@ -1350,16 +1425,51 @@ pub struct RtxHit {
     pub u: f32,
     pub v: f32,
 }
+impl RtxHitExpr {
+    pub fn valid(&self) -> Expr<bool> {
+       self.inst_id().cmpne(u32::MAX) & self.prim_id().cmpne(u32::MAX)
+    }
+}
 impl AccelVar {
-    pub fn trace_closest(&self, ray: Expr<RtxRay>) -> Expr<RtxHit> {
+    #[inline]
+    pub fn trace_closest_masked(
+        &self,
+        ray: impl Into<Expr<RtxRay>>,
+        mask: impl Into<Expr<u32>>,
+    ) -> Expr<RtxHit> {
+        let ray = ray.into();
+        let mask = mask.into();
         FromNode::from_node(__current_scope(|b| {
-            b.call(Func::RayTracingTraceClosest, &[ray.node()], RtxHit::type_())
+            b.call(
+                Func::RayTracingTraceClosest,
+                &[self.node, ray.node(), mask.node()],
+                RtxHit::type_(),
+            )
         }))
     }
-    pub fn trace_any(&self, ray: Expr<RtxRay>) -> Expr<bool> {
+    #[inline]
+    pub fn trace_any_masked(
+        &self,
+        ray: impl Into<Expr<RtxRay>>,
+        mask: impl Into<Expr<u32>>,
+    ) -> Expr<bool> {
+        let ray = ray.into();
+        let mask = mask.into();
         FromNode::from_node(__current_scope(|b| {
-            b.call(Func::RayTracingTraceAny, &[ray.node()], bool::type_())
+            b.call(
+                Func::RayTracingTraceAny,
+                &[self.node, ray.node(), mask.node()],
+                bool::type_(),
+            )
         }))
+    }
+    #[inline]
+    pub fn trace_closest(&self, ray: impl Into<Expr<RtxRay>>) -> Expr<RtxHit> {
+        self.trace_closest_masked(ray, 0xff)
+    }
+    #[inline]
+    pub fn trace_any(&self, ray: impl Into<Expr<RtxRay>>) -> Expr<bool> {
+        self.trace_any_masked(ray, 0xff)
     }
     pub fn new(accel: &rtx::Accel) -> Self {
         let node = RECORDER.with(|r| {

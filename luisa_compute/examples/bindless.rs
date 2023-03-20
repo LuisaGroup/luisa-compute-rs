@@ -19,7 +19,7 @@ fn main() {
     let img = {
         let img = ImageReader::open(file_path).unwrap().decode().unwrap();
         let tex: Tex2d<Float4> = device
-            .create_tex2d(PixelFormat::Rgba32f, img.width(), img.height(), mip_levels)
+            .create_tex2d(PixelStorage::Float4, img.width(), img.height(), mip_levels)
             .unwrap();
         for i in 0..mip_levels {
             let mip = img

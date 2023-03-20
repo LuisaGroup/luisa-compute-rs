@@ -19,11 +19,11 @@ macro_rules! def_vec {
         }
         impl $name {
             #[inline]
-            pub fn new($($comp: $scalar), *) -> Self {
+            pub const fn new($($comp: $scalar), *) -> Self {
                 Self { $($comp), * }
             }
             #[inline]
-            pub fn splat(scalar: $scalar) -> Self {
+            pub const fn splat(scalar: $scalar) -> Self {
                 Self { $($comp: scalar), * }
             }
         }
@@ -123,7 +123,45 @@ pub struct Mat3 {
 pub struct Mat4 {
     pub cols: [Float4; 4],
 }
+impl Mat2 {
+    pub const fn from_cols(c0: Float2, c1: Float2) -> Self {
+        Self { cols: [c0, c1] }
+    }
+    pub const fn identity() -> Self {
+        Self::from_cols(
+            Float2::new(1.0, 0.0),
+            Float2::new(0.0, 1.0),
+        )
+    }
+}
+impl Mat3 {
+    pub const fn from_cols(c0: Float3, c1: Float3, c2: Float3) -> Self {
+        Self {
+            cols: [c0, c1, c2],
+        }
+    }
+    pub const fn identity() -> Self {
+        Self::from_cols(
+            Float3::new(1.0, 0.0, 0.0),
+            Float3::new(0.0, 1.0, 0.0),
+            Float3::new(0.0, 0.0, 1.0),
+        )
+    }
+}
 impl Mat4 {
+    pub const fn from_cols(c0: Float4, c1: Float4, c2: Float4, c3: Float4) -> Self {
+        Self {
+            cols: [c0, c1, c2, c3],
+        }
+    }
+    pub const fn identity() -> Self {
+        Self::from_cols(
+            Float4::new(1.0, 0.0, 0.0, 0.0),
+            Float4::new(0.0, 1.0, 0.0, 0.0),
+            Float4::new(0.0, 0.0, 1.0, 0.0),
+            Float4::new(0.0, 0.0, 0.0, 1.0),
+        )
+    }
     pub fn into_affine3x4(&self) -> [f32; 12] {
         [
             self.cols[0].x,

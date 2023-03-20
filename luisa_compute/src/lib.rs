@@ -11,7 +11,7 @@ use luisa_compute_api_types as api;
 use luisa_compute_backend::Backend;
 pub mod prelude {
     pub use crate::*;
-    pub use api::{AccelBuildModificationFlags, AccelBuildRequest, AccelUsageHint, MeshType, PixelFormat, PixelStorage};
+    pub use api::{AccelBuildModificationFlags, AccelBuildRequest, AccelOption, AccelUsageHint, MeshType, PixelFormat, PixelStorage};
     pub use glam;
     pub use lang::math::*;
     pub use lang::poly::*;

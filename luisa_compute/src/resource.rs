@@ -33,7 +33,7 @@ impl Drop for BufferHandle {
         self.device.inner.destroy_buffer(self.handle);
     }
 }
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct BufferView<'a, T: Value> {
     buffer: &'a Buffer<T>,
     pub(crate) offset: usize,
@@ -402,136 +402,157 @@ pub(crate) struct TextureHandle {
     #[allow(dead_code)]
     pub(crate) levels: u32,
 }
+trait GetPixelFormat {
+    fn pixel_format(storage: PixelStorage) -> PixelFormat;
+}
+impl GetPixelFormat for f32 {
+    fn pixel_format(storage: PixelStorage) -> PixelFormat {
+        match storage {
+            PixelStorage::Byte1 => PixelFormat::R8Unorm,
+            PixelStorage::Byte2 => PixelFormat::Rg8Unorm,
+            PixelStorage::Byte4 => PixelFormat::Rgba8Unorm,
+            PixelStorage::Half1 => PixelFormat::Rg16f,
+            PixelStorage::Half2 => PixelFormat::Rg16f,
+            PixelStorage::Half4 => PixelFormat::Rgba16f,
+            PixelStorage::Short1 => PixelFormat::R16Unorm,
+            PixelStorage::Short2 => PixelFormat::Rg16Unorm,
+            PixelStorage::Short4 => PixelFormat::Rgba16Unorm,
+            PixelStorage::Float1 => PixelFormat::R32f,
+            PixelStorage::Float2 => PixelFormat::Rg32f,
+            PixelStorage::Float4 => PixelFormat::Rgba32f,
+            _ => panic!("Invalid pixel storage for f32"),
+        }
+    }
+}
+impl GetPixelFormat for i32 {
+    fn pixel_format(storage: PixelStorage) -> PixelFormat {
+        match storage {
+            PixelStorage::Byte1 => PixelFormat::R8Sint,
+            PixelStorage::Byte2 => PixelFormat::Rg8Sint,
+            PixelStorage::Byte4 => PixelFormat::Rgba8Sint,
+            PixelStorage::Short1 => PixelFormat::R16Sint,
+            PixelStorage::Short2 => PixelFormat::Rg16Sint,
+            PixelStorage::Short4 => PixelFormat::Rgba16Sint,
+            PixelStorage::Int1 => PixelFormat::R32Sint,
+            PixelStorage::Int2 => PixelFormat::Rg32Sint,
+            PixelStorage::Int4 => PixelFormat::Rgba32Sint,
+            _ => panic!("Invalid pixel storage for i32"),
+        }
+    }
+}
+impl GetPixelFormat for u32 {
+    fn pixel_format(storage: PixelStorage) -> PixelFormat {
+        match storage {
+            PixelStorage::Byte1 => PixelFormat::R8Uint,
+            PixelStorage::Byte2 => PixelFormat::Rg8Uint,
+            PixelStorage::Byte4 => PixelFormat::Rgba8Uint,
+            PixelStorage::Short1 => PixelFormat::R16Uint,
+            PixelStorage::Short2 => PixelFormat::Rg16Uint,
+            PixelStorage::Short4 => PixelFormat::Rgba16Uint,
+            PixelStorage::Int1 => PixelFormat::R32Uint,
+            PixelStorage::Int2 => PixelFormat::Rg32Uint,
+            PixelStorage::Int4 => PixelFormat::Rgba32Uint,
+            _ => panic!("Invalid pixel storage for u32"),
+        }
+    }
+}
 // Type that can be converted from a pixel format
 // This is the type that is read from/written to a texture
 pub trait IoTexel: Value {
-    // acceptable pixel format
-    fn pixel_formats() -> &'static HashSet<api::PixelFormat>;
-    fn pixel_storage() -> &'static HashSet<api::PixelStorage>;
+    fn pixel_format(storage: PixelStorage) -> PixelFormat;
 }
 
 macro_rules! impl_io_texel {
-    ($t:ty, $($formats:ident),*) => {
+    ($t:ty,$el:ty) => {
         impl IoTexel for $t {
-            fn pixel_formats() -> &'static HashSet<api::PixelFormat> {
-                lazy_static!{
-                    static ref FORMATS: HashSet<api::PixelFormat> = {
-                        let mut set = HashSet::new();
-                        $(
-                            set.insert(api::PixelFormat::$formats);
-                        )*
-                        set = set.union(<$t as StorageTexel>::pixel_formats()).cloned().collect();
-                        set
-                    };
-                }
-                &FORMATS
-            }
-            fn pixel_storage() -> &'static HashSet<api::PixelStorage> {
-                lazy_static! {
-                    static ref STORAGES: HashSet<api::PixelStorage> = {
-                       <$t as StorageTexel>::pixel_formats().iter().map(|f| f.storage()).collect()
-                    };
-                }
-                &STORAGES
+            fn pixel_format(storage: PixelStorage) -> PixelFormat {
+                <$el as GetPixelFormat>::pixel_format(storage)
             }
         }
     };
 }
-impl_io_texel!(
-    f32, R8Sint, R8Uint, R8Unorm, R16Sint, R16Uint, R16Unorm, R32Sint, R32Uint, R16f, R32f
-);
-impl_io_texel!(Float2, Rg16Sint, Rg16Uint, Rg16Unorm, Rg32Sint, Rg32Uint, Rg16f, Rg32f);
-impl_io_texel!(
-    Float4,
-    Rgba8Sint,
-    Rgba8Uint,
-    Rgba8Unorm,
-    Rgba16Sint,
-    Rgba16Uint,
-    Rgba16Unorm,
-    Rgba32Sint,
-    Rgba32Uint,
-    Rgba16f,
-    Rgba32f
-);
+impl_io_texel!(f32, f32);
+impl_io_texel!(Float2, f32);
+impl_io_texel!(Float4, f32);
 
-impl_io_texel!(u16,);
-impl_io_texel!(i16,);
-impl_io_texel!(Ushort2,);
-impl_io_texel!(Short2,);
-impl_io_texel!(Ushort4,);
-impl_io_texel!(Short4,);
-impl_io_texel!(u32,);
-impl_io_texel!(i32,);
-impl_io_texel!(Uint2,);
-impl_io_texel!(Int2,);
-impl_io_texel!(Uint4,);
-impl_io_texel!(Int4,);
+// impl_io_texel!(u16,);
+// impl_io_texel!(i16,);
+// impl_io_texel!(Ushort2,);
+// impl_io_texel!(Short2,);
+// impl_io_texel!(Ushort4,);
+// impl_io_texel!(Short4,);
+impl_io_texel!(u32, u32);
+impl_io_texel!(i32, i32);
+impl_io_texel!(Uint2, u32);
+impl_io_texel!(Int2, i32);
+impl_io_texel!(Uint4, u32);
+impl_io_texel!(Int4, i32);
 
 // Types that is stored in a texture
-pub trait StorageTexel {
-    fn pixel_formats() -> &'static HashSet<api::PixelFormat>;
-    fn pixel_storage() -> &'static HashSet<api::PixelStorage>;
+pub trait StorageTexel<T: IoTexel> {
+    fn pixel_storage() -> PixelStorage;
 }
 macro_rules! impl_storage_texel {
-    ($t:ty, $($formats:ident),*) => {
-        impl StorageTexel for $t {
-            fn pixel_formats() -> &'static HashSet<api::PixelFormat> {
-                lazy_static!{
-                    static ref FORMATS: HashSet<api::PixelFormat> = {
-                        let mut set = HashSet::new();
-                        $(
-                            set.insert(api::PixelFormat::$formats);
-                        )*
-                        set
-                    };
-                }
-                &FORMATS
-            }
-            fn pixel_storage() -> &'static HashSet<api::PixelStorage> {
-                lazy_static! {
-                    static ref STORAGES: HashSet<api::PixelStorage> = {
-                       <$t as StorageTexel>::pixel_formats().iter().map(|f| f.storage()).collect()
-                    };
-                }
-                &STORAGES
+    ($t:ty, $st:ident, $t2:ident,) => {
+        impl StorageTexel<$t2> for $t {
+            fn pixel_storage() -> PixelStorage {
+                PixelStorage::$st
             }
         }
     };
+    ($t:ty, $st:ident, $t2:ident, $($rest:ident,) *) => {
+        impl_storage_texel!($t, $st, $t2, );
+        impl_storage_texel!($t, $st, $($rest, )*);
+    };
 }
 
-impl_storage_texel!(u8, R8Uint, R8Unorm);
-impl_storage_texel!(i8, R8Sint);
-impl_storage_texel!(Ubyte3, Rgb8Uint, Rgb8Unorm);
-impl_storage_texel!(Byte3, Rgb8Sint);
-impl_storage_texel!(Ubyte4, Rgba8Uint, Rgba8Unorm);
-impl_storage_texel!(Byte4, Rgba8Sint);
+impl_storage_texel!(u8, Byte1, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Ubyte2, Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Ubyte4, Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([u8; 2], Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([u8; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
-impl_storage_texel!(u16, R16Uint, R16Unorm);
-impl_storage_texel!(i16, R16Sint);
+impl_storage_texel!(i8, Byte1, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Byte2, Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Byte4, Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([i8; 2], Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([i8; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
-impl_storage_texel!(Ushort2, Rg16Uint, Rg16Unorm);
-impl_storage_texel!(Short2, Rg16Sint);
+impl_storage_texel!(u16, Short1, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Ushort2, Short2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Ushort4, Short4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([u16; 2], Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([u16; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
-impl_storage_texel!(Ushort4, Rgba16Uint, Rgba16Unorm);
-impl_storage_texel!(Short4, Rgba16Sint);
+impl_storage_texel!(i16, Short1, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Short2, Short2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Short4, Short4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([i16; 2], Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([i16; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
-impl_storage_texel!(u32, R32Uint);
-impl_storage_texel!(i32, R32Sint);
+impl_storage_texel!(u32, Int1, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Uint2, Int2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Uint4, Int4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([u32; 2], Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([u32; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
-impl_storage_texel!(Uint2, Rg32Uint);
-impl_storage_texel!(Int2, Rg32Sint);
+impl_storage_texel!(i32, Int1, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Int2, Int2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Int4, Int4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([i32; 2], Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([i32; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
-impl_storage_texel!(Uint4, Rgba32Uint);
-impl_storage_texel!(Int4, Rgba32Sint);
+impl_storage_texel!(f32, Float1, f32, Float2, Float4,);
+impl_storage_texel!(Float2, Float2, f32, Float2, Float4,);
+impl_storage_texel!(Float4, Float4, f32, Float2, Float4,);
+impl_storage_texel!([f32; 2], Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([f32; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
-impl_storage_texel!(f16, R16f);
-impl_storage_texel!(Half2, Rg16f);
-impl_storage_texel!(Half4, Rgba16f);
-
-impl_storage_texel!(f32, R32f);
-impl_storage_texel!(Float2, Rg32f);
-impl_storage_texel!(Float4, Rgba32f);
+impl_storage_texel!(f16, Half1, f32, Float2, Float4,);
+impl_storage_texel!(Half2, Half2, f32, Float2, Float4,);
+impl_storage_texel!(Half4, Half4, f32, Float2, Float4,);
+impl_storage_texel!([f16; 2], Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([f16; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
 // `T` is the read out type of the texture, which is not necessarily the same as the storage type
 // In fact, the texture can be stored in any format as long as it can be converted to `T`
@@ -546,12 +567,12 @@ pub struct Tex3d<T: IoTexel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
 }
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Tex2dView<'a, T: IoTexel> {
     pub(crate) tex: &'a Tex2d<T>,
     pub(crate) level: u32,
 }
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Tex3dView<'a, T: IoTexel> {
     pub(crate) tex: &'a Tex3d<T>,
     pub(crate) level: u32,
@@ -560,18 +581,24 @@ impl<T: IoTexel> Tex2d<T> {
     pub(crate) fn handle(&self) -> api::Texture {
         self.handle.handle
     }
+    pub fn var(&self) -> Tex2dVar<T> {
+        Tex2dVar::new(self.view(0))
+    }
 }
 impl<T: IoTexel> Tex3d<T> {
     pub(crate) fn handle(&self) -> api::Texture {
         self.handle.handle
     }
+    pub fn var(&self) -> Tex3dVar<T> {
+        Tex3dVar::new(self.view(0))
+    }
 }
 macro_rules! impl_tex_view {
     ($name:ident) => {
         impl<'a, T: IoTexel> $name<'a, T> {
-            pub fn copy_to_async<U: StorageTexel>(&'a self, data: &'a mut [U]) -> Command<'a> {
+            pub fn copy_to_async<U: StorageTexel<T>>(&'a self, data: &'a mut [U]) -> Command<'a> {
                 assert_eq!(data.len(), self.texel_count() as usize);
-                assert!(U::pixel_storage().contains(&self.tex.handle.storage));
+                assert_eq!(self.tex.handle.storage, U::pixel_storage());
                 let mut rt = ResourceTracker::new();
                 rt.add(self.tex.handle.clone());
                 Command {
@@ -586,13 +613,13 @@ macro_rules! impl_tex_view {
                     marker: std::marker::PhantomData,
                 }
             }
-            pub fn copy_to<U: StorageTexel>(&'a self, data: &'a mut [U]) {
+            pub fn copy_to<U: StorageTexel<T>>(&'a self, data: &'a mut [U]) {
                 assert_eq!(data.len(), self.texel_count() as usize);
 
                 submit_default_stream_and_sync(&self.tex.handle.device, [self.copy_to_async(data)])
                     .unwrap();
             }
-            pub fn copy_to_vec<U: StorageTexel>(&'a self) -> Vec<U> {
+            pub fn copy_to_vec<U: StorageTexel<T>>(&'a self) -> Vec<U> {
                 let mut data = Vec::with_capacity(self.texel_count() as usize);
                 self.copy_to(&mut data);
                 unsafe {
@@ -600,9 +627,9 @@ macro_rules! impl_tex_view {
                 }
                 data
             }
-            pub fn copy_from_async<U: StorageTexel>(&'a self, data: &'a [U]) -> Command<'a> {
+            pub fn copy_from_async<U: StorageTexel<T>>(&'a self, data: &'a [U]) -> Command<'a> {
                 assert_eq!(data.len(), self.texel_count() as usize);
-                assert!(U::pixel_storage().contains(&self.tex.handle.storage));
+                assert_eq!(self.tex.handle.storage, U::pixel_storage());
                 let mut rt = ResourceTracker::new();
                 rt.add(self.tex.handle.clone());
                 Command {
@@ -617,14 +644,14 @@ macro_rules! impl_tex_view {
                     marker: std::marker::PhantomData,
                 }
             }
-            pub fn copy_from<U: StorageTexel>(&'a self, data: &[U]) {
+            pub fn copy_from<U: StorageTexel<T>>(&'a self, data: &[U]) {
                 submit_default_stream_and_sync(
                     &self.tex.handle.device,
                     [self.copy_from_async(data)],
                 )
                 .unwrap();
             }
-            pub fn copy_to_buffer_async<U: StorageTexel + Value>(
+            pub fn copy_to_buffer_async<U: StorageTexel<T> + Value>(
                 &'a self,
                 buffer_view: &'a BufferView<U>,
             ) -> Command<'a> {
@@ -632,7 +659,7 @@ macro_rules! impl_tex_view {
                 rt.add(self.tex.handle.clone());
                 rt.add(buffer_view.buffer.handle.clone());
                 assert_eq!(buffer_view.len, self.texel_count() as usize);
-                assert!(U::pixel_storage().contains(&self.tex.handle.storage));
+                assert_eq!(self.tex.handle.storage, U::pixel_storage());
                 Command {
                     inner: api::Command::TextureToBufferCopy(api::TextureToBufferCopyCommand {
                         texture: self.handle(),
@@ -646,14 +673,14 @@ macro_rules! impl_tex_view {
                     marker: std::marker::PhantomData,
                 }
             }
-            pub fn copy_to_buffer<U: StorageTexel + Value>(&'a self, buffer_view: &BufferView<U>) {
+            pub fn copy_to_buffer<U: StorageTexel<T> + Value>(&'a self, buffer_view: &BufferView<U>) {
                 submit_default_stream_and_sync(
                     &self.tex.handle.device,
                     [self.copy_to_buffer_async(buffer_view)],
                 )
                 .unwrap();
             }
-            pub fn copy_from_buffer_async<U: StorageTexel + Value>(
+            pub fn copy_from_buffer_async<U: StorageTexel<T> + Value>(
                 &'a self,
                 buffer_view: &BufferView<U>,
             ) -> Command<'a> {
@@ -661,7 +688,7 @@ macro_rules! impl_tex_view {
                 rt.add(self.tex.handle.clone());
                 rt.add(buffer_view.buffer.handle.clone());
                 assert_eq!(buffer_view.len, self.texel_count() as usize);
-                assert!(U::pixel_storage().contains(&self.tex.handle.storage));
+                assert_eq!(self.tex.handle.storage, U::pixel_storage());
                 Command {
                     inner: api::Command::BufferToTextureCopy(api::BufferToTextureCopyCommand {
                         texture: self.handle(),
@@ -675,7 +702,7 @@ macro_rules! impl_tex_view {
                     marker: std::marker::PhantomData,
                 }
             }
-            pub fn copy_from_buffer<U: StorageTexel + Value>(
+            pub fn copy_from_buffer<U: StorageTexel<T> + Value>(
                 &'a self,
                 buffer_view: &BufferView<U>,
             ) {
@@ -691,6 +718,7 @@ macro_rules! impl_tex_view {
                 rt.add(other.tex.handle.clone());
                 assert_eq!(self.size(), other.size());
                 assert_eq!(self.tex.handle.storage, other.tex.handle.storage);
+                assert_eq!(self.tex.handle.format, other.tex.handle.format);
                 Command {
                     inner: api::Command::TextureCopy(api::TextureCopyCommand {
                         src: self.handle(),
@@ -729,6 +757,9 @@ impl<'a, T: IoTexel> Tex2dView<'a, T> {
             1,
         ]
     }
+    pub fn var(&self) -> Tex2dVar<T> {
+        Tex2dVar::new(*self)
+    }
 }
 impl_tex_view!(Tex2dView);
 impl<'a, T: IoTexel> Tex3dView<'a, T> {
@@ -745,6 +776,9 @@ impl<'a, T: IoTexel> Tex3dView<'a, T> {
             (self.tex.handle.height >> self.level).max(1),
             (self.tex.handle.depth >> self.level).max(1),
         ]
+    }
+    pub fn var(&self) -> Tex3dVar<T> {
+        Tex3dVar::new(*self)
     }
 }
 impl_tex_view!(Tex3dView);

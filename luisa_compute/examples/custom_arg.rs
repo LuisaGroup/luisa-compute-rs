@@ -1,6 +1,6 @@
 use luisa::prelude::*;
 use luisa_compute as luisa;
-#[derive(ShaderArg)]
+#[derive(KernelArg)]
 struct MyArgStruct<T: Value> {
     x: Buffer<T>,
     y: Buffer<T>,
@@ -21,7 +21,7 @@ fn main() {
         exclude: 42.0,
     };
     let shader = device
-        .create_shader::<(MyArgStruct<f32>,)>(&|_args| {})
+        .create_kernel::<(MyArgStruct<f32>,)>(&|_args| {})
         .unwrap();
     shader.dispatch([1024, 1, 1], &my_args).unwrap();
 }

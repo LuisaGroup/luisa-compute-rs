@@ -20,7 +20,7 @@ fn vec_cast() {
     f.view(..)
         .fill_fn(|i| Float2::new(i as f32 + 0.5, i as f32 + 1.5));
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let f = f.var();
             let i = i.var();
             let tid = dispatch_id().x();
@@ -50,7 +50,7 @@ fn bool_op() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let tid = dispatch_id().x();
             let x = x.var().read(tid);
             let y = y.var().read(tid);
@@ -94,7 +94,7 @@ fn bvec_op() {
     x.view(..).fill_fn(|_| Bool2::new(rng.gen(), rng.gen()));
     y.view(..).fill_fn(|_| Bool2::new(rng.gen(), rng.gen()));
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let tid = dispatch_id().x();
             let x = x.var().read(tid);
             let y = y.var().read(tid);
@@ -147,7 +147,7 @@ fn vec_bit_minmax() {
     y.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
     z.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let tid = dispatch_id().x();
             let x = x.var().read(tid);
             let y = y.var().read(tid);
@@ -209,7 +209,7 @@ fn vec_permute() {
     v2.view(..)
         .fill_fn(|i| Int2::new(i as i32 + 0, i as i32 + 1));
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let v2 = v2.var();
             let v3 = v3.var();
             let tid = dispatch_id().x();
@@ -235,7 +235,7 @@ fn if_phi() {
     let even: Buffer<bool> = device.create_buffer(1024).unwrap();
     x.view(..).fill_fn(|i| i as i32);
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let x = x.var();
             let even = even.var();
             let tid = dispatch_id().x();
@@ -261,7 +261,7 @@ fn switch_phi() {
     let z: Buffer<f32> = device.create_buffer(1024).unwrap();
     x.view(..).fill_fn(|i| i as i32);
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_z = z.var();
@@ -311,7 +311,7 @@ fn switch_unreachable() {
     let z: Buffer<f32> = device.create_buffer(1024).unwrap();
     x.view(..).fill_fn(|i| i as i32 % 3);
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_z = z.var();
@@ -356,7 +356,7 @@ fn array_read_write() {
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let tid = dispatch_id().x();
             let arr = local_zeroed::<[i32; 4]>();
@@ -384,7 +384,7 @@ fn array_read_write2() {
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let tid = dispatch_id().x();
@@ -416,7 +416,7 @@ fn array_read_write_async_compile() {
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let tid = dispatch_id().x();
             let arr = local_zeroed::<[i32; 4]>();

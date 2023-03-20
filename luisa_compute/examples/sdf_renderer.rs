@@ -19,7 +19,7 @@ fn main() {
     }]);
     let x = device.create_buffer::<f32>(1024).unwrap();
     let shader = device
-        .create_shader::<(Buffer<f32>, Buffer<Sphere>)>(
+        .create_kernel::<(Buffer<f32>, Buffer<Sphere>)>(
             &|buf_x: BufferVar<f32>, spheres: BufferVar<Sphere>| {
                 let tid = dispatch_id().x();
                 let o = make_float3(0.0, 0.0, -2.0);

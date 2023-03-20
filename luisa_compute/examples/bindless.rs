@@ -43,8 +43,8 @@ fn main() {
     bindless.emplace_buffer_async(1, &y);
     bindless.emplace_tex2d_async(0, &img, Sampler::default());
     bindless.update();
-    let shader = device
-        .create_shader::<(BufferView<f32>,)>(&|buf_z| {
+    let kernel = device
+        .create_kernel::<(BufferView<f32>,)>(&|buf_z| {
             let bindless = bindless.var();
             let tid = dispatch_id().x();
             let buf_x = bindless.buffer::<f32>(Uint::from(0));
@@ -54,7 +54,7 @@ fn main() {
             buf_z.write(tid, x + y);
         })
         .unwrap();
-    shader.dispatch([1024, 1, 1], &z).unwrap();
+    kernel.dispatch([1024, 1, 1], &z).unwrap();
     let mut z_data = vec![0.0; 1024];
     z.view(..).copy_to(&mut z_data);
     println!("{:?}", &z_data[0..16]);

@@ -9,7 +9,7 @@ fn main() {
     x.view(..).fill_fn(|i| i as f32);
     sum.view(..).fill(0.0);
     let shader = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_sum = sum.var();
             let tid = dispatch_id().x();

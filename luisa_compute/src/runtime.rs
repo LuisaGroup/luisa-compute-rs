@@ -3,7 +3,7 @@ use crate::lang::ShaderBuildOptions;
 use crate::*;
 use crate::{lang::Value, resource::*};
 
-use lang::{ShaderBuildFn, ShaderBuilder, ShaderParameter, ShaderSignature};
+use lang::{KernelBuildFn, ShaderBuilder, KernelParameter, KernelSignature};
 pub use luisa_compute_api_types as api;
 use luisa_compute_ir::ir::KernelModule;
 use luisa_compute_ir::CArc;
@@ -193,20 +193,20 @@ impl Device {
             modifications: RefCell::new(HashMap::new()),
         })
     }
-    pub fn create_shader<'a, S: ShaderSignature<'a>>(
+    pub fn create_kernel<'a, S: KernelSignature<'a>>(
         &self,
         f: S::Fn,
-    ) -> Result<S::Shader, crate::backend::BackendError> {
+    ) -> Result<S::Kernel, crate::backend::BackendError> {
         let mut builder = ShaderBuilder::new(self.clone());
-        let raw_kernel = ShaderBuildFn::build(&f, &mut builder, ShaderBuildOptions::default());
+        let raw_kernel = KernelBuildFn::build(&f, &mut builder, ShaderBuildOptions::default());
         S::wrap_raw_shader(raw_kernel)
     }
-    pub fn create_shader_async<'a, S: ShaderSignature<'a>>(
+    pub fn create_kernel_async<'a, S: KernelSignature<'a>>(
         &self,
         f: S::Fn,
-    ) -> Result<S::Shader, crate::backend::BackendError> {
+    ) -> Result<S::Kernel, crate::backend::BackendError> {
         let mut builder = ShaderBuilder::new(self.clone());
-        let raw_kernel = ShaderBuildFn::build(&f, &mut builder, ShaderBuildOptions::default());
+        let raw_kernel = KernelBuildFn::build(&f, &mut builder, ShaderBuildOptions::default());
         S::wrap_raw_shader(raw_kernel)
     }
 }
@@ -441,53 +441,53 @@ impl ArgEncoder {
         self.args.push(api::Argument::Accel(accel.handle.handle));
     }
 }
-pub trait ShaderArg {
-    type Parameter: ShaderParameter;
+pub trait KernelArg {
+    type Parameter: KernelParameter;
     fn encode(&self, encoder: &mut ArgEncoder);
 }
-impl<T: Value> ShaderArg for Buffer<T> {
+impl<T: Value> KernelArg for Buffer<T> {
     type Parameter = lang::BufferVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.buffer(self);
     }
 }
-impl<'a, T: Value> ShaderArg for BufferView<'a, T> {
+impl<'a, T: Value> KernelArg for BufferView<'a, T> {
     type Parameter = lang::BufferVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.buffer_view(self);
     }
 }
-impl<T: IoTexel> ShaderArg for Tex2d<T> {
+impl<T: IoTexel> KernelArg for Tex2d<T> {
     type Parameter = lang::Tex2dVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.tex2d(&self.view(0));
     }
 }
-impl<T: IoTexel> ShaderArg for Tex3d<T> {
+impl<T: IoTexel> KernelArg for Tex3d<T> {
     type Parameter = lang::Tex3dVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.tex3d(&self.view(0));
     }
 }
-impl<'a, T: IoTexel> ShaderArg for Tex2dView<'a, T> {
+impl<'a, T: IoTexel> KernelArg for Tex2dView<'a, T> {
     type Parameter = lang::Tex2dVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.tex2d(self);
     }
 }
-impl<'a, T: IoTexel> ShaderArg for Tex3dView<'a, T> {
+impl<'a, T: IoTexel> KernelArg for Tex3dView<'a, T> {
     type Parameter = lang::Tex3dVar<T>;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.tex3d(self);
     }
 }
-impl ShaderArg for BindlessArray {
+impl KernelArg for BindlessArray {
     type Parameter = lang::BindlessArrayVar;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.bindless_array(self);
     }
 }
-impl ShaderArg for Accel {
+impl KernelArg for Accel {
     type Parameter = lang::AccelVar;
     fn encode(&self, encoder: &mut ArgEncoder) {
         encoder.accel(self)
@@ -495,13 +495,13 @@ impl ShaderArg for Accel {
 }
 macro_rules! impl_kernel_arg_for_tuple {
     ()=>{
-        impl ShaderArg for () {
+        impl KernelArg for () {
             type Parameter = ();
             fn encode(&self, _: &mut ArgEncoder) { }
         }
     };
     ($first:ident  $($rest:ident) *) => {
-        impl<$first:ShaderArg, $($rest: ShaderArg),*> ShaderArg for ($first, $($rest,)*) {
+        impl<$first:KernelArg, $($rest: KernelArg),*> KernelArg for ($first, $($rest,)*) {
             type Parameter = ($first::Parameter, $($rest::Parameter),*);
             #[allow(non_snake_case)]
             fn encode(&self, encoder: &mut ArgEncoder) {
@@ -556,38 +556,38 @@ impl RawShader {
         submit_default_stream_and_sync(&self.device, vec![self.dispatch_async(args, dispatch_size)])
     }
 }
-pub struct Shader<T: ShaderArg> {
+pub struct Kernel<T: KernelArg> {
     pub(crate) inner: RawShader,
     pub(crate) _marker: std::marker::PhantomData<T>,
 }
-impl<T: ShaderArg> Shader<T> {
+impl<T: KernelArg> Kernel<T> {
     pub fn cache_dir(&self) -> Option<PathBuf> {
         let handle = self.inner.unwrap();
         let device = &self.inner.device;
         device.inner.shader_cache_dir(handle)
     }
 }
-pub trait AsShaderArg<T: ShaderArg>: ShaderArg {}
-impl<T: Value> AsShaderArg<Buffer<T>> for Buffer<T> {}
-impl<'a, T: Value> AsShaderArg<Buffer<T>> for BufferView<'a, T> {}
-impl<'a, T: Value> AsShaderArg<BufferView<'a, T>> for BufferView<'a, T> {}
-impl<'a, T: Value> AsShaderArg<BufferView<'a, T>> for Buffer<T> {}
-impl<'a, T: IoTexel> AsShaderArg<Tex2d<T>> for Tex2dView<'a, T> {}
-impl<'a, T: IoTexel> AsShaderArg<Tex3d<T>> for Tex3dView<'a, T> {}
-impl<'a, T: IoTexel> AsShaderArg<Tex3dView<'a, T>> for Tex2dView<'a, T> {}
-impl<'a, T: IoTexel> AsShaderArg<Tex3dView<'a, T>> for Tex3dView<'a, T> {}
-impl<'a, T: IoTexel> AsShaderArg<Tex3dView<'a, T>> for Tex2d<T> {}
-impl<'a, T: IoTexel> AsShaderArg<Tex3dView<'a, T>> for Tex3d<T> {}
-impl<T: IoTexel> AsShaderArg<Tex2d<T>> for Tex2d<T> {}
-impl<T: IoTexel> AsShaderArg<Tex3d<T>> for Tex3d<T> {}
-impl AsShaderArg<BindlessArray> for BindlessArray {}
-impl AsShaderArg<Accel> for Accel {}
+pub trait AsKernelArg<T: KernelArg>: KernelArg {}
+impl<T: Value> AsKernelArg<Buffer<T>> for Buffer<T> {}
+impl<'a, T: Value> AsKernelArg<Buffer<T>> for BufferView<'a, T> {}
+impl<'a, T: Value> AsKernelArg<BufferView<'a, T>> for BufferView<'a, T> {}
+impl<'a, T: Value> AsKernelArg<BufferView<'a, T>> for Buffer<T> {}
+impl<'a, T: IoTexel> AsKernelArg<Tex2d<T>> for Tex2dView<'a, T> {}
+impl<'a, T: IoTexel> AsKernelArg<Tex3d<T>> for Tex3dView<'a, T> {}
+impl<'a, T: IoTexel> AsKernelArg<Tex3dView<'a, T>> for Tex2dView<'a, T> {}
+impl<'a, T: IoTexel> AsKernelArg<Tex3dView<'a, T>> for Tex3dView<'a, T> {}
+impl<'a, T: IoTexel> AsKernelArg<Tex3dView<'a, T>> for Tex2d<T> {}
+impl<'a, T: IoTexel> AsKernelArg<Tex3dView<'a, T>> for Tex3d<T> {}
+impl<T: IoTexel> AsKernelArg<Tex2d<T>> for Tex2d<T> {}
+impl<T: IoTexel> AsKernelArg<Tex3d<T>> for Tex3d<T> {}
+impl AsKernelArg<BindlessArray> for BindlessArray {}
+impl AsKernelArg<Accel> for Accel {}
 macro_rules! impl_dispatch_for_kernel {
 
    ($first:ident  $($rest:ident)*) => {
-        impl <$first:ShaderArg, $($rest: ShaderArg),*> Shader<($first, $($rest,)*)> {
+        impl <$first:KernelArg, $($rest: KernelArg),*> Kernel<($first, $($rest,)*)> {
             #[allow(non_snake_case)]
-            pub fn dispatch(&self, dispatch_size: [u32; 3], $first:&impl AsShaderArg<$first>, $($rest:&impl AsShaderArg<$rest>),*) -> backend::Result<()> {
+            pub fn dispatch(&self, dispatch_size: [u32; 3], $first:&impl AsKernelArg<$first>, $($rest:&impl AsKernelArg<$rest>),*) -> backend::Result<()> {
                 let mut encoder = ArgEncoder::new();
                 $first.encode(&mut encoder);
                 $($rest.encode(&mut encoder);)*
@@ -596,7 +596,7 @@ macro_rules! impl_dispatch_for_kernel {
             #[allow(non_snake_case)]
             pub fn dispatch_async<'a>(
                 &'a self,
-                dispatch_size: [u32; 3], $first: &impl AsShaderArg<$first>, $($rest:impl AsShaderArg<$rest>),*
+                dispatch_size: [u32; 3], $first: &impl AsKernelArg<$first>, $($rest:impl AsKernelArg<$rest>),*
             ) -> Command<'a> {
                 let mut encoder = ArgEncoder::new();
                 $first.encode(&mut encoder);
@@ -607,7 +607,7 @@ macro_rules! impl_dispatch_for_kernel {
         impl_dispatch_for_kernel!($($rest)*);
    };
    ()=>{
-    impl Shader<()> {
+    impl Kernel<()> {
         pub fn dispatch(&self, dispatch_size: [u32; 3]) -> backend::Result<()> {
             self.inner.dispatch(&ArgEncoder::new(), dispatch_size)
         }

@@ -12,7 +12,7 @@ fn main() {
     x.fill_fn(|i| i as f32);
     y.fill_fn(|i| 1.0 + i as f32);
     let shader = device
-        .create_shader::<(Buffer<f32>, Buffer<f32>, Buffer<f32>, Buffer<f32>)>(
+        .create_kernel::<(Buffer<f32>, Buffer<f32>, Buffer<f32>, Buffer<f32>)>(
             &|buf_x: BufferVar<f32>,
               buf_y: BufferVar<f32>,
               buf_dx: BufferVar<f32>,

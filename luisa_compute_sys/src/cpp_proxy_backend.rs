@@ -264,7 +264,7 @@ impl Backend for CppProxyBackend {
         ))
     }
 
-    fn create_shader_async(&self, kernel: Gc<KernelModule>) -> backend::Result<api::Shader> {
+    fn create_kernel_async(&self, kernel: Gc<KernelModule>) -> backend::Result<api::Shader> {
         todo!()
     }
 

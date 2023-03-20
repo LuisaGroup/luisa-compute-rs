@@ -33,8 +33,8 @@ fn main() {
     let z = device.create_buffer::<f32>(1024).unwrap();
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
-    let shader = device
-        .create_shader::<(Buffer<f32>,)>(&|buf_z| {
+    let kernel = device
+        .create_kernel::<(Buffer<f32>,)>(&|buf_z| {
             // z is pass by arg
             let buf_x = x.var(); // x and y are captured
             let buf_y = y.var();
@@ -44,7 +44,7 @@ fn main() {
             buf_z.write(tid, x + y);
         })
         .unwrap();
-    shader.dispatch([1024, 1, 1], &z).unwrap();
+    kernel.dispatch([1024, 1, 1], &z).unwrap();
     let z_data = z.view(..).copy_to_vec();
     println!("{:?}", &z_data[0..16]);
 }
@@ -222,38 +222,36 @@ let result = my_add.call(args);
 ### Kernel
 A kernel can be written in a closure or a function. The closure/function should have a `Fn(/*args*/)->()` signature, where the args are taking the `Var` type of resources, such as `BufferVar<T>`, `Tex2D<T>`, etc.
 
-The resulting kernel is of type `Shader<(Args, ...)>`. The argument types include `Buffer<T>`, `Tex2D<T>`, `Tex3D<T>`, `BindlessArray`, `Accel`, etc. Note that an argument type of `Buffer<T>` can take both `Buffer<T>` and `BufferView<T>` in `Shader::dispatch`. The same applies to `Tex2D<T>` and `Tex3D<T>`.
-
-Note: `Device::create_shader` takes a tuple of types as its generic parameter. If the kernel takes a single argument, it is required to use `create_shader::<(Type,)>` instead of `create_shader::<Type>`.
+Note: `Device::create_kernel` takes a tuple of types as its generic parameter. If the kernel takes a single argument, it is required to use `create_kernel::<(Type,)>` instead of `create_kernel::<Type>`.
 
 ```rust
-let shader = device.create_shader::<(Arg0, Arg1, ...)>(&|/*args*/| {
+let kernel = device.create_kernel::<(Arg0, Arg1, ...)>(&|/*args*/| {
     /*body*/
 }).unwrap();
-shader.dispatch([/*dispatch size*/], &arg0, &arg1, ...).unwrap();
+kernel.dispatch([/*dispatch size*/], &arg0, &arg1, ...).unwrap();
 ```
 There are two ways to pass arguments to a kernel: by arguments or by capture.
 ```rust
 let captured:Buffer<f32> = device.create_buffer(...).unwrap();
-let shader = device.create_shader::<(BufferVar<f32>, )>(arg| {
+let kernel = device.create_kernel::<(BufferVar<f32>, )>(arg| {
     let v = arg.read(..);
     let u = captured.var().read(..);
 })).unwrap();
 ```
 User can pass a maximum of 16 arguments to kernel and unlimited number of captured variables. If more than 16 arguments are needed, user can pack them into a struct and pass the struct as a single argument.
 ```rust
-#[derive(ShaderArg)]
+#[derive(KernelArg)]
 pub struct BufferPair {
     a:Buffer<f32>,
     b:Buffer<f32>
 }
-let shader = device.create_shader::<(BufferPair, )>(&|| {
+let kernel = device.create_kernel::<(BufferPair, )>(&|| {
     // ...
 }).unwrap();
 let a = device.create_buffer(...).unwrap();
 let b = device.create_buffer(...).unwrap();
 let pair = BufferPair{a,b};
-shader.dispatch([...], &packed).unwrap();
+kernel.dispatch([...], &packed).unwrap();
 let BufferPair{a, b} = packed; // unpack if you need to use them later
 ```
 ## Advanced Usage

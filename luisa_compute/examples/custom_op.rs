@@ -26,7 +26,7 @@ fn main() {
         }
     });
     let shader = device
-        .create_shader::<(Buffer<f32>,)>(&|buf_z: BufferVar<f32>| {
+        .create_kernel::<(Buffer<f32>,)>(&|buf_z: BufferVar<f32>| {
             // z is pass by arg
             let buf_x = x.var(); // x and y are captured
             let buf_y = y.var();

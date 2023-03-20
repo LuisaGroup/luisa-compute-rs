@@ -79,26 +79,26 @@ impl Compiler {
         let parameter_name = syn::Ident::new(&format!("{}Var", name), name.span());
         let parameter_def = quote!(
             #vis struct #parameter_name #generics {
-                #(#field_vis #field_names: <#field_types as luisa_compute::runtime::ShaderArg>::Parameter),*
+                #(#field_vis #field_names: <#field_types as luisa_compute::runtime::KernelArg>::Parameter),*
             }
         );
         quote_spanned!(span=>
             #parameter_def
 
-            impl #impl_generics luisa_compute::lang::ShaderParameter for #parameter_name #ty_generics #where_clause{
+            impl #impl_generics luisa_compute::lang::KernelParameter for #parameter_name #ty_generics #where_clause{
                 fn def_param(builder: &mut ShaderBuilder) -> Self {
                     Self{
-                        #(#field_names:  luisa_compute::lang::ShaderParameter::def_param(builder)),*
+                        #(#field_names:  luisa_compute::lang::KernelParameter::def_param(builder)),*
                     }
                 }
             }
-            impl #impl_generics luisa_compute::runtime::ShaderArg for #name #ty_generics #where_clause{
+            impl #impl_generics luisa_compute::runtime::KernelArg for #name #ty_generics #where_clause{
                 type Parameter = #parameter_name #ty_generics;
                 fn encode(&self, encoder: &mut  luisa_compute::prelude::ArgEncoder) {
                     #(self.#field_names.encode(encoder);)*
                 }
             }
-            impl #impl_generics luisa_compute::runtime::AsShaderArg<#name #ty_generics> for #name #ty_generics #where_clause {
+            impl #impl_generics luisa_compute::runtime::AsKernelArg<#name #ty_generics> for #name #ty_generics #where_clause {
             }
         )
     }

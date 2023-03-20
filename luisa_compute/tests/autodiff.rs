@@ -71,7 +71,7 @@ fn autodiff_helper<F: Fn(&[Float]) -> Float>(
     // }
     println!("init time: {:?}", tic.elapsed());
     let kernel = device
-        .create_shader_async::<()>(&|| {
+        .create_kernel_async::<()>(&|| {
             let input_vars = inputs.iter().map(|input| input.var()).collect::<Vec<_>>();
             let grad_fd_vars = grad_fd.iter().map(|grad| grad.var()).collect::<Vec<_>>();
             let grad_ad_vars = grad_ad.iter().map(|grad| grad.var()).collect::<Vec<_>>();
@@ -557,7 +557,7 @@ fn autodiff_select() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -604,7 +604,7 @@ fn autodiff_detach() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -657,7 +657,7 @@ fn autodiff_select_nan() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen::<f32>() + 10.0);
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -701,7 +701,7 @@ fn autodiff_if_nan() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen::<f32>() + 10.0);
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -755,7 +755,7 @@ fn autodiff_if_phi() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -806,7 +806,7 @@ fn autodiff_if_phi2() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -865,7 +865,7 @@ fn autodiff_if_phi3() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -926,7 +926,7 @@ fn autodiff_switch() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = device
-        .create_shader::<()>(&|| {
+        .create_kernel::<()>(&|| {
             let buf_t = t.var();
             let buf_x = x.var();
             let buf_y = y.var();

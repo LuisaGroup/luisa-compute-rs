@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use crate::*;
 use luisa_compute_ir::CArc;
 use luisa_compute_ir::ir::new_user_node;
 use luisa_compute_ir::{ir::Func, ir::Type, TypeOf};

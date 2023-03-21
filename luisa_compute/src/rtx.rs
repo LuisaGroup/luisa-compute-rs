@@ -2,10 +2,9 @@ use std::{cell::RefCell, collections::HashMap, marker::PhantomData, sync::Arc};
 
 use crate::{
     lang::{AccelVar, Value},
-    prelude::{Command, Device, Mat4},
     resource::Buffer,
     runtime::submit_default_stream_and_sync,
-    ResourceTracker,
+    ResourceTracker, *,
 };
 use api::AccelBuildRequest;
 use luisa_compute_api_types as api;

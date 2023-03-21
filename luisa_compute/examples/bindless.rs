@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use image::io::Reader as ImageReader;
-use luisa::prelude::*;
+use luisa::*;
 use luisa_compute as luisa;
 fn main() {
     init();
@@ -12,7 +12,13 @@ fn main() {
     let z = device.create_buffer::<f32>(1024).unwrap();
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
-    let mut file_path = PathBuf::from(PathBuf::from(file!()).canonicalize().unwrap().parent().unwrap());
+    let mut file_path = PathBuf::from(
+        PathBuf::from(file!())
+            .canonicalize()
+            .unwrap()
+            .parent()
+            .unwrap(),
+    );
     file_path.push("logo.png");
     let mip_levels = 4;
 

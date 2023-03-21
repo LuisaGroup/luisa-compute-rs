@@ -1,9 +1,8 @@
-use luisa::prelude::*;
 use luisa_compute as luisa;
 
 fn main() {
-    init();
-    let device = create_cpu_device().unwrap();
+    luisa::init();
+    let device = luisa::create_cpu_device().unwrap();
     let x = device.create_buffer::<f32>(128).unwrap();
     let sum = device.create_buffer::<f32>(1).unwrap();
     x.view(..).fill_fn(|i| i as f32);
@@ -12,7 +11,7 @@ fn main() {
         .create_kernel::<()>(&|| {
             let buf_x = x.var();
             let buf_sum = sum.var();
-            let tid = dispatch_id().x();
+            let tid = luisa::dispatch_id().x();
             buf_sum.atomic_fetch_add(0, buf_x.read(tid));
         })
         .unwrap();

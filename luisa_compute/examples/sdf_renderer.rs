@@ -1,5 +1,6 @@
 use luisa::prelude::*;
 use luisa_compute as luisa;
+use luisa::math::*;
 
 #[derive(Copy, Clone, Debug, Value)]
 #[repr(C)]
@@ -9,6 +10,7 @@ pub struct Sphere {
 }
 
 fn main() {
+    use luisa::*;
     init();
     // luisa::sys::init_cpp(current_exe().unwrap().parent().unwrap());
     let device = create_cpu_device().unwrap();

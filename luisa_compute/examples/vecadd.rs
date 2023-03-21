@@ -1,7 +1,7 @@
-use luisa::prelude::*;
 use luisa_compute as luisa;
 
 fn main() {
+    use luisa::*;
     init();
     init_logger();
     let device = create_cpu_device().unwrap();

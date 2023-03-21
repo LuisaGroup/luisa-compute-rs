@@ -1,5 +1,6 @@
 use luisa::prelude::*;
 use luisa_compute as luisa;
+use luisa::*;
 use image::Rgb;
 fn main() {
     init();

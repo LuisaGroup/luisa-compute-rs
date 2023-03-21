@@ -4,9 +4,9 @@ use crate::*;
 use crate::{lang::Value, resource::*};
 
 use api::AccelOption;
-use lang::{KernelBuildFn, KernelParameter, KernelSignature, ShaderBuilder};
+use lang::{KernelBuildFn, KernelParameter, KernelSignature, KernelBuilder};
 pub use luisa_compute_api_types as api;
-use luisa_compute_ir::ir::KernelModule;
+use luisa_compute_ir::ir::{KernelModule, self};
 use luisa_compute_ir::CArc;
 use parking_lot::{Condvar, Mutex};
 use rtx::{Accel, Mesh, MeshHandle};
@@ -210,11 +210,14 @@ impl Device {
             modifications: RefCell::new(HashMap::new()),
         })
     }
+    // pub fn create_callable(&self, ) {
+
+    // }
     pub fn create_kernel<'a, S: KernelSignature<'a>>(
         &self,
         f: S::Fn,
     ) -> Result<S::Kernel, crate::backend::BackendError> {
-        let mut builder = ShaderBuilder::new(self.clone());
+        let mut builder = KernelBuilder::new(self.clone());
         let raw_kernel = KernelBuildFn::build(&f, &mut builder, ShaderBuildOptions::default());
         S::wrap_raw_shader(raw_kernel)
     }
@@ -222,7 +225,7 @@ impl Device {
         &self,
         f: S::Fn,
     ) -> Result<S::Kernel, crate::backend::BackendError> {
-        let mut builder = ShaderBuilder::new(self.clone());
+        let mut builder = KernelBuilder::new(self.clone());
         let raw_kernel = KernelBuildFn::build(&f, &mut builder, ShaderBuildOptions::default());
         S::wrap_raw_shader(raw_kernel)
     }
@@ -601,6 +604,13 @@ impl RawShader {
     pub fn dispatch(&self, args: &ArgEncoder, dispatch_size: [u32; 3]) -> backend::Result<()> {
         submit_default_stream_and_sync(&self.device, vec![self.dispatch_async(args, dispatch_size)])
     }
+}
+pub trait CallableArg {
+
+}
+pub struct Callable<T:CallableArg> {
+    pub(crate) inner: ir::CallableModuleRef,
+    marker: std::marker::PhantomData<T>,
 }
 pub struct Kernel<T: KernelArg> {
     pub(crate) inner: RawShader,

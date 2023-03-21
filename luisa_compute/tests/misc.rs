@@ -1,9 +1,6 @@
-use std::{ops::Range, sync::Once};
-
-use luisa::prelude::*;
 use luisa_compute as luisa;
+use luisa::*;
 use rand::prelude::*;
-use rayon::{prelude::IntoParallelRefMutIterator, slice::ParallelSliceMut};
 fn get_device() -> Device {
     let device = match std::env::var("LUISA_TEST_DEVICE") {
         Ok(device) => device,

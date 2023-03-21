@@ -5,26 +5,49 @@ pub mod lang;
 pub mod resource;
 pub mod rtx;
 pub mod runtime;
-pub use luisa_compute_backend as backend;
 pub use half::f16;
 use luisa_compute_api_types as api;
+pub use luisa_compute_backend as backend;
 use luisa_compute_backend::Backend;
 pub mod prelude {
-    pub use crate::*;
-    pub use api::{AccelBuildModificationFlags, AccelBuildRequest, AccelOption, AccelUsageHint, MeshType, PixelFormat, PixelStorage};
-    pub use glam;
-    pub use lang::math::*;
-    pub use lang::poly::*;
-    pub use lang::traits::*;
-    pub use lang::*;
+    pub use luisa_compute_ir::TypeOf;
+    pub use crate::lang::traits::VarTrait;
+    pub use crate::runtime::KernelArg;
+    pub use crate::resource::{IoTexel, StorageTexel};
+    pub use crate::lang::{_Mask, Value, FromNode, Aggregate, KernelBuildFn, KernelParameter, KernelSignature, VarProxy, ExprProxy};
+    pub use crate::lang::traits::{VarCmp, VarCmpEq, IntVarTrait, FloatVarTrait, CommonVarOp};
     pub use luisa_compute_derive::*;
-    pub use luisa_compute_ir::ir::UserNodeData;
-    pub use resource::*;
-    pub use rtx::*;
-    pub use runtime::*;
+    pub use crate::lang::poly::PolymorphicImpl;
+    pub use crate::lang::{
+        __compose,
+        __cpu_dbg,
+        __current_scope,
+        __env_need_backtrace,
+        __extract,
+        __insert,
+        __module_pools,
+        __new_user_node,
+        __pop_scope,
+    };
 }
+pub use api::{
+    AccelBuildModificationFlags, AccelBuildRequest, AccelOption, AccelUsageHint, MeshType,
+    PixelFormat, PixelStorage,
+};
+pub use glam;
+pub use lang::math;
+pub use lang::math::*;
+pub use lang::poly;
+pub use lang::poly::*;
+pub use lang::traits::*;
+pub use lang::*;
+pub use luisa_compute_derive::*;
+pub use luisa_compute_ir::ir::UserNodeData;
+pub use resource::*;
+pub use runtime::*;
+
 pub use luisa_compute_sys as sys;
-use prelude::{Device, DeviceHandle};
+pub use runtime::{CommandBuffer, Device, Stream};
 use std::sync::Once;
 static INIT: Once = Once::new();
 pub fn init() {

@@ -1,5 +1,6 @@
 use luisa::prelude::*;
 use luisa_compute as luisa;
+use luisa::lang::*;
 
 #[derive(Clone, Copy, Value, Debug)]
 #[repr(C)]
@@ -10,6 +11,7 @@ pub struct MyAddArgs {
 }
 
 fn main() {
+    use luisa::*;
     init();
     let device = create_cpu_device().unwrap();
     let x = device.create_buffer::<f32>(1024).unwrap();

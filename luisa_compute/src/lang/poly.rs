@@ -28,9 +28,12 @@ pub trait PolymorphicImpl<T: ?Sized + 'static>: Value {
 macro_rules! impl_polymorphic {
     ($trait_:ident, $ty:ty) => {
         impl PolymorphicImpl<dyn $trait_> for $ty {
-            fn new_poly_array(buffer: &Buffer<Self>, tag: i32) -> PolyArray<dyn $trait_> {
+            fn new_poly_array(buffer: &luisa_compute::Buffer<Self>, tag: i32) -> luisa_compute::PolyArray<dyn $trait_> {
                 let buffer = unsafe { buffer.shallow_clone() };
-                PolyArray::new(tag, Box::new(move |_, index| Box::new(buffer.var().read(index))))
+                luisa_compute::PolyArray::new(
+                    tag,
+                    Box::new(move |_, index| Box::new(buffer.var().read(index))),
+                )
             }
         }
     };
@@ -39,7 +42,24 @@ pub struct Polymorphic<T: ?Sized + 'static> {
     _marker: std::marker::PhantomData<T>,
     arrays: Vec<PolyArray<T>>,
 }
-
+pub struct PolymorphicRef<'a, T: ?Sized + 'static> {
+    parent: &'a Polymorphic<T>,
+    tag: Uint,
+    index: Uint,
+}
+impl<'a, T: ?Sized + 'static> PolymorphicRef<'a, T> {
+    #[inline]
+    pub fn dispatch<R: Aggregate>(&self, f: impl Fn(&T) -> R) -> R {
+        let mut sw = switch::<R>(self.tag.int());
+        for array in &self.parent.arrays {
+            sw = sw.case(array.tag, || {
+                let obj = (array.get)(array, self.index);
+                f(&obj)
+            });
+        }
+        sw.finish()
+    }
+}
 impl<T: ?Sized + 'static> Polymorphic<T> {
     pub fn new() -> Self {
         Self {
@@ -57,16 +77,12 @@ impl<T: ?Sized + 'static> Polymorphic<T> {
         self.arrays.push(array);
         tag
     }
-
     #[inline]
-    pub fn dispatch<R: Aggregate>(&self, tag: Uint, index: Uint, f: impl Fn(&T) -> R) -> R {
-        let mut sw = switch::<R>(tag.int());
-        for array in &self.arrays {
-            sw = sw.case(array.tag, || {
-                let obj = (array.get)(array, index);
-                f(&obj)
-            });
+    pub fn get<'a>(&'a self, tag: Uint, index: Uint) -> PolymorphicRef<'a, T> {
+        PolymorphicRef {
+            parent: self,
+            tag,
+            index,
         }
-        sw.finish()
     }
 }

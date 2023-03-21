@@ -1,5 +1,5 @@
-use luisa::prelude::*;
 use luisa_compute as luisa;
+use luisa::*;
 #[derive(KernelArg)]
 struct MyArgStruct<T: Value> {
     x: Buffer<T>,

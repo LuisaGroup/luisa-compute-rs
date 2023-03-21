@@ -2,8 +2,7 @@ use std::ops::Mul;
 
 pub use super::swizzle::*;
 use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*, Float};
-use crate::prelude::FromNode;
-use crate::prelude::{__compose, __insert, const_, Expr, PrimExpr, Var, __current_scope};
+use crate::*;
 use half::f16;
 use luisa_compute_ir::{
     context::register_type,
@@ -1351,6 +1350,7 @@ mod test {
     #[test]
     fn test_size() {
         use crate::prelude::*;
+        use crate::*;
         macro_rules! assert_size {
             ($ty:ty) => {
                 {assert_eq!(std::mem::size_of::<$ty>(), <$ty as TypeOf>::type_().size());}

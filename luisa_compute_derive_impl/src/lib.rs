@@ -86,7 +86,7 @@ impl Compiler {
             #parameter_def
 
             impl #impl_generics luisa_compute::lang::KernelParameter for #parameter_name #ty_generics #where_clause{
-                fn def_param(builder: &mut ShaderBuilder) -> Self {
+                fn def_param(builder: &mut luisa_compute::KernelBuilder) -> Self {
                     Self{
                         #(#field_names:  luisa_compute::lang::KernelParameter::def_param(builder)),*
                     }
@@ -94,7 +94,7 @@ impl Compiler {
             }
             impl #impl_generics luisa_compute::runtime::KernelArg for #name #ty_generics #where_clause{
                 type Parameter = #parameter_name #ty_generics;
-                fn encode(&self, encoder: &mut  luisa_compute::prelude::ArgEncoder) {
+                fn encode(&self, encoder: &mut  luisa_compute::ArgEncoder) {
                     #(self.#field_names.encode(encoder);)*
                 }
             }
@@ -141,13 +141,15 @@ impl Compiler {
                 let set_ident = syn::Ident::new(&format!("set_{}", ident), ident.span());
                 quote_spanned!(span=>
                     #[allow(dead_code)]
-                    #vis fn #ident (&self) -> Expr<#ty> {
+                    #vis fn #ident (&self) -> #crate_path ::Expr<#ty> {
+                        use #crate_path ::*;
                         <Expr::<#ty> as FromNode>::from_node(__extract::<#ty>(
                             self.node, #i,
                         ))
                     }
                     #[allow(dead_code)]
-                    #vis fn #set_ident<T:Into<Expr<#ty>>>(&self, value: T) -> Self {
+                    #vis fn #set_ident<T:Into<#crate_path ::Expr<#ty>>>(&self, value: T) -> Self {
+                        use #crate_path ::*;
                         let value = value.into();
                         Self::from_node(#crate_path ::__insert::<#name #ty_generics>(self.node, #i, FromNode::node(&value)))
                     }
@@ -164,13 +166,14 @@ impl Compiler {
                 let set_ident = syn::Ident::new(&format!("set_{}", ident), ident.span());
                 quote_spanned!(span=>
                     #[allow(dead_code)]
-                    #vis fn #ident (&self) -> Var<#ty> {
+                    #vis fn #ident (&self) -> #crate_path:: Var<#ty> {
+                        use #crate_path ::*;
                         <Var::<#ty> as FromNode>::from_node(__extract::<#ty>(
                             self.node, #i,
                         ))
                     }
                     #[allow(dead_code)]
-                    #vis fn #set_ident<T:Into<Expr<#ty>>>(&self, value: T) {
+                    #vis fn #set_ident<T:Into<#crate_path ::Expr<#ty>>>(&self, value: T) {
                         let value = value.into();
                         self.#ident().store(value);
                     }
@@ -284,7 +287,8 @@ impl Compiler {
             }
             impl #impl_generics #expr_proxy_name #ty_generics #where_clause {
                 #(#expr_proxy_field_methods)*
-                #vis fn new(#(#field_names: impl Into<Expr<#field_types>>),*) -> Self {
+                #vis fn new(#(#field_names: impl Into<#crate_path ::Expr<#field_types>>),*) -> Self {
+                    use #crate_path ::*;
                     let node = #crate_path ::__compose::<#name #ty_generics>(&[ #( FromNode::node(&#field_names.into()) ),* ]);
                     Self { node, _marker:std::marker::PhantomData }
                 }

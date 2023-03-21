@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::ops::RangeBounds;
 use std::sync::Arc;
 
-use crate::prelude::*;
+use crate::math::*;
 use crate::*;
 use api::BufferDownloadCommand;
 use api::BufferUploadCommand;
@@ -13,7 +13,6 @@ use api::INVALID_RESOURCE_HANDLE;
 use lang::BindlessArrayVar;
 use lang::BufferVar;
 use lang::Value;
-use lazy_static::lazy_static;
 use libc::c_void;
 use runtime::*;
 pub struct Buffer<T: Value> {

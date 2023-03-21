@@ -1,7 +1,8 @@
 use std::f32::consts::PI;
 
-use luisa::prelude::{poly::Polymorphic, *};
+use luisa::prelude::*;
 use luisa_compute as luisa;
+use luisa::{Float, impl_polymorphic, lang::*};
 
 trait Area {
     fn area(&self) -> Float;
@@ -29,6 +30,7 @@ impl Area for SquareExpr {
 }
 impl_polymorphic!(Area, Square);
 fn main() {
+    use luisa::*;
     init();
     let device = create_cpu_device().unwrap();
     let circles = device.create_buffer::<Circle>(2).unwrap();
@@ -47,7 +49,7 @@ fn main() {
         let tid = dispatch_id().x();
         let tag = tid / 2;
         let index = tid % 2;
-        let area = poly_area.dispatch(tag, index, |obj|{
+        let area = poly_area.get(tag, index).dispatch(|obj|{
             obj.area()
         });
         areas.var().write(tid, area);

@@ -4,12 +4,11 @@ use std::process::abort;
 use std::{any::Any, collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 
 use crate::lang::traits::VarCmp;
-use crate::prelude::{AccelHandle, Tex2dView, Tex3dView};
+use crate::{rtx::AccelHandle, Tex2dView, Tex3dView};
 use crate::resource::BufferView;
 use crate::runtime::{AsyncShaderArtifact, ShaderArtifact};
 use crate::{
-    backend,
-    prelude::{Device, Kernel, KernelArg, RawShader},
+    *,
     resource::{
         BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, IoTexel, Tex2d, Tex3d,
         TextureHandle,
@@ -53,6 +52,8 @@ pub mod math;
 pub mod poly;
 pub mod swizzle;
 pub mod traits;
+pub use poly::*;
+pub use math::*;
 
 pub trait Value: Copy + ir::TypeOf {
     type Expr: ExprProxy<Value = Self>;
@@ -546,7 +547,11 @@ pub fn block_size() -> Expr<Uint3> {
 }
 pub type Expr<T> = <T as Value>::Expr;
 pub type Var<T> = <T as Value>::Var;
-
+pub fn zeroed<T:Value>() -> T::Expr {
+    FromNode::from_node(__current_scope(|b|{
+        b.zero_initializer(T::type_())
+    }))
+}
 pub fn const_<T: Value + Copy + 'static>(value: T) -> T::Expr {
     let node = __current_scope(|s| -> NodeRef {
         let any = &value as &dyn Any;
@@ -1652,35 +1657,35 @@ macro_rules! struct_ {
 }
 
 // Not recommended to use this directly
-pub struct ShaderBuilder {
+pub struct KernelBuilder {
     device: crate::runtime::Device,
     args: Vec<NodeRef>,
 }
 pub trait KernelParameter {
-    fn def_param(builder: &mut ShaderBuilder) -> Self;
+    fn def_param(builder: &mut KernelBuilder) -> Self;
 }
 impl<T: Value> KernelParameter for BufferVar<T> {
-    fn def_param(builder: &mut ShaderBuilder) -> Self {
+    fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.buffer()
     }
 }
 impl<T: IoTexel> KernelParameter for Tex2dVar<T> {
-    fn def_param(builder: &mut ShaderBuilder) -> Self {
+    fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.tex2d()
     }
 }
 impl<T: IoTexel> KernelParameter for Tex3dVar<T> {
-    fn def_param(builder: &mut ShaderBuilder) -> Self {
+    fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.tex3d()
     }
 }
 impl KernelParameter for BindlessArrayVar {
-    fn def_param(builder: &mut ShaderBuilder) -> Self {
+    fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.bindless_array()
     }
 }
 impl KernelParameter for AccelVar {
-    fn def_param(builder: &mut ShaderBuilder) -> Self {
+    fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.accel()
     }
 }
@@ -1688,7 +1693,7 @@ macro_rules! impl_kernel_param_for_tuple {
     ($first:ident  $($rest:ident)*) => {
         impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelParameter for ($first, $($rest,)*) {
             #[allow(non_snake_case)]
-            fn def_param(builder: &mut ShaderBuilder) -> Self {
+            fn def_param(builder: &mut KernelBuilder) -> Self {
                 ($first::def_param(builder), $($rest::def_param(builder)),*)
             }
         }
@@ -1696,13 +1701,13 @@ macro_rules! impl_kernel_param_for_tuple {
     };
     ()=>{
         impl KernelParameter for () {
-            fn def_param(_: &mut ShaderBuilder) -> Self {
+            fn def_param(_: &mut KernelBuilder) -> Self {
             }
         }
     }
 }
 impl_kernel_param_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
-impl ShaderBuilder {
+impl KernelBuilder {
     pub fn new(device: crate::runtime::Device) -> Self {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
@@ -1776,14 +1781,6 @@ impl ShaderBuilder {
         );
         self.args.push(node);
         AccelVar { node, handle: None }
-    }
-    pub(crate) fn build(
-        device: crate::runtime::Device,
-        options: ShaderBuildOptions,
-        f: impl FnOnce(&mut Self),
-    ) -> Result<crate::runtime::RawShader, crate::backend::BackendError> {
-        let mut builder = Self::new(device);
-        builder.build_(options, f)
     }
     fn build_(
         &mut self,
@@ -1870,7 +1867,7 @@ impl Default for ShaderBuildOptions {
 pub trait KernelBuildFn {
     fn build(
         &self,
-        builder: &mut ShaderBuilder,
+        builder: &mut KernelBuilder,
         options: ShaderBuildOptions,
     ) -> Result<crate::runtime::RawShader, crate::backend::BackendError>;
 }
@@ -1915,7 +1912,7 @@ impl_kernel_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 macro_rules! impl_kernel_build_for_fn {
     ()=>{
         impl KernelBuildFn for &dyn Fn() {
-            fn build(&self, builder: &mut ShaderBuilder, options:ShaderBuildOptions) -> Result<crate::runtime::RawShader, crate::backend::BackendError> {
+            fn build(&self, builder: &mut KernelBuilder, options:ShaderBuildOptions) -> Result<crate::runtime::RawShader, crate::backend::BackendError> {
                 builder.build_(options, |_| {
                     self()
                 })
@@ -1925,7 +1922,7 @@ macro_rules! impl_kernel_build_for_fn {
     ($first:ident  $($rest:ident)*) => {
         impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelBuildFn for &dyn Fn($first, $($rest,)*) {
             #[allow(non_snake_case)]
-            fn build(&self, builder: &mut ShaderBuilder, options:ShaderBuildOptions) -> Result<crate::runtime::RawShader, crate::backend::BackendError>  {
+            fn build(&self, builder: &mut KernelBuilder, options:ShaderBuildOptions) -> Result<crate::runtime::RawShader, crate::backend::BackendError>  {
                 builder.build_(options, |builder| {
                     let $first = $first::def_param(builder);
                     $(let $rest = $rest::def_param(builder);)*

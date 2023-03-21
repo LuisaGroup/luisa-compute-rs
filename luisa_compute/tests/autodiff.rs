@@ -2,6 +2,7 @@ use std::ops::Range;
 
 use luisa::prelude::*;
 use luisa_compute as luisa;
+use luisa::*;
 use rand::prelude::*;
 use rayon::{
     prelude::{IntoParallelIterator, ParallelIterator},

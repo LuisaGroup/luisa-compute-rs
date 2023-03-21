@@ -10,25 +10,21 @@ use luisa_compute_api_types as api;
 pub use luisa_compute_backend as backend;
 use luisa_compute_backend::Backend;
 pub mod prelude {
-    pub use luisa_compute_ir::TypeOf;
-    pub use crate::lang::traits::VarTrait;
-    pub use crate::runtime::KernelArg;
-    pub use crate::resource::{IoTexel, StorageTexel};
-    pub use crate::lang::{_Mask, Value, FromNode, Aggregate, KernelBuildFn, KernelParameter, KernelSignature, VarProxy, ExprProxy};
-    pub use crate::lang::traits::{VarCmp, VarCmpEq, IntVarTrait, FloatVarTrait, CommonVarOp};
-    pub use luisa_compute_derive::*;
     pub use crate::lang::poly::PolymorphicImpl;
+    pub use crate::lang::traits::VarTrait;
+    pub use crate::lang::traits::{CommonVarOp, FloatVarTrait, IntVarTrait, VarCmp, VarCmpEq};
     pub use crate::lang::{
-        __compose,
-        __cpu_dbg,
-        __current_scope,
-        __env_need_backtrace,
-        __extract,
-        __insert,
-        __module_pools,
-        __new_user_node,
-        __pop_scope,
+        Aggregate, ExprProxy, FromNode, KernelBuildFn, KernelParameter, KernelSignature, Value,
+        VarProxy, _Mask,
     };
+    pub use crate::lang::{
+        __compose, __cpu_dbg, __current_scope, __env_need_backtrace, __extract, __insert,
+        __module_pools, __new_user_node, __pop_scope,
+    };
+    pub use crate::resource::{IoTexel, StorageTexel};
+    pub use crate::runtime::KernelArg;
+    pub use luisa_compute_derive::*;
+    pub use luisa_compute_ir::TypeOf;
 }
 pub use api::{
     AccelBuildModificationFlags, AccelBuildRequest, AccelOption, AccelUsageHint, MeshType,
@@ -45,6 +41,9 @@ pub use luisa_compute_derive::*;
 pub use luisa_compute_ir::ir::UserNodeData;
 pub use resource::*;
 pub use runtime::*;
+pub mod macros {
+    pub use crate::{cpu_dbg, if_, impl_polymorphic, var, while_};
+}
 
 pub use luisa_compute_sys as sys;
 pub use runtime::{CommandBuffer, Device, Stream};

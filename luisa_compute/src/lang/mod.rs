@@ -1646,16 +1646,6 @@ impl AccelVar {
     }
 }
 
-#[macro_export]
-macro_rules! struct_ {
-    ($name:ident $fields:tt) => {
-        {
-            type P = <$name as Value>::Proxy;
-            Expr::from_proxy(P $fields)
-        }
-    };
-}
-
 // Not recommended to use this directly
 pub struct KernelBuilder {
     device: crate::runtime::Device,
@@ -1935,7 +1925,7 @@ macro_rules! impl_kernel_build_for_fn {
 }
 impl_kernel_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
-pub fn if_<R: Aggregate>(
+pub fn if_then_else<R: Aggregate>(
     cond: impl _Mask,
     then: impl FnOnce() -> R,
     else_: impl FnOnce() -> R,
@@ -2137,10 +2127,10 @@ impl<R: Aggregate> SwitchBuilder<R> {
 #[macro_export]
 macro_rules! if_ {
     ($cond:expr, $then:block, else $else_:block) => {
-        if_($cond, || $then, || $else_)
+        if_then_else($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block) => {
-        if_($cond, || $then, || {})
+        if_then_else($cond, || $then, || {})
     };
 }
 #[macro_export]

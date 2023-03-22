@@ -1,8 +1,9 @@
 use std::f32::consts::PI;
 
 use luisa::prelude::*;
+use luisa::Value;
+use luisa::{impl_polymorphic, lang::*, Float};
 use luisa_compute as luisa;
-use luisa::{Float, impl_polymorphic, lang::*};
 
 trait Area {
     fn area(&self) -> Float;
@@ -41,20 +42,25 @@ fn main() {
     squares
         .view(..)
         .copy_from(&[Square { side: 1.0 }, Square { side: 2.0 }]);
-    let mut poly_area: Polymorphic<dyn Area> = Polymorphic::new();
-    poly_area.register(&circles);
-    poly_area.register(&squares);
+    // Polymorphic<DevirtualizationKey, Trait>
+    // Here we only need the type to devirtualize, so we use `()`.
+    let mut poly_area: Polymorphic<(), dyn Area> = Polymorphic::new();
+    // since we don't need a key, just supply `()`.
+    poly_area.register((), &circles);
+    poly_area.register((), &squares);
     let areas = device.create_buffer::<f32>(4).unwrap();
-    let shader = device.create_kernel::<()>(&|| {
-        let tid = dispatch_id().x();
-        let tag = tid / 2;
-        let index = tid % 2;
-        let area = poly_area.get(tag, index).dispatch(|obj|{
-            obj.area()
-        });
-        areas.var().write(tid, area);
-    }).unwrap();
-    shader.dispatch([4,1,1]).unwrap();
+    let shader = device
+        .create_kernel::<()>(&|| {
+            let tid = dispatch_id().x();
+            let tag = tid / 2;
+            let index = tid % 2;
+            let area = poly_area
+                .get(TagIndexExpr::new(tag, index))
+                .dispatch(|_tag, _key, obj| obj.area());
+            areas.var().write(tid, area);
+        })
+        .unwrap();
+    shader.dispatch([4, 1, 1]).unwrap();
     let areas = areas.view(..).copy_to_vec();
     println!("{:?}", areas);
 }

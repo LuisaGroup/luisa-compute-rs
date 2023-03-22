@@ -4,9 +4,9 @@ use crate::*;
 use crate::{lang::Value, resource::*};
 
 use api::AccelOption;
-use lang::{KernelBuildFn, KernelParameter, KernelSignature, KernelBuilder};
+use lang::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSignature};
 pub use luisa_compute_api_types as api;
-use luisa_compute_ir::ir::{KernelModule, self};
+use luisa_compute_ir::ir::{self, KernelModule};
 use luisa_compute_ir::CArc;
 use parking_lot::{Condvar, Mutex};
 use rtx::{Accel, Mesh, MeshHandle};
@@ -54,6 +54,10 @@ impl Drop for DeviceHandle {
 }
 impl Device {
     pub fn create_buffer<T: Value>(&self, count: usize) -> backend::Result<Buffer<T>> {
+        assert!(
+            std::mem::size_of::<T>() > 0,
+            "size of T must be greater than 0"
+        );
         let buffer = self.inner.create_buffer(&T::type_(), count)?;
         let buffer = Buffer {
             device: self.clone(),
@@ -605,10 +609,8 @@ impl RawShader {
         submit_default_stream_and_sync(&self.device, vec![self.dispatch_async(args, dispatch_size)])
     }
 }
-pub trait CallableArg {
-
-}
-pub struct Callable<T:CallableArg> {
+pub trait CallableArg {}
+pub struct Callable<T: CallableArg> {
     pub(crate) inner: ir::CallableModuleRef,
     marker: std::marker::PhantomData<T>,
 }

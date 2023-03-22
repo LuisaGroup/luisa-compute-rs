@@ -23,7 +23,6 @@ pub mod prelude {
     };
     pub use crate::resource::{IoTexel, StorageTexel};
     pub use crate::runtime::KernelArg;
-    pub use luisa_compute_derive::*;
     pub use luisa_compute_ir::TypeOf;
 }
 pub use api::{
@@ -37,6 +36,7 @@ pub use lang::poly;
 pub use lang::poly::*;
 pub use lang::traits::*;
 pub use lang::*;
+pub use luisa_compute_derive as derive;
 pub use luisa_compute_derive::*;
 pub use luisa_compute_ir::ir::UserNodeData;
 pub use resource::*;

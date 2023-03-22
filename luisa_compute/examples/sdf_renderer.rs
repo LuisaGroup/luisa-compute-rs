@@ -1,6 +1,7 @@
-use luisa::prelude::*;
-use luisa_compute as luisa;
 use luisa::math::*;
+use luisa::prelude::*;
+use luisa::Value;
+use luisa_compute as luisa;
 
 #[derive(Copy, Clone, Debug, Value)]
 #[repr(C)]

@@ -1,7 +1,6 @@
-use luisa::prelude::*;
 use luisa_compute as luisa;
 use luisa::lang::*;
-
+use luisa::Value;
 #[derive(Clone, Copy, Value, Debug)]
 #[repr(C)]
 pub struct MyAddArgs {

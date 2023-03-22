@@ -71,13 +71,17 @@ pub struct TagIndex {
     pub index: u32,
 }
 /**
- * A  de-virtualized builder for Polymorphic<T>
+ * A  de-virtualized polymorphic array builder
  * K: the key type for de-virtualization
         Objects with the same key will shared the same tag
         Due to the multi-stage nature of the library, the keys can be different
         for the same types.
         If K is (), the the array is devirtualized by type only.
  * T: The trait to be de-virtualized
+
+ * This class works by maintaining two HashMaps, one containing (Key, TypeId) -> Tag
+    and the other containing Key -> Tag.
+    Thus a tag can be retrieved by either (Key, TypeId) or Key alone if the key is unique for all types.
 */
 pub struct PolymorphicBuilder<DevirtualizationKey: Hash + Eq + Clone, Trait: ?Sized + 'static> {
     device: Device,
@@ -129,18 +133,38 @@ impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBui
     }
     pub fn build(self) -> Polymorphic<K, T> {
         let mut poly = Polymorphic::new();
-        poly.key_to_tag = self.key_to_tag;
+        poly.key_typeid_to_tag = self.key_to_tag;
+        for ((key, _), tag) in &poly.key_typeid_to_tag {
+            if poly.key_to_tag.contains_key(key) {
+                *poly.key_to_tag.get_mut(key).unwrap() = None;
+            } else {
+                poly.key_to_tag.insert(key.clone(), Some(*tag));
+            }
+        }
         for a in &self.arrays {
             poly.arrays.push(a.build());
         }
         poly
     }
 }
+/**
+ * A  de-virtualized polymorphic array
+ * K: the key type for de-virtualization
+        Objects with the same key will shared the same tag
+        Due to the multi-stage nature of the library, the keys can be different
+        for the same types.
+        If K is (), the the array is devirtualized by type only.
+ * T: The trait to be de-virtualized
 
+ * This class works by maintaining two HashMaps, one containing (Key, TypeId) -> Tag
+    and the other containing Key -> Tag.
+    Thus a tag can be retrieved by either (Key, TypeId) or Key alone if the key is unique for all types.
+*/
 pub struct Polymorphic<DevirtualizationKey, Trait: ?Sized + 'static> {
     _marker: std::marker::PhantomData<Trait>,
     arrays: Vec<PolyArray<DevirtualizationKey, Trait>>,
-    key_to_tag: HashMap<(DevirtualizationKey, TypeId), u32>,
+    key_typeid_to_tag: HashMap<(DevirtualizationKey, TypeId), u32>,
+    key_to_tag: HashMap<DevirtualizationKey, Option<u32>>,
 }
 pub struct PolymorphicRef<'a, DevirtualizationKey, Trait: ?Sized + 'static> {
     parent: &'a Polymorphic<DevirtualizationKey, Trait>,
@@ -178,27 +202,30 @@ impl<'a, K: Eq + Clone + Hash, T: ?Sized + 'static> PolymorphicRef<'a, K, T> {
         }
         sw.finish()
     }
+
+    /* Retrieve the tag from the (key, TypeId::of::<U>()) pair
+     */
     #[inline]
-    pub fn tag_of<U: PolymorphicImpl<T> + 'static>(&self, key: &K) -> Option<u32> {
-        self.parent.tag_of::<U>(key)
+    pub fn tag_from_key_value<U: PolymorphicImpl<T> + 'static>(&self, key: &K) -> Option<u32> {
+        self.parent.tag_from_key_value::<U>(key)
+    }
+
+    /* Retrieve the tag from the key only. If multiple arrays have the same key (but different value type),
+        this function will return None.
+    */
+    #[inline]
+    pub fn tag_from_key(&self, key: &K) -> Option<u32> {
+        self.parent.tag_from_key(key)
     }
 }
 
-/**
- * A  de-virtualized polymorphic array
- * K: the key type for de-virtualization
-        Objects with the same key will shared the same tag
-        Due to the multi-stage nature of the library, the keys can be different
-        for the same types.
-        If K is (), the the array is devirtualized by type only.
- * T: The trait to be de-virtualized
-*/
 impl<K: Hash + Eq + Clone, T: ?Sized + 'static> Polymorphic<K, T> {
     pub fn new() -> Self {
         Self {
             _marker: std::marker::PhantomData,
             arrays: vec![],
             key_to_tag: HashMap::new(),
+            key_typeid_to_tag: HashMap::new(),
         }
     }
     #[inline]
@@ -207,11 +234,17 @@ impl<K: Hash + Eq + Clone, T: ?Sized + 'static> Polymorphic<K, T> {
         U: PolymorphicImpl<T> + 'static,
     {
         let pair = (key, TypeId::of::<U>());
-        assert!(!self.key_to_tag.contains_key(&pair));
-        self.key_to_tag
+        assert!(!self.key_typeid_to_tag.contains_key(&pair));
+        self.key_typeid_to_tag
             .insert(pair.clone(), self.arrays.len() as u32);
         let key = pair.0;
         let tag = self.arrays.len() as u32;
+        if self.key_to_tag.contains_key(&key) {
+            let tag = self.key_to_tag.get_mut(&key).unwrap();
+            *tag = None;
+        } else {
+            self.key_to_tag.insert(key.clone(), Some(tag));
+        }
         let array = U::new_poly_array(array, tag as i32, key);
         self.arrays.push(array);
         tag
@@ -223,9 +256,20 @@ impl<K: Hash + Eq + Clone, T: ?Sized + 'static> Polymorphic<K, T> {
             tag_index,
         }
     }
+
+    /* Retrieve the tag from the (key, TypeId::of::<U>()) pair
+     */
     #[inline]
-    pub fn tag_of<U: PolymorphicImpl<T> + 'static>(&self, key: &K) -> Option<u32> {
+    pub fn tag_from_key_value<U: PolymorphicImpl<T> + 'static>(&self, key: &K) -> Option<u32> {
         let pair = (key.clone(), TypeId::of::<U>());
-        self.key_to_tag.get(&pair).copied()
+        self.key_typeid_to_tag.get(&pair).copied()
+    }
+
+    /* Retrieve the tag from the key only. If multiple arrays have the same key (but different value type),
+        this function will return None.
+    */
+    #[inline]
+    pub fn tag_from_key(&self, key: &K) -> Option<u32> {
+        self.key_to_tag.get(key).copied().flatten()
     }
 }

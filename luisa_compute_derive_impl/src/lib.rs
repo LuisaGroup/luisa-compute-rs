@@ -140,14 +140,14 @@ impl Compiler {
                 let ty = &f.ty;
                 let set_ident = syn::Ident::new(&format!("set_{}", ident), ident.span());
                 quote_spanned!(span=>
-                    #[allow(dead_code)]
+                    #[allow(dead_code, non_snake_case)]
                     #vis fn #ident (&self) -> #crate_path ::Expr<#ty> {
                         use #crate_path ::*;
                         <Expr::<#ty> as FromNode>::from_node(__extract::<#ty>(
                             self.node, #i,
                         ))
                     }
-                    #[allow(dead_code)]
+                    #[allow(dead_code, non_snake_case)]
                     #vis fn #set_ident<T:Into<#crate_path ::Expr<#ty>>>(&self, value: T) -> Self {
                         use #crate_path ::*;
                         let value = value.into();
@@ -165,14 +165,14 @@ impl Compiler {
                 let ty = &f.ty;
                 let set_ident = syn::Ident::new(&format!("set_{}", ident), ident.span());
                 quote_spanned!(span=>
-                    #[allow(dead_code)]
+                    #[allow(dead_code, non_snake_case)]
                     #vis fn #ident (&self) -> #crate_path:: Var<#ty> {
                         use #crate_path ::*;
                         <Var::<#ty> as FromNode>::from_node(__extract::<#ty>(
                             self.node, #i,
                         ))
                     }
-                    #[allow(dead_code)]
+                    #[allow(dead_code, non_snake_case)]
                     #vis fn #set_ident<T:Into<#crate_path ::Expr<#ty>>>(&self, value: T) {
                         let value = value.into();
                         self.#ident().store(value);

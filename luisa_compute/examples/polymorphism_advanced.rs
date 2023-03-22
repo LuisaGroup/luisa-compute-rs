@@ -2,7 +2,7 @@ use std::f32::consts::PI;
 
 use luisa::prelude::*;
 use luisa::Value;
-use luisa::{impl_polymorphic, lang::*, Float};
+use luisa::{impl_polymorphic, lang::*};
 use luisa_compute as luisa;
 
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
@@ -56,26 +56,11 @@ fn eval_recursive_shader(
     x: Expr<f32>,
     ctx: &ShaderEvalContext<'_>,
 ) -> Expr<f32> {
-    // let tag = shader.tag_of::<ConstShader>(ctx.key).unwrap();
-    // shader.unwrap(tag, |key, shader| {
-    //     assert_eq!(key, ctx.key);
-    //     shader.evaluate(x, ctx)
-    // })
-    let key = ctx.key;
-    match key {
-        ShaderDevirtualizationKey::ConstShader => {
-            let tag = shader.tag_of::<ConstShader>(key).unwrap();
-            shader.unwrap(tag, |key, shader| shader.evaluate(x, ctx))
-        }
-        ShaderDevirtualizationKey::SinShader => {
-            let tag = shader.tag_of::<SinShader>(key).unwrap();
-            shader.unwrap(tag, |key, shader| shader.evaluate(x, ctx))
-        }
-        ShaderDevirtualizationKey::AddShader(a, b) => {
-            let tag = shader.tag_of::<AddShader>(key).unwrap();
-            shader.unwrap(tag, |key, shader| shader.evaluate(x, ctx))
-        }
-    }
+    let tag = shader.tag_from_key(ctx.key).unwrap();
+    shader.unwrap(tag, |key, shader| {
+        assert_eq!(key, ctx.key);
+        shader.evaluate(x, ctx)
+    })
 }
 impl ShaderNode for AddShaderExpr {
     fn evaluate(&self, x: Expr<f32>, ctx: &ShaderEvalContext<'_>) -> Expr<f32> {
@@ -169,4 +154,5 @@ fn main() {
         let v = x.sin() + (1.0 + 2.0);
         assert!((result[i] - v).abs() < 1e-5);
     }
+    println!("OK");
 }

@@ -1,16 +1,17 @@
-use luisa::prelude::*;
 use luisa_compute as luisa;
-
+use luisa::*;
 fn main() {
-    init();
-    let device = create_cpu_device().unwrap();
+    luisa::init();
+    luisa::init_logger();
+
+    let device = luisa::create_cpu_device().unwrap();
     let x = device.create_buffer::<f32>(1024).unwrap();
     let y = device.create_buffer::<f32>(1024).unwrap();
     let dx = device.create_buffer::<f32>(1024).unwrap();
     let dy = device.create_buffer::<f32>(1024).unwrap();
-    x.view(..).fill_fn(|i| i as f32);
-    y.view(..).fill_fn(|i| 1.0 + i as f32);
-    let kernel = device
+    x.fill_fn(|i| i as f32);
+    y.fill_fn(|i| 1.0 + i as f32);
+    let shader = device
         .create_kernel::<(Buffer<f32>, Buffer<f32>, Buffer<f32>, Buffer<f32>)>(
             &|buf_x: BufferVar<f32>,
               buf_y: BufferVar<f32>,
@@ -30,11 +31,9 @@ fn main() {
             },
         )
         .unwrap();
-    kernel.dispatch([1024, 1, 1], &x, &y, &dx, &dy).unwrap();
-    let mut dx_data = vec![0.0; 1024];
-    dx.view(..).copy_to(&mut dx_data);
-    println!("{:?}", &dx_data[0..16]);
-    let mut dy_data = vec![0.0; 1024];
-    dy.view(..).copy_to(&mut dy_data);
-    println!("{:?}", &dy_data[0..16]);
+    shader.dispatch([1024, 1, 1], &x.view(..), &y, &dx, &dy).unwrap();
+    let dx = dx.copy_to_vec();
+    println!("{:?}", &dx[0..16]);
+    let dy = dy.copy_to_vec();
+    println!("{:?}", &dy[0..16]);
 }

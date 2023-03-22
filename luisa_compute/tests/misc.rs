@@ -1,12 +1,6 @@
-use std::{ops::Range, sync::Once};
-
-use luisa::prelude::*;
 use luisa_compute as luisa;
+use luisa::*;
 use rand::prelude::*;
-use rayon::{
-    prelude::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
-    slice::ParallelSliceMut,
-};
 fn get_device() -> Device {
     let device = match std::env::var("LUISA_TEST_DEVICE") {
         Ok(device) => device,
@@ -18,17 +12,17 @@ fn get_device() -> Device {
 fn vec_cast() {
     init();
     let device = get_device();
-    let f: Buffer<Vec2> = device.create_buffer(1024).unwrap();
-    let i: Buffer<IVec2> = device.create_buffer(1024).unwrap();
+    let f: Buffer<Float2> = device.create_buffer(1024).unwrap();
+    let i: Buffer<Int2> = device.create_buffer(1024).unwrap();
     f.view(..)
-        .fill_fn(|i| Vec2::new(i as f32 + 0.5, i as f32 + 1.5));
+        .fill_fn(|i| Float2::new(i as f32 + 0.5, i as f32 + 1.5));
     let kernel = device
         .create_kernel::<()>(&|| {
             let f = f.var();
             let i = i.var();
             let tid = dispatch_id().x();
             let v = f.read(tid);
-            i.write(tid, v.as_ivec2());
+            i.write(tid, v.int());
         })
         .unwrap();
     kernel.dispatch([1024, 1, 1]).unwrap();
@@ -87,15 +81,15 @@ fn bool_op() {
 fn bvec_op() {
     init();
     let device = get_device();
-    let x: Buffer<BVec2> = device.create_buffer(1024).unwrap();
-    let y: Buffer<BVec2> = device.create_buffer(1024).unwrap();
-    let and: Buffer<BVec2> = device.create_buffer(1024).unwrap();
-    let or: Buffer<BVec2> = device.create_buffer(1024).unwrap();
-    let xor: Buffer<BVec2> = device.create_buffer(1024).unwrap();
-    let not: Buffer<BVec2> = device.create_buffer(1024).unwrap();
+    let x: Buffer<Bool2> = device.create_buffer(1024).unwrap();
+    let y: Buffer<Bool2> = device.create_buffer(1024).unwrap();
+    let and: Buffer<Bool2> = device.create_buffer(1024).unwrap();
+    let or: Buffer<Bool2> = device.create_buffer(1024).unwrap();
+    let xor: Buffer<Bool2> = device.create_buffer(1024).unwrap();
+    let not: Buffer<Bool2> = device.create_buffer(1024).unwrap();
     let mut rng = rand::thread_rng();
-    x.view(..).fill_fn(|_| BVec2::new(rng.gen(), rng.gen()));
-    y.view(..).fill_fn(|_| BVec2::new(rng.gen(), rng.gen()));
+    x.view(..).fill_fn(|_| Bool2::new(rng.gen(), rng.gen()));
+    y.view(..).fill_fn(|_| Bool2::new(rng.gen(), rng.gen()));
     let kernel = device
         .create_kernel::<()>(&|| {
             let tid = dispatch_id().x();
@@ -135,20 +129,20 @@ fn bvec_op() {
 fn vec_bit_minmax() {
     init();
     let device = get_device();
-    let x: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let y: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let z: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let and: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let or: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let xor: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let not: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let min = device.create_buffer::<IVec2>(1024).unwrap();
-    let max = device.create_buffer::<IVec2>(1024).unwrap();
-    let clamp = device.create_buffer::<IVec2>(1024).unwrap();
+    let x: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let y: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let z: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let and: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let or: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let xor: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let not: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let min = device.create_buffer::<Int2>(1024).unwrap();
+    let max = device.create_buffer::<Int2>(1024).unwrap();
+    let clamp = device.create_buffer::<Int2>(1024).unwrap();
     let mut rng = rand::thread_rng();
-    x.view(..).fill_fn(|_| IVec2::new(rng.gen(), rng.gen()));
-    y.view(..).fill_fn(|_| IVec2::new(rng.gen(), rng.gen()));
-    z.view(..).fill_fn(|_| IVec2::new(rng.gen(), rng.gen()));
+    x.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
+    y.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
+    z.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
     let kernel = device
         .create_kernel::<()>(&|| {
             let tid = dispatch_id().x();
@@ -207,10 +201,10 @@ fn vec_bit_minmax() {
 fn vec_permute() {
     init();
     let device = get_device();
-    let v2: Buffer<IVec2> = device.create_buffer(1024).unwrap();
-    let v3: Buffer<IVec3> = device.create_buffer(1024).unwrap();
+    let v2: Buffer<Int2> = device.create_buffer(1024).unwrap();
+    let v3: Buffer<Int3> = device.create_buffer(1024).unwrap();
     v2.view(..)
-        .fill_fn(|i| IVec2::new(i as i32 + 0, i as i32 + 1));
+        .fill_fn(|i| Int2::new(i as i32 + 0, i as i32 + 1));
     let kernel = device
         .create_kernel::<()>(&|| {
             let v2 = v2.var();
@@ -271,10 +265,10 @@ fn switch_phi() {
             let tid = dispatch_id().x();
             let x = buf_x.read(tid);
             let (y, z) = switch::<(Expr<i32>, Expr<f32>)>(x)
-                .case(0, || (Int32::from(0), Float32::from(1.0)))
-                .case(1, || (Int32::from(1), Float32::from(2.0)))
-                .case(2, || (Int32::from(2), Float32::from(3.0)))
-                .default(|| (Int32::from(3), Float32::from(4.0)))
+                .case(0, || (Int::from(0), Float::from(1.0)))
+                .case(1, || (Int::from(1), Float::from(2.0)))
+                .case(2, || (Int::from(2), Float::from(3.0)))
+                .default(|| (Int::from(3), Float::from(4.0)))
                 .finish();
             buf_y.write(tid, y);
             buf_z.write(tid, z);
@@ -321,9 +315,9 @@ fn switch_unreachable() {
             let tid = dispatch_id().x();
             let x = buf_x.read(tid);
             let (y, z) = switch::<(Expr<i32>, Expr<f32>)>(x)
-                .case(0, || (Int32::from(0), Float32::from(1.0)))
-                .case(1, || (Int32::from(1), Float32::from(2.0)))
-                .case(2, || (Int32::from(2), Float32::from(3.0)))
+                .case(0, || (Int::from(0), Float::from(1.0)))
+                .case(1, || (Int::from(1), Float::from(2.0)))
+                .case(2, || (Int::from(2), Float::from(3.0)))
                 .finish();
             buf_y.write(tid, y);
             buf_z.write(tid, z);
@@ -395,6 +389,45 @@ fn array_read_write2() {
             let i = local_zeroed::<i32>();
             while_!(i.load().cmplt(4), {
                 arr.write(i.load().uint(), tid.int() + i.load());
+                i.store(i.load() + 1);
+            });
+            let arr = arr.load();
+            buf_x.write(tid, arr);
+            buf_y.write(tid, arr.read(0));
+        })
+        .unwrap();
+    kernel.dispatch([1024, 1, 1]).unwrap();
+    let x_data = x.view(..).copy_to_vec();
+    let y_data = y.view(..).copy_to_vec();
+    for i in 0..1024 {
+        assert_eq!(
+            x_data[i],
+            [i as i32, i as i32 + 1, i as i32 + 2, i as i32 + 3]
+        );
+        assert_eq!(y_data[i], i as i32);
+    }
+}
+#[test]
+fn array_read_write_vla() {
+    init();
+    let device = get_device();
+    let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
+    let y: Buffer<i32> = device.create_buffer(1024).unwrap();
+    let kernel = device
+        .create_kernel::<()>(&|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let tid = dispatch_id().x();
+            let vl = VLArrayVar::<i32>::zero(4);
+            let i = local_zeroed::<i32>();
+            while_!(i.load().cmplt(4), {
+                vl.write(i.load().uint(), tid.int() + i.load());
+                i.store(i.load() + 1);
+            });
+            let arr = local_zeroed::<[i32; 4]>();
+            let i = local_zeroed::<i32>();
+            while_!(i.load().cmplt(4), {
+                arr.write(i.load().uint(), vl.read(i.load().uint()));
                 i.store(i.load() + 1);
             });
             let arr = arr.load();

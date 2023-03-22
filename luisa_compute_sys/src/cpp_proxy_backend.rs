@@ -11,7 +11,6 @@ use luisa_compute_api_types as api;
 use luisa_compute_backend as backend;
 use luisa_compute_ir::{
     ir::{KernelModule, Type},
-    Gc,
 };
 use parking_lot::Mutex;
 use std::sync::Once;
@@ -265,7 +264,7 @@ impl Backend for CppProxyBackend {
         ))
     }
 
-    fn create_shader_async(&self, kernel: Gc<KernelModule>) -> backend::Result<api::Shader> {
+    fn create_kernel_async(&self, kernel: Gc<KernelModule>) -> backend::Result<api::Shader> {
         todo!()
     }
 
@@ -299,9 +298,44 @@ impl Backend for CppProxyBackend {
         todo!()
     }
 
-    fn is_cpu_backend(&self) -> bool {
-        false
+    fn set_buffer_type(&self, _buffer: api::Buffer, _ty: CArc<Type>) {}
+
+    fn create_mesh(
+        &self,
+        hint: api::AccelUsageHint,
+        ty: api::MeshType,
+        allow_compact: bool,
+        allow_update: bool,
+    ) -> api::Mesh {
+        todo!()
     }
 
-    fn set_buffer_type(&self, _buffer: api::Buffer, _ty: Gc<Type>) {}
+    fn destroy_mesh(&self, mesh: api::Mesh) {
+        todo!()
+    }
+
+    fn create_accel(
+        &self,
+        hint: api::AccelUsageHint,
+        allow_compact: bool,
+        allow_update: bool,
+    ) -> api::Accel {
+        todo!()
+    }
+
+    fn destroy_accel(&self, accel: api::Accel) {
+        todo!()
+    }
+
+    fn mesh_native_handle(&self, mesh: api::Mesh) -> *mut libc::c_void {
+        todo!()
+    }
+
+    fn accel_native_handle(&self, accel: api::Accel) -> *mut libc::c_void {
+        todo!()
+    }
+
+    fn query(&self, property: &str) -> Option<String> {
+        todo!()
+    }
 }

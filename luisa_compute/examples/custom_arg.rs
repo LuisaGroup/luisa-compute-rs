@@ -1,9 +1,12 @@
-use luisa::prelude::*;
 use luisa_compute as luisa;
+use luisa::*;
 #[derive(KernelArg)]
-struct MyArgStruct {
-    x: Buffer<f32>,
-    y: Buffer<f32>,
+struct MyArgStruct<T: Value> {
+    x: Buffer<T>,
+    y: Buffer<T>,
+    #[allow(dead_code)]
+    #[luisa(exclude)]
+    exclude: T,
 }
 fn main() {
     init();
@@ -12,7 +15,13 @@ fn main() {
     let y = device.create_buffer::<f32>(1024).unwrap();
     x.view(..).fill(1.0);
     y.view(..).fill(2.0);
-    let my_args = MyArgStruct { x, y };
-    let kernel = device.create_kernel::<(MyArgStruct,)>(&|_args| {}).unwrap();
-    kernel.dispatch([1024, 1, 1], &my_args).unwrap();
+    let my_args = MyArgStruct {
+        x,
+        y,
+        exclude: 42.0,
+    };
+    let shader = device
+        .create_kernel::<(MyArgStruct<f32>,)>(&|_args| {})
+        .unwrap();
+    shader.dispatch([1024, 1, 1], &my_args).unwrap();
 }

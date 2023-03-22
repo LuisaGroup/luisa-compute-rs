@@ -1,6 +1,6 @@
-use luisa::prelude::*;
 use luisa_compute as luisa;
-
+use luisa::lang::*;
+use luisa::Value;
 #[derive(Clone, Copy, Value, Debug)]
 #[repr(C)]
 pub struct MyAddArgs {
@@ -10,6 +10,7 @@ pub struct MyAddArgs {
 }
 
 fn main() {
+    use luisa::*;
     init();
     let device = create_cpu_device().unwrap();
     let x = device.create_buffer::<f32>(1024).unwrap();
@@ -25,7 +26,7 @@ fn main() {
             println!("Hello from thread 0!");
         }
     });
-    let kernel = device
+    let shader = device
         .create_kernel::<(Buffer<f32>,)>(&|buf_z: BufferVar<f32>| {
             // z is pass by arg
             let buf_x = x.var(); // x and y are captured
@@ -33,16 +34,16 @@ fn main() {
             let tid = dispatch_id().x();
             let x = buf_x.read(tid);
             let y = buf_y.read(tid);
-            let args = MyAddArgsExpr::new(x, y, Float32::zero());
+            let args = MyAddArgsExpr::new(x, y, Float::zero());
             let result = my_add.call(args);
             let _ = my_print.call(tid);
             if_!(tid.cmpeq(0), {
-                cpu_dbg!(MyAddArgs, args);
+                cpu_dbg!(args);
             });
             buf_z.write(tid, result.result());
         })
         .unwrap();
-    kernel.dispatch([1024, 1, 1], &z).unwrap();
+    shader.dispatch([1024, 1, 1], &z).unwrap();
     let mut z_data = vec![0.0; 1024];
     z.view(..).copy_to(&mut z_data);
     println!("{:?}", &z_data[0..16]);

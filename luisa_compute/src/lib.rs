@@ -1,36 +1,57 @@
 #![allow(unused_unsafe)]
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 
 pub mod lang;
 pub mod resource;
-pub mod runtime;
 pub mod rtx;
+pub mod runtime;
+pub use half::f16;
+use luisa_compute_api_types as api;
 pub use luisa_compute_backend as backend;
 use luisa_compute_backend::Backend;
-pub use luisa_compute_ir::Gc;
 pub mod prelude {
-    pub use crate::*;
-    pub use glam;
-    pub use lang::math::*;
-    pub use lang::traits::*;
-    pub use lang::*;
-    pub use luisa_compute_derive::*;
-    pub use resource::*;
-    pub use runtime::*;
-    pub use rtx::*;
+    pub use crate::lang::poly::PolymorphicImpl;
+    pub use crate::lang::traits::VarTrait;
+    pub use crate::lang::traits::{CommonVarOp, FloatVarTrait, IntVarTrait, VarCmp, VarCmpEq};
+    pub use crate::lang::{
+        Aggregate, ExprProxy, FromNode, KernelBuildFn, KernelParameter, KernelSignature, Value,
+        VarProxy, _Mask,
+    };
+    pub use crate::lang::{
+        __compose, __cpu_dbg, __current_scope, __env_need_backtrace, __extract, __insert,
+        __module_pools, __new_user_node, __pop_scope,
+    };
+    pub use crate::resource::{IoTexel, StorageTexel};
+    pub use crate::runtime::KernelArg;
+    pub use luisa_compute_ir::TypeOf;
 }
+pub use api::{
+    AccelBuildModificationFlags, AccelBuildRequest, AccelOption, AccelUsageHint, MeshType,
+    PixelFormat, PixelStorage,
+};
+pub use glam;
+pub use lang::math;
+pub use lang::math::*;
+pub use lang::poly;
+pub use lang::poly::*;
+pub use lang::traits::*;
+pub use lang::*;
+pub use luisa_compute_derive as derive;
+pub use luisa_compute_derive::*;
+pub use luisa_compute_ir::ir::UserNodeData;
+pub use resource::*;
+pub use runtime::*;
+pub mod macros {
+    pub use crate::{cpu_dbg, if_, impl_polymorphic, var, while_};
+}
+
 pub use luisa_compute_sys as sys;
-use prelude::{Device, DeviceHandle};
+pub use runtime::{CommandBuffer, Device, Stream};
 use std::sync::Once;
 static INIT: Once = Once::new();
 pub fn init() {
-    INIT.call_once(|| unsafe {
-
-        let gc_ctx = luisa_compute_ir::ir::luisa_compute_gc_create_context();
-        luisa_compute_ir::ir::luisa_compute_gc_set_context(gc_ctx);
-
-        let ctx = luisa_compute_ir::context::luisa_compute_ir_new_context();
-        luisa_compute_ir::context::luisa_compute_ir_set_context(ctx);
+    INIT.call_once(|| {
+        // do nothing?
     });
 }
 pub fn init_logger() {
@@ -58,7 +79,7 @@ pub fn create_device(device: &str) -> backend::Result<Device> {
         }
         _ => panic!("unsupported device: {}", device),
     };
-    let default_stream = backend.create_stream()?;
+    let default_stream = api::Stream(backend.create_stream()?.handle);
     Ok(Device {
         inner: Arc::new(DeviceHandle {
             backend,
@@ -66,3 +87,21 @@ pub fn create_device(device: &str) -> backend::Result<Device> {
         }),
     })
 }
+pub struct ResourceTracker {
+    resources: Vec<Arc<dyn Any>>,
+}
+impl ResourceTracker {
+    pub fn add<T: Any>(&mut self, ptr: Arc<T>) -> &mut Self {
+        self.resources.push(ptr);
+        self
+    }
+    pub fn add_any(&mut self, ptr: Arc<dyn Any>) -> &mut Self {
+        self.resources.push(ptr);
+        self
+    }
+    pub fn new() -> Self {
+        Self { resources: vec![] }
+    }
+}
+unsafe impl Send for ResourceTracker {}
+unsafe impl Sync for ResourceTracker {}

@@ -165,8 +165,8 @@ impl Device {
             )),
         }
     }
-    pub fn create_stream(&self) -> backend::Result<Stream> {
-        let stream = self.inner.create_stream()?;
+    pub fn create_stream(&self, tag:api::StreamTag) -> backend::Result<Stream> {
+        let stream = self.inner.create_stream(tag)?;
         Ok(Stream {
             device: self.clone(),
             handle: Arc::new(StreamHandle::NonDefault {

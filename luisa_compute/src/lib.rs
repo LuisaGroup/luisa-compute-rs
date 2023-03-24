@@ -79,7 +79,7 @@ pub fn create_device(device: &str) -> backend::Result<Device> {
         }
         _ => panic!("unsupported device: {}", device),
     };
-    let default_stream = api::Stream(backend.create_stream()?.handle);
+    let default_stream = api::Stream(backend.create_stream(api::StreamTag::Graphics)?.handle);
     Ok(Device {
         inner: Arc::new(DeviceHandle {
             backend,

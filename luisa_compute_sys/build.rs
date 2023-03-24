@@ -54,8 +54,10 @@ fn generate_bindings() {
         .header("./LuisaCompute/src/api/runtime.h")
         .header("./LuisaCompute/src/api/logging.h")
         .clang_arg("-I./LuisaCompute/src/")
+        .clang_arg("-I./LuisaCompute/src/ext/EASTL/include")
         .clang_arg("-I./LuisaCompute/src/ir/")
         .clang_arg("-I./LuisaCompute/src/ir/luisa-compute-ir")
+        .clang_arg("-DLUISA_COMPUTE_RUST_BINDGEN")
         .prepend_enum_name(false)
         .newtype_enum("LC.*")
         .parse_callbacks(Box::new(ParseCallback {}))
@@ -95,6 +97,7 @@ fn cmake_build() -> PathBuf {
     config.define("LUISA_COMPUTE_BUILD_TESTS", "OFF");
     config.define("LUISA_COMPUTE_ENABLE_DSL", "OFF");
     config.define("LUISA_COMPUTE_ENABLE_CPU", "OFF");
+    config.define("LUISA_COMPUTE_ENABLE_REMOTE", "OFF");
     config.define("CMAKE_BUILD_TYPE", "Release");
     // set compiler based on env
     println!("cargo:rerun-if-env-changed=CC");
@@ -165,19 +168,19 @@ fn copy_dlls(out_dir: &PathBuf) {
 }
 
 fn main() {
-    // let out_dir = cmake_build();
-    // generate_bindings();
+    let out_dir = cmake_build();
+    generate_bindings();
 
-    // // dbg!(&out_dir);
-    // println!(
-    //     "cargo:rustc-link-search=native={}/build/bin/",
-    //     out_dir.to_str().unwrap()
-    // );
-    // println!(
-    //     "cargo:rustc-link-search=native={}/build/lib/",
-    //     out_dir.to_str().unwrap()
-    // );
-    // println!("cargo:rustc-link-lib=dylib=luisa-compute-api");
-    // copy_dlls(&out_dir);
+    // dbg!(&out_dir);
+    println!(
+        "cargo:rustc-link-search=native={}/build/bin/",
+        out_dir.to_str().unwrap()
+    );
+    println!(
+        "cargo:rustc-link-search=native={}/build/lib/",
+        out_dir.to_str().unwrap()
+    );
+    println!("cargo:rustc-link-lib=dylib=luisa-compute-api");
+    copy_dlls(&out_dir);
 }
 

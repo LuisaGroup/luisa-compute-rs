@@ -60,6 +60,7 @@ fn generate_bindings() {
         .clang_arg("-DLUISA_COMPUTE_RUST_BINDGEN")
         .prepend_enum_name(false)
         .newtype_enum("LC.*")
+        .allowlist_function("luisa_compute_.*")
         .parse_callbacks(Box::new(ParseCallback {}))
         .generate()
         .expect("Unable to generate bindings");

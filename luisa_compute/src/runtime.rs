@@ -165,7 +165,7 @@ impl Device {
             )),
         }
     }
-    pub fn create_stream(&self, tag:api::StreamTag) -> backend::Result<Stream> {
+    pub fn create_stream(&self, tag: api::StreamTag) -> backend::Result<Stream> {
         let stream = self.inner.create_stream(tag)?;
         Ok(Stream {
             device: self.clone(),
@@ -230,7 +230,14 @@ impl Device {
         f: S::Fn,
     ) -> Result<S::Kernel, crate::backend::BackendError> {
         let mut builder = KernelBuilder::new(self.clone());
-        let raw_kernel = KernelBuildFn::build(&f, &mut builder, ShaderBuildOptions::default());
+        let raw_kernel = KernelBuildFn::build(
+            &f,
+            &mut builder,
+            ShaderBuildOptions {
+                async_compile: true,
+                ..Default::default()
+            },
+        );
         S::wrap_raw_shader(raw_kernel)
     }
 }
@@ -428,6 +435,7 @@ impl AsyncShaderArtifact {
     pub(crate) fn new(
         device: Device,
         kernel: CArc<KernelModule>,
+        options:api::ShaderOption,
     ) -> Arc<(Mutex<AsyncShaderArtifact>, Condvar)> {
         let artifact = Arc::new((
             Mutex::new(AsyncShaderArtifact { shader: None }),
@@ -436,7 +444,7 @@ impl AsyncShaderArtifact {
         {
             let artifact = artifact.clone();
             rayon::spawn(move || {
-                let shader = device.inner.create_shader(kernel);
+                let shader = device.inner.create_shader(kernel, &options);
                 {
                     let mut artifact = artifact.0.lock();
                     artifact.shader = Some(shader);

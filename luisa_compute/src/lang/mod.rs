@@ -1,20 +1,21 @@
+use std::ffi::CStr;
 use std::io::stderr;
 use std::marker::PhantomData;
 use std::process::abort;
 use std::{any::Any, collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 
 use crate::lang::traits::VarCmp;
-use crate::{rtx::AccelHandle, Tex2dView, Tex3dView};
 use crate::resource::BufferView;
 use crate::runtime::{AsyncShaderArtifact, ShaderArtifact};
 use crate::{
-    *,
     resource::{
         BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, IoTexel, Tex2d, Tex3d,
         TextureHandle,
     },
+    *,
 };
 use crate::{rtx, ResourceTracker};
+use crate::{rtx::AccelHandle, Tex2dView, Tex3dView};
 use bumpalo::Bump;
 use ir::context::type_hash;
 pub use ir::ir::NodeRef;
@@ -52,8 +53,8 @@ pub mod math;
 pub mod poly;
 pub mod swizzle;
 pub mod traits;
-pub use poly::*;
 pub use math::*;
+pub use poly::*;
 
 pub trait Value: Copy + ir::TypeOf {
     type Expr: ExprProxy<Value = Self>;
@@ -547,10 +548,8 @@ pub fn block_size() -> Expr<Uint3> {
 }
 pub type Expr<T> = <T as Value>::Expr;
 pub type Var<T> = <T as Value>::Var;
-pub fn zeroed<T:Value>() -> T::Expr {
-    FromNode::from_node(__current_scope(|b|{
-        b.zero_initializer(T::type_())
-    }))
+pub fn zeroed<T: Value>() -> T::Expr {
+    FromNode::from_node(__current_scope(|b| b.zero_initializer(T::type_())))
 }
 pub fn const_<T: Value + Copy + 'static>(value: T) -> T::Expr {
     let node = __current_scope(|s| -> NodeRef {
@@ -1823,10 +1822,22 @@ impl KernelBuilder {
                 };
 
                 let module = CArc::new(module);
+                static NO_NAME: &'static [u8] = b"no_name\0";
+                let shader_options = api::ShaderOption {
+                    enable_cache: options.enable_cache,
+                    enable_fast_math: options.enable_fast_math,
+                    enable_debug_info: options.enable_debug_info,
+                    compile_only: false,
+                    name: NO_NAME.as_ptr() as *const i8,
+                };
                 let artifact = if options.async_compile {
-                    ShaderArtifact::Async(AsyncShaderArtifact::new(self.device.clone(), module))
+                    ShaderArtifact::Async(AsyncShaderArtifact::new(
+                        self.device.clone(),
+                        module,
+                        shader_options,
+                    ))
                 } else {
-                    ShaderArtifact::Sync(self.device.inner.create_shader(module)?)
+                    ShaderArtifact::Sync(self.device.inner.create_shader(module, &shader_options)?)
                 };
                 //
                 r.reset();
@@ -1841,16 +1852,20 @@ impl KernelBuilder {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ShaderBuildOptions {
-    pub enable_debug: bool,
+    pub enable_debug_info: bool,
     pub enable_optimization: bool,
     pub async_compile: bool,
+    pub enable_cache: bool,
+    pub enable_fast_math: bool,
 }
 impl Default for ShaderBuildOptions {
     fn default() -> Self {
         Self {
-            enable_debug: false,
+            enable_debug_info: false,
             enable_optimization: true,
             async_compile: false,
+            enable_cache: true,
+            enable_fast_math: false,
         }
     }
 }

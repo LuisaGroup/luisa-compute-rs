@@ -1,7 +1,7 @@
 use crate::prelude::*;
 use crate::*;
-use luisa_compute_ir::CArc;
 use luisa_compute_ir::ir::new_user_node;
+use luisa_compute_ir::CArc;
 use luisa_compute_ir::{ir::Func, ir::Type, TypeOf};
 use std::cell::{Cell, RefCell};
 use std::ops::*;
@@ -262,8 +262,9 @@ pub trait FloatVarTrait:
     fn mul_add<A: Into<Self>, B: Into<Self>>(&self, a: A, b: B) -> Self {
         let a: Self = a.into();
         let b: Self = b.into();
-        let node =
-            __current_scope(|s| s.call(Func::Fma, &[self.node(), a.node(), b.node()], Self::type_()));
+        let node = __current_scope(|s| {
+            s.call(Func::Fma, &[self.node(), a.node(), b.node()], Self::type_())
+        });
         Self::from_node(node)
     }
     fn ceil(&self) -> Self {
@@ -450,25 +451,27 @@ pub trait FloatVarTrait:
             Self::from_node(ret)
         })
     }
-    fn powf<A: Into<Self>>(&self, exp: A) -> Self {
-        (self.ln() * exp.into()).exp()
+    fn powf(&self, exp: impl Into<Self>) -> Self {
+        let exp = exp.into();
+        __current_scope(|s| {
+            let ret = s.call(Func::Powf, &[self.node(), exp.node()], Self::type_());
+            Self::from_node(ret)
+        })
     }
-    fn powi(&self, exp: i32) -> Self {
-        let mut n = exp.abs();
-        let mut result = Self::one();
-        let mut x = self.clone();
-        while n > 0 {
-            if n & 1 == 1 {
-                result *= x.clone();
-            }
-            x *= x.clone();
-            n >>= 1;
-        }
-        if exp < 0 {
-            result.recip()
-        } else {
-            result
-        }
+    fn powi(&self, exp: impl Into<Self::Int>) -> Self {
+        let exp = exp.into();
+        __current_scope(|s| {
+            let ret = s.call(Func::Powi, &[self.node(), exp.node()], Self::type_());
+            Self::from_node(ret)
+        })
+    }
+    fn lerp(&self, other: impl Into<Self>, frac: impl Into<Self>) -> Self{
+        let other = other.into();
+        let frac = frac.into();
+        __current_scope(|s| {
+            let ret = s.call(Func::Lerp, &[self.node(), other.node(), frac.node()], Self::type_());
+            Self::from_node(ret)
+        })
     }
     fn recip(&self) -> Self {
         Self::one() / self.clone()

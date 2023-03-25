@@ -1822,7 +1822,7 @@ impl KernelBuilder {
                 };
 
                 let module = CArc::new(module);
-                static NO_NAME: &'static [u8] = b"no_name\0";
+                static NO_NAME: &'static [u8] = b"\0";
                 let shader_options = api::ShaderOption {
                     enable_cache: options.enable_cache,
                     enable_fast_math: options.enable_fast_math,

@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use luisa::prelude::*;
-use luisa_compute as luisa;
 use luisa::*;
+use luisa_compute as luisa;
 use rand::prelude::*;
 use rayon::{
     prelude::{IntoParallelIterator, ParallelIterator},
@@ -208,6 +208,20 @@ macro_rules! autodiff_2 {
         }
     };
 }
+macro_rules! autodiff_3 {
+    ($name:ident, $range:expr, $e:expr) => {
+        #[test]
+        fn $name() {
+            init();
+            autodiff_helper($range, 1024 * 1024, 3, |inputs| {
+                let x = inputs[0];
+                let y = inputs[1];
+                let z = inputs[2];
+                ($e)(x, y, z)
+            });
+        }
+    };
+}
 #[derive(Clone, Copy, Debug, Value)]
 #[repr(C)]
 struct Foo {
@@ -246,6 +260,8 @@ autodiff_1!(autodiff_tanh, -10.0..10.0, |x: Float| x.tanh());
 autodiff_2!(autodiff_div, 1.0..10.0, |x: Float, y: Float| x / y);
 
 autodiff_2!(autodiff_pow, 1.0..10.0, |x: Float, y: Float| x.powf(y));
+autodiff_3!(autodiff_lerp, 0.0..1.0, |x: Float, y: Float, z: Float| x
+    .lerp(y, z));
 
 #[test]
 fn autodiff_vec3_reduce_add_manual() {

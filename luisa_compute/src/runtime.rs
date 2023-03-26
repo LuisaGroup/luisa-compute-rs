@@ -72,8 +72,12 @@ impl Device {
             raw_window_handle::RawWindowHandle::AppKit(_) => todo!(),
             raw_window_handle::RawWindowHandle::Orbital(_) => todo!(),
             raw_window_handle::RawWindowHandle::Xlib(h) => h.window as u64,
-            raw_window_handle::RawWindowHandle::Xcb(h) => h.window as u64,
-            raw_window_handle::RawWindowHandle::Wayland(h) => h.surface as u64,
+            raw_window_handle::RawWindowHandle::Xcb(_h) => {
+                panic!("xcb not supported, use X11 instead")
+            }
+            raw_window_handle::RawWindowHandle::Wayland(_h) => {
+                panic!("Wayland not supported, use X11 instead")
+            }
             raw_window_handle::RawWindowHandle::Drm(_) => todo!(),
             raw_window_handle::RawWindowHandle::Gbm(_) => todo!(),
             raw_window_handle::RawWindowHandle::Win32(h) => {

@@ -12,6 +12,9 @@ use winit::{
 fn main() {
     use luisa::*;
     init_logger();
+
+    std::env::set_var("WINIT_UNIX_BACKEND", "x11");
+
     let ctx = Context::new(current_exe().unwrap());
     let device = ctx.create_device("cpu").unwrap();
     let vbuffer: Buffer<Float3> = device

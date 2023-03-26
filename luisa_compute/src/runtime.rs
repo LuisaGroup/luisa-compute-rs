@@ -9,6 +9,7 @@ pub use luisa_compute_api_types as api;
 use luisa_compute_ir::ir::{self, KernelModule};
 use luisa_compute_ir::CArc;
 use parking_lot::{Condvar, Mutex};
+use raw_window_handle::HasRawWindowHandle;
 use rtx::{Accel, Mesh, MeshHandle};
 use std::cell::{Cell, RefCell, UnsafeCell};
 use std::collections::HashMap;
@@ -18,6 +19,7 @@ use std::mem::align_of;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
+use winit::window::Window;
 #[derive(Clone)]
 pub struct Device {
     pub(crate) inner: Arc<DeviceHandle>,
@@ -53,6 +55,76 @@ impl Drop for DeviceHandle {
     }
 }
 impl Device {
+    pub fn create_swapchain(
+        &self,
+        window: &Window,
+        stream: &Stream,
+        width: u32,
+        height: u32,
+        allow_hdr: bool,
+        vsync: bool,
+        back_buffer_size: u32,
+    ) -> backend::Result<Swapchain> {
+        let handle = window.raw_window_handle();
+        dbg!(&handle);
+        let window_handle = match handle {
+            raw_window_handle::RawWindowHandle::UiKit(_) => todo!(),
+            raw_window_handle::RawWindowHandle::AppKit(_) => todo!(),
+            raw_window_handle::RawWindowHandle::Orbital(_) => todo!(),
+            raw_window_handle::RawWindowHandle::Xlib(h) => h.window as u64,
+            raw_window_handle::RawWindowHandle::Xcb(h) => h.window as u64,
+            raw_window_handle::RawWindowHandle::Wayland(h) => h.surface as u64,
+            raw_window_handle::RawWindowHandle::Drm(_) => todo!(),
+            raw_window_handle::RawWindowHandle::Gbm(_) => todo!(),
+            raw_window_handle::RawWindowHandle::Win32(h) => {
+                h.hwnd as u64 // TODO: test this
+            }
+            raw_window_handle::RawWindowHandle::WinRt(h) => h.core_window as u64,
+            raw_window_handle::RawWindowHandle::Web(_) => todo!(),
+            raw_window_handle::RawWindowHandle::AndroidNdk(_) => todo!(),
+            raw_window_handle::RawWindowHandle::Haiku(_) => todo!(),
+            _ => todo!(),
+        };
+        self.create_swapchain_raw_handle(
+            window_handle,
+            stream,
+            width,
+            height,
+            allow_hdr,
+            vsync,
+            back_buffer_size,
+        )
+    }
+    pub fn create_swapchain_raw_handle(
+        &self,
+        window_handle: u64,
+        stream: &Stream,
+        width: u32,
+        height: u32,
+        allow_hdr: bool,
+        vsync: bool,
+        back_buffer_size: u32,
+    ) -> backend::Result<Swapchain> {
+        let swapchain = self.inner.create_swapchain(
+            window_handle,
+            stream.handle(),
+            width,
+            height,
+            allow_hdr,
+            vsync,
+            back_buffer_size,
+        )?;
+        let swapchain = Swapchain {
+            device: self.clone(),
+            handle: Arc::new(SwapchainHandle {
+                device: self.inner.clone(),
+                handle: api::Swapchain(swapchain.resource.handle),
+                native_handle: swapchain.resource.native_handle,
+                pixel_storage: swapchain.storage,
+            }),
+        };
+        Ok(swapchain)
+    }
     pub fn create_buffer<T: Value>(&self, count: usize) -> backend::Result<Buffer<T>> {
         assert!(
             std::mem::size_of::<T>() > 0,
@@ -281,6 +353,34 @@ pub(crate) enum StreamHandle {
         native_handle: *mut std::ffi::c_void,
     },
 }
+pub(crate) struct SwapchainHandle {
+    pub(crate) device: Arc<DeviceHandle>,
+    pub(crate) handle: api::Swapchain,
+    pub(crate) native_handle: *mut std::ffi::c_void,
+    pub(crate) pixel_storage: PixelStorage,
+}
+unsafe impl Send for SwapchainHandle {}
+unsafe impl Sync for SwapchainHandle {}
+impl Drop for SwapchainHandle {
+    fn drop(&mut self) {
+        self.device.destroy_swapchain(self.handle);
+    }
+}
+pub struct Swapchain {
+    pub(crate) handle: Arc<SwapchainHandle>,
+    #[allow(dead_code)]
+    pub(crate) device: Device,
+}
+impl Swapchain {
+    #[inline]
+    pub fn handle(&self) -> api::Swapchain {
+        self.handle.handle
+    }
+    #[inline]
+    pub fn native_handle(&self) -> *mut std::ffi::c_void {
+        self.handle.native_handle
+    }
+}
 pub struct Stream {
     #[allow(dead_code)]
     pub(crate) device: Device,
@@ -299,6 +399,12 @@ impl StreamHandle {
             StreamHandle::NonDefault { handle, .. } => *handle,
         }
     }
+    pub(crate) fn native_handle(&self) -> *mut std::ffi::c_void {
+        match self {
+            StreamHandle::Default(_, _) => todo!(),
+            StreamHandle::NonDefault { native_handle, .. } => *native_handle,
+        }
+    }
 }
 impl Drop for StreamHandle {
     fn drop(&mut self) {
@@ -310,43 +416,118 @@ impl Drop for StreamHandle {
         }
     }
 }
-impl Stream {
+pub struct Scope<'a> {
+    handle: Arc<StreamHandle>,
+    marker: std::marker::PhantomData<&'a ()>,
+    synchronized: Cell<bool>,
+    resource_tracker: RefCell<ResourceTracker>,
+}
+impl<'a> Scope<'a> {
+    #[inline]
     pub fn handle(&self) -> api::Stream {
         self.handle.handle()
     }
+    #[inline]
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         match self.handle.as_ref() {
             StreamHandle::Default(_, _) => todo!(),
             StreamHandle::NonDefault { native_handle, .. } => *native_handle,
         }
     }
+    #[inline]
     pub fn synchronize(&self) -> backend::Result<()> {
-        self.handle.device().synchronize_stream(self.handle())
+        self.handle.device().synchronize_stream(self.handle())?;
+        self.synchronized.set(true);
+        Ok(())
     }
-    pub fn command_buffer<'a>(&self) -> CommandBuffer<'a> {
-        CommandBuffer::<'a> {
+    #[inline]
+    pub fn command_list(&self) -> CommandList<'a> {
+        CommandList::<'a> {
             marker: std::marker::PhantomData {},
-            stream: self.handle.clone(),
             commands: Vec::new(),
         }
     }
-    pub fn submit<'a>(
+    #[inline]
+    pub fn submit(&self, commands: impl IntoIterator<Item = Command<'a>>) -> backend::Result<()> {
+        self.submit_with_callback(commands, || {})
+    }
+    #[inline]
+    pub fn submit_with_callback<F: FnOnce() + Send + 'static>(
         &self,
         commands: impl IntoIterator<Item = Command<'a>>,
-    ) -> backend::Result<SyncHandle<'a>> {
-        let mut command_buffer = self.command_buffer();
-        command_buffer.extend(commands);
-        command_buffer.commit()
-    }
-    pub fn submit_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
-        &self,
-        commands: I,
+        callback: F,
     ) -> backend::Result<()> {
-        self.submit(commands)?.synchronize()
+        self.synchronized.set(false);
+        let mut command_buffer = self.command_list();
+        command_buffer.extend(commands);
+        let commands = command_buffer.commands;
+        let api_commands = commands.iter().map(|c| c.inner).collect::<Vec<_>>();
+        let ctx = CommandCallbackCtx {
+            commands,
+            f: callback,
+        };
+        let ptr = Box::into_raw(Box::new(ctx));
+        extern "C" fn trampoline<'a, F: FnOnce() + Send + 'static>(ptr: *mut u8) {
+            let ctx = unsafe { *Box::from_raw(ptr as *mut CommandCallbackCtx<'a, F>) };
+            (ctx.f)();
+        }
+        self.handle.device().dispatch(
+            self.handle(),
+            &api_commands,
+            (trampoline::<F>, ptr as *mut u8),
+        )
+    }
+    #[inline]
+    pub fn present<T: IoTexel>(
+        &self,
+        swapchain: &Swapchain,
+        image: &Tex2d<T>,
+    ) -> backend::Result<()> {
+        assert_eq!(image.handle.storage, swapchain.handle.pixel_storage);
+        let mut rt = self.resource_tracker.borrow_mut();
+        rt.add(swapchain.handle.clone());
+        rt.add(image.handle.clone());
+        self.synchronized.set(false);
+        self.handle.device().present_display_in_stream(
+            self.handle(),
+            swapchain.handle(),
+            image.handle(),
+        );
+        Ok(())
     }
 }
-pub struct CommandBuffer<'a> {
-    stream: Arc<StreamHandle>,
+impl<'a> Drop for Scope<'a> {
+    fn drop(&mut self) {
+        if !self.synchronized.get() {
+            self.synchronize().unwrap();
+        }
+    }
+}
+impl Stream {
+    #[inline]
+    pub fn with_scope<'a, R>(&self, f: impl FnOnce(&Scope<'a>) -> R) -> R {
+        let s = self.scope();
+        f(&s)
+    }
+    #[inline]
+    pub fn scope<'a>(&self) -> Scope<'a> {
+        Scope {
+            handle: self.handle.clone(),
+            marker: std::marker::PhantomData {},
+            synchronized: Cell::new(false),
+            resource_tracker: RefCell::new(ResourceTracker::new()),
+        }
+    }
+    #[inline]
+    pub fn handle(&self) -> api::Stream {
+        self.handle.handle()
+    }
+    #[inline]
+    pub fn native_handle(&self) -> *mut std::ffi::c_void {
+        self.handle.native_handle()
+    }
+}
+pub struct CommandList<'a> {
     marker: std::marker::PhantomData<&'a ()>,
     commands: Vec<Command<'a>>,
 }
@@ -355,58 +536,13 @@ struct CommandCallbackCtx<'a, F: FnOnce() + Send + 'static> {
     commands: Vec<Command<'a>>,
     f: F,
 }
-pub struct SyncHandle<'a> {
-    stream: Cell<Option<Arc<StreamHandle>>>,
-    marker: PhantomData<&'a ()>,
-}
-impl<'a> SyncHandle<'a> {
-    pub fn synchronize(&mut self) -> backend::Result<()> {
-        self.stream
-            .take()
-            .map(|stream| stream.device().synchronize_stream(stream.handle()))
-            .unwrap()
-    }
-}
-impl<'a> Drop for SyncHandle<'a> {
-    fn drop(&mut self) {
-        self.stream
-            .take()
-            .map(|stream| stream.device().synchronize_stream(stream.handle()));
-    }
-}
-impl<'a> CommandBuffer<'a> {
+
+impl<'a> CommandList<'a> {
     pub fn extend<I: IntoIterator<Item = Command<'a>>>(&mut self, commands: I) {
         self.commands.extend(commands);
     }
     pub fn push(&mut self, command: Command<'a>) {
         self.commands.push(command);
-    }
-    pub fn commit_with_callback<F: FnOnce() + Send + 'static>(
-        self,
-        callback: F,
-    ) -> backend::Result<SyncHandle<'a>> {
-        let commands = self.commands.iter().map(|c| c.inner).collect::<Vec<_>>();
-        let ctx = CommandCallbackCtx {
-            commands: self.commands,
-            f: callback,
-        };
-        let ptr = Box::into_raw(Box::new(ctx));
-        extern "C" fn trampoline<'a, F: FnOnce() + Send + 'static>(ptr: *mut u8) {
-            let ctx = unsafe { *Box::from_raw(ptr as *mut CommandCallbackCtx<'a, F>) };
-            (ctx.f)();
-        }
-        self.stream.device().dispatch(
-            self.stream.handle(),
-            &commands,
-            (trampoline::<F>, ptr as *mut u8),
-        )?;
-        Ok(SyncHandle {
-            stream: Cell::new(Some(self.stream.clone())),
-            marker: PhantomData,
-        })
-    }
-    pub fn commit(self) -> backend::Result<SyncHandle<'a>> {
-        self.commit_with_callback(|| {})
     }
 }
 
@@ -415,7 +551,10 @@ pub fn submit_default_stream_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
     commands: I,
 ) -> backend::Result<()> {
     let default_stream = device.default_stream();
-    default_stream.submit_and_sync(commands)
+    default_stream.with_scope(|s| {
+        s.submit(commands)?;
+        s.synchronize()
+    })
 }
 pub struct Command<'a> {
     #[allow(dead_code)]
@@ -435,7 +574,7 @@ impl AsyncShaderArtifact {
     pub(crate) fn new(
         device: Device,
         kernel: CArc<KernelModule>,
-        options:api::ShaderOption,
+        options: api::ShaderOption,
     ) -> Arc<(Mutex<AsyncShaderArtifact>, Condvar)> {
         let artifact = Arc::new((
             Mutex::new(AsyncShaderArtifact { shader: None }),

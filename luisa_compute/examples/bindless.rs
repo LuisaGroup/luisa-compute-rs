@@ -1,12 +1,12 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, env::current_exe};
 
 use image::io::Reader as ImageReader;
 use luisa::*;
 use luisa_compute as luisa;
 fn main() {
-    init();
     init_logger();
-    let device = create_cpu_device().unwrap();
+    let ctx = Context::new(current_exe().unwrap());
+    let device = ctx.create_device("cpu").unwrap();
     let x = device.create_buffer::<f32>(1024).unwrap();
     let y = device.create_buffer::<f32>(1024).unwrap();
     let z = device.create_buffer::<f32>(1024).unwrap();

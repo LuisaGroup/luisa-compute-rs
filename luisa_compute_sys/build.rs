@@ -164,6 +164,12 @@ fn copy_dlls(out_dir: &PathBuf) {
                     .join(path.file_name().unwrap());
                 dbg!(&dest);
                 copy_if_different(&path, dest);
+            }{
+                let dest = std::path::PathBuf::from_iter(comps[..comps.len() - 6].iter())
+                    .join("examples")
+                    .join(path.file_name().unwrap());
+                dbg!(&dest);
+                copy_if_different(&path, dest);
             }
         }
     }

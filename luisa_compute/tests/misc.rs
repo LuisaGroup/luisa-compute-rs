@@ -1,16 +1,19 @@
+use std::env::current_exe;
+
 use luisa_compute as luisa;
 use luisa::*;
 use rand::prelude::*;
 fn get_device() -> Device {
+    let ctx = Context::new(current_exe().unwrap());
     let device = match std::env::var("LUISA_TEST_DEVICE") {
         Ok(device) => device,
         Err(_) => "cpu".to_string(),
     };
-    luisa::create_device(&device).unwrap()
+    ctx.create_device(&device).unwrap()
 }
 #[test]
 fn vec_cast() {
-    init();
+
     let device = get_device();
     let f: Buffer<Float2> = device.create_buffer(1024).unwrap();
     let i: Buffer<Int2> = device.create_buffer(1024).unwrap();
@@ -35,7 +38,7 @@ fn vec_cast() {
 }
 #[test]
 fn bool_op() {
-    init();
+
     let device = get_device();
     let x: Buffer<bool> = device.create_buffer(1024).unwrap();
     let y: Buffer<bool> = device.create_buffer(1024).unwrap();
@@ -79,7 +82,7 @@ fn bool_op() {
 }
 #[test]
 fn bvec_op() {
-    init();
+
     let device = get_device();
     let x: Buffer<Bool2> = device.create_buffer(1024).unwrap();
     let y: Buffer<Bool2> = device.create_buffer(1024).unwrap();
@@ -127,7 +130,7 @@ fn bvec_op() {
 }
 #[test]
 fn vec_bit_minmax() {
-    init();
+
     let device = get_device();
     let x: Buffer<Int2> = device.create_buffer(1024).unwrap();
     let y: Buffer<Int2> = device.create_buffer(1024).unwrap();
@@ -199,7 +202,7 @@ fn vec_bit_minmax() {
 }
 #[test]
 fn vec_permute() {
-    init();
+
     let device = get_device();
     let v2: Buffer<Int2> = device.create_buffer(1024).unwrap();
     let v3: Buffer<Int3> = device.create_buffer(1024).unwrap();
@@ -226,7 +229,7 @@ fn vec_permute() {
 
 #[test]
 fn if_phi() {
-    init();
+
     let device = get_device();
     let x: Buffer<i32> = device.create_buffer(1024).unwrap();
     let even: Buffer<bool> = device.create_buffer(1024).unwrap();
@@ -251,7 +254,7 @@ fn if_phi() {
 
 #[test]
 fn switch_phi() {
-    init();
+
     let device = get_device();
     let x: Buffer<i32> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
@@ -301,7 +304,7 @@ fn switch_phi() {
 
 #[test]
 fn switch_unreachable() {
-    init();
+
     let device = get_device();
     let x: Buffer<i32> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
@@ -349,7 +352,7 @@ fn switch_unreachable() {
 
 #[test]
 fn array_read_write() {
-    init();
+
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let kernel = device
@@ -376,7 +379,7 @@ fn array_read_write() {
 }
 #[test]
 fn array_read_write2() {
-    init();
+
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
@@ -409,7 +412,7 @@ fn array_read_write2() {
 }
 #[test]
 fn array_read_write_vla() {
-    init();
+
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
@@ -448,7 +451,7 @@ fn array_read_write_vla() {
 }
 #[test]
 fn array_read_write_async_compile() {
-    init();
+
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let kernel = device

@@ -332,7 +332,7 @@ impl Backend for CppProxyBackend {
 
     unsafe fn set_swapchain_contex(&self, _ctx: backend::SwapChainForCpuContext) {}
 
-    fn create_swap_chain(
+    fn create_swapchain(
         &self,
         window_handle: u64,
         stream_handle: api::Stream,
@@ -359,7 +359,7 @@ impl Backend for CppProxyBackend {
         })
     }
 
-    fn destroy_swap_chain(&self, swap_chain: api::Swapchain) {
+    fn destroy_swapchain(&self, swap_chain: api::Swapchain) {
         catch_abort!({
             binding::luisa_compute_swapchain_destroy(
                 self.device,

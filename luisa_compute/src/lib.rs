@@ -1,4 +1,5 @@
 #![allow(unused_unsafe)]
+use std::path::{Path, PathBuf};
 use std::{any::Any, sync::Arc};
 
 pub mod lang;
@@ -46,13 +47,10 @@ pub mod macros {
 }
 
 pub use luisa_compute_sys as sys;
-pub use runtime::{CommandBuffer, Device, Stream};
+pub use runtime::{CommandList, Device, Stream};
 use std::sync::Once;
-static INIT: Once = Once::new();
-pub fn init() {
-    INIT.call_once(|| {
-        // do nothing?
-    });
+pub struct Context {
+    lib_path: PathBuf,
 }
 pub fn init_logger() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
@@ -60,32 +58,61 @@ pub fn init_logger() {
         .init();
 }
 
-pub fn create_cpu_device() -> backend::Result<Device> {
-    create_device("cpu")
-}
-
-pub fn create_device(device: &str) -> backend::Result<Device> {
-    let backend: Arc<dyn Backend> = match device {
-        "cpu" => backend::rust::RustBackend::new(),
-        "cuda" => {
-            #[cfg(feature = "cuda")]
-            {
-                sys::cpp_proxy_backend::CppProxyBackend::new(device)
-            }
-            #[cfg(not(feature = "cuda"))]
-            {
-                panic!("{} backend is not enabled", device)
-            }
+impl Context {
+    // path to libluisa-*
+    // if the current_exe() is in the same directory as libluisa-*, then passing current_exe() is enough
+    pub fn new(lib_path: impl AsRef<Path>) -> Self {
+        let mut lib_path = lib_path.as_ref().to_path_buf();
+        if lib_path.is_file() {
+            lib_path = lib_path.parent().unwrap().to_path_buf();
         }
-        _ => panic!("unsupported device: {}", device),
-    };
-    let default_stream = api::Stream(backend.create_stream(api::StreamTag::Graphics)?.handle);
-    Ok(Device {
-        inner: Arc::new(DeviceHandle {
-            backend,
-            default_stream,
-        }),
-    })
+        Self { lib_path }
+    }
+    #[inline]
+    pub fn create_cpu_device(&self) -> backend::Result<Device> {
+        self.create_device("cpu")
+    }
+
+    pub fn create_device(&self, device: &str) -> backend::Result<Device> {
+        use luisa_compute_backend::SwapChainForCpuContext;
+        let backend: Arc<dyn Backend> = match device {
+            "cpu" => {
+                let device = backend::rust::RustBackend::new();
+
+                let lib_path = if cfg!(target_os = "windows") {
+                    "libluisa-compute-vulkan-swapchain.dll"
+                } else if cfg!(target_os = "linux") {
+                    "libluisa-compute-vulkan-swapchain.so"
+                } else {
+                    todo!()
+                };
+                let lib_path = self.lib_path.join(lib_path);
+                let swapchain_ctx = unsafe { SwapChainForCpuContext::new(lib_path) }.unwrap();
+                unsafe {
+                    device.set_swapchain_contex(swapchain_ctx);
+                }
+                device
+            }
+            "cuda" => {
+                #[cfg(feature = "cuda")]
+                {
+                    sys::cpp_proxy_backend::CppProxyBackend::new(device)
+                }
+                #[cfg(not(feature = "cuda"))]
+                {
+                    panic!("{} backend is not enabled", device)
+                }
+            }
+            _ => panic!("unsupported device: {}", device),
+        };
+        let default_stream = api::Stream(backend.create_stream(api::StreamTag::Graphics)?.handle);
+        Ok(Device {
+            inner: Arc::new(DeviceHandle {
+                backend,
+                default_stream,
+            }),
+        })
+    }
 }
 pub struct ResourceTracker {
     resources: Vec<Arc<dyn Any>>,

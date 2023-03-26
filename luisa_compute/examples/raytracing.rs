@@ -1,11 +1,19 @@
+use std::env::current_exe;
+
+use image::Rgb;
+#[allow(unused_imports)]
 use luisa::prelude::*;
 use luisa_compute as luisa;
-use luisa::*;
-use image::Rgb;
+use winit::{
+    event::{Event, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
+};
+
 fn main() {
-    init();
+    use luisa::*;
     init_logger();
-    let device = create_device("cpu").unwrap();
+    let ctx = Context::new(current_exe().unwrap());
+    let device = ctx.create_device("cpu").unwrap();
     let vbuffer: Buffer<Float3> = device
         .create_buffer_from_slice(&[
             Float3::new(-0.5, -0.5, 0.0),
@@ -23,8 +31,8 @@ fn main() {
     let accel = device.create_accel(Default::default()).unwrap();
     accel.push_mesh(&mesh, Mat4::identity(), 0xff, true);
     accel.build(AccelBuildRequest::ForceBuild);
-    let img_w = 1024;
-    let img_h = 1024;
+    let img_w = 800;
+    let img_h = 800;
     let img = device
         .create_tex2d::<Float4>(PixelStorage::Byte4, img_w, img_h, 1)
         .unwrap();
@@ -48,19 +56,57 @@ fn main() {
             img.write(px, make_float4(color.x(), color.y(), color.z(), 1.0));
         })
         .unwrap();
-    let mut img_buffer = vec![[0u8;4]; (img_w * img_h) as usize];
+    let event_loop = EventLoop::new();
+    let window = winit::window::WindowBuilder::new()
+        .with_title("Luisa Compute Rust - Ray Tracing")
+        .with_inner_size(winit::dpi::LogicalSize::new(img_w, img_h))
+        .build(&event_loop)
+        .unwrap();
+    let swapchain = device
+        .create_swapchain(
+            &window,
+            &device.default_stream(),
+            img_w,
+            img_h,
+            false,
+            true,
+            3,
+        )
+        .unwrap();
+    let mut img_buffer = vec![[0u8; 4]; (img_w * img_h) as usize];
     {
-        let stream = device.default_stream();
-        stream.submit([
-            rt_kernel.dispatch_async([img_w, img_h, 1]),
-            img.view(0).copy_to_async(&mut img_buffer)
-        ]).unwrap();
+        let scope = device.default_stream().scope();
+        scope
+            .submit([
+                rt_kernel.dispatch_async([img_w, img_h, 1]),
+                img.view(0).copy_to_async(&mut img_buffer),
+            ])
+            .unwrap();
     }
-    let img = image::RgbImage::from_fn(img_w, img_h, |x,y|{
-        let i = x + y * img_w;
-        let px = img_buffer[i as usize];
-        Rgb([px[0], px[1], px[2]])
+    {
+        let img = image::RgbImage::from_fn(img_w, img_h, |x, y| {
+            let i = x + y * img_w;
+            let px = img_buffer[i as usize];
+            Rgb([px[0], px[1], px[2]])
+        });
+        img.save("triangle.png").unwrap();
+    }
+    event_loop.run(move |event, _, control_flow| {
+        control_flow.set_wait();
+        println!("{event:?}");
+        match event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                window_id,
+            } if window_id == window.id() => *control_flow = ControlFlow::Exit,
+            Event::MainEventsCleared => {
+                window.request_redraw();
+            }
+            Event::RedrawRequested(_) => {
+                let scope = device.default_stream().scope();
+                scope.present(&swapchain, &img).unwrap();
+            }
+            _ => (),
+        }
     });
-    img.save("triangle.png").unwrap();
-
 }

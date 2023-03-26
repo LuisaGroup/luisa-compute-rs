@@ -1,3 +1,4 @@
+use std::env::current_exe;
 use std::f32::consts::PI;
 
 use luisa::prelude::*;
@@ -32,8 +33,8 @@ impl Area for SquareExpr {
 impl_polymorphic!(Area, Square);
 fn main() {
     use luisa::*;
-    init();
-    let device = create_cpu_device().unwrap();
+    let ctx = Context::new(current_exe().unwrap());
+    let device = ctx.create_device("cpu").unwrap();
     let circles = device.create_buffer::<Circle>(2).unwrap();
     circles
         .view(..)

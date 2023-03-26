@@ -1,3 +1,5 @@
+use std::env::current_exe;
+
 use luisa::math::*;
 use luisa::prelude::*;
 use luisa::Value;
@@ -12,9 +14,8 @@ pub struct Sphere {
 
 fn main() {
     use luisa::*;
-    init();
-    // luisa::sys::init_cpp(current_exe().unwrap().parent().unwrap());
-    let device = create_cpu_device().unwrap();
+    let ctx = Context::new(current_exe().unwrap());
+    let device = ctx.create_device("cpu").unwrap();
     let spheres = device.create_buffer::<Sphere>(1).unwrap();
     spheres.view(..).copy_from(&[Sphere {
         center: Float3::new(0.0, 0.0, 0.0),

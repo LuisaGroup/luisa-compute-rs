@@ -66,7 +66,6 @@ impl Device {
         back_buffer_size: u32,
     ) -> backend::Result<Swapchain> {
         let handle = window.raw_window_handle();
-        dbg!(&handle);
         let window_handle = match handle {
             raw_window_handle::RawWindowHandle::UiKit(_) => todo!(),
             raw_window_handle::RawWindowHandle::AppKit(_) => todo!(),

@@ -1816,6 +1816,7 @@ impl KernelBuilder {
                     cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
                     captures: CBoxedSlice::new(captured),
                     shared: CBoxedSlice::new(vec![]),
+                    callables: CBoxedSlice::new(vec![]),
                     args: CBoxedSlice::new(self.args.clone()),
                     block_size: r.block_size.unwrap_or([1, 1, 1]),
                     pools: r.pools.clone().unwrap(),

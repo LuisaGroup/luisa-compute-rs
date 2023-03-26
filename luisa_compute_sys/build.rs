@@ -96,6 +96,7 @@ fn cmake_build() -> PathBuf {
     set_from_env!("GUI", "LUISA_COMPUTE_ENABLE_GUI");
     config.define("LUISA_COMPUTE_CHECK_BACKEND_DEPENDENCIES", "OFF");
     config.define("LUISA_COMPUTE_BUILD_TESTS", "OFF");
+    config.define("LUISA_COMPUTE_COMPILED_BY_RUST_FRONTEND", "ON");
     config.define("LUISA_COMPUTE_ENABLE_DSL", "OFF");
     config.define("LUISA_COMPUTE_ENABLE_CPU", "OFF");
     config.define("LUISA_COMPUTE_ENABLE_REMOTE", "OFF");

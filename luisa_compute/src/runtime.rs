@@ -618,6 +618,7 @@ impl RawShader {
     }
 }
 pub trait CallableArg {}
+// impl <T> CallableArg for T where T: KernelArg {}
 pub struct Callable<T: CallableArg> {
     pub(crate) inner: ir::CallableModuleRef,
     marker: std::marker::PhantomData<T>,

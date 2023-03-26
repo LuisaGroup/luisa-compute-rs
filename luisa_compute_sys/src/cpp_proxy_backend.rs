@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::binding;
+use crate::{binding, LCStream};
 use api::StreamTag;
 use backend::Backend;
 use libc::c_void;
@@ -328,5 +328,59 @@ impl Backend for CppProxyBackend {
 
     fn destroy_procedural_primitive(&self, _primitive: api::ProceduralPrimitive) {
         todo!()
+    }
+
+    unsafe fn set_swapchain_contex(&self, _ctx: backend::SwapChainForCpuContext) {}
+
+    fn create_swap_chain(
+        &self,
+        window_handle: u64,
+        stream_handle: api::Stream,
+        width: u32,
+        height: u32,
+        allow_hdr: bool,
+        vsync: bool,
+        back_buffer_size: u32,
+    ) -> backend::Result<api::CreatedSwapchainInfo> {
+        catch_abort!({
+            let swap_chain = binding::luisa_compute_swapchain_create(
+                self.device,
+                window_handle,
+                LCStream {
+                    _0: stream_handle.0,
+                },
+                width,
+                height,
+                allow_hdr,
+                vsync,
+                back_buffer_size,
+            );
+            Ok(std::mem::transmute(swap_chain))
+        })
+    }
+
+    fn destroy_swap_chain(&self, swap_chain: api::Swapchain) {
+        catch_abort!({
+            binding::luisa_compute_swapchain_destroy(
+                self.device,
+                crate::LCSwapchain { _0: swap_chain.0 },
+            )
+        })
+    }
+
+    fn present_display_in_stream(
+        &self,
+        stream_handle: api::Stream,
+        swapchain_handle: api::Swapchain,
+        image_handle: api::Texture,
+    ) {
+        catch_abort!({
+            binding::luisa_compute_swapchain_present(
+                self.device,
+                std::mem::transmute(stream_handle),
+                std::mem::transmute(swapchain_handle),
+                std::mem::transmute(image_handle),
+            )
+        })
     }
 }

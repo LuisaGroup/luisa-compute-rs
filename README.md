@@ -21,13 +21,16 @@ Rust frontend to LuisaCompute and more! (WIP) ⚠ A stable version will be relea
 * [Safety](#safety)
     
 ## Example
+Try `cargo run --release --example raytracing`!
+### Vecadd
 ```rust
 use luisa::prelude::*;
 use luisa_compute as luisa;
 
 fn main() {
-    init();
-    let device = create_cpu_device().unwrap();
+    init_logger();
+    let ctx = Context::new(current_exe().unwrap());
+    let device = ctx.create_device("cpu").unwrap();
     let x = device.create_buffer::<f32>(1024).unwrap();
     let y = device.create_buffer::<f32>(1024).unwrap();
     let z = device.create_buffer::<f32>(1024).unwrap();
@@ -49,8 +52,19 @@ fn main() {
     println!("{:?}", &z_data[0..16]);
 }
 
-
 ```
+Other examples in [examples](luisa_compute/examples)
+
+| Example | Description |
+| ----------- | ----------- |
+| [Atomic](luisa_compute/examples/atomic.rs) | Atomic buffer operations |
+| [Bindless](luisa_compute/examples/bindless.rs) | Bindless array access |
+| [Custom Aggregate](luisa_compute/examples/custom_aggregate.rs) | Use #[derive(Aggregate)] for kernel only data types|
+| [Custom Op](luisa_compute/examples/custom_op.rs) | Custom operator for CPU backend |
+| [Polymporphism](luisa_compute/examples/polymorphism.rs) | Simple usage of Polymorphic<K, T> |
+| [Advanced Polymporphism](luisa_compute/examples/polymorphism_advanced.rs) | Use Polymorphic<K, T> to implement recursive polymorphic call|
+| [Ray Tracing](luisa_compute/examples/raytracing.rs) | A simple raytracing kernel with GUI|
+
 ## Overview
 ### Embedded Domain-Specific Language
 We provided an Rust-flavored implementation of LuisaCompute EDSL that tightly integrates with Rust language via traits and proc-macros.
@@ -168,7 +182,7 @@ impl Area for CircleExpr {
 }
 impl_polymorphic!(Area, Circle);
 
-let circles = device.create_buffer(..).unwrap()'
+let circles = device.create_buffer(..).unwrap();
 let mut poly_area: Polymorphic<dyn Area> = Polymorphic::new();
 poly_area.register(&circles);
 let area = poly_area.dispatch(tag, index, |obj|{

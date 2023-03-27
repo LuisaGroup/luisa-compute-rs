@@ -1,74 +1,6 @@
 use std::path::Path;
 use std::{env, fs, path::PathBuf};
 
-use bindgen::{self, CargoCallbacks};
-
-fn generate_bindings() {
-    #[derive(Debug)]
-    struct ParseCallback {}
-    fn to_upper_snake_case(s: &str) -> String {
-        let mut result = String::new();
-        let mut last: Option<char> = None;
-        for c in s.chars() {
-            if let Some(last) = last {
-                if c.is_uppercase() {
-                    if last.is_lowercase() || last.is_numeric() {
-                        result.push('_');
-                    }
-                }
-            }
-            result.push(c.to_ascii_uppercase());
-            last = Some(c);
-        }
-        result
-    }
-    impl bindgen::callbacks::ParseCallbacks for ParseCallback {
-        fn include_file(&self, _filename: &str) {
-            let cb = CargoCallbacks {};
-            cb.include_file(_filename);
-        }
-        fn enum_variant_name(
-            &self,
-            _enum_name: Option<&str>,
-            original_variant_name: &str,
-            _variant_value: bindgen::callbacks::EnumVariantValue,
-        ) -> Option<String> {
-            // let enum_name = enum_name?;
-            // if !enum_name.starts_with("LC") {
-            //     return None;
-            // }
-            if original_variant_name.starts_with("LC_OP_") {
-                let mut name = original_variant_name.to_string();
-                name = name.replace("LC_OP_", "");
-                return Some(to_upper_snake_case(&name));
-            }
-            if original_variant_name.starts_with("LC_") {
-                let mut name = original_variant_name.to_string();
-                name = name.replace("LC_", "");
-                return Some(to_upper_snake_case(&name));
-            }
-            None
-        }
-    }
-    let bindings = bindgen::Builder::default()
-        .header("./LuisaCompute/src/api/runtime.h")
-        .header("./LuisaCompute/src/api/logging.h")
-        .clang_arg("-I./LuisaCompute/src/")
-        .clang_arg("-I./LuisaCompute/src/ext/EASTL/include")
-        .clang_arg("-I./LuisaCompute/src/ir/")
-        .clang_arg("-I./LuisaCompute/src/ir/luisa-compute-ir")
-        .clang_arg("-DLUISA_COMPUTE_RUST_BINDGEN")
-        .prepend_enum_name(false)
-        .newtype_enum("LC.*")
-        .allowlist_function("luisa_compute_.*")
-        .parse_callbacks(Box::new(ParseCallback {}))
-        .generate()
-        .expect("Unable to generate bindings");
-    bindings
-        .write_to_file("src/binding.rs")
-        .expect("Couldn't write bindings!");
-}
-
 fn cmake_build() -> PathBuf {
     let mut config = cmake::Config::new("./LuisaCompute");
     macro_rules! set_from_env {
@@ -177,18 +109,6 @@ fn copy_dlls(out_dir: &PathBuf) {
 
 fn main() {
     let out_dir = cmake_build();
-    generate_bindings();
-
-    // dbg!(&out_dir);
-    println!(
-        "cargo:rustc-link-search=native={}/build/bin/",
-        out_dir.to_str().unwrap()
-    );
-    println!(
-        "cargo:rustc-link-search=native={}/build/lib/",
-        out_dir.to_str().unwrap()
-    );
-    println!("cargo:rustc-link-lib=dylib=luisa-compute-api");
     copy_dlls(&out_dir);
 }
 

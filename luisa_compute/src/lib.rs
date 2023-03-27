@@ -50,7 +50,7 @@ pub use luisa_compute_sys as sys;
 pub use runtime::{CommandList, Device, Stream};
 use std::sync::Once;
 pub struct Context {
-    lib_path: PathBuf,
+    inner: backend::Context,
 }
 pub fn init_logger() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
@@ -66,7 +66,9 @@ impl Context {
         if lib_path.is_file() {
             lib_path = lib_path.parent().unwrap().to_path_buf();
         }
-        Self { lib_path }
+        Self {
+            inner: backend::Context::new(lib_path),
+        }
     }
     #[inline]
     pub fn create_cpu_device(&self) -> backend::Result<Device> {
@@ -75,36 +77,7 @@ impl Context {
 
     pub fn create_device(&self, device: &str) -> backend::Result<Device> {
         use luisa_compute_backend::SwapChainForCpuContext;
-        let backend: Arc<dyn Backend> = match device {
-            "cpu" => {
-                let device = backend::rust::RustBackend::new();
-
-                let lib_path = if cfg!(target_os = "windows") {
-                    "libluisa-compute-vulkan-swapchain.dll"
-                } else if cfg!(target_os = "linux") {
-                    "libluisa-compute-vulkan-swapchain.so"
-                } else {
-                    todo!()
-                };
-                let lib_path = self.lib_path.join(lib_path);
-                let swapchain_ctx = unsafe { SwapChainForCpuContext::new(lib_path) }.unwrap();
-                unsafe {
-                    device.set_swapchain_contex(swapchain_ctx);
-                }
-                device
-            }
-            "cuda" => {
-                #[cfg(feature = "cuda")]
-                {
-                    sys::cpp_proxy_backend::CppProxyBackend::new(device)
-                }
-                #[cfg(not(feature = "cuda"))]
-                {
-                    panic!("{} backend is not enabled", device)
-                }
-            }
-            _ => panic!("unsupported device: {}", device),
-        };
+        let backend = self.inner.create_device(device)?;
         let default_stream = api::Stream(backend.create_stream(api::StreamTag::Graphics)?.handle);
         Ok(Device {
             inner: Arc::new(DeviceHandle {

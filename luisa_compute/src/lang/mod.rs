@@ -379,7 +379,7 @@ impl<T: Value> CpuFn<T> {
 pub(crate) struct Recorder {
     scopes: Vec<IrBuilder>,
     lock: bool,
-    captured_buffer: HashMap<u64, (usize, NodeRef, Binding, Arc<dyn Any>)>,
+    captured_buffer: HashMap<Binding, (usize, NodeRef, Binding, Arc<dyn Any>)>,
     cpu_custom_ops: HashMap<u64, (usize, CArc<CpuCustomOp>)>,
     device: Option<Device>,
     block_size: Option<[u32; 3]>,
@@ -1125,7 +1125,9 @@ impl BindlessArrayVar {
                 "BindlessArrayVar must be created from within a kernel"
             );
             let handle: u64 = array.handle().0;
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
+            let binding = Binding::BindlessArray(BindlessArrayBinding { handle });
+
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
                 *node
             } else {
                 let node = new_node(
@@ -1133,15 +1135,8 @@ impl BindlessArrayVar {
                     Node::new(CArc::new(Instruction::Bindless), Type::void()),
                 );
                 let i = r.captured_buffer.len();
-                r.captured_buffer.insert(
-                    handle,
-                    (
-                        i,
-                        node,
-                        Binding::BindlessArray(BindlessArrayBinding { handle }),
-                        array.handle.clone(),
-                    ),
-                );
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, array.handle.clone()));
                 node
             }
         });
@@ -1152,12 +1147,16 @@ impl BindlessArrayVar {
     }
 }
 impl<T: Value> BufferVar<T> {
-    pub fn new(buffer: &Buffer<T>) -> Self {
+    pub fn new(buffer: &BufferView<'_, T>) -> Self {
         let node = RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(r.lock, "BufferVar must be created from within a kernel");
-            let handle: u64 = buffer.handle().0;
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
+            let binding = Binding::Buffer(BufferBinding {
+                handle: buffer.handle().0,
+                size: buffer.len * std::mem::size_of::<T>(),
+                offset: (buffer.offset * std::mem::size_of::<T>()) as u64,
+            });
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
                 *node
             } else {
                 let node = new_node(
@@ -1165,26 +1164,15 @@ impl<T: Value> BufferVar<T> {
                     Node::new(CArc::new(Instruction::Buffer), T::type_()),
                 );
                 let i = r.captured_buffer.len();
-                r.captured_buffer.insert(
-                    handle,
-                    (
-                        i,
-                        node,
-                        Binding::Buffer(BufferBinding {
-                            handle: buffer.handle().0,
-                            size: buffer.size_bytes(),
-                            offset: 0,
-                        }),
-                        buffer.handle.clone(),
-                    ),
-                );
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, buffer.buffer.handle.clone()));
                 node
             }
         });
         Self {
             node,
             marker: std::marker::PhantomData,
-            handle: Some(buffer.handle.clone()),
+            handle: Some(buffer.buffer.handle.clone()),
         }
     }
     pub fn len(&self) -> Expr<u32> {
@@ -1430,7 +1418,11 @@ impl<T: IoTexel> Tex2dVar<T> {
             let mut r = r.borrow_mut();
             assert!(r.lock, "Tex2dVar<T> must be created from within a kernel");
             let handle: u64 = view.tex.handle().0;
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
+            let binding = Binding::Texture(TextureBinding {
+                handle,
+                level: view.level,
+            });
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
                 *node
             } else {
                 let node = new_node(
@@ -1438,18 +1430,8 @@ impl<T: IoTexel> Tex2dVar<T> {
                     Node::new(CArc::new(Instruction::Texture2D), Type::void()),
                 );
                 let i = r.captured_buffer.len();
-                r.captured_buffer.insert(
-                    handle,
-                    (
-                        i,
-                        node,
-                        Binding::Texture(TextureBinding {
-                            handle,
-                            level: view.level,
-                        }),
-                        view.tex.handle.clone(),
-                    ),
-                );
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, view.tex.handle.clone()));
                 node
             }
         });
@@ -1484,7 +1466,11 @@ impl<T: IoTexel> Tex3dVar<T> {
             let mut r = r.borrow_mut();
             assert!(r.lock, "Tex3dVar<T> must be created from within a kernel");
             let handle: u64 = view.tex.handle().0;
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
+            let binding = Binding::Texture(TextureBinding {
+                handle,
+                level: view.level,
+            });
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
                 *node
             } else {
                 let node = new_node(
@@ -1492,18 +1478,8 @@ impl<T: IoTexel> Tex3dVar<T> {
                     Node::new(CArc::new(Instruction::Texture3D), Type::void()),
                 );
                 let i = r.captured_buffer.len();
-                r.captured_buffer.insert(
-                    handle,
-                    (
-                        i,
-                        node,
-                        Binding::Texture(TextureBinding {
-                            handle,
-                            level: view.level,
-                        }),
-                        view.tex.handle.clone(),
-                    ),
-                );
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, view.tex.handle.clone()));
                 node
             }
         });
@@ -1618,7 +1594,8 @@ impl AccelVar {
             let mut r = r.borrow_mut();
             assert!(r.lock, "BufferVar must be created from within a kernel");
             let handle: u64 = accel.handle().0;
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
+            let binding = Binding::Accel(AccelBinding { handle });
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
                 *node
             } else {
                 let node = new_node(
@@ -1626,15 +1603,8 @@ impl AccelVar {
                     Node::new(CArc::new(Instruction::Accel), Type::void()),
                 );
                 let i = r.captured_buffer.len();
-                r.captured_buffer.insert(
-                    handle,
-                    (
-                        i,
-                        node,
-                        Binding::Accel(AccelBinding { handle }),
-                        accel.handle.clone(),
-                    ),
-                );
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, accel.handle.clone()));
                 node
             }
         });

@@ -1,4 +1,4 @@
-use crate::backend::{Backend, BackendError};
+use crate::backend::Backend;
 use crate::lang::ShaderBuildOptions;
 use crate::*;
 use crate::{lang::Value, resource::*};
@@ -11,11 +11,9 @@ use luisa_compute_ir::CArc;
 use parking_lot::{Condvar, Mutex};
 use raw_window_handle::HasRawWindowHandle;
 use rtx::{Accel, Mesh, MeshHandle};
-use std::cell::{Cell, RefCell, UnsafeCell};
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::marker::PhantomData;
-use std::mem::align_of;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -759,7 +757,9 @@ impl RawShader {
         submit_default_stream_and_sync(&self.device, vec![self.dispatch_async(args, dispatch_size)])
     }
 }
-pub trait CallableArg {}
+pub trait CallableArg {
+    fn arg_node(&self)->NodeRef;
+}
 // impl <T> CallableArg for T where T: KernelArg {}
 pub struct Callable<T: CallableArg> {
     pub(crate) inner: ir::CallableModuleRef,

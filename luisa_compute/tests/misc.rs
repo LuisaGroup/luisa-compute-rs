@@ -1,7 +1,7 @@
 use std::env::current_exe;
 
-use luisa_compute as luisa;
 use luisa::*;
+use luisa_compute as luisa;
 use rand::prelude::*;
 fn get_device() -> Device {
     let ctx = Context::new(current_exe().unwrap());
@@ -13,7 +13,6 @@ fn get_device() -> Device {
 }
 #[test]
 fn vec_cast() {
-
     let device = get_device();
     let f: Buffer<Float2> = device.create_buffer(1024).unwrap();
     let i: Buffer<Int2> = device.create_buffer(1024).unwrap();
@@ -38,7 +37,6 @@ fn vec_cast() {
 }
 #[test]
 fn bool_op() {
-
     let device = get_device();
     let x: Buffer<bool> = device.create_buffer(1024).unwrap();
     let y: Buffer<bool> = device.create_buffer(1024).unwrap();
@@ -82,7 +80,6 @@ fn bool_op() {
 }
 #[test]
 fn bvec_op() {
-
     let device = get_device();
     let x: Buffer<Bool2> = device.create_buffer(1024).unwrap();
     let y: Buffer<Bool2> = device.create_buffer(1024).unwrap();
@@ -130,7 +127,6 @@ fn bvec_op() {
 }
 #[test]
 fn vec_bit_minmax() {
-
     let device = get_device();
     let x: Buffer<Int2> = device.create_buffer(1024).unwrap();
     let y: Buffer<Int2> = device.create_buffer(1024).unwrap();
@@ -202,7 +198,6 @@ fn vec_bit_minmax() {
 }
 #[test]
 fn vec_permute() {
-
     let device = get_device();
     let v2: Buffer<Int2> = device.create_buffer(1024).unwrap();
     let v3: Buffer<Int3> = device.create_buffer(1024).unwrap();
@@ -229,7 +224,6 @@ fn vec_permute() {
 
 #[test]
 fn if_phi() {
-
     let device = get_device();
     let x: Buffer<i32> = device.create_buffer(1024).unwrap();
     let even: Buffer<bool> = device.create_buffer(1024).unwrap();
@@ -254,7 +248,6 @@ fn if_phi() {
 
 #[test]
 fn switch_phi() {
-
     let device = get_device();
     let x: Buffer<i32> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
@@ -304,7 +297,6 @@ fn switch_phi() {
 
 #[test]
 fn switch_unreachable() {
-
     let device = get_device();
     let x: Buffer<i32> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
@@ -352,7 +344,6 @@ fn switch_unreachable() {
 
 #[test]
 fn array_read_write() {
-
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let kernel = device
@@ -379,7 +370,6 @@ fn array_read_write() {
 }
 #[test]
 fn array_read_write2() {
-
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
@@ -412,7 +402,6 @@ fn array_read_write2() {
 }
 #[test]
 fn array_read_write_vla() {
-
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
@@ -451,7 +440,6 @@ fn array_read_write_vla() {
 }
 #[test]
 fn array_read_write_async_compile() {
-
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let kernel = device
@@ -475,4 +463,33 @@ fn array_read_write_async_compile() {
             [i as i32, i as i32 + 1, i as i32 + 2, i as i32 + 3]
         );
     }
+}
+#[test]
+fn capture_same_buffer_multiple_view() {
+    let device = get_device();
+    let x = device.create_buffer::<f32>(128).unwrap();
+    let sum = device.create_buffer::<f32>(1).unwrap();
+    x.view(..).fill_fn(|i| i as f32);
+    sum.view(..).fill(0.0);
+    let shader = device
+        .create_kernel::<()>(&|| {
+            let tid = luisa::dispatch_id().x();
+            let buf_x_lo = x.view(0..64).var();
+            let buf_x_hi = x.view(64..).var();
+            let x = if_!(tid.cmplt(64), {
+                buf_x_lo.read(tid)
+            },else {
+                buf_x_hi.read(tid - 64)
+            });
+            let buf_sum = sum.var();
+
+            buf_sum.atomic_fetch_add(0, x);
+        })
+        .unwrap();
+    shader.dispatch([x.len() as u32, 1, 1]).unwrap();
+    let mut sum_data = vec![0.0];
+    sum.view(..).copy_to(&mut sum_data);
+    let actual = sum_data[0];
+    let expected = (x.len() as f32 - 1.0) * x.len() as f32 * 0.5;
+    assert!((actual - expected).abs() < 1e-4);
 }

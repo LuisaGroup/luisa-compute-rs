@@ -34,11 +34,14 @@ impl Drop for BufferHandle {
 }
 #[derive(Clone, Copy)]
 pub struct BufferView<'a, T: Value> {
-    buffer: &'a Buffer<T>,
+    pub(crate) buffer: &'a Buffer<T>,
     pub(crate) offset: usize,
     pub(crate) len: usize,
 }
 impl<'a, T: Value> BufferView<'a, T> {
+    pub fn var(&self) -> BufferVar<T> {
+        BufferVar::new(self)
+    }
     pub(crate) fn handle(&self) -> api::Buffer {
         self.buffer.handle()
     }
@@ -179,7 +182,7 @@ impl<T: Value> Buffer<T> {
         self.len * std::mem::size_of::<T>()
     }
     pub fn var(&self) -> BufferVar<T> {
-        BufferVar::new(self)
+        BufferVar::new(&self.view(..))
     }
 }
 impl<T: Value> Clone for Buffer<T> {
@@ -672,7 +675,10 @@ macro_rules! impl_tex_view {
                     marker: std::marker::PhantomData,
                 }
             }
-            pub fn copy_to_buffer<U: StorageTexel<T> + Value>(&'a self, buffer_view: &BufferView<U>) {
+            pub fn copy_to_buffer<U: StorageTexel<T> + Value>(
+                &'a self,
+                buffer_view: &BufferView<U>,
+            ) {
                 submit_default_stream_and_sync(
                     &self.tex.handle.device,
                     [self.copy_to_buffer_async(buffer_view)],

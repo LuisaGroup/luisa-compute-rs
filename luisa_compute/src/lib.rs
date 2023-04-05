@@ -76,7 +76,6 @@ impl Context {
     }
 
     pub fn create_device(&self, device: &str) -> backend::Result<Device> {
-        use luisa_compute_backend::SwapChainForCpuContext;
         let backend = self.inner.create_device(device)?;
         let default_stream = api::Stream(backend.create_stream(api::StreamTag::Graphics)?.handle);
         Ok(Device {

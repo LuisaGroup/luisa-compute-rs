@@ -94,7 +94,7 @@ impl Compiler {
             }
             impl #impl_generics luisa_compute::runtime::KernelArg for #name #ty_generics #where_clause{
                 type Parameter = #parameter_name #ty_generics;
-                fn encode(&self, encoder: &mut  luisa_compute::ArgEncoder) {
+                fn encode(&self, encoder: &mut  luisa_compute::KernelArgEncoder) {
                     #(self.#field_names.encode(encoder);)*
                 }
             }

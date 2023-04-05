@@ -493,3 +493,35 @@ fn capture_same_buffer_multiple_view() {
     let expected = (x.len() as f32 - 1.0) * x.len() as f32 * 0.5;
     assert!((actual - expected).abs() < 1e-4);
 }
+
+#[test]
+fn uniform() {
+    let device = get_device();
+    let x = device.create_buffer::<f32>(128).unwrap();
+    let sum = device.create_buffer::<f32>(1).unwrap();
+    x.view(..).fill_fn(|i| i as f32);
+    sum.view(..).fill(0.0);
+    let shader = device
+        .create_kernel::<(Float3,)>(&|v: Expr<Float3>| {
+            let tid = luisa::dispatch_id().x();
+            let buf_x_lo = x.view(0..64).var();
+            let buf_x_hi = x.view(64..).var();
+            let x = if_!(tid.cmplt(64), {
+                buf_x_lo.read(tid)
+            },else {
+                buf_x_hi.read(tid - 64)
+            });
+            let buf_sum = sum.var();
+            let x = x * v.reduce_prod();
+            buf_sum.atomic_fetch_add(0, x);
+        })
+        .unwrap();
+    shader
+        .dispatch([x.len() as u32, 1, 1], &Float3::new(1.0, 2.0, 3.0))
+        .unwrap();
+    let mut sum_data = vec![0.0];
+    sum.view(..).copy_to(&mut sum_data);
+    let actual = sum_data[0];
+    let expected = (x.len() as f32 - 1.0) * x.len() as f32 * 0.5 * 6.0;
+    assert!((actual - expected).abs() < 1e-4);
+}

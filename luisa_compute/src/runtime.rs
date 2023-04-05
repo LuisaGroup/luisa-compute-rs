@@ -1,5 +1,5 @@
 use crate::backend::Backend;
-use crate::lang::ShaderBuildOptions;
+use crate::lang::KernelBuildOptions;
 use crate::*;
 use crate::{lang::Value, resource::*};
 
@@ -287,31 +287,37 @@ impl Device {
             modifications: RefCell::new(HashMap::new()),
         })
     }
-    // pub fn create_callable(&self, ) {
-
-    // }
+    pub fn create_callable<'a, S: CallableSignature<'a, R>, R: CallableRet>(
+        &self,
+        f: S::Fn,
+    ) -> S::Callable {
+        let mut builder = KernelBuilder::new(self.clone(), false);
+        let raw_callable = KernelBuildFn::build_callable(&f, &mut builder);
+        S::wrap_raw_callable(raw_callable)
+    }
     pub fn create_kernel<'a, S: KernelSignature<'a>>(
         &self,
         f: S::Fn,
     ) -> Result<S::Kernel, crate::backend::BackendError> {
-        let mut builder = KernelBuilder::new(self.clone());
-        let raw_kernel = KernelBuildFn::build(&f, &mut builder, ShaderBuildOptions::default());
-        S::wrap_raw_shader(raw_kernel)
+        let mut builder = KernelBuilder::new(self.clone(), true);
+        let raw_kernel =
+            KernelBuildFn::build_kernel(&f, &mut builder, KernelBuildOptions::default());
+        S::wrap_raw_kernel(raw_kernel)
     }
     pub fn create_kernel_async<'a, S: KernelSignature<'a>>(
         &self,
         f: S::Fn,
     ) -> Result<S::Kernel, crate::backend::BackendError> {
-        let mut builder = KernelBuilder::new(self.clone());
-        let raw_kernel = KernelBuildFn::build(
+        let mut builder = KernelBuilder::new(self.clone(), true);
+        let raw_kernel = KernelBuildFn::build_kernel(
             &f,
             &mut builder,
-            ShaderBuildOptions {
+            KernelBuildOptions {
                 async_compile: true,
                 ..Default::default()
             },
         );
-        S::wrap_raw_shader(raw_kernel)
+        S::wrap_raw_kernel(raw_kernel)
     }
 }
 #[macro_export]
@@ -595,18 +601,68 @@ impl AsyncShaderArtifact {
         artifact
     }
 }
-pub struct RawShader {
+pub struct RawKernel {
     pub(crate) device: Device,
     pub(crate) artifact: ShaderArtifact,
     #[allow(dead_code)]
     pub(crate) resource_tracker: ResourceTracker,
 }
-pub struct ArgEncoder {
-    pub(crate) args: Vec<api::Argument>,
+pub struct CallableArgEncoder {
+    pub(crate) args: Vec<NodeRef>,
 }
-impl ArgEncoder {
-    pub fn new() -> ArgEncoder {
-        ArgEncoder { args: Vec::new() }
+impl CallableArgEncoder {
+    pub fn new() -> CallableArgEncoder {
+        CallableArgEncoder { args: Vec::new() }
+    }
+    pub fn buffer<T: Value>(&mut self, buffer: &BufferVar<T>) {
+        self.args.push(buffer.node);
+    }
+    pub fn tex2d<T: IoTexel>(&mut self, tex2d: &Tex2dVar<T>) {
+        self.args.push(tex2d.node);
+    }
+    pub fn tex3d<T: IoTexel>(&mut self, tex3d: &Tex3dVar<T>) {
+        self.args.push(tex3d.node);
+    }
+    pub fn bindless_array(&mut self, array: &BindlessArrayVar) {
+        self.args.push(array.node);
+    }
+    pub fn value<T: Value>(&mut self, value: Expr<T>) {
+        self.args.push(value.node());
+    }
+    pub fn var<T: Value>(&mut self, var: Var<T>) {
+        self.args.push(var.node());
+    }
+}
+pub struct KernelArgEncoder {
+    pub(crate) args: Vec<api::Argument>,
+    pub(crate) uniform_data: Vec<Box<[u8]>>,
+}
+impl KernelArgEncoder {
+    pub fn new() -> KernelArgEncoder {
+        KernelArgEncoder {
+            args: Vec::new(),
+            uniform_data: vec![],
+        }
+    }
+    pub fn uniform<T: Value>(&mut self, value: T) {
+        let mut data_u8 = unsafe {
+            let layout = std::alloc::Layout::new::<T>();
+            let ptr = std::alloc::alloc(layout);
+            let slice = std::slice::from_raw_parts_mut(ptr as *mut u8, layout.size());
+            Box::from_raw(slice)
+        };
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                &value as *const _ as *const u8,
+                data_u8.as_mut_ptr(),
+                std::mem::size_of::<T>(),
+            )
+        }
+        self.args.push(api::Argument::Uniform(api::UniformArgument {
+            data: data_u8.as_ptr(),
+            size: data_u8.len(),
+        }));
+        self.uniform_data.push(data_u8);
     }
     pub fn buffer<T: Value>(&mut self, buffer: &Buffer<T>) {
         self.args.push(api::Argument::Buffer(api::BufferArgument {
@@ -642,55 +698,72 @@ impl ArgEncoder {
         self.args.push(api::Argument::Accel(accel.handle.handle));
     }
 }
+pub trait CallableArg {
+    type Parameter: CallableParameter;
+    fn encode(&self, encoder: &mut CallableArgEncoder);
+}
+// impl<T:Value> CallableArg for BufferVar<T> {
+//     type Parameter = BufferVar<T>;
+//     fn encode(&self, encoder: &mut CallableArgEncoder) {
+//         encoder.buffer(self);
+//     }
+// }
 pub trait KernelArg {
     type Parameter: KernelParameter;
-    fn encode(&self, encoder: &mut ArgEncoder);
+    fn encode(&self, encoder: &mut KernelArgEncoder);
 }
+
 impl<T: Value> KernelArg for Buffer<T> {
     type Parameter = lang::BufferVar<T>;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.buffer(self);
+    }
+}
+impl<T: Value> KernelArg for T {
+    type Parameter = lang::Expr<T>;
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
+        encoder.uniform(*self)
     }
 }
 impl<'a, T: Value> KernelArg for BufferView<'a, T> {
     type Parameter = lang::BufferVar<T>;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.buffer_view(self);
     }
 }
 impl<T: IoTexel> KernelArg for Tex2d<T> {
     type Parameter = lang::Tex2dVar<T>;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex2d(&self.view(0));
     }
 }
 impl<T: IoTexel> KernelArg for Tex3d<T> {
     type Parameter = lang::Tex3dVar<T>;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex3d(&self.view(0));
     }
 }
 impl<'a, T: IoTexel> KernelArg for Tex2dView<'a, T> {
     type Parameter = lang::Tex2dVar<T>;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex2d(self);
     }
 }
 impl<'a, T: IoTexel> KernelArg for Tex3dView<'a, T> {
     type Parameter = lang::Tex3dVar<T>;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex3d(self);
     }
 }
 impl KernelArg for BindlessArray {
     type Parameter = lang::BindlessArrayVar;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.bindless_array(self);
     }
 }
 impl KernelArg for Accel {
     type Parameter = lang::AccelVar;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.accel(self)
     }
 }
@@ -698,14 +771,14 @@ macro_rules! impl_kernel_arg_for_tuple {
     ()=>{
         impl KernelArg for () {
             type Parameter = ();
-            fn encode(&self, _: &mut ArgEncoder) { }
+            fn encode(&self, _: &mut KernelArgEncoder) { }
         }
     };
     ($first:ident  $($rest:ident) *) => {
         impl<$first:KernelArg, $($rest: KernelArg),*> KernelArg for ($first, $($rest,)*) {
             type Parameter = ($first::Parameter, $($rest::Parameter),*);
             #[allow(non_snake_case)]
-            fn encode(&self, encoder: &mut ArgEncoder) {
+            fn encode(&self, encoder: &mut KernelArgEncoder) {
                 let ($first, $($rest,)*) = self;
                 $first.encode(encoder);
                 $($rest.encode(encoder);)*
@@ -717,7 +790,7 @@ macro_rules! impl_kernel_arg_for_tuple {
 }
 impl_kernel_arg_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
-impl RawShader {
+impl RawKernel {
     fn unwrap(&self) -> api::Shader {
         match &self.artifact {
             ShaderArtifact::Sync(shader) => api::Shader(shader.resource.handle),
@@ -741,32 +814,40 @@ impl RawShader {
             }
         }
     }
-    pub fn dispatch_async<'a>(&'a self, args: &ArgEncoder, dispatch_size: [u32; 3]) -> Command<'a> {
+    pub fn dispatch_async<'a>(
+        &'a self,
+        args: KernelArgEncoder,
+        dispatch_size: [u32; 3],
+    ) -> Command<'a> {
+        let mut rt = ResourceTracker::new();
+        rt.add(Arc::new(args.uniform_data));
+        let args = args.args;
+        let args = Arc::new(args);
+        rt.add(args.clone());
         Command {
             inner: api::Command::ShaderDispatch(api::ShaderDispatchCommand {
                 shader: self.unwrap(),
-                args: args.args.as_ptr(),
-                args_count: args.args.len(),
+                args: args.as_ptr(),
+                args_count: args.len(),
                 dispatch_size,
             }),
             marker: std::marker::PhantomData,
-            resource_tracker: ResourceTracker::new(),
+            resource_tracker: rt,
         }
     }
-    pub fn dispatch(&self, args: &ArgEncoder, dispatch_size: [u32; 3]) -> backend::Result<()> {
+    pub fn dispatch(&self, args: KernelArgEncoder, dispatch_size: [u32; 3]) -> backend::Result<()> {
         submit_default_stream_and_sync(&self.device, vec![self.dispatch_async(args, dispatch_size)])
     }
 }
-pub trait CallableArg {
-    fn arg_node(&self)->NodeRef;
-}
-// impl <T> CallableArg for T where T: KernelArg {}
-pub struct Callable<T: CallableArg> {
+pub trait CallableRet {}
+impl CallableRet for () {}
+impl<T: Value> CallableRet for T {}
+pub struct Callable<T: KernelArg, R: CallableRet> {
     pub(crate) inner: ir::CallableModuleRef,
-    marker: std::marker::PhantomData<T>,
+    pub(crate) _marker: std::marker::PhantomData<(T, R)>,
 }
 pub struct Kernel<T: KernelArg> {
-    pub(crate) inner: RawShader,
+    pub(crate) inner: RawKernel,
     pub(crate) _marker: std::marker::PhantomData<T>,
 }
 impl<T: KernelArg> Kernel<T> {
@@ -777,6 +858,7 @@ impl<T: KernelArg> Kernel<T> {
     }
 }
 pub trait AsKernelArg<T: KernelArg>: KernelArg {}
+impl<T: Value> AsKernelArg<T> for T {}
 impl<T: Value> AsKernelArg<Buffer<T>> for Buffer<T> {}
 impl<'a, T: Value> AsKernelArg<Buffer<T>> for BufferView<'a, T> {}
 impl<'a, T: Value> AsKernelArg<BufferView<'a, T>> for BufferView<'a, T> {}
@@ -791,26 +873,47 @@ impl<T: IoTexel> AsKernelArg<Tex2d<T>> for Tex2d<T> {}
 impl<T: IoTexel> AsKernelArg<Tex3d<T>> for Tex3d<T> {}
 impl AsKernelArg<BindlessArray> for BindlessArray {}
 impl AsKernelArg<Accel> for Accel {}
+macro_rules! impl_call_for_callable {
+    ($first:ident  $($rest:ident)*) => {
+        impl <R:CallableRet, $first:KernelArg, $($rest: KernelArg),*> Callable<($first, $($rest,)*), R> {
+            #[allow(non_snake_case)]
+            pub fn call(&self, $first:&impl AsKernelArg<$first>, $($rest:&impl AsKernelArg<$rest>),*) -> ->Expr<R> {
+                let mut encoder = KernelArgEncoder::new();
+                $first.encode(&mut encoder);
+                $($rest.encode(&mut encoder);)*
+                self.inner.dispatch(encoder, dispatch_size)
+            }
+        }
+        impl_dispatch_for_kernel!($($rest)*);
+   };
+   ()=>{
+        impl<R:CallableRet> Callable<(), R> {
+            pub fn call(&self)->Expr<R> {
+
+            }
+        }
+    }
+}
 macro_rules! impl_dispatch_for_kernel {
 
    ($first:ident  $($rest:ident)*) => {
         impl <$first:KernelArg, $($rest: KernelArg),*> Kernel<($first, $($rest,)*)> {
             #[allow(non_snake_case)]
             pub fn dispatch(&self, dispatch_size: [u32; 3], $first:&impl AsKernelArg<$first>, $($rest:&impl AsKernelArg<$rest>),*) -> backend::Result<()> {
-                let mut encoder = ArgEncoder::new();
+                let mut encoder = KernelArgEncoder::new();
                 $first.encode(&mut encoder);
                 $($rest.encode(&mut encoder);)*
-                self.inner.dispatch(&encoder, dispatch_size)
+                self.inner.dispatch(encoder, dispatch_size)
             }
             #[allow(non_snake_case)]
             pub fn dispatch_async<'a>(
                 &'a self,
-                dispatch_size: [u32; 3], $first: &impl AsKernelArg<$first>, $($rest:impl AsKernelArg<$rest>),*
+                dispatch_size: [u32; 3], $first: &impl AsKernelArg<$first>, $($rest:&impl AsKernelArg<$rest>),*
             ) -> Command<'a> {
-                let mut encoder = ArgEncoder::new();
+                let mut encoder = KernelArgEncoder::new();
                 $first.encode(&mut encoder);
                 $($rest.encode(&mut encoder);)*
-                self.inner.dispatch_async(&encoder, dispatch_size)
+                self.inner.dispatch_async(encoder, dispatch_size)
             }
         }
         impl_dispatch_for_kernel!($($rest)*);
@@ -818,13 +921,13 @@ macro_rules! impl_dispatch_for_kernel {
    ()=>{
     impl Kernel<()> {
         pub fn dispatch(&self, dispatch_size: [u32; 3]) -> backend::Result<()> {
-            self.inner.dispatch(&ArgEncoder::new(), dispatch_size)
+            self.inner.dispatch(KernelArgEncoder::new(), dispatch_size)
         }
         pub fn dispatch_async<'a>(
             &'a self,
             dispatch_size: [u32; 3],
         ) -> Command<'a> {
-            self.inner.dispatch_async(&ArgEncoder::new(), dispatch_size)
+            self.inner.dispatch_async(KernelArgEncoder::new(), dispatch_size)
         }
     }
 }

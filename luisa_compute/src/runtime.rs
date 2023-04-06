@@ -8,7 +8,7 @@ use lang::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSignature};
 pub use luisa_compute_api_types as api;
 use luisa_compute_ir::ir::{self, KernelModule};
 use luisa_compute_ir::CArc;
-use parking_lot::{Condvar, Mutex};
+use parking_lot::{Condvar, Mutex, RwLock};
 use raw_window_handle::HasRawWindowHandle;
 use rtx::{Accel, Mesh, MeshHandle};
 use std::cell::{Cell, RefCell};
@@ -283,8 +283,8 @@ impl Device {
                 handle: api::Accel(accel.handle),
                 native_handle: accel.native_handle,
             }),
-            mesh_handles: RefCell::new(Vec::new()),
-            modifications: RefCell::new(HashMap::new()),
+            mesh_handles: RwLock::new(Vec::new()),
+            modifications: RwLock::new(HashMap::new()),
         })
     }
     pub fn create_callable<'a, S: CallableSignature<'a, R>, R: CallableRet>(

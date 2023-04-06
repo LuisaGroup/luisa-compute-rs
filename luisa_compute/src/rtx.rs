@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, marker::PhantomData, sync::Arc};
+use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
 use crate::{
     lang::{AccelVar, Value},
@@ -8,6 +8,7 @@ use crate::{
 };
 use api::AccelBuildRequest;
 use luisa_compute_api_types as api;
+use parking_lot::RwLock;
 pub(crate) struct AccelHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::Accel,
@@ -18,10 +19,12 @@ impl Drop for AccelHandle {
         self.device.inner.destroy_accel(self.handle);
     }
 }
+unsafe impl Send for AccelHandle {}
+unsafe impl Sync for AccelHandle {}
 pub struct Accel {
     pub(crate) handle: Arc<AccelHandle>,
-    pub(crate) mesh_handles: RefCell<Vec<Option<Arc<MeshHandle>>>>,
-    pub(crate) modifications: RefCell<HashMap<usize, api::AccelBuildModification>>,
+    pub(crate) mesh_handles: RwLock<Vec<Option<Arc<MeshHandle>>>>,
+    pub(crate) modifications: RwLock<HashMap<usize, api::AccelBuildModification>>,
 }
 pub(crate) struct MeshHandle {
     pub(crate) device: Device,
@@ -33,6 +36,8 @@ impl Drop for MeshHandle {
         self.device.inner.destroy_mesh(self.handle);
     }
 }
+unsafe impl Send for MeshHandle {}
+unsafe impl Sync for MeshHandle {}
 pub struct Mesh {
     pub(crate) handle: Arc<MeshHandle>,
     pub(crate) vertex_buffer: api::Buffer,
@@ -82,8 +87,8 @@ impl Accel {
         if opaque {
             flags |= api::AccelBuildModificationFlags::OPAQUE;
         }
-        let mut modifications = self.modifications.borrow_mut();
-        let mut mesh_handles = self.mesh_handles.borrow_mut();
+        let mut modifications = self.modifications.write();
+        let mut mesh_handles = self.mesh_handles.write();
         let index = modifications.len() as u32;
         modifications.insert(
             mesh_handles.len(),
@@ -113,7 +118,7 @@ impl Accel {
         if opaque {
             flags |= api::AccelBuildModificationFlags::OPAQUE_ON;
         }
-        let mut modifications = self.modifications.borrow_mut();
+        let mut modifications = self.modifications.write();
         modifications.insert(
             index as usize,
             api::AccelBuildModification {
@@ -124,7 +129,7 @@ impl Accel {
                 index: index as u32,
             },
         );
-        let mut mesh_handles = self.mesh_handles.borrow_mut();
+        let mut mesh_handles = self.mesh_handles.write();
         mesh_handles[index] = Some(handle.clone());
     }
     pub fn push_mesh(&self, mesh: &Mesh, transform: Mat4, visible: u8, opaque: bool) {
@@ -134,8 +139,8 @@ impl Accel {
         self.set_handle(index, mesh.handle.clone(), transform, visible, opaque)
     }
     pub fn pop(&self) {
-        let mut modifications = self.modifications.borrow_mut();
-        let mut mesh_handles = self.mesh_handles.borrow_mut();
+        let mut modifications = self.modifications.write();
+        let mut mesh_handles = self.mesh_handles.write();
         let n = mesh_handles.len();
         modifications.remove(&n);
         mesh_handles.pop().unwrap();
@@ -145,9 +150,9 @@ impl Accel {
     }
     pub fn build_async<'a>(&'a self, request: api::AccelBuildRequest) -> Command<'a> {
         let mut rt = ResourceTracker::new();
-        let mesh_handles = self.mesh_handles.borrow();
+        let mesh_handles = self.mesh_handles.read();
         rt.add(self.handle.clone());
-        let mut modifications = self.modifications.borrow_mut();
+        let mut modifications = self.modifications.write();
         let m = modifications.drain().map(|(_, v)| v).collect::<Vec<_>>();
         let m = Arc::new(m);
         rt.add(m.clone());

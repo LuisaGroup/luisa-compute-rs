@@ -1537,6 +1537,7 @@ pub struct AccelVar {
 }
 
 #[repr(C)]
+#[repr(align(16))]
 #[derive(Clone, Copy, __Value)]
 pub struct RtxRay {
     pub orig_x: f32,
@@ -1550,12 +1551,22 @@ pub struct RtxRay {
 }
 
 #[repr(C)]
+#[repr(align(16))]
 #[derive(Clone, Copy, __Value)]
 pub struct RtxHit {
     pub inst_id: u32,
     pub prim_id: u32,
     pub u: f32,
     pub v: f32,
+}
+#[cfg(test)]
+mod test{
+    #[test]
+    fn rtx_layout() {
+        use crate::*;
+        assert_eq!(std::mem::align_of::<RtxRay>(), 16);
+        assert_eq!(std::mem::align_of::<RtxHit>(), 16);
+    }
 }
 impl RtxHitExpr {
     pub fn valid(&self) -> Expr<bool> {

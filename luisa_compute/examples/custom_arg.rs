@@ -1,5 +1,7 @@
-use luisa_compute as luisa;
+use std::env::current_exe;
+
 use luisa::*;
+use luisa_compute as luisa;
 #[derive(KernelArg)]
 struct MyArgStruct<T: Value> {
     x: Buffer<T>,
@@ -9,8 +11,8 @@ struct MyArgStruct<T: Value> {
     exclude: T,
 }
 fn main() {
-    init();
-    let device = create_cpu_device().unwrap();
+    let ctx = Context::new(current_exe().unwrap());
+    let device = ctx.create_device("cpu").unwrap();
     let x = device.create_buffer::<f32>(1024).unwrap();
     let y = device.create_buffer::<f32>(1024).unwrap();
     x.view(..).fill(1.0);

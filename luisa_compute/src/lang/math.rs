@@ -127,17 +127,12 @@ impl Mat2 {
         Self { cols: [c0, c1] }
     }
     pub const fn identity() -> Self {
-        Self::from_cols(
-            Float2::new(1.0, 0.0),
-            Float2::new(0.0, 1.0),
-        )
+        Self::from_cols(Float2::new(1.0, 0.0), Float2::new(0.0, 1.0))
     }
 }
 impl Mat3 {
     pub const fn from_cols(c0: Float3, c1: Float3, c2: Float3) -> Self {
-        Self {
-            cols: [c0, c1, c2],
-        }
+        Self { cols: [c0, c1, c2] }
     }
     pub const fn identity() -> Self {
         Self::from_cols(
@@ -396,6 +391,9 @@ macro_rules! impl_vec_proxy {
                 Self {
                     node: __compose::<$vec>(&[$(FromNode::node(&$comp)), *]),
                 }
+            }
+            pub fn at(&self, index: usize) -> Expr<$scalar> {
+                FromNode::from_node(__extract::<$scalar>(self.node, index))
             }
         }
     };

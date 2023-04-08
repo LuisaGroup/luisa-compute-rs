@@ -1,8 +1,11 @@
+use std::env::current_exe;
+
+use luisa::Context;
 use luisa_compute as luisa;
 
 fn main() {
-    luisa::init();
-    let device = luisa::create_cpu_device().unwrap();
+    let ctx = Context::new(current_exe().unwrap());
+    let device = ctx.create_device("cpu").unwrap();
     let x = device.create_buffer::<f32>(128).unwrap();
     let sum = device.create_buffer::<f32>(1).unwrap();
     x.view(..).fill_fn(|i| i as f32);

@@ -1,5 +1,5 @@
-use crate::backend::{Backend, BackendError};
-use crate::lang::ShaderBuildOptions;
+use crate::backend::Backend;
+use crate::lang::KernelBuildOptions;
 use crate::*;
 use crate::{lang::Value, resource::*};
 
@@ -8,16 +8,16 @@ use lang::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSignature};
 pub use luisa_compute_api_types as api;
 use luisa_compute_ir::ir::{self, KernelModule};
 use luisa_compute_ir::CArc;
-use parking_lot::{Condvar, Mutex};
+use parking_lot::{Condvar, Mutex, RwLock};
+use raw_window_handle::HasRawWindowHandle;
 use rtx::{Accel, Mesh, MeshHandle};
-use std::cell::{Cell, RefCell, UnsafeCell};
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::marker::PhantomData;
-use std::mem::align_of;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
+use winit::window::Window;
 #[derive(Clone)]
 pub struct Device {
     pub(crate) inner: Arc<DeviceHandle>,
@@ -53,6 +53,79 @@ impl Drop for DeviceHandle {
     }
 }
 impl Device {
+    pub fn create_swapchain(
+        &self,
+        window: &Window,
+        stream: &Stream,
+        width: u32,
+        height: u32,
+        allow_hdr: bool,
+        vsync: bool,
+        back_buffer_size: u32,
+    ) -> backend::Result<Swapchain> {
+        let handle = window.raw_window_handle();
+        let window_handle = match handle {
+            raw_window_handle::RawWindowHandle::UiKit(_) => todo!(),
+            raw_window_handle::RawWindowHandle::AppKit(_) => todo!(),
+            raw_window_handle::RawWindowHandle::Orbital(_) => todo!(),
+            raw_window_handle::RawWindowHandle::Xlib(h) => h.window as u64,
+            raw_window_handle::RawWindowHandle::Xcb(_h) => {
+                panic!("xcb not supported, use X11 instead")
+            }
+            raw_window_handle::RawWindowHandle::Wayland(_h) => {
+                panic!("Wayland not supported, use X11 instead")
+            }
+            raw_window_handle::RawWindowHandle::Drm(_) => todo!(),
+            raw_window_handle::RawWindowHandle::Gbm(_) => todo!(),
+            raw_window_handle::RawWindowHandle::Win32(h) => {
+                h.hwnd as u64 // TODO: test this
+            }
+            raw_window_handle::RawWindowHandle::WinRt(h) => h.core_window as u64,
+            raw_window_handle::RawWindowHandle::Web(_) => todo!(),
+            raw_window_handle::RawWindowHandle::AndroidNdk(_) => todo!(),
+            raw_window_handle::RawWindowHandle::Haiku(_) => todo!(),
+            _ => todo!(),
+        };
+        self.create_swapchain_raw_handle(
+            window_handle,
+            stream,
+            width,
+            height,
+            allow_hdr,
+            vsync,
+            back_buffer_size,
+        )
+    }
+    pub fn create_swapchain_raw_handle(
+        &self,
+        window_handle: u64,
+        stream: &Stream,
+        width: u32,
+        height: u32,
+        allow_hdr: bool,
+        vsync: bool,
+        back_buffer_size: u32,
+    ) -> backend::Result<Swapchain> {
+        let swapchain = self.inner.create_swapchain(
+            window_handle,
+            stream.handle(),
+            width,
+            height,
+            allow_hdr,
+            vsync,
+            back_buffer_size,
+        )?;
+        let swapchain = Swapchain {
+            device: self.clone(),
+            handle: Arc::new(SwapchainHandle {
+                device: self.inner.clone(),
+                handle: api::Swapchain(swapchain.resource.handle),
+                native_handle: swapchain.resource.native_handle,
+                pixel_storage: swapchain.storage,
+            }),
+        };
+        Ok(swapchain)
+    }
     pub fn create_buffer<T: Value>(&self, count: usize) -> backend::Result<Buffer<T>> {
         assert!(
             std::mem::size_of::<T>() > 0,
@@ -165,8 +238,8 @@ impl Device {
             )),
         }
     }
-    pub fn create_stream(&self) -> backend::Result<Stream> {
-        let stream = self.inner.create_stream()?;
+    pub fn create_stream(&self, tag: api::StreamTag) -> backend::Result<Stream> {
+        let stream = self.inner.create_stream(tag)?;
         Ok(Stream {
             device: self.clone(),
             handle: Arc::new(StreamHandle::NonDefault {
@@ -210,28 +283,41 @@ impl Device {
                 handle: api::Accel(accel.handle),
                 native_handle: accel.native_handle,
             }),
-            mesh_handles: RefCell::new(Vec::new()),
-            modifications: RefCell::new(HashMap::new()),
+            mesh_handles: RwLock::new(Vec::new()),
+            modifications: RwLock::new(HashMap::new()),
         })
     }
-    // pub fn create_callable(&self, ) {
-
-    // }
+    pub fn create_callable<'a, S: CallableSignature<'a, R>, R: CallableRet>(
+        &self,
+        f: S::Fn,
+    ) -> S::Callable {
+        let mut builder = KernelBuilder::new(self.clone(), false);
+        let raw_callable = KernelBuildFn::build_callable(&f, &mut builder);
+        S::wrap_raw_callable(raw_callable)
+    }
     pub fn create_kernel<'a, S: KernelSignature<'a>>(
         &self,
         f: S::Fn,
     ) -> Result<S::Kernel, crate::backend::BackendError> {
-        let mut builder = KernelBuilder::new(self.clone());
-        let raw_kernel = KernelBuildFn::build(&f, &mut builder, ShaderBuildOptions::default());
-        S::wrap_raw_shader(raw_kernel)
+        let mut builder = KernelBuilder::new(self.clone(), true);
+        let raw_kernel =
+            KernelBuildFn::build_kernel(&f, &mut builder, KernelBuildOptions::default());
+        S::wrap_raw_kernel(raw_kernel)
     }
     pub fn create_kernel_async<'a, S: KernelSignature<'a>>(
         &self,
         f: S::Fn,
     ) -> Result<S::Kernel, crate::backend::BackendError> {
-        let mut builder = KernelBuilder::new(self.clone());
-        let raw_kernel = KernelBuildFn::build(&f, &mut builder, ShaderBuildOptions::default());
-        S::wrap_raw_shader(raw_kernel)
+        let mut builder = KernelBuilder::new(self.clone(), true);
+        let raw_kernel = KernelBuildFn::build_kernel(
+            &f,
+            &mut builder,
+            KernelBuildOptions {
+                async_compile: true,
+                ..Default::default()
+            },
+        );
+        S::wrap_raw_kernel(raw_kernel)
     }
 }
 #[macro_export]
@@ -274,6 +360,34 @@ pub(crate) enum StreamHandle {
         native_handle: *mut std::ffi::c_void,
     },
 }
+pub(crate) struct SwapchainHandle {
+    pub(crate) device: Arc<DeviceHandle>,
+    pub(crate) handle: api::Swapchain,
+    pub(crate) native_handle: *mut std::ffi::c_void,
+    pub(crate) pixel_storage: PixelStorage,
+}
+unsafe impl Send for SwapchainHandle {}
+unsafe impl Sync for SwapchainHandle {}
+impl Drop for SwapchainHandle {
+    fn drop(&mut self) {
+        self.device.destroy_swapchain(self.handle);
+    }
+}
+pub struct Swapchain {
+    pub(crate) handle: Arc<SwapchainHandle>,
+    #[allow(dead_code)]
+    pub(crate) device: Device,
+}
+impl Swapchain {
+    #[inline]
+    pub fn handle(&self) -> api::Swapchain {
+        self.handle.handle
+    }
+    #[inline]
+    pub fn native_handle(&self) -> *mut std::ffi::c_void {
+        self.handle.native_handle
+    }
+}
 pub struct Stream {
     #[allow(dead_code)]
     pub(crate) device: Device,
@@ -292,6 +406,12 @@ impl StreamHandle {
             StreamHandle::NonDefault { handle, .. } => *handle,
         }
     }
+    pub(crate) fn native_handle(&self) -> *mut std::ffi::c_void {
+        match self {
+            StreamHandle::Default(_, _) => todo!(),
+            StreamHandle::NonDefault { native_handle, .. } => *native_handle,
+        }
+    }
 }
 impl Drop for StreamHandle {
     fn drop(&mut self) {
@@ -303,43 +423,118 @@ impl Drop for StreamHandle {
         }
     }
 }
-impl Stream {
+pub struct Scope<'a> {
+    handle: Arc<StreamHandle>,
+    marker: std::marker::PhantomData<&'a ()>,
+    synchronized: Cell<bool>,
+    resource_tracker: RefCell<ResourceTracker>,
+}
+impl<'a> Scope<'a> {
+    #[inline]
     pub fn handle(&self) -> api::Stream {
         self.handle.handle()
     }
+    #[inline]
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         match self.handle.as_ref() {
             StreamHandle::Default(_, _) => todo!(),
             StreamHandle::NonDefault { native_handle, .. } => *native_handle,
         }
     }
+    #[inline]
     pub fn synchronize(&self) -> backend::Result<()> {
-        self.handle.device().synchronize_stream(self.handle())
+        self.handle.device().synchronize_stream(self.handle())?;
+        self.synchronized.set(true);
+        Ok(())
     }
-    pub fn command_buffer<'a>(&self) -> CommandBuffer<'a> {
-        CommandBuffer::<'a> {
+    #[inline]
+    pub fn command_list(&self) -> CommandList<'a> {
+        CommandList::<'a> {
             marker: std::marker::PhantomData {},
-            stream: self.handle.clone(),
             commands: Vec::new(),
         }
     }
-    pub fn submit<'a>(
+    #[inline]
+    pub fn submit(&self, commands: impl IntoIterator<Item = Command<'a>>) -> backend::Result<()> {
+        self.submit_with_callback(commands, || {})
+    }
+    #[inline]
+    pub fn submit_with_callback<F: FnOnce() + Send + 'static>(
         &self,
         commands: impl IntoIterator<Item = Command<'a>>,
-    ) -> backend::Result<SyncHandle<'a>> {
-        let mut command_buffer = self.command_buffer();
-        command_buffer.extend(commands);
-        command_buffer.commit()
-    }
-    pub fn submit_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
-        &self,
-        commands: I,
+        callback: F,
     ) -> backend::Result<()> {
-        self.submit(commands)?.synchronize()
+        self.synchronized.set(false);
+        let mut command_buffer = self.command_list();
+        command_buffer.extend(commands);
+        let commands = command_buffer.commands;
+        let api_commands = commands.iter().map(|c| c.inner).collect::<Vec<_>>();
+        let ctx = CommandCallbackCtx {
+            commands,
+            f: callback,
+        };
+        let ptr = Box::into_raw(Box::new(ctx));
+        extern "C" fn trampoline<'a, F: FnOnce() + Send + 'static>(ptr: *mut u8) {
+            let ctx = unsafe { *Box::from_raw(ptr as *mut CommandCallbackCtx<'a, F>) };
+            (ctx.f)();
+        }
+        self.handle.device().dispatch(
+            self.handle(),
+            &api_commands,
+            (trampoline::<F>, ptr as *mut u8),
+        )
+    }
+    #[inline]
+    pub fn present<T: IoTexel>(
+        &self,
+        swapchain: &Swapchain,
+        image: &Tex2d<T>,
+    ) -> backend::Result<()> {
+        assert_eq!(image.handle.storage, swapchain.handle.pixel_storage);
+        let mut rt = self.resource_tracker.borrow_mut();
+        rt.add(swapchain.handle.clone());
+        rt.add(image.handle.clone());
+        self.synchronized.set(false);
+        self.handle.device().present_display_in_stream(
+            self.handle(),
+            swapchain.handle(),
+            image.handle(),
+        );
+        Ok(())
     }
 }
-pub struct CommandBuffer<'a> {
-    stream: Arc<StreamHandle>,
+impl<'a> Drop for Scope<'a> {
+    fn drop(&mut self) {
+        if !self.synchronized.get() {
+            self.synchronize().unwrap();
+        }
+    }
+}
+impl Stream {
+    #[inline]
+    pub fn with_scope<'a, R>(&self, f: impl FnOnce(&Scope<'a>) -> R) -> R {
+        let s = self.scope();
+        f(&s)
+    }
+    #[inline]
+    pub fn scope<'a>(&self) -> Scope<'a> {
+        Scope {
+            handle: self.handle.clone(),
+            marker: std::marker::PhantomData {},
+            synchronized: Cell::new(false),
+            resource_tracker: RefCell::new(ResourceTracker::new()),
+        }
+    }
+    #[inline]
+    pub fn handle(&self) -> api::Stream {
+        self.handle.handle()
+    }
+    #[inline]
+    pub fn native_handle(&self) -> *mut std::ffi::c_void {
+        self.handle.native_handle()
+    }
+}
+pub struct CommandList<'a> {
     marker: std::marker::PhantomData<&'a ()>,
     commands: Vec<Command<'a>>,
 }
@@ -348,58 +543,13 @@ struct CommandCallbackCtx<'a, F: FnOnce() + Send + 'static> {
     commands: Vec<Command<'a>>,
     f: F,
 }
-pub struct SyncHandle<'a> {
-    stream: Cell<Option<Arc<StreamHandle>>>,
-    marker: PhantomData<&'a ()>,
-}
-impl<'a> SyncHandle<'a> {
-    pub fn synchronize(&mut self) -> backend::Result<()> {
-        self.stream
-            .take()
-            .map(|stream| stream.device().synchronize_stream(stream.handle()))
-            .unwrap()
-    }
-}
-impl<'a> Drop for SyncHandle<'a> {
-    fn drop(&mut self) {
-        self.stream
-            .take()
-            .map(|stream| stream.device().synchronize_stream(stream.handle()));
-    }
-}
-impl<'a> CommandBuffer<'a> {
+
+impl<'a> CommandList<'a> {
     pub fn extend<I: IntoIterator<Item = Command<'a>>>(&mut self, commands: I) {
         self.commands.extend(commands);
     }
     pub fn push(&mut self, command: Command<'a>) {
         self.commands.push(command);
-    }
-    pub fn commit_with_callback<F: FnOnce() + Send + 'static>(
-        self,
-        callback: F,
-    ) -> backend::Result<SyncHandle<'a>> {
-        let commands = self.commands.iter().map(|c| c.inner).collect::<Vec<_>>();
-        let ctx = CommandCallbackCtx {
-            commands: self.commands,
-            f: callback,
-        };
-        let ptr = Box::into_raw(Box::new(ctx));
-        extern "C" fn trampoline<'a, F: FnOnce() + Send + 'static>(ptr: *mut u8) {
-            let ctx = unsafe { *Box::from_raw(ptr as *mut CommandCallbackCtx<'a, F>) };
-            (ctx.f)();
-        }
-        self.stream.device().dispatch(
-            self.stream.handle(),
-            &commands,
-            (trampoline::<F>, ptr as *mut u8),
-        )?;
-        Ok(SyncHandle {
-            stream: Cell::new(Some(self.stream.clone())),
-            marker: PhantomData,
-        })
-    }
-    pub fn commit(self) -> backend::Result<SyncHandle<'a>> {
-        self.commit_with_callback(|| {})
     }
 }
 
@@ -408,7 +558,10 @@ pub fn submit_default_stream_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
     commands: I,
 ) -> backend::Result<()> {
     let default_stream = device.default_stream();
-    default_stream.submit_and_sync(commands)
+    default_stream.with_scope(|s| {
+        s.submit(commands)?;
+        s.synchronize()
+    })
 }
 pub struct Command<'a> {
     #[allow(dead_code)]
@@ -428,6 +581,7 @@ impl AsyncShaderArtifact {
     pub(crate) fn new(
         device: Device,
         kernel: CArc<KernelModule>,
+        options: api::ShaderOption,
     ) -> Arc<(Mutex<AsyncShaderArtifact>, Condvar)> {
         let artifact = Arc::new((
             Mutex::new(AsyncShaderArtifact { shader: None }),
@@ -436,7 +590,7 @@ impl AsyncShaderArtifact {
         {
             let artifact = artifact.clone();
             rayon::spawn(move || {
-                let shader = device.inner.create_shader(kernel);
+                let shader = device.inner.create_shader(kernel, &options);
                 {
                     let mut artifact = artifact.0.lock();
                     artifact.shader = Some(shader);
@@ -447,18 +601,68 @@ impl AsyncShaderArtifact {
         artifact
     }
 }
-pub struct RawShader {
+pub struct RawKernel {
     pub(crate) device: Device,
     pub(crate) artifact: ShaderArtifact,
     #[allow(dead_code)]
     pub(crate) resource_tracker: ResourceTracker,
 }
-pub struct ArgEncoder {
-    pub(crate) args: Vec<api::Argument>,
+pub struct CallableArgEncoder {
+    pub(crate) args: Vec<NodeRef>,
 }
-impl ArgEncoder {
-    pub fn new() -> ArgEncoder {
-        ArgEncoder { args: Vec::new() }
+impl CallableArgEncoder {
+    pub fn new() -> CallableArgEncoder {
+        CallableArgEncoder { args: Vec::new() }
+    }
+    pub fn buffer<T: Value>(&mut self, buffer: &BufferVar<T>) {
+        self.args.push(buffer.node);
+    }
+    pub fn tex2d<T: IoTexel>(&mut self, tex2d: &Tex2dVar<T>) {
+        self.args.push(tex2d.node);
+    }
+    pub fn tex3d<T: IoTexel>(&mut self, tex3d: &Tex3dVar<T>) {
+        self.args.push(tex3d.node);
+    }
+    pub fn bindless_array(&mut self, array: &BindlessArrayVar) {
+        self.args.push(array.node);
+    }
+    pub fn value<T: Value>(&mut self, value: Expr<T>) {
+        self.args.push(value.node());
+    }
+    pub fn var<T: Value>(&mut self, var: Var<T>) {
+        self.args.push(var.node());
+    }
+}
+pub struct KernelArgEncoder {
+    pub(crate) args: Vec<api::Argument>,
+    pub(crate) uniform_data: Vec<Box<[u8]>>,
+}
+impl KernelArgEncoder {
+    pub fn new() -> KernelArgEncoder {
+        KernelArgEncoder {
+            args: Vec::new(),
+            uniform_data: vec![],
+        }
+    }
+    pub fn uniform<T: Value>(&mut self, value: T) {
+        let mut data_u8 = unsafe {
+            let layout = std::alloc::Layout::new::<T>();
+            let ptr = std::alloc::alloc(layout);
+            let slice = std::slice::from_raw_parts_mut(ptr as *mut u8, layout.size());
+            Box::from_raw(slice)
+        };
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                &value as *const _ as *const u8,
+                data_u8.as_mut_ptr(),
+                std::mem::size_of::<T>(),
+            )
+        }
+        self.args.push(api::Argument::Uniform(api::UniformArgument {
+            data: data_u8.as_ptr(),
+            size: data_u8.len(),
+        }));
+        self.uniform_data.push(data_u8);
     }
     pub fn buffer<T: Value>(&mut self, buffer: &Buffer<T>) {
         self.args.push(api::Argument::Buffer(api::BufferArgument {
@@ -494,55 +698,72 @@ impl ArgEncoder {
         self.args.push(api::Argument::Accel(accel.handle.handle));
     }
 }
+pub trait CallableArg {
+    type Parameter: CallableParameter;
+    fn encode(&self, encoder: &mut CallableArgEncoder);
+}
+// impl<T:Value> CallableArg for BufferVar<T> {
+//     type Parameter = BufferVar<T>;
+//     fn encode(&self, encoder: &mut CallableArgEncoder) {
+//         encoder.buffer(self);
+//     }
+// }
 pub trait KernelArg {
     type Parameter: KernelParameter;
-    fn encode(&self, encoder: &mut ArgEncoder);
+    fn encode(&self, encoder: &mut KernelArgEncoder);
 }
+
 impl<T: Value> KernelArg for Buffer<T> {
     type Parameter = lang::BufferVar<T>;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.buffer(self);
+    }
+}
+impl<T: Value> KernelArg for T {
+    type Parameter = lang::Expr<T>;
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
+        encoder.uniform(*self)
     }
 }
 impl<'a, T: Value> KernelArg for BufferView<'a, T> {
     type Parameter = lang::BufferVar<T>;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.buffer_view(self);
     }
 }
 impl<T: IoTexel> KernelArg for Tex2d<T> {
     type Parameter = lang::Tex2dVar<T>;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex2d(&self.view(0));
     }
 }
 impl<T: IoTexel> KernelArg for Tex3d<T> {
     type Parameter = lang::Tex3dVar<T>;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex3d(&self.view(0));
     }
 }
 impl<'a, T: IoTexel> KernelArg for Tex2dView<'a, T> {
     type Parameter = lang::Tex2dVar<T>;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex2d(self);
     }
 }
 impl<'a, T: IoTexel> KernelArg for Tex3dView<'a, T> {
     type Parameter = lang::Tex3dVar<T>;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex3d(self);
     }
 }
 impl KernelArg for BindlessArray {
     type Parameter = lang::BindlessArrayVar;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.bindless_array(self);
     }
 }
 impl KernelArg for Accel {
     type Parameter = lang::AccelVar;
-    fn encode(&self, encoder: &mut ArgEncoder) {
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.accel(self)
     }
 }
@@ -550,14 +771,14 @@ macro_rules! impl_kernel_arg_for_tuple {
     ()=>{
         impl KernelArg for () {
             type Parameter = ();
-            fn encode(&self, _: &mut ArgEncoder) { }
+            fn encode(&self, _: &mut KernelArgEncoder) { }
         }
     };
     ($first:ident  $($rest:ident) *) => {
         impl<$first:KernelArg, $($rest: KernelArg),*> KernelArg for ($first, $($rest,)*) {
             type Parameter = ($first::Parameter, $($rest::Parameter),*);
             #[allow(non_snake_case)]
-            fn encode(&self, encoder: &mut ArgEncoder) {
+            fn encode(&self, encoder: &mut KernelArgEncoder) {
                 let ($first, $($rest,)*) = self;
                 $first.encode(encoder);
                 $($rest.encode(encoder);)*
@@ -569,7 +790,7 @@ macro_rules! impl_kernel_arg_for_tuple {
 }
 impl_kernel_arg_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
-impl RawShader {
+impl RawKernel {
     fn unwrap(&self) -> api::Shader {
         match &self.artifact {
             ShaderArtifact::Sync(shader) => api::Shader(shader.resource.handle),
@@ -593,29 +814,40 @@ impl RawShader {
             }
         }
     }
-    pub fn dispatch_async<'a>(&'a self, args: &ArgEncoder, dispatch_size: [u32; 3]) -> Command<'a> {
+    pub fn dispatch_async<'a>(
+        &'a self,
+        args: KernelArgEncoder,
+        dispatch_size: [u32; 3],
+    ) -> Command<'a> {
+        let mut rt = ResourceTracker::new();
+        rt.add(Arc::new(args.uniform_data));
+        let args = args.args;
+        let args = Arc::new(args);
+        rt.add(args.clone());
         Command {
             inner: api::Command::ShaderDispatch(api::ShaderDispatchCommand {
                 shader: self.unwrap(),
-                args: args.args.as_ptr(),
-                args_count: args.args.len(),
+                args: args.as_ptr(),
+                args_count: args.len(),
                 dispatch_size,
             }),
             marker: std::marker::PhantomData,
-            resource_tracker: ResourceTracker::new(),
+            resource_tracker: rt,
         }
     }
-    pub fn dispatch(&self, args: &ArgEncoder, dispatch_size: [u32; 3]) -> backend::Result<()> {
+    pub fn dispatch(&self, args: KernelArgEncoder, dispatch_size: [u32; 3]) -> backend::Result<()> {
         submit_default_stream_and_sync(&self.device, vec![self.dispatch_async(args, dispatch_size)])
     }
 }
-pub trait CallableArg {}
-pub struct Callable<T: CallableArg> {
+pub trait CallableRet {}
+impl CallableRet for () {}
+impl<T: Value> CallableRet for T {}
+pub struct Callable<T: KernelArg, R: CallableRet> {
     pub(crate) inner: ir::CallableModuleRef,
-    marker: std::marker::PhantomData<T>,
+    pub(crate) _marker: std::marker::PhantomData<(T, R)>,
 }
 pub struct Kernel<T: KernelArg> {
-    pub(crate) inner: RawShader,
+    pub(crate) inner: RawKernel,
     pub(crate) _marker: std::marker::PhantomData<T>,
 }
 impl<T: KernelArg> Kernel<T> {
@@ -626,6 +858,7 @@ impl<T: KernelArg> Kernel<T> {
     }
 }
 pub trait AsKernelArg<T: KernelArg>: KernelArg {}
+impl<T: Value> AsKernelArg<T> for T {}
 impl<T: Value> AsKernelArg<Buffer<T>> for Buffer<T> {}
 impl<'a, T: Value> AsKernelArg<Buffer<T>> for BufferView<'a, T> {}
 impl<'a, T: Value> AsKernelArg<BufferView<'a, T>> for BufferView<'a, T> {}
@@ -640,26 +873,47 @@ impl<T: IoTexel> AsKernelArg<Tex2d<T>> for Tex2d<T> {}
 impl<T: IoTexel> AsKernelArg<Tex3d<T>> for Tex3d<T> {}
 impl AsKernelArg<BindlessArray> for BindlessArray {}
 impl AsKernelArg<Accel> for Accel {}
+macro_rules! impl_call_for_callable {
+    ($first:ident  $($rest:ident)*) => {
+        impl <R:CallableRet, $first:KernelArg, $($rest: KernelArg),*> Callable<($first, $($rest,)*), R> {
+            #[allow(non_snake_case)]
+            pub fn call(&self, $first:&impl AsKernelArg<$first>, $($rest:&impl AsKernelArg<$rest>),*) -> ->Expr<R> {
+                let mut encoder = KernelArgEncoder::new();
+                $first.encode(&mut encoder);
+                $($rest.encode(&mut encoder);)*
+                self.inner.dispatch(encoder, dispatch_size)
+            }
+        }
+        impl_dispatch_for_kernel!($($rest)*);
+   };
+   ()=>{
+        impl<R:CallableRet> Callable<(), R> {
+            pub fn call(&self)->Expr<R> {
+
+            }
+        }
+    }
+}
 macro_rules! impl_dispatch_for_kernel {
 
    ($first:ident  $($rest:ident)*) => {
         impl <$first:KernelArg, $($rest: KernelArg),*> Kernel<($first, $($rest,)*)> {
             #[allow(non_snake_case)]
             pub fn dispatch(&self, dispatch_size: [u32; 3], $first:&impl AsKernelArg<$first>, $($rest:&impl AsKernelArg<$rest>),*) -> backend::Result<()> {
-                let mut encoder = ArgEncoder::new();
+                let mut encoder = KernelArgEncoder::new();
                 $first.encode(&mut encoder);
                 $($rest.encode(&mut encoder);)*
-                self.inner.dispatch(&encoder, dispatch_size)
+                self.inner.dispatch(encoder, dispatch_size)
             }
             #[allow(non_snake_case)]
             pub fn dispatch_async<'a>(
                 &'a self,
-                dispatch_size: [u32; 3], $first: &impl AsKernelArg<$first>, $($rest:impl AsKernelArg<$rest>),*
+                dispatch_size: [u32; 3], $first: &impl AsKernelArg<$first>, $($rest:&impl AsKernelArg<$rest>),*
             ) -> Command<'a> {
-                let mut encoder = ArgEncoder::new();
+                let mut encoder = KernelArgEncoder::new();
                 $first.encode(&mut encoder);
                 $($rest.encode(&mut encoder);)*
-                self.inner.dispatch_async(&encoder, dispatch_size)
+                self.inner.dispatch_async(encoder, dispatch_size)
             }
         }
         impl_dispatch_for_kernel!($($rest)*);
@@ -667,13 +921,13 @@ macro_rules! impl_dispatch_for_kernel {
    ()=>{
     impl Kernel<()> {
         pub fn dispatch(&self, dispatch_size: [u32; 3]) -> backend::Result<()> {
-            self.inner.dispatch(&ArgEncoder::new(), dispatch_size)
+            self.inner.dispatch(KernelArgEncoder::new(), dispatch_size)
         }
         pub fn dispatch_async<'a>(
             &'a self,
             dispatch_size: [u32; 3],
         ) -> Command<'a> {
-            self.inner.dispatch_async(&ArgEncoder::new(), dispatch_size)
+            self.inner.dispatch_async(KernelArgEncoder::new(), dispatch_size)
         }
     }
 }

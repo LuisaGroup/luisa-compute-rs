@@ -26,6 +26,8 @@ pub(crate) struct BufferHandle {
     pub(crate) handle: api::Buffer,
     pub(crate) native_handle: *mut c_void,
 }
+unsafe impl Send for BufferHandle {}
+unsafe impl Sync for BufferHandle {}
 
 impl Drop for BufferHandle {
     fn drop(&mut self) {
@@ -34,11 +36,14 @@ impl Drop for BufferHandle {
 }
 #[derive(Clone, Copy)]
 pub struct BufferView<'a, T: Value> {
-    buffer: &'a Buffer<T>,
+    pub(crate) buffer: &'a Buffer<T>,
     pub(crate) offset: usize,
     pub(crate) len: usize,
 }
 impl<'a, T: Value> BufferView<'a, T> {
+    pub fn var(&self) -> BufferVar<T> {
+        BufferVar::new(self)
+    }
     pub(crate) fn handle(&self) -> api::Buffer {
         self.buffer.handle()
     }
@@ -96,7 +101,7 @@ impl<'a, T: Value> BufferView<'a, T> {
     pub fn fill(&self, value: T) {
         self.fill_fn(|_| value);
     }
-    pub fn copy_to_buffer_async(&self, dst: &'a BufferView<T>) -> Command<'a> {
+    pub fn copy_to_buffer_async(&self, dst: &BufferView<'a, T>) -> Command<'a> {
         assert_eq!(self.len, dst.len);
         let mut rt = ResourceTracker::new();
         rt.add(self.buffer.handle.clone());
@@ -145,6 +150,9 @@ impl<T: Value> Buffer<T> {
     pub fn copy_to_buffer(&self, dst: &Buffer<T>) {
         self.view(..).copy_to_buffer(&dst.view(..));
     }
+    pub fn copy_to_buffer_async<'a>(&'a self, dst: &'a Buffer<T>) -> Command<'a> {
+        self.view(..).copy_to_buffer_async(&dst.view(..))
+    }
     pub fn fill_fn<F: FnMut(usize) -> T>(&self, f: F) {
         self.view(..).fill_fn(f);
     }
@@ -179,7 +187,7 @@ impl<T: Value> Buffer<T> {
         self.len * std::mem::size_of::<T>()
     }
     pub fn var(&self) -> BufferVar<T> {
-        BufferVar::new(self)
+        BufferVar::new(&self.view(..))
     }
 }
 impl<T: Value> Clone for Buffer<T> {
@@ -672,7 +680,10 @@ macro_rules! impl_tex_view {
                     marker: std::marker::PhantomData,
                 }
             }
-            pub fn copy_to_buffer<U: StorageTexel<T> + Value>(&'a self, buffer_view: &BufferView<U>) {
+            pub fn copy_to_buffer<U: StorageTexel<T> + Value>(
+                &'a self,
+                buffer_view: &BufferView<U>,
+            ) {
                 submit_default_stream_and_sync(
                     &self.tex.handle.device,
                     [self.copy_to_buffer_async(buffer_view)],

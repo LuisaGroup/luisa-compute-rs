@@ -1,26 +1,27 @@
+use std::ffi::CStr;
 use std::io::stderr;
 use std::marker::PhantomData;
 use std::process::abort;
 use std::{any::Any, collections::HashMap, fmt::Debug, ops::Deref, sync::Arc};
 
 use crate::lang::traits::VarCmp;
-use crate::{rtx::AccelHandle, Tex2dView, Tex3dView};
 use crate::resource::BufferView;
 use crate::runtime::{AsyncShaderArtifact, ShaderArtifact};
 use crate::{
-    *,
     resource::{
         BindlessArray, BindlessArrayHandle, Buffer, BufferHandle, IoTexel, Tex2d, Tex3d,
         TextureHandle,
     },
+    *,
 };
 use crate::{rtx, ResourceTracker};
+use crate::{rtx::AccelHandle, Tex2dView, Tex3dView};
 use bumpalo::Bump;
 use ir::context::type_hash;
 pub use ir::ir::NodeRef;
 use ir::ir::{
-    AccelBinding, ArrayType, BindlessArrayBinding, ModulePools, SwitchCase, TextureBinding,
-    UserNodeData, INVALID_REF,
+    AccelBinding, ArrayType, BindlessArrayBinding, CallableModule, CallableModuleRef, ModulePools,
+    SwitchCase, TextureBinding, UserNodeData, INVALID_REF,
 };
 pub use ir::CArc;
 use ir::Pooled;
@@ -52,8 +53,8 @@ pub mod math;
 pub mod poly;
 pub mod swizzle;
 pub mod traits;
-pub use poly::*;
 pub use math::*;
+pub use poly::*;
 
 pub trait Value: Copy + ir::TypeOf {
     type Expr: ExprProxy<Value = Self>;
@@ -378,10 +379,11 @@ impl<T: Value> CpuFn<T> {
 pub(crate) struct Recorder {
     scopes: Vec<IrBuilder>,
     lock: bool,
-    captured_buffer: HashMap<u64, (usize, NodeRef, Binding, Arc<dyn Any>)>,
+    captured_buffer: HashMap<Binding, (usize, NodeRef, Binding, Arc<dyn Any>)>,
     cpu_custom_ops: HashMap<u64, (usize, CArc<CpuCustomOp>)>,
     device: Option<Device>,
     block_size: Option<[u32; 3]>,
+    building_kernel: bool,
     pools: Option<CArc<ModulePools>>,
     arena: Bump,
 }
@@ -405,7 +407,8 @@ thread_local! {
         device:None,
         block_size: None,
         pools: None,
-        arena:Bump::new()
+        arena:Bump::new(),
+        building_kernel:false,
     });
 }
 
@@ -417,6 +420,13 @@ pub fn __current_scope<F: FnOnce(&mut IrBuilder) -> R, R>(f: F) -> R {
         let s = &mut r.scopes;
         f(s.last_mut().unwrap())
     })
+}
+pub fn __invoke_callable(
+    callable: &CallableModuleRef,
+    args: &[NodeRef],
+    ret_type: &CArc<Type>,
+) -> NodeRef {
+    __current_scope(|b| b.call(Func::Callable(callable.clone()), args, ret_type.clone()))
 }
 // Don't call this function directly unless you know what you are doing
 pub fn __pop_scope() -> Pooled<BasicBlock> {
@@ -534,7 +544,12 @@ pub fn dispatch_size() -> Expr<Uint3> {
 pub fn set_block_size(size: [u32; 3]) {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
+        assert!(
+            r.building_kernel,
+            "set_block_size cannot be called in callable!"
+        );
         assert!(r.block_size.is_none(), "Block size already set");
+
         r.block_size = Some(size);
     });
 }
@@ -547,10 +562,8 @@ pub fn block_size() -> Expr<Uint3> {
 }
 pub type Expr<T> = <T as Value>::Expr;
 pub type Var<T> = <T as Value>::Var;
-pub fn zeroed<T:Value>() -> T::Expr {
-    FromNode::from_node(__current_scope(|b|{
-        b.zero_initializer(T::type_())
-    }))
+pub fn zeroed<T: Value>() -> T::Expr {
+    FromNode::from_node(__current_scope(|b| b.zero_initializer(T::type_())))
 }
 pub fn const_<T: Value + Copy + 'static>(value: T) -> T::Expr {
     let node = __current_scope(|s| -> NodeRef {
@@ -839,14 +852,14 @@ pub struct BufferVar<T: Value> {
     marker: std::marker::PhantomData<T>,
     #[allow(dead_code)]
     handle: Option<Arc<BufferHandle>>,
-    node: NodeRef,
+    pub(crate) node: NodeRef,
 }
 
 impl<T: Value> Drop for BufferVar<T> {
     fn drop(&mut self) {}
 }
 pub struct BindlessArrayVar {
-    node: NodeRef,
+    pub(crate) node: NodeRef,
     #[allow(dead_code)]
     handle: Option<Arc<BindlessArrayHandle>>,
 }
@@ -1126,7 +1139,9 @@ impl BindlessArrayVar {
                 "BindlessArrayVar must be created from within a kernel"
             );
             let handle: u64 = array.handle().0;
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
+            let binding = Binding::BindlessArray(BindlessArrayBinding { handle });
+
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
                 *node
             } else {
                 let node = new_node(
@@ -1134,15 +1149,8 @@ impl BindlessArrayVar {
                     Node::new(CArc::new(Instruction::Bindless), Type::void()),
                 );
                 let i = r.captured_buffer.len();
-                r.captured_buffer.insert(
-                    handle,
-                    (
-                        i,
-                        node,
-                        Binding::BindlessArray(BindlessArrayBinding { handle }),
-                        array.handle.clone(),
-                    ),
-                );
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, array.handle.clone()));
                 node
             }
         });
@@ -1153,12 +1161,16 @@ impl BindlessArrayVar {
     }
 }
 impl<T: Value> BufferVar<T> {
-    pub fn new(buffer: &Buffer<T>) -> Self {
+    pub fn new(buffer: &BufferView<'_, T>) -> Self {
         let node = RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(r.lock, "BufferVar must be created from within a kernel");
-            let handle: u64 = buffer.handle().0;
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
+            let binding = Binding::Buffer(BufferBinding {
+                handle: buffer.handle().0,
+                size: buffer.len * std::mem::size_of::<T>(),
+                offset: (buffer.offset * std::mem::size_of::<T>()) as u64,
+            });
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
                 *node
             } else {
                 let node = new_node(
@@ -1166,26 +1178,15 @@ impl<T: Value> BufferVar<T> {
                     Node::new(CArc::new(Instruction::Buffer), T::type_()),
                 );
                 let i = r.captured_buffer.len();
-                r.captured_buffer.insert(
-                    handle,
-                    (
-                        i,
-                        node,
-                        Binding::Buffer(BufferBinding {
-                            handle: buffer.handle().0,
-                            size: buffer.size_bytes(),
-                            offset: 0,
-                        }),
-                        buffer.handle.clone(),
-                    ),
-                );
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, buffer.buffer.handle.clone()));
                 node
             }
         });
         Self {
             node,
             marker: std::marker::PhantomData,
-            handle: Some(buffer.handle.clone()),
+            handle: Some(buffer.buffer.handle.clone()),
         }
     }
     pub fn len(&self) -> Expr<u32> {
@@ -1417,7 +1418,7 @@ impl_atomic_bit!(u64);
 impl_atomic_bit!(i32);
 impl_atomic_bit!(i64);
 pub struct Tex2dVar<T: IoTexel> {
-    node: NodeRef,
+    pub(crate) node: NodeRef,
     #[allow(dead_code)]
     handle: Option<Arc<TextureHandle>>,
     marker: std::marker::PhantomData<T>,
@@ -1431,7 +1432,11 @@ impl<T: IoTexel> Tex2dVar<T> {
             let mut r = r.borrow_mut();
             assert!(r.lock, "Tex2dVar<T> must be created from within a kernel");
             let handle: u64 = view.tex.handle().0;
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
+            let binding = Binding::Texture(TextureBinding {
+                handle,
+                level: view.level,
+            });
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
                 *node
             } else {
                 let node = new_node(
@@ -1439,18 +1444,8 @@ impl<T: IoTexel> Tex2dVar<T> {
                     Node::new(CArc::new(Instruction::Texture2D), Type::void()),
                 );
                 let i = r.captured_buffer.len();
-                r.captured_buffer.insert(
-                    handle,
-                    (
-                        i,
-                        node,
-                        Binding::Texture(TextureBinding {
-                            handle,
-                            level: view.level,
-                        }),
-                        view.tex.handle.clone(),
-                    ),
-                );
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, view.tex.handle.clone()));
                 node
             }
         });
@@ -1485,7 +1480,11 @@ impl<T: IoTexel> Tex3dVar<T> {
             let mut r = r.borrow_mut();
             assert!(r.lock, "Tex3dVar<T> must be created from within a kernel");
             let handle: u64 = view.tex.handle().0;
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
+            let binding = Binding::Texture(TextureBinding {
+                handle,
+                level: view.level,
+            });
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
                 *node
             } else {
                 let node = new_node(
@@ -1493,18 +1492,8 @@ impl<T: IoTexel> Tex3dVar<T> {
                     Node::new(CArc::new(Instruction::Texture3D), Type::void()),
                 );
                 let i = r.captured_buffer.len();
-                r.captured_buffer.insert(
-                    handle,
-                    (
-                        i,
-                        node,
-                        Binding::Texture(TextureBinding {
-                            handle,
-                            level: view.level,
-                        }),
-                        view.tex.handle.clone(),
-                    ),
-                );
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, view.tex.handle.clone()));
                 node
             }
         });
@@ -1534,7 +1523,7 @@ impl<T: IoTexel> Tex3dVar<T> {
     }
 }
 pub struct Tex3dVar<T: IoTexel> {
-    node: NodeRef,
+    pub(crate) node: NodeRef,
     #[allow(dead_code)]
     handle: Option<Arc<TextureHandle>>,
     marker: std::marker::PhantomData<T>,
@@ -1548,6 +1537,7 @@ pub struct AccelVar {
 }
 
 #[repr(C)]
+#[repr(align(16))]
 #[derive(Clone, Copy, __Value)]
 pub struct RtxRay {
     pub orig_x: f32,
@@ -1561,12 +1551,22 @@ pub struct RtxRay {
 }
 
 #[repr(C)]
+#[repr(align(16))]
 #[derive(Clone, Copy, __Value)]
 pub struct RtxHit {
     pub inst_id: u32,
     pub prim_id: u32,
     pub u: f32,
     pub v: f32,
+}
+#[cfg(test)]
+mod test{
+    #[test]
+    fn rtx_layout() {
+        use crate::*;
+        assert_eq!(std::mem::align_of::<RtxRay>(), 16);
+        assert_eq!(std::mem::align_of::<RtxHit>(), 16);
+    }
 }
 impl RtxHitExpr {
     pub fn valid(&self) -> Expr<bool> {
@@ -1619,7 +1619,8 @@ impl AccelVar {
             let mut r = r.borrow_mut();
             assert!(r.lock, "BufferVar must be created from within a kernel");
             let handle: u64 = accel.handle().0;
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&handle) {
+            let binding = Binding::Accel(AccelBinding { handle });
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
                 *node
             } else {
                 let node = new_node(
@@ -1627,15 +1628,8 @@ impl AccelVar {
                     Node::new(CArc::new(Instruction::Accel), Type::void()),
                 );
                 let i = r.captured_buffer.len();
-                r.captured_buffer.insert(
-                    handle,
-                    (
-                        i,
-                        node,
-                        Binding::Accel(AccelBinding { handle }),
-                        accel.handle.clone(),
-                    ),
-                );
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, accel.handle.clone()));
                 node
             }
         });
@@ -1651,8 +1645,21 @@ pub struct KernelBuilder {
     device: crate::runtime::Device,
     args: Vec<NodeRef>,
 }
+pub trait CallableParameter {
+    fn def_param(builder: &mut KernelBuilder) -> Self;
+}
+
 pub trait KernelParameter {
     fn def_param(builder: &mut KernelBuilder) -> Self;
+}
+impl<T: Value, U> KernelParameter for U
+where
+    U: ExprProxy<Value = T>,
+    T: Value<Expr = U>,
+{
+    fn def_param(builder: &mut KernelBuilder) -> Self {
+        builder.uniform::<T>()
+    }
 }
 impl<T: Value> KernelParameter for BufferVar<T> {
     fn def_param(builder: &mut KernelBuilder) -> Self {
@@ -1698,7 +1705,7 @@ macro_rules! impl_kernel_param_for_tuple {
 }
 impl_kernel_param_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 impl KernelBuilder {
-    pub fn new(device: crate::runtime::Device) -> Self {
+    pub fn new(device: crate::runtime::Device, is_kernel: bool) -> Self {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(!r.lock, "Cannot record multiple kernels at the same time");
@@ -1710,6 +1717,7 @@ impl KernelBuilder {
             r.device = Some(device.clone());
             r.pools = Some(CArc::new(ModulePools::new()));
             r.scopes.clear();
+            r.building_kernel = is_kernel;
             let pools = r.pools.clone().unwrap();
             r.scopes.push(IrBuilder::new(pools));
         });
@@ -1717,6 +1725,14 @@ impl KernelBuilder {
             device,
             args: vec![],
         }
+    }
+    pub fn uniform<T: Value>(&mut self) -> Expr<T> {
+        let node = new_node(
+            __module_pools(),
+            Node::new(CArc::new(Instruction::Uniform), T::type_()),
+        );
+        self.args.push(node);
+        FromNode::from_node(node)
     }
     pub fn buffer<T: Value>(&mut self) -> BufferVar<T> {
         let node = new_node(
@@ -1772,14 +1788,59 @@ impl KernelBuilder {
         self.args.push(node);
         AccelVar { node, handle: None }
     }
-    fn build_(
+    fn build_callable(&mut self, body: impl FnOnce(&mut Self)) -> CallableModuleRef {
+        body(self);
+        RECORDER.with(|r| {
+            let mut resource_tracker = ResourceTracker::new();
+            let mut r = r.borrow_mut();
+            assert!(r.lock);
+            r.lock = false;
+            assert_eq!(r.scopes.len(), 1);
+            let scope = r.scopes.pop().unwrap();
+            let entry = scope.finish();
+            let mut captured: Vec<Capture> = Vec::new();
+            let mut captured_buffers: Vec<_> = r.captured_buffer.values().cloned().collect();
+            captured_buffers.sort_by_key(|(i, _, _, _)| *i);
+            for (j, (i, node, binding, handle)) in captured_buffers.into_iter().enumerate() {
+                assert_eq!(j, i);
+                captured.push(Capture {
+                    node: node,
+                    binding: binding,
+                });
+                resource_tracker.add_any(handle);
+            }
+            let mut cpu_custom_ops: Vec<_> = r.cpu_custom_ops.values().cloned().collect();
+            cpu_custom_ops.sort_by_key(|(i, _)| *i);
+            let cpu_custom_ops = cpu_custom_ops
+                .iter()
+                .enumerate()
+                .map(|(j, (i, op))| {
+                    assert_eq!(j, *i);
+                    op.clone()
+                })
+                .collect::<Vec<_>>();
+            let module = CallableModule {
+                module: Module {
+                    entry,
+                    kind: ModuleKind::Kernel,
+                    pools: r.pools.clone().unwrap(),
+                },
+                cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
+                captures: CBoxedSlice::new(captured),
+                args: CBoxedSlice::new(self.args.clone()),
+                pools: r.pools.clone().unwrap(),
+            };
+            CallableModuleRef(CArc::new(module))
+        })
+    }
+    fn build_kernel(
         &mut self,
-        options: ShaderBuildOptions,
+        options: KernelBuildOptions,
         body: impl FnOnce(&mut Self),
-    ) -> Result<crate::runtime::RawShader, crate::backend::BackendError> {
+    ) -> Result<crate::runtime::RawKernel, crate::backend::BackendError> {
         body(self);
         RECORDER.with(
-            |r| -> Result<crate::runtime::RawShader, crate::backend::BackendError> {
+            |r| -> Result<crate::runtime::RawKernel, crate::backend::BackendError> {
                 let mut resource_tracker = ResourceTracker::new();
                 let mut r = r.borrow_mut();
                 assert!(r.lock);
@@ -1817,20 +1878,33 @@ impl KernelBuilder {
                     cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
                     captures: CBoxedSlice::new(captured),
                     shared: CBoxedSlice::new(vec![]),
+                    callables: CBoxedSlice::new(vec![]),
                     args: CBoxedSlice::new(self.args.clone()),
                     block_size: r.block_size.unwrap_or([1, 1, 1]),
                     pools: r.pools.clone().unwrap(),
                 };
 
                 let module = CArc::new(module);
+                static NO_NAME: &'static [u8] = b"\0";
+                let shader_options = api::ShaderOption {
+                    enable_cache: options.enable_cache,
+                    enable_fast_math: options.enable_fast_math,
+                    enable_debug_info: options.enable_debug_info,
+                    compile_only: false,
+                    name: NO_NAME.as_ptr() as *const i8,
+                };
                 let artifact = if options.async_compile {
-                    ShaderArtifact::Async(AsyncShaderArtifact::new(self.device.clone(), module))
+                    ShaderArtifact::Async(AsyncShaderArtifact::new(
+                        self.device.clone(),
+                        module,
+                        shader_options,
+                    ))
                 } else {
-                    ShaderArtifact::Sync(self.device.inner.create_shader(module)?)
+                    ShaderArtifact::Sync(self.device.inner.create_shader(module, &shader_options)?)
                 };
                 //
                 r.reset();
-                Ok(RawShader {
+                Ok(RawKernel {
                     artifact,
                     device: self.device.clone(),
                     resource_tracker,
@@ -1840,42 +1914,80 @@ impl KernelBuilder {
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ShaderBuildOptions {
-    pub enable_debug: bool,
+pub struct KernelBuildOptions {
+    pub enable_debug_info: bool,
     pub enable_optimization: bool,
     pub async_compile: bool,
+    pub enable_cache: bool,
+    pub enable_fast_math: bool,
 }
-impl Default for ShaderBuildOptions {
+impl Default for KernelBuildOptions {
     fn default() -> Self {
         Self {
-            enable_debug: false,
+            enable_debug_info: false,
             enable_optimization: true,
             async_compile: false,
+            enable_cache: true,
+            enable_fast_math: false,
         }
     }
 }
 pub trait KernelBuildFn {
-    fn build(
+    fn build_kernel(
         &self,
         builder: &mut KernelBuilder,
-        options: ShaderBuildOptions,
-    ) -> Result<crate::runtime::RawShader, crate::backend::BackendError>;
+        options: KernelBuildOptions,
+    ) -> Result<crate::runtime::RawKernel, crate::backend::BackendError>;
+    fn build_callable(&self, builder: &mut KernelBuilder) -> CallableModuleRef;
 }
+pub trait CallableSignature<'a, R: CallableRet> {
+    type Callable;
+    type Fn: KernelBuildFn;
+    fn wrap_raw_callable(callable: CallableModuleRef) -> Self::Callable;
+}
+
 pub trait KernelSignature<'a> {
     type Fn: KernelBuildFn;
     type Kernel;
 
-    fn wrap_raw_shader(
-        kernel: Result<crate::runtime::RawShader, crate::backend::BackendError>,
+    fn wrap_raw_kernel(
+        kernel: Result<crate::runtime::RawKernel, crate::backend::BackendError>,
     ) -> Result<Self::Kernel, crate::backend::BackendError>;
 }
-
+macro_rules! impl_callable_signature {
+    ()=>{
+        impl<'a, R: CallableRet> CallableSignature<'a, R> for () {
+            type Fn = &'a dyn Fn();
+            type Callable = Callable<(), R>;
+            fn wrap_raw_callable(callable: CallableModuleRef) -> Self::Callable{
+                Callable {
+                    inner: callable,
+                    _marker:std::marker::PhantomData,
+                }
+            }
+        }
+    };
+    ($first:ident  $($rest:ident)*) => {
+        impl<'a, R:CallableRet, $first:KernelArg +'static, $($rest: KernelArg +'static),*> CallableSignature<'a, R> for ($first, $($rest,)*) {
+            type Fn = &'a dyn Fn($first::Parameter, $($rest::Parameter),*);
+            type Callable = Callable<($first, $($rest,)*), R>;
+            fn wrap_raw_callable(callable: CallableModuleRef) -> Self::Callable{
+                Callable {
+                    inner: callable,
+                    _marker:std::marker::PhantomData,
+                }
+            }
+        }
+        impl_callable_signature!($($rest)*);
+    };
+}
+impl_callable_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 macro_rules! impl_kernel_signature {
     ()=>{
         impl<'a> KernelSignature<'a> for () {
             type Fn = &'a dyn Fn();
             type Kernel = Kernel<()>;
-            fn wrap_raw_shader(kernel: Result<crate::runtime::RawShader, crate::backend::BackendError>) -> Result<Self::Kernel, crate::backend::BackendError> {
+            fn wrap_raw_kernel(kernel: Result<crate::runtime::RawKernel, crate::backend::BackendError>) -> Result<Self::Kernel, crate::backend::BackendError> {
                 Ok(Self::Kernel{
                     inner:kernel?,
                     _marker:std::marker::PhantomData,
@@ -1887,7 +1999,7 @@ macro_rules! impl_kernel_signature {
         impl<'a, $first:KernelArg +'static, $($rest: KernelArg +'static),*> KernelSignature<'a> for ($first, $($rest,)*) {
             type Fn = &'a dyn Fn($first::Parameter, $($rest::Parameter),*);
             type Kernel = Kernel<($first, $($rest,)*)>;
-            fn wrap_raw_shader(kernel: Result<crate::runtime::RawShader, crate::backend::BackendError>) -> Result<Self::Kernel, crate::backend::BackendError> {
+            fn wrap_raw_kernel(kernel: Result<crate::runtime::RawKernel, crate::backend::BackendError>) -> Result<Self::Kernel, crate::backend::BackendError> {
                 Ok(Self::Kernel{
                     inner:kernel?,
                     _marker:std::marker::PhantomData,
@@ -1902,8 +2014,13 @@ impl_kernel_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 macro_rules! impl_kernel_build_for_fn {
     ()=>{
         impl KernelBuildFn for &dyn Fn() {
-            fn build(&self, builder: &mut KernelBuilder, options:ShaderBuildOptions) -> Result<crate::runtime::RawShader, crate::backend::BackendError> {
-                builder.build_(options, |_| {
+            fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> Result<crate::runtime::RawKernel, crate::backend::BackendError> {
+                builder.build_kernel(options, |_| {
+                    self()
+                })
+            }
+            fn build_callable(&self, builder: &mut KernelBuilder)->CallableModuleRef {
+                builder.build_callable( |_| {
                     self()
                 })
             }
@@ -1912,8 +2029,16 @@ macro_rules! impl_kernel_build_for_fn {
     ($first:ident  $($rest:ident)*) => {
         impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelBuildFn for &dyn Fn($first, $($rest,)*) {
             #[allow(non_snake_case)]
-            fn build(&self, builder: &mut KernelBuilder, options:ShaderBuildOptions) -> Result<crate::runtime::RawShader, crate::backend::BackendError>  {
-                builder.build_(options, |builder| {
+            fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> Result<crate::runtime::RawKernel, crate::backend::BackendError>  {
+                builder.build_kernel(options, |builder| {
+                    let $first = $first::def_param(builder);
+                    $(let $rest = $rest::def_param(builder);)*
+                    self($first, $($rest,)*)
+                })
+            }
+            #[allow(non_snake_case)]
+            fn build_callable(&self, builder: &mut KernelBuilder)->CallableModuleRef {
+                builder.build_callable( |builder| {
                     let $first = $first::def_param(builder);
                     $(let $rest = $rest::def_param(builder);)*
                     self($first, $($rest,)*)

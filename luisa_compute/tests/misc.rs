@@ -1,16 +1,18 @@
-use luisa_compute as luisa;
+use std::env::current_exe;
+
 use luisa::*;
+use luisa_compute as luisa;
 use rand::prelude::*;
 fn get_device() -> Device {
+    let ctx = Context::new(current_exe().unwrap());
     let device = match std::env::var("LUISA_TEST_DEVICE") {
         Ok(device) => device,
         Err(_) => "cpu".to_string(),
     };
-    luisa::create_device(&device).unwrap()
+    ctx.create_device(&device).unwrap()
 }
 #[test]
 fn vec_cast() {
-    init();
     let device = get_device();
     let f: Buffer<Float2> = device.create_buffer(1024).unwrap();
     let i: Buffer<Int2> = device.create_buffer(1024).unwrap();
@@ -35,7 +37,6 @@ fn vec_cast() {
 }
 #[test]
 fn bool_op() {
-    init();
     let device = get_device();
     let x: Buffer<bool> = device.create_buffer(1024).unwrap();
     let y: Buffer<bool> = device.create_buffer(1024).unwrap();
@@ -79,7 +80,6 @@ fn bool_op() {
 }
 #[test]
 fn bvec_op() {
-    init();
     let device = get_device();
     let x: Buffer<Bool2> = device.create_buffer(1024).unwrap();
     let y: Buffer<Bool2> = device.create_buffer(1024).unwrap();
@@ -127,7 +127,6 @@ fn bvec_op() {
 }
 #[test]
 fn vec_bit_minmax() {
-    init();
     let device = get_device();
     let x: Buffer<Int2> = device.create_buffer(1024).unwrap();
     let y: Buffer<Int2> = device.create_buffer(1024).unwrap();
@@ -199,7 +198,6 @@ fn vec_bit_minmax() {
 }
 #[test]
 fn vec_permute() {
-    init();
     let device = get_device();
     let v2: Buffer<Int2> = device.create_buffer(1024).unwrap();
     let v3: Buffer<Int3> = device.create_buffer(1024).unwrap();
@@ -226,7 +224,6 @@ fn vec_permute() {
 
 #[test]
 fn if_phi() {
-    init();
     let device = get_device();
     let x: Buffer<i32> = device.create_buffer(1024).unwrap();
     let even: Buffer<bool> = device.create_buffer(1024).unwrap();
@@ -251,7 +248,6 @@ fn if_phi() {
 
 #[test]
 fn switch_phi() {
-    init();
     let device = get_device();
     let x: Buffer<i32> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
@@ -301,7 +297,6 @@ fn switch_phi() {
 
 #[test]
 fn switch_unreachable() {
-    init();
     let device = get_device();
     let x: Buffer<i32> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
@@ -349,7 +344,6 @@ fn switch_unreachable() {
 
 #[test]
 fn array_read_write() {
-    init();
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let kernel = device
@@ -376,7 +370,6 @@ fn array_read_write() {
 }
 #[test]
 fn array_read_write2() {
-    init();
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
@@ -409,7 +402,6 @@ fn array_read_write2() {
 }
 #[test]
 fn array_read_write_vla() {
-    init();
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let y: Buffer<i32> = device.create_buffer(1024).unwrap();
@@ -448,7 +440,6 @@ fn array_read_write_vla() {
 }
 #[test]
 fn array_read_write_async_compile() {
-    init();
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024).unwrap();
     let kernel = device
@@ -472,4 +463,65 @@ fn array_read_write_async_compile() {
             [i as i32, i as i32 + 1, i as i32 + 2, i as i32 + 3]
         );
     }
+}
+#[test]
+fn capture_same_buffer_multiple_view() {
+    let device = get_device();
+    let x = device.create_buffer::<f32>(128).unwrap();
+    let sum = device.create_buffer::<f32>(1).unwrap();
+    x.view(..).fill_fn(|i| i as f32);
+    sum.view(..).fill(0.0);
+    let shader = device
+        .create_kernel::<()>(&|| {
+            let tid = luisa::dispatch_id().x();
+            let buf_x_lo = x.view(0..64).var();
+            let buf_x_hi = x.view(64..).var();
+            let x = if_!(tid.cmplt(64), {
+                buf_x_lo.read(tid)
+            },else {
+                buf_x_hi.read(tid - 64)
+            });
+            let buf_sum = sum.var();
+
+            buf_sum.atomic_fetch_add(0, x);
+        })
+        .unwrap();
+    shader.dispatch([x.len() as u32, 1, 1]).unwrap();
+    let mut sum_data = vec![0.0];
+    sum.view(..).copy_to(&mut sum_data);
+    let actual = sum_data[0];
+    let expected = (x.len() as f32 - 1.0) * x.len() as f32 * 0.5;
+    assert!((actual - expected).abs() < 1e-4);
+}
+
+#[test]
+fn uniform() {
+    let device = get_device();
+    let x = device.create_buffer::<f32>(128).unwrap();
+    let sum = device.create_buffer::<f32>(1).unwrap();
+    x.view(..).fill_fn(|i| i as f32);
+    sum.view(..).fill(0.0);
+    let shader = device
+        .create_kernel::<(Float3,)>(&|v: Expr<Float3>| {
+            let tid = luisa::dispatch_id().x();
+            let buf_x_lo = x.view(0..64).var();
+            let buf_x_hi = x.view(64..).var();
+            let x = if_!(tid.cmplt(64), {
+                buf_x_lo.read(tid)
+            },else {
+                buf_x_hi.read(tid - 64)
+            });
+            let buf_sum = sum.var();
+            let x = x * v.reduce_prod();
+            buf_sum.atomic_fetch_add(0, x);
+        })
+        .unwrap();
+    shader
+        .dispatch([x.len() as u32, 1, 1], &Float3::new(1.0, 2.0, 3.0))
+        .unwrap();
+    let mut sum_data = vec![0.0];
+    sum.view(..).copy_to(&mut sum_data);
+    let actual = sum_data[0];
+    let expected = (x.len() as f32 - 1.0) * x.len() as f32 * 0.5 * 6.0;
+    assert!((actual - expected).abs() < 1e-4);
 }

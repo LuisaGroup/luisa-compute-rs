@@ -14,7 +14,6 @@ lazy_static = "1.4"
 parking_lot = "0.12.1"
 
 [build-dependencies]
-bindgen = "0.60"
 cmake = "0.1.48"
 
 
@@ -22,8 +21,6 @@ cmake = "0.1.48"
 default = []
 cuda = []
 dx = []
-vk = []
-llvm = []
-ispc = []
+metal = []
 python = []
 

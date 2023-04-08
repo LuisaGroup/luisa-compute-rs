@@ -110,18 +110,18 @@ Expr<u64> == UInt64, Var<u64> == UInt64Var
 As in the C++ EDSL, we additionally supports the following vector/matrix types. Their proxy types are `XXXExpr` and `XXXVar`:
 
 ```rust
-BVec2 // bool2 in C++
-BVec3 // bool3 in C++
-BVec4 // bool4 in C++
+Bool2 // bool2 in C++
+Bool3 // bool3 in C++
+Bool4 // bool4 in C++
 Vec2 // float2 in C++
 Vec3 // float3 in C++
 Vec4 // float4 in C++
-IVec2 // int2 in C++
-IVec3 // int3 in C++
-IVec4 // int4 in C++
-UVec2 // uint2 in C++
-UVec3 // uint3 in C++
-UVec4 // uint4 in C++
+Int2 // int2 in C++
+Int3 // int3 in C++
+Int4 // int4 in C++
+Uint2 // uint2 in C++
+Uint3 // uint3 in C++
+Uint4 // uint4 in C++
 Mat2 // float2x2 in C++
 Mat3 // float3x3 in C++
 Mat4 // float4x4 in C++
@@ -165,7 +165,7 @@ v.set_x(v_ld.x() + 1.0);
 
 ```
 ### Polymorphism
-We prvoide the similar `Polymorphic<dyn Trait>` construct as in the C++ DSL.
+We prvoide a powerful `Polymorphic<DevirtualizationKey, dyn Trait>` construct as in the C++ DSL. See examples for more detail
 ```rust
 trait Area {
     fn area(&self) -> Float32;
@@ -183,8 +183,8 @@ impl Area for CircleExpr {
 impl_polymorphic!(Area, Circle);
 
 let circles = device.create_buffer(..).unwrap();
-let mut poly_area: Polymorphic<dyn Area> = Polymorphic::new();
-poly_area.register(&circles);
+let mut poly_area: Polymorphic<(), dyn Area> = Polymorphic::new();
+poly_area.register((), &circles);
 let area = poly_area.dispatch(tag, index, |obj|{
     obj.area()
 });

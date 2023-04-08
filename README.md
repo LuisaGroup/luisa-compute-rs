@@ -1,4 +1,4 @@
-# luisa-compute-rs 
+# luisa-compute-rs
 Rust frontend to LuisaCompute and more! (WIP) ⚠ A stable version will be released with the next version of LuisaCompute ⚠. See [next](https://github.com/LuisaGroup/luisa-compute-rs/tree/next) branch for ongoing development.
 
 ## Table of Contents
@@ -19,7 +19,7 @@ Rust frontend to LuisaCompute and more! (WIP) ⚠ A stable version will be relea
 * [Advanced Usage](#advanced-usage)
 
 * [Safety](#safety)
-    
+
 ## Example
 Try `cargo run --release --example raytracing`!
 ### Vecadd
@@ -75,7 +75,7 @@ We implemented a source-to-source reverse mode automatic differentiation that su
 The autodiff works tightly with builtin functions and the type system. Instead of implementing every function using basic arithmetic operations and apply autodiff on it, all builtin functions are differentiated using efficient VJP formulae.
 
 ### CPU Backend
-This crate also provides a CPU backend implementation in Rust that will eventually replace the current LLVM backend in LuisaCompute. This backend emphasizes on debuggability, flexibility and as well as safety. 
+This crate also provides a CPU backend implementation in Rust that will eventually replace the current LLVM backend in LuisaCompute. This backend emphasizes on debuggability, flexibility and as well as safety.
 
 ### IR Module
 The EDSL and code generation are built atop of an SSA-based IR module. The IR module is in a separate crate and can be used to implement other backends and IR transformation such as autodiff.
@@ -97,7 +97,7 @@ use luisa::prelude::*;
 ### Variables and Expressions
 There are six basic types in EDSL. `bool`, `i32`, `u32`, `i64`, `u64`, `f32`. (`f64` support might be added to CPU backend).
 For each type, there are two EDSL proxy objects `Expr<T>` and `Var<T>`. `Expr<T>` is an immutable object that represents a value. `Var<T>` is a mutable object that represents a variable. `Expr<T>` can be converted to `Var<T>` by calling `Var<T>::load()`.
-All operations except load/store should be performed on `Expr<T>`. `Var<T>` can only be used to load/store values. While `Expr<T>` and `Var<T>` are sufficent in most cases, it cannot be placed in an `impl` block. To do so, the exact name of these proxies are needed. 
+All operations except load/store should be performed on `Expr<T>`. `Var<T>` can only be used to load/store values. While `Expr<T>` and `Var<T>` are sufficent in most cases, it cannot be placed in an `impl` block. To do so, the exact name of these proxies are needed.
 ```rust
 Expr<Bool> == Bool, Var<Bool> == BoolVar
 Expr<f32> == Float32, Var<f32> == Float32Var
@@ -105,7 +105,7 @@ Expr<i32> == Int32, Var<i32> == Int32Var
 Expr<u32> == UInt32, Var<u32> == UInt32Var
 Expr<i64> == Int64, Var<i64> == Int64Var
 Expr<u64> == UInt64, Var<u64> == UInt64Var
-```     
+```
 
 As in the C++ EDSL, we additionally supports the following vector/matrix types. Their proxy types are `XXXExpr` and `XXXVar`:
 
@@ -126,7 +126,7 @@ Mat2 // float2x2 in C++
 Mat3 // float3x3 in C++
 Mat4 // float4x4 in C++
 ```
-Array types `[T;N]` are also supported and their proxy types are `ArrayExpr<T, N>` and `ArrayVar<T, N>`. 
+Array types `[T;N]` are also supported and their proxy types are `ArrayExpr<T, N>` and `ArrayVar<T, N>`.
 
 ### Control Flow
 If, while, break, continue are supported. Note that `if` and `switch` works similar to native Rust `if` and `match` in that values can be returned at the end of the block.
@@ -275,7 +275,9 @@ TODO
 
 ## Safety
 ### API
-The API is safe to a large extent. However, async operations are difficult to be completely safe without requiring users to write boilerplate. Thus, all async operations are marked unsafe. 
+Host-side safety: The API aims to be 100% safe on host side. However, the safety of async operations are gauranteed via staticly know sync points (such as `Stream::submit_and_sync`). If fully dynamic async operations are needed, user need to manually lift the liftime and use unsafe code accordingly.
 
-### Backend 
+Device-side safety: Due to the async nature of device-side operations. It is both very difficult to propose a safe **host** API that captures **device** resource lifetime. While device-side safety isn't guaranteed at compile time, on `cpu` backend runtime checks will catch any illegal memory access/racing condition during execution. However, for other backends such check is either too expensive or impractical and memory errors would result in undefined behavior instead.
+
+### Backend
 Safety checks such as OOB is generally not available for GPU backends. As it is difficult to produce meaningful debug message in event of a crash. However, the Rust backend provided in the crate contains full safety checks and is recommended for debugging.

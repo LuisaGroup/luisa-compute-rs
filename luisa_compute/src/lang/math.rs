@@ -1,5 +1,3 @@
-use std::ops::Mul;
-
 pub use super::swizzle::*;
 use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*, Float};
 use crate::*;
@@ -9,6 +7,8 @@ use luisa_compute_ir::{
     ir::{Func, MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType},
     TypeOf,
 };
+use std::ops::Mul;
+use std::ops::*;
 macro_rules! def_vec {
     ($name:ident, $glam_type:ident, $scalar:ty, $align:literal, $($comp:ident), *) => {
         #[repr(C, align($align))]
@@ -1160,6 +1160,9 @@ impl Mul<Float2Expr> for Mat2Expr {
     }
 }
 impl Mat2Expr {
+    pub fn eye(e: Expr<Float2>) -> Self {
+        Self::new(make_float2(e.x(), 0.0), make_float2(0.0, e.y()))
+    }
     pub fn inverse(&self) -> Self {
         Mat2Expr::from_node(__current_scope(|s| {
             s.call(Func::Inverse, &[self.node], <Mat2 as TypeOf>::type_())
@@ -1190,6 +1193,13 @@ impl Mul<Float3Expr> for Mat3Expr {
     }
 }
 impl Mat3Expr {
+    pub fn eye(e: Expr<Float3>) -> Self {
+        Self::new(
+            make_float3(e.x(), 0.0, 0.0),
+            make_float3(0.0, e.y(), 0.0),
+            make_float3(0.0, 0.0, e.z()),
+        )
+    }
     pub fn inverse(&self) -> Self {
         Self::from_node(__current_scope(|s| {
             s.call(Func::Inverse, &[self.node], <Mat3 as TypeOf>::type_())
@@ -1216,6 +1226,60 @@ impl Mul<Float4Expr> for Mat4Expr {
                 &[self.node, rhs.node],
                 <Float4 as TypeOf>::type_(),
             )
+        }))
+    }
+}
+impl Add for Mat2Expr {
+    type Output = Self;
+    #[inline]
+    fn add(self, rhs: Self) -> Self::Output {
+        Self::from_node(__current_scope(|s| {
+            s.call(Func::Add, &[self.node, rhs.node], <Mat2 as TypeOf>::type_())
+        }))
+    }
+}
+impl Add for Mat3Expr {
+    type Output = Self;
+    #[inline]
+    fn add(self, rhs: Self) -> Self::Output {
+        Self::from_node(__current_scope(|s| {
+            s.call(Func::Add, &[self.node, rhs.node], <Mat3 as TypeOf>::type_())
+        }))
+    }
+}
+impl Add for Mat4Expr {
+    type Output = Self;
+    #[inline]
+    fn add(self, rhs: Self) -> Self::Output {
+        Self::from_node(__current_scope(|s| {
+            s.call(Func::Add, &[self.node, rhs.node], <Mat4 as TypeOf>::type_())
+        }))
+    }
+}
+impl Sub for Mat2Expr {
+    type Output = Self;
+    #[inline]
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self::from_node(__current_scope(|s| {
+            s.call(Func::Sub, &[self.node, rhs.node], <Mat2 as TypeOf>::type_())
+        }))
+    }
+}
+impl Sub for Mat3Expr {
+    type Output = Self;
+    #[inline]
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self::from_node(__current_scope(|s| {
+            s.call(Func::Sub, &[self.node, rhs.node], <Mat3 as TypeOf>::type_())
+        }))
+    }
+}
+impl Sub for Mat4Expr {
+    type Output = Self;
+    #[inline]
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self::from_node(__current_scope(|s| {
+            s.call(Func::Sub, &[self.node, rhs.node], <Mat4 as TypeOf>::type_())
         }))
     }
 }
@@ -1247,6 +1311,14 @@ impl Mul for Mat4Expr {
     }
 }
 impl Mat4Expr {
+    pub fn eye(e: Expr<Float4>) -> Self {
+        Self::new(
+            make_float4(e.x(), 0.0, 0.0, 0.0),
+            make_float4(0.0, e.y(), 0.0, 0.0),
+            make_float4(0.0, 0.0, e.z(), 0.0),
+            make_float4(0.0, 0.0, 0.0, e.w()),
+        )
+    }
     pub fn inverse(&self) -> Self {
         Self::from_node(__current_scope(|s| {
             s.call(Func::Inverse, &[self.node], <Mat4 as TypeOf>::type_())

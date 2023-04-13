@@ -17,8 +17,8 @@ Rust frontend to LuisaCompute and more! (WIP) ⚠ A stable version will be relea
     + [Custom Operators](#custom-operators)
     + [Kernel](#kernel)
 * [Advanced Usage](#advanced-usage)
-
 * [Safety](#safety)
+* [Citation](#citation)
 
 ## Example
 Try `cargo run --release --example raytracing`!
@@ -281,3 +281,14 @@ Device-side safety: Due to the async nature of device-side operations. It is bot
 
 ### Backend
 Safety checks such as OOB is generally not available for GPU backends. As it is difficult to produce meaningful debug message in event of a crash. However, the Rust backend provided in the crate contains full safety checks and is recommended for debugging.
+
+## Citation
+When using luisa-compute-rs in an academic project, please cite
+```bibtex
+@misc{LuisaComputeRust
+    author = {Xiaochun Tong},
+    year = {2023},
+    note = {https://github.com/LuisaGroup/luisa-compute-rs},
+    title = {Rust frontend to LuisaCompute}
+}
+```

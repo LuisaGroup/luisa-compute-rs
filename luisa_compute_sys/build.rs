@@ -32,6 +32,7 @@ fn cmake_build() -> PathBuf {
     config.define("LUISA_COMPUTE_ENABLE_DSL", "OFF");
     config.define("LUISA_COMPUTE_ENABLE_CPU", "OFF");
     config.define("LUISA_COMPUTE_ENABLE_REMOTE", "OFF");
+    config.define("LUISA_COMPUTE_ENABLE_RUST", "ON");
     config.define("CMAKE_BUILD_TYPE", "Release");
     // set compiler based on env
     println!("cargo:rerun-if-env-changed=CC");

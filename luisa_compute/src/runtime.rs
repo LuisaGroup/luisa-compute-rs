@@ -249,10 +249,10 @@ impl Device {
             }),
         })
     }
-    pub fn create_mesh<V: Value, T: Value>(
+    pub fn create_mesh<V: Value>(
         &self,
         vbuffer: BufferView<'_, V>,
-        tbuffer: BufferView<'_, T>,
+        tbuffer: BufferView<'_, RtxIndex>,
         option: AccelOption,
     ) -> backend::Result<Mesh> {
         let mesh = self.inner.create_mesh(option)?;
@@ -269,9 +269,9 @@ impl Device {
             vertex_buffer_size: vbuffer.len * std::mem::size_of::<V>() as usize,
             vertex_stride: std::mem::size_of::<V>() as usize,
             index_buffer: tbuffer.handle(),
-            index_buffer_offset: tbuffer.offset * std::mem::size_of::<T>() as usize,
-            index_buffer_size: tbuffer.len * std::mem::size_of::<T>() as usize,
-            index_stride: std::mem::size_of::<T>() as usize,
+            index_buffer_offset: tbuffer.offset * std::mem::size_of::<RtxIndex>() as usize,
+            index_buffer_size: tbuffer.len * std::mem::size_of::<RtxIndex>() as usize,
+            index_stride: std::mem::size_of::<RtxIndex>() as usize,
         };
         Ok(mesh)
     }

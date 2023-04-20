@@ -24,8 +24,8 @@ fn main() {
             Float3::new(0.0, 0.5, 0.0),
         ])
         .unwrap();
-    let tbuffer: Buffer<Uint3> = device
-        .create_buffer_from_slice(&[Uint3::new(0, 1, 2)])
+    let tbuffer: Buffer<RtxIndex> = device
+        .create_buffer_from_slice(&[RtxIndex::new(0, 1, 2)])
         .unwrap();
     let mesh = device
         .create_mesh(vbuffer.view(..), tbuffer.view(..), AccelOption::default())

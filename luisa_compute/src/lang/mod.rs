@@ -1549,7 +1549,19 @@ pub struct RtxRay {
     pub dir_z: f32,
     pub tmax: f32,
 }
-
+#[repr(C)]
+#[derive(Clone, Copy, __Value)]
+pub struct RtxIndex {
+    pub v0: u32,
+    pub v1: u32,
+    pub v2: u32,
+}
+impl RtxIndex {
+    #[inline]
+    pub fn new(v0: u32, v1: u32, v2: u32) -> Self {
+        Self { v0, v1, v2 }
+    }
+}
 #[repr(C)]
 #[repr(align(16))]
 #[derive(Clone, Copy, __Value)]
@@ -1566,6 +1578,7 @@ mod test{
         use crate::*;
         assert_eq!(std::mem::align_of::<RtxRay>(), 16);
         assert_eq!(std::mem::align_of::<RtxHit>(), 16);
+        assert_eq!(std::mem::size_of::<RtxIndex>(), 12);
     }
 }
 impl RtxHitExpr {

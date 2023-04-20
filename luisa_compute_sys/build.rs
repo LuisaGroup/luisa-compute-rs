@@ -27,7 +27,14 @@ fn cmake_build() -> PathBuf {
     set_from_env!("METAL", "LUISA_COMPUTE_ENABLE_METAL");
     set_from_env!("PYTHON", "LUISA_COMPUTE_ENABLE_PYTHON");
     set_from_env!("GUI", "LUISA_COMPUTE_ENABLE_GUI");
-    config.define("LUISA_COMPUTE_CHECK_BACKEND_DEPENDENCIES", "OFF");
+    config.define(
+        "LUISA_COMPUTE_CHECK_BACKEND_DEPENDENCIES",
+        if cfg!(feature = "strict") {
+            "OFF"
+        } else {
+            "ON"
+        },
+    );
     config.define("LUISA_COMPUTE_BUILD_TESTS", "OFF");
     config.define("LUISA_COMPUTE_COMPILED_BY_RUST_FRONTEND", "ON");
     config.define("LUISA_COMPUTE_ENABLE_DSL", "OFF");
@@ -110,11 +117,16 @@ fn copy_dlls(out_dir: &PathBuf) {
         if path.is_dir() && path.ends_with(".data") {
             let create_dir = |path: &Path| {
                 if let Err(err) = std::fs::create_dir(path) {
-                    assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists, "Failed to create dir.");
+                    assert_eq!(
+                        err.kind(),
+                        std::io::ErrorKind::AlreadyExists,
+                        "Failed to create dir."
+                    );
                 }
             };
             let comps: Vec<_> = path.components().collect();
-            let target_base_dir = std::path::PathBuf::from_iter(comps[..comps.len() - 6].iter()).join("examples");
+            let target_base_dir =
+                std::path::PathBuf::from_iter(comps[..comps.len() - 6].iter()).join("examples");
 
             let current_target_dir = target_base_dir.join(".data");
             create_dir(current_target_dir.as_path());
@@ -142,4 +154,3 @@ fn main() {
     let out_dir = cmake_build();
     copy_dlls(&out_dir);
 }
-

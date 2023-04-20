@@ -36,4 +36,7 @@ image = "0.24.5"
 
 
 [features]
+default = ["remote", "cuda", "strict"]
 cuda = ["luisa_compute_sys/cuda"]
+strict = ["luisa_compute_sys/strict"]
+remote = []

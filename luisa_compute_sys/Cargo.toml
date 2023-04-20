@@ -18,9 +18,7 @@ cmake = "0.1.48"
 
 
 [features]
-default = []
+default = ["cuda"]
 cuda = []
-dx = []
-metal = []
-python = []
+strict = []
 

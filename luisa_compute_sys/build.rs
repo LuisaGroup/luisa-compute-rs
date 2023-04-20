@@ -1,3 +1,4 @@
+use std::io;
 use std::path::Path;
 use std::{env, fs, path::PathBuf};
 
@@ -97,12 +98,41 @@ fn copy_dlls(out_dir: &PathBuf) {
                     .join(path.file_name().unwrap());
                 dbg!(&dest);
                 copy_if_different(&path, dest);
-            }{
+            }
+            {
                 let dest = std::path::PathBuf::from_iter(comps[..comps.len() - 6].iter())
                     .join("examples")
                     .join(path.file_name().unwrap());
                 dbg!(&dest);
                 copy_if_different(&path, dest);
+            }
+        }
+        if path.is_dir() && path.ends_with(".data") {
+            let create_dir = |path: &Path| {
+                if let Err(err) = std::fs::create_dir(path) {
+                    assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists, "Failed to create dir.");
+                }
+            };
+            let comps: Vec<_> = path.components().collect();
+            let target_base_dir = std::path::PathBuf::from_iter(comps[..comps.len() - 6].iter()).join("examples");
+
+            let current_target_dir = target_base_dir.join(".data");
+            create_dir(current_target_dir.as_path());
+            for entry in fs::read_dir(path).unwrap() {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                if path.is_dir() {
+                    let secondary_name = path.components().last().unwrap();
+                    let current_target_dir = current_target_dir.join(secondary_name);
+                    create_dir(current_target_dir.as_path());
+                    for entry in fs::read_dir(path).unwrap() {
+                        let entry = entry.unwrap();
+                        let src_path = entry.path();
+                        let file_name = src_path.components().last().unwrap();
+                        let current_target_dir = current_target_dir.join(file_name);
+                        fs::copy(src_path, current_target_dir).unwrap();
+                    }
+                }
             }
         }
     }

@@ -15,8 +15,21 @@ fn main() {
 
     std::env::set_var("WINIT_UNIX_BACKEND", "x11");
 
+    let args: Vec<String> = std::env::args().collect();
+    assert!(
+        args.len() <= 2,
+        "Usage: {} <backend>. <backend>: cpu, cuda, dx, metal, remote",
+        args[0]
+    );
+
     let ctx = Context::new(current_exe().unwrap());
-    let device = ctx.create_device("cpu").unwrap();
+    let device = ctx
+        .create_device(if args.len() == 2 {
+            args[1].as_str()
+        } else {
+            "cpu"
+        })
+        .unwrap();
     let vbuffer: Buffer<Float3> = device
         .create_buffer_from_slice(&[
             Float3::new(-0.5, -0.5, 0.0),

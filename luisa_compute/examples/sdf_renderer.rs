@@ -14,8 +14,21 @@ pub struct Sphere {
 
 fn main() {
     use luisa::*;
+    let args: Vec<String> = std::env::args().collect();
+    assert!(
+        args.len() <= 2,
+        "Usage: {} <backend>. <backend>: cpu, cuda, dx, metal, remote",
+        args[0]
+    );
+
     let ctx = Context::new(current_exe().unwrap());
-    let device = ctx.create_device("cpu").unwrap();
+    let device = ctx
+        .create_device(if args.len() == 2 {
+            args[1].as_str()
+        } else {
+            "cpu"
+        })
+        .unwrap();
     let spheres = device.create_buffer::<Sphere>(1).unwrap();
     spheres.view(..).copy_from(&[Sphere {
         center: Float3::new(0.0, 0.0, 0.0),

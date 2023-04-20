@@ -48,16 +48,22 @@ pub mod macros {
 
 pub use luisa_compute_sys as sys;
 pub use runtime::{CommandList, Device, Stream};
-use std::sync::Once;
+use std::sync::{Once, Weak};
+use lazy_static::lazy_static;
+use parking_lot::Mutex;
+use std::collections::HashMap;
+
 pub struct Context {
-    inner: backend::Context,
+    inner: Arc<backend::Context>,
 }
 pub fn init_logger() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .format_timestamp_secs()
         .init();
 }
-
+lazy_static!{
+    static ref CTX_CACHE: Mutex<HashMap<String, Weak<backend::Context>>> = Mutex::new(HashMap::new());
+}
 impl Context {
     // path to libluisa-*
     // if the current_exe() is in the same directory as libluisa-*, then passing current_exe() is enough
@@ -66,9 +72,23 @@ impl Context {
         if lib_path.is_file() {
             lib_path = lib_path.parent().unwrap().to_path_buf();
         }
-        Self {
-            inner: backend::Context::new(lib_path),
-        }
+        let inner = {
+            let mut cache = CTX_CACHE.lock();
+            if let Some(ctx) = cache.get(lib_path.to_str().unwrap()) {
+                if let Some(ctx) = ctx.upgrade() {
+                    return Self { inner: ctx.clone() };
+                } else {
+                    let ctx = Arc::new(backend::Context::new(lib_path.clone()));
+                    cache.insert(lib_path.to_str().unwrap().to_string(), Arc::downgrade(&ctx));
+                    ctx
+                }
+            } else {
+                let ctx = Arc::new(backend::Context::new(lib_path.clone()));
+                cache.insert(lib_path.to_str().unwrap().to_string(), Arc::downgrade(&ctx));
+                ctx
+            }
+        };
+        Self { inner }
     }
     #[inline]
     pub fn create_cpu_device(&self) -> backend::Result<Device> {

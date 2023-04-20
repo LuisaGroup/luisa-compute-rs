@@ -283,7 +283,7 @@ Device-side safety: Due to the async nature of device-side operations. It is bot
 Safety checks such as OOB is generally not available for GPU backends. As it is difficult to produce meaningful debug message in event of a crash. However, the Rust backend provided in the crate contains full safety checks and is recommended for debugging.
 
 ## Citation
-When using luisa-compute-rs in an academic project, please cite
+When using luisa-compute-rs in an academic project, we encourage you to cite
 ```bibtex
 @misc{LuisaComputeRust
     author = {Xiaochun Tong},

@@ -33,7 +33,7 @@ raw-window-handle = "0.5.1"
 [dev-dependencies]
 rand = "0.8.5"
 image = "0.24.5"
-
+tobj = "3.2.5"
 
 [features]
 default = ["remote", "cuda", "strict"]

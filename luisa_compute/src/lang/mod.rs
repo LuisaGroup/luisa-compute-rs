@@ -44,6 +44,7 @@ pub use luisa_compute_ir::{
 };
 use math::{Bool2Expr, Bool3Expr, Bool4Expr, Uint3};
 use std::cell::RefCell;
+use std::ops::{Bound, RangeBounds};
 
 use self::math::{Float2, Float3, Float4, Uint2};
 use self::traits::VarCmpEq;
@@ -1556,7 +1557,7 @@ pub struct RtxHit {
     pub v: f32,
 }
 #[cfg(test)]
-mod test{
+mod test {
     #[test]
     fn rtx_layout() {
         use crate::*;
@@ -2261,7 +2262,24 @@ macro_rules! while_ {
         generic_loop(|| $cond, || $body, || {})
     };
 }
-
+#[inline]
+pub fn for_range(r:impl RangeBounds<Expr<i32>>, body: impl FnOnce(Expr<i32>)) {
+    let start = match r.start_bound() {
+        Bound::Included(v) => *v,
+        Bound::Excluded(v) => *v + 1,
+        Bound::Unbounded => 0i32.into(),
+    };
+    let end = match r.end_bound() {
+        Bound::Included(v) => *v + 1,
+        Bound::Excluded(v) => *v,
+        Bound::Unbounded => i32::MAX.into(),
+    };
+    let i = var!(i32, start);
+    while_!(i.load().cmplt(end), {
+        body(i.load());
+        i.store(i.load() + 1);
+    });
+}
 pub fn break_() {
     __current_scope(|b| {
         b.break_();

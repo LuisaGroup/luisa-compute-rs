@@ -843,6 +843,7 @@ pub trait CallableRet {}
 impl CallableRet for () {}
 impl<T: Value> CallableRet for T {}
 pub struct Callable<T: KernelArg, R: CallableRet> {
+    #[allow(dead_code)]
     pub(crate) inner: ir::CallableModuleRef,
     pub(crate) _marker: std::marker::PhantomData<(T, R)>,
 }

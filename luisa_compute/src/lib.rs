@@ -1,5 +1,5 @@
 #![allow(unused_unsafe)]
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::{any::Any, sync::Arc};
 
 pub mod lang;
@@ -9,7 +9,6 @@ pub mod runtime;
 pub use half::f16;
 use luisa_compute_api_types as api;
 pub use luisa_compute_backend as backend;
-use luisa_compute_backend::Backend;
 pub mod prelude {
     pub use crate::lang::poly::PolymorphicImpl;
     pub use crate::lang::traits::VarTrait;
@@ -46,12 +45,12 @@ pub mod macros {
     pub use crate::{cpu_dbg, if_, impl_polymorphic, var, while_};
 }
 
-pub use luisa_compute_sys as sys;
-pub use runtime::{CommandList, Device, Stream};
-use std::sync::{Once, Weak};
 use lazy_static::lazy_static;
+pub use luisa_compute_sys as sys;
 use parking_lot::Mutex;
+pub use runtime::{CommandList, Device, Stream};
 use std::collections::HashMap;
+use std::sync::Weak;
 
 pub struct Context {
     inner: Arc<backend::Context>,
@@ -61,8 +60,9 @@ pub fn init_logger() {
         .format_timestamp_secs()
         .init();
 }
-lazy_static!{
-    static ref CTX_CACHE: Mutex<HashMap<String, Weak<backend::Context>>> = Mutex::new(HashMap::new());
+lazy_static! {
+    static ref CTX_CACHE: Mutex<HashMap<String, Weak<backend::Context>>> =
+        Mutex::new(HashMap::new());
 }
 impl Context {
     // path to libluisa-*

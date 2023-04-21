@@ -1,11 +1,6 @@
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
-use crate::{
-    lang::{AccelVar, Value},
-    resource::Buffer,
-    runtime::submit_default_stream_and_sync,
-    ResourceTracker, *,
-};
+use crate::{lang::AccelVar, runtime::submit_default_stream_and_sync, ResourceTracker, *};
 use api::AccelBuildRequest;
 use luisa_compute_api_types as api;
 use parking_lot::RwLock;

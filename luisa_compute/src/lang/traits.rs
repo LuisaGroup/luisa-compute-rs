@@ -107,28 +107,28 @@ pub trait CommonVarOp: VarTrait {
         _cast(*self)
     }
     fn int(&self) -> Self::Int {
-          _cast(*self)
+        _cast(*self)
     }
     fn ulong(&self) -> Self::Ulong {
-          _cast(*self)
+        _cast(*self)
     }
     fn long(&self) -> Self::Long {
-          _cast(*self)
+        _cast(*self)
     }
     fn float(&self) -> Self::Float {
-          _cast(*self)
+        _cast(*self)
     }
     fn short(&self) -> Self::Short {
-          _cast(*self)
+        _cast(*self)
     }
     fn ushort(&self) -> Self::Ushort {
-          _cast(*self)
+        _cast(*self)
     }
     // fn double(&self) -> Self::Double {
     //       _cast(*self)
     // }
     fn bool_(&self) -> Self::Bool {
-          _cast(*self)
+        _cast(*self)
     }
 }
 pub trait VarCmpEq: VarTrait {
@@ -467,11 +467,15 @@ pub trait FloatVarTrait:
             Self::from_node(ret)
         })
     }
-    fn lerp(&self, other: impl Into<Self>, frac: impl Into<Self>) -> Self{
+    fn lerp(&self, other: impl Into<Self>, frac: impl Into<Self>) -> Self {
         let other = other.into();
         let frac = frac.into();
         __current_scope(|s| {
-            let ret = s.call(Func::Lerp, &[self.node(), other.node(), frac.node()], Self::type_());
+            let ret = s.call(
+                Func::Lerp,
+                &[self.node(), other.node(), frac.node()],
+                Self::type_(),
+            );
             Self::from_node(ret)
         })
     }

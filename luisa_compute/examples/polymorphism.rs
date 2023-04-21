@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 
 use luisa::prelude::*;
 use luisa::Value;
-use luisa::{impl_polymorphic, lang::*, Float};
+use luisa::{impl_polymorphic, Float};
 use luisa_compute as luisa;
 
 trait Area {

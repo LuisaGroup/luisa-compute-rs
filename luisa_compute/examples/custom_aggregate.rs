@@ -1,5 +1,5 @@
-use luisa_compute as luisa;
 use luisa::*;
+use luisa_compute as luisa;
 #[derive(Aggregate)]
 pub struct Spectrum {
     samples: Vec<Float>,
@@ -8,9 +8,7 @@ pub struct Spectrum {
 #[derive(Aggregate)]
 pub enum Color {
     Rgb(Expr<Float3>),
-    Spectrum(Spectrum)
+    Spectrum(Spectrum),
 }
 
-fn main() {
-
-}
+fn main() {}

@@ -1,11 +1,3 @@
-use std::any::Any;
-use std::cell::RefCell;
-use std::cell::UnsafeCell;
-use std::collections::HashSet;
-use std::ops::RangeBounds;
-use std::sync::Arc;
-
-use crate::math::*;
 use crate::*;
 use api::BufferDownloadCommand;
 use api::BufferUploadCommand;
@@ -15,6 +7,9 @@ use lang::BufferVar;
 use lang::Value;
 use libc::c_void;
 use runtime::*;
+use std::cell::RefCell;
+use std::ops::RangeBounds;
+use std::sync::Arc;
 pub struct Buffer<T: Value> {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BufferHandle>,

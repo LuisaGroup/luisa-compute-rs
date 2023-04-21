@@ -1,4 +1,4 @@
-use std::{path::PathBuf, env::current_exe};
+use std::{env::current_exe, path::PathBuf};
 
 use image::io::Reader as ImageReader;
 use luisa::*;

@@ -146,54 +146,53 @@ def_vec!(Uint2, UVec2, u32, 8, x, y);
 def_vec!(Uint3, UVec3, u32, 16, x, y, z);
 def_vec!(Uint4, UVec4, u32, 16, x, y, z, w);
 
-def_packed_vec!(PackedUint2,Uint2, UVec2, u32, x, y);
-def_packed_vec!(PackedUint3,Uint3, UVec3, u32, x, y, z);
-def_packed_vec!(PackedUint4,Uint4, UVec4, u32, x, y, z, w);
+def_packed_vec!(PackedUint2, Uint2, UVec2, u32, x, y);
+def_packed_vec!(PackedUint3, Uint3, UVec3, u32, x, y, z);
+def_packed_vec!(PackedUint4, Uint4, UVec4, u32, x, y, z, w);
 
 def_vec!(Int2, IVec2, i32, 8, x, y);
 def_vec!(Int3, IVec3, i32, 16, x, y, z);
 def_vec!(Int4, IVec4, i32, 16, x, y, z, w);
 
-def_packed_vec!(PackedInt2,Int2, IVec2, i32, x, y);
-def_packed_vec!(PackedInt3,Int3, IVec3, i32, x, y, z);
-def_packed_vec!(PackedInt4,Int4, IVec4, i32, x, y, z, w);
+def_packed_vec!(PackedInt2, Int2, IVec2, i32, x, y);
+def_packed_vec!(PackedInt3, Int3, IVec3, i32, x, y, z);
+def_packed_vec!(PackedInt4, Int4, IVec4, i32, x, y, z, w);
 
 def_vec!(Double2, DVec2, f64, 16, x, y);
 def_vec!(Double3, DVec3, f64, 32, x, y, z);
 def_vec!(Double4, DVec4, f64, 32, x, y, z, w);
 
-
 def_vec!(Bool2, BVec2, bool, 2, x, y);
 def_vec!(Bool3, BVec3, bool, 4, x, y, z);
 def_vec!(Bool4, BVec4, bool, 4, x, y, z, w);
 
-def_packed_vec!(PackedBool2,Bool2, BVec2, bool, x, y);
-def_packed_vec!(PackedBool3,Bool3, BVec3, bool, x, y, z);
-def_packed_vec!(PackedBool4,Bool4, BVec4, bool, x, y, z, w);
+def_packed_vec!(PackedBool2, Bool2, BVec2, bool, x, y);
+def_packed_vec!(PackedBool3, Bool3, BVec3, bool, x, y, z);
+def_packed_vec!(PackedBool4, Bool4, BVec4, bool, x, y, z, w);
 
 def_vec_no_glam!(Ulong2, u64, 16, x, y);
 def_vec_no_glam!(Ulong3, u64, 32, x, y, z);
 def_vec_no_glam!(Ulong4, u64, 32, x, y, z, w);
 
-def_packed_vec_no_glam!(PackedUlong2,Ulong2, u64, x, y);
-def_packed_vec_no_glam!(PackedUlong3,Ulong3, u64, x, y, z);
-def_packed_vec_no_glam!(PackedUlong4,Ulong4, u64, x, y, z, w);
+def_packed_vec_no_glam!(PackedUlong2, Ulong2, u64, x, y);
+def_packed_vec_no_glam!(PackedUlong3, Ulong3, u64, x, y, z);
+def_packed_vec_no_glam!(PackedUlong4, Ulong4, u64, x, y, z, w);
 
 def_vec_no_glam!(Long2, i64, 16, x, y);
 def_vec_no_glam!(Long3, i64, 32, x, y, z);
 def_vec_no_glam!(Long4, i64, 32, x, y, z, w);
 
-def_packed_vec_no_glam!(PackedLong2, Long2,i64, x, y);
-def_packed_vec_no_glam!(PackedLong3, Long3,i64, x, y, z);
-def_packed_vec_no_glam!(PackedLong4, Long4,i64, x, y, z, w);
+def_packed_vec_no_glam!(PackedLong2, Long2, i64, x, y);
+def_packed_vec_no_glam!(PackedLong3, Long3, i64, x, y, z);
+def_packed_vec_no_glam!(PackedLong4, Long4, i64, x, y, z, w);
 
 def_vec_no_glam!(Ushort2, u16, 4, x, y);
 def_vec_no_glam!(Ushort3, u16, 8, x, y, z);
 def_vec_no_glam!(Ushort4, u16, 8, x, y, z, w);
 
-def_packed_vec_no_glam!(PackedUshort2, Ushort2,u16,  x, y);
-def_packed_vec_no_glam!(PackedUshort3, Ushort3,u16,  x, y, z);
-def_packed_vec_no_glam!(PackedUshort4, Ushort4,u16,  x, y, z, w);
+def_packed_vec_no_glam!(PackedUshort2, Ushort2, u16, x, y);
+def_packed_vec_no_glam!(PackedUshort3, Ushort3, u16, x, y, z);
+def_packed_vec_no_glam!(PackedUshort4, Ushort4, u16, x, y, z, w);
 
 def_vec_no_glam!(Short2, i16, 4, x, y);
 def_vec_no_glam!(Short3, i16, 8, x, y, z);
@@ -688,7 +687,6 @@ impl_packed_cvt!(PackedLong4Expr, Long4Expr, x, y, z, w);
 impl_packed_cvt!(PackedUlong2Expr, Ulong2Expr, x, y);
 impl_packed_cvt!(PackedUlong3Expr, Ulong3Expr, x, y, z);
 impl_packed_cvt!(PackedUlong4Expr, Ulong4Expr, x, y, z, w);
-
 
 macro_rules! impl_binop {
     ($t:ty, $scalar:ty, $proxy:ty, $tr:ident, $m:ident, $tr_assign:ident, $m_assign:ident) => {

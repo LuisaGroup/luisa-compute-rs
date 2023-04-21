@@ -1,7 +1,7 @@
 use std::env::current_exe;
 
-use luisa_compute as luisa;
 use luisa::*;
+use luisa_compute as luisa;
 fn main() {
     luisa::init_logger();
 
@@ -33,7 +33,9 @@ fn main() {
             },
         )
         .unwrap();
-    shader.dispatch([1024, 1, 1], &x.view(..), &y, &dx, &dy).unwrap();
+    shader
+        .dispatch([1024, 1, 1], &x.view(..), &y, &dx, &dy)
+        .unwrap();
     let dx = dx.copy_to_vec();
     println!("{:?}", &dx[0..16]);
     let dy = dy.copy_to_vec();

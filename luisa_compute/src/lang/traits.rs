@@ -59,6 +59,13 @@ impl<T: Copy + 'static + Value> FromNode for PrimExpr<T> {
         self.node
     }
 }
+fn _cast<T: VarTrait, U: VarTrait>(expr: T) -> U {
+    let node = expr.node();
+    __current_scope(|s| {
+        let ret = s.call(Func::Cast, &[node], U::type_());
+        U::from_node(ret)
+    })
+}
 pub trait CommonVarOp: VarTrait {
     fn max<A: Into<Self>>(&self, other: A) -> Self {
         let lhs = self.node();
@@ -90,11 +97,6 @@ pub trait CommonVarOp: VarTrait {
             Self::from_node(ret)
         })
     }
-    fn _cast<A: VarTrait>(&self) -> A {
-        let ty = <A::Value>::type_();
-        let node = __current_scope(|s| s.cast(self.node(), ty));
-        FromNode::from_node(node)
-    }
     fn bitcast<T: Value>(&self) -> Expr<T> {
         assert_eq!(std::mem::size_of::<Self::Value>(), std::mem::size_of::<T>());
         let ty = <T>::type_();
@@ -102,31 +104,31 @@ pub trait CommonVarOp: VarTrait {
         Expr::<T>::from_node(node)
     }
     fn uint(&self) -> Self::Uint {
-        self._cast()
+        _cast(*self)
     }
     fn int(&self) -> Self::Int {
-        self._cast()
+          _cast(*self)
     }
     fn ulong(&self) -> Self::Ulong {
-        self._cast()
+          _cast(*self)
     }
     fn long(&self) -> Self::Long {
-        self._cast()
+          _cast(*self)
     }
     fn float(&self) -> Self::Float {
-        self._cast()
+          _cast(*self)
     }
     fn short(&self) -> Self::Short {
-        self._cast()
+          _cast(*self)
     }
     fn ushort(&self) -> Self::Ushort {
-        self._cast()
+          _cast(*self)
     }
     // fn double(&self) -> Self::Double {
-    //     self._cast()
+    //       _cast(*self)
     // }
     fn bool_(&self) -> Self::Bool {
-        self._cast()
+          _cast(*self)
     }
 }
 pub trait VarCmpEq: VarTrait {

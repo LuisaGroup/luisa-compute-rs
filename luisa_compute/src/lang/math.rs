@@ -9,6 +9,7 @@ use luisa_compute_ir::{
 };
 use std::ops::Mul;
 use std::ops::*;
+
 macro_rules! def_vec {
     ($name:ident, $glam_type:ident, $scalar:ty, $align:literal, $($comp:ident), *) => {
         #[repr(C, align($align))]
@@ -40,6 +41,80 @@ macro_rules! def_vec {
         }
     };
 }
+macro_rules! def_packed_vec {
+    ($name:ident, $vec_type:ident, $glam_type:ident, $scalar:ty, $($comp:ident), *) => {
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, Default, __Value)]
+        pub struct $name {
+            $(pub $comp: $scalar), *
+        }
+        impl $name {
+            #[inline]
+            pub const fn new($($comp: $scalar), *) -> Self {
+                Self { $($comp), * }
+            }
+            #[inline]
+            pub const fn splat(scalar: $scalar) -> Self {
+                Self { $($comp: scalar), * }
+            }
+        }
+        impl From<$name> for glam::$glam_type {
+            #[inline]
+            fn from(v: $name) -> Self {
+                Self::new($(v.$comp), *)
+            }
+        }
+        impl From<glam::$glam_type> for $name {
+            #[inline]
+            fn from(v: glam::$glam_type) -> Self {
+                Self::new($(v.$comp), *)
+            }
+        }
+        impl From<$name> for $vec_type {
+            #[inline]
+            fn from(v: $name) -> Self {
+                Self::new($(v.$comp), *)
+            }
+        }
+        impl From<$vec_type> for $name {
+            #[inline]
+            fn from(v: $vec_type) -> Self {
+                Self::new($(v.$comp), *)
+            }
+        }
+    };
+}
+macro_rules! def_packed_vec_no_glam {
+    ($name:ident, $vec_type:ident, $scalar:ty, $($comp:ident), *) => {
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, Default, __Value)]
+        pub struct $name {
+            $(pub $comp: $scalar), *
+        }
+        impl $name {
+            #[inline]
+            pub const fn new($($comp: $scalar), *) -> Self {
+                Self { $($comp), * }
+            }
+            #[inline]
+            pub const fn splat(scalar: $scalar) -> Self {
+                Self { $($comp: scalar), * }
+            }
+        }
+        impl From<$name> for $vec_type {
+            #[inline]
+            fn from(v: $name) -> Self {
+                Self::new($(v.$comp), *)
+            }
+        }
+        impl From<$vec_type> for $name {
+            #[inline]
+            fn from(v: $vec_type) -> Self {
+                Self::new($(v.$comp), *)
+            }
+        }
+    };
+}
 macro_rules! def_vec_no_glam {
     ($name:ident, $scalar:ty, $align:literal, $($comp:ident), *) => {
         #[repr(C, align($align))]
@@ -63,49 +138,94 @@ def_vec!(Float2, Vec2, f32, 8, x, y);
 def_vec!(Float3, Vec3, f32, 16, x, y, z);
 def_vec!(Float4, Vec4, f32, 16, x, y, z, w);
 
+def_packed_vec!(PackedFloat2, Float2, Vec2, f32, x, y);
+def_packed_vec!(PackedFloat3, Float3, Vec3, f32, x, y, z);
+def_packed_vec!(PackedFloat4, Float4, Vec4, f32, x, y, z, w);
+
 def_vec!(Uint2, UVec2, u32, 8, x, y);
 def_vec!(Uint3, UVec3, u32, 16, x, y, z);
 def_vec!(Uint4, UVec4, u32, 16, x, y, z, w);
+
+def_packed_vec!(PackedUint2,Uint2, UVec2, u32, x, y);
+def_packed_vec!(PackedUint3,Uint3, UVec3, u32, x, y, z);
+def_packed_vec!(PackedUint4,Uint4, UVec4, u32, x, y, z, w);
 
 def_vec!(Int2, IVec2, i32, 8, x, y);
 def_vec!(Int3, IVec3, i32, 16, x, y, z);
 def_vec!(Int4, IVec4, i32, 16, x, y, z, w);
 
+def_packed_vec!(PackedInt2,Int2, IVec2, i32, x, y);
+def_packed_vec!(PackedInt3,Int3, IVec3, i32, x, y, z);
+def_packed_vec!(PackedInt4,Int4, IVec4, i32, x, y, z, w);
+
 def_vec!(Double2, DVec2, f64, 16, x, y);
 def_vec!(Double3, DVec3, f64, 32, x, y, z);
 def_vec!(Double4, DVec4, f64, 32, x, y, z, w);
+
 
 def_vec!(Bool2, BVec2, bool, 2, x, y);
 def_vec!(Bool3, BVec3, bool, 4, x, y, z);
 def_vec!(Bool4, BVec4, bool, 4, x, y, z, w);
 
+def_packed_vec!(PackedBool2,Bool2, BVec2, bool, x, y);
+def_packed_vec!(PackedBool3,Bool3, BVec3, bool, x, y, z);
+def_packed_vec!(PackedBool4,Bool4, BVec4, bool, x, y, z, w);
+
 def_vec_no_glam!(Ulong2, u64, 16, x, y);
 def_vec_no_glam!(Ulong3, u64, 32, x, y, z);
 def_vec_no_glam!(Ulong4, u64, 32, x, y, z, w);
+
+def_packed_vec_no_glam!(PackedUlong2,Ulong2, u64, x, y);
+def_packed_vec_no_glam!(PackedUlong3,Ulong3, u64, x, y, z);
+def_packed_vec_no_glam!(PackedUlong4,Ulong4, u64, x, y, z, w);
 
 def_vec_no_glam!(Long2, i64, 16, x, y);
 def_vec_no_glam!(Long3, i64, 32, x, y, z);
 def_vec_no_glam!(Long4, i64, 32, x, y, z, w);
 
+def_packed_vec_no_glam!(PackedLong2, Long2,i64, x, y);
+def_packed_vec_no_glam!(PackedLong3, Long3,i64, x, y, z);
+def_packed_vec_no_glam!(PackedLong4, Long4,i64, x, y, z, w);
+
 def_vec_no_glam!(Ushort2, u16, 4, x, y);
 def_vec_no_glam!(Ushort3, u16, 8, x, y, z);
 def_vec_no_glam!(Ushort4, u16, 8, x, y, z, w);
+
+def_packed_vec_no_glam!(PackedUshort2, Ushort2,u16,  x, y);
+def_packed_vec_no_glam!(PackedUshort3, Ushort3,u16,  x, y, z);
+def_packed_vec_no_glam!(PackedUshort4, Ushort4,u16,  x, y, z, w);
 
 def_vec_no_glam!(Short2, i16, 4, x, y);
 def_vec_no_glam!(Short3, i16, 8, x, y, z);
 def_vec_no_glam!(Short4, i16, 8, x, y, z, w);
 
+def_packed_vec_no_glam!(PackedShort2, Short2, i16, x, y);
+def_packed_vec_no_glam!(PackedShort3, Short3, i16, x, y, z);
+def_packed_vec_no_glam!(PackedShort4, Short4, i16, x, y, z, w);
+
 def_vec_no_glam!(Half2, f16, 4, x, y);
 def_vec_no_glam!(Half3, f16, 8, x, y, z);
 def_vec_no_glam!(Half4, f16, 8, x, y, z, w);
+
+// def_packed_vec_no_glam!(PackedHalf2, f16, x, y);
+// def_packed_vec_no_glam!(PackedHalf3, f16, x, y, z);
+// pub type PackHalf4 = Half4;
 
 def_vec_no_glam!(Ubyte2, u8, 2, x, y);
 def_vec_no_glam!(Ubyte3, u8, 4, x, y, z);
 def_vec_no_glam!(Ubyte4, u8, 4, x, y, z, w);
 
+// def_packed_vec_no_glam!(PackedUbyte2, u8, x, y);
+// def_packed_vec_no_glam!(PackedUbyte3, u8, x, y, z);
+// pub type PackUbyte4 = Ubyte4;
+
 def_vec_no_glam!(Byte2, u8, 2, x, y);
 def_vec_no_glam!(Byte3, u8, 4, x, y, z);
 def_vec_no_glam!(Byte4, u8, 4, x, y, z, w);
+
+// def_packed_vec_no_glam!(PackedByte2, u8, x, y);
+// def_packed_vec_no_glam!(PackedByte3, u8, x, y, z);
+// pub type PackByte4 = Byte4;
 
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C, align(8))]
@@ -156,7 +276,7 @@ impl Mat4 {
             Float4::new(0.0, 0.0, 0.0, 1.0),
         )
     }
-    pub fn into_affine3x4(&self) -> [f32; 12] {
+    pub fn into_affine3x4(self) -> [f32; 12] {
         [
             self.cols[0].x,
             self.cols[0].y,
@@ -521,6 +641,54 @@ impl_vec_proxy!(Long4, Long4Expr, Long4Var, i64, Int64, 4, x, y, z, w);
 impl_mat_proxy!(Mat2, Mat2Expr, Mat2Var, Float2, Float32, 2, x, y);
 impl_mat_proxy!(Mat3, Mat3Expr, Mat3Var, Float3, Float32, 3, x, y, z);
 impl_mat_proxy!(Mat4, Mat4Expr, Mat4Var, Float4, Float32, 4, x, y, z, w);
+
+macro_rules! impl_packed_cvt {
+    ($packed:ty, $vec:ty, $($comp:ident), *) => {
+        impl From<$vec> for $packed {
+            fn from(v: $vec) -> Self {
+                Self::new($(v.$comp()), *)
+            }
+        }
+        impl From<$packed> for $vec {
+            fn from(v: $packed) -> Self {
+                Self::new($(v.$comp()), *)
+            }
+        }
+    }
+}
+impl_packed_cvt!(PackedFloat2Expr, Float2Expr, x, y);
+impl_packed_cvt!(PackedFloat3Expr, Float3Expr, x, y, z);
+impl_packed_cvt!(PackedFloat4Expr, Float4Expr, x, y, z, w);
+
+impl_packed_cvt!(PackedShort2Expr, Short2Expr, x, y);
+impl_packed_cvt!(PackedShort3Expr, Short3Expr, x, y, z);
+impl_packed_cvt!(PackedShort4Expr, Short4Expr, x, y, z, w);
+
+// ushort
+impl_packed_cvt!(PackedUshort2Expr, Ushort2Expr, x, y);
+impl_packed_cvt!(PackedUshort3Expr, Ushort3Expr, x, y, z);
+impl_packed_cvt!(PackedUshort4Expr, Ushort4Expr, x, y, z, w);
+
+// int
+impl_packed_cvt!(PackedInt2Expr, Int2Expr, x, y);
+impl_packed_cvt!(PackedInt3Expr, Int3Expr, x, y, z);
+impl_packed_cvt!(PackedInt4Expr, Int4Expr, x, y, z, w);
+
+// uint
+impl_packed_cvt!(PackedUint2Expr, Uint2Expr, x, y);
+impl_packed_cvt!(PackedUint3Expr, Uint3Expr, x, y, z);
+impl_packed_cvt!(PackedUint4Expr, Uint4Expr, x, y, z, w);
+
+// long
+impl_packed_cvt!(PackedLong2Expr, Long2Expr, x, y);
+impl_packed_cvt!(PackedLong3Expr, Long3Expr, x, y, z);
+impl_packed_cvt!(PackedLong4Expr, Long4Expr, x, y, z, w);
+
+// ulong
+impl_packed_cvt!(PackedUlong2Expr, Ulong2Expr, x, y);
+impl_packed_cvt!(PackedUlong3Expr, Ulong3Expr, x, y, z);
+impl_packed_cvt!(PackedUlong4Expr, Ulong4Expr, x, y, z, w);
+
 
 macro_rules! impl_binop {
     ($t:ty, $scalar:ty, $proxy:ty, $tr:ident, $m:ident, $tr_assign:ident, $m_assign:ident) => {

@@ -37,8 +37,8 @@ fn main() {
             Float3::new(0.0, 0.5, 0.0),
         ])
         .unwrap();
-    let tbuffer: Buffer<RtxIndex> = device
-        .create_buffer_from_slice(&[RtxIndex::new(0, 1, 2)])
+    let tbuffer: Buffer<PackedUint3> = device
+        .create_buffer_from_slice(&[PackedUint3::new(0, 1, 2)])
         .unwrap();
     let mesh = device
         .create_mesh(vbuffer.view(..), tbuffer.view(..), AccelOption::default())
@@ -61,7 +61,7 @@ fn main() {
             let o = make_float3(0.0, 0.0, -1.0);
             let d = make_float3(xy.x(), xy.y(), 0.0) - o;
             let d = d.normalize();
-            let ray = RtxRayExpr::new(o.x(), o.y(), o.z(), 1e-3, d.x(), d.y(), d.z(), 1e9);
+            let ray = RtxRayExpr::new(o, 1e-3, d, 1e9);
             let hit = accel.trace_closest(ray);
             let img = img.view(0).var();
             let color = select(

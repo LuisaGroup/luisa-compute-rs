@@ -1540,28 +1540,12 @@ pub struct AccelVar {
 #[repr(align(16))]
 #[derive(Clone, Copy, __Value)]
 pub struct RtxRay {
-    pub orig_x: f32,
-    pub orig_y: f32,
-    pub orig_z: f32,
+    pub orig: PackedFloat3,
     pub tmin: f32,
-    pub dir_x: f32,
-    pub dir_y: f32,
-    pub dir_z: f32,
+    pub dir: PackedFloat3,
     pub tmax: f32,
 }
-#[repr(C)]
-#[derive(Clone, Copy, __Value)]
-pub struct RtxIndex {
-    pub v0: u32,
-    pub v1: u32,
-    pub v2: u32,
-}
-impl RtxIndex {
-    #[inline]
-    pub fn new(v0: u32, v1: u32, v2: u32) -> Self {
-        Self { v0, v1, v2 }
-    }
-}
+pub type RtxIndex = PackedUint3;
 #[repr(C)]
 #[repr(align(16))]
 #[derive(Clone, Copy, __Value)]

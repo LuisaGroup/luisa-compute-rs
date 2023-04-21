@@ -54,12 +54,13 @@ pub mod math;
 pub mod poly;
 pub mod swizzle;
 pub mod traits;
+
 pub use math::*;
 pub use poly::*;
 
 pub trait Value: Copy + ir::TypeOf {
-    type Expr: ExprProxy<Value = Self>;
-    type Var: VarProxy<Value = Self>;
+    type Expr: ExprProxy<Value=Self>;
+    type Var: VarProxy<Value=Self>;
     fn fields() -> Vec<String>;
 }
 
@@ -76,13 +77,14 @@ pub trait Aggregate: Sized {
         ret
     }
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>);
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self;
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self;
 }
 
 pub trait FromNode {
     fn from_node(node: NodeRef) -> Self;
     fn node(&self) -> NodeRef;
 }
+
 fn _store<T1: Aggregate, T2: Aggregate>(var: &T1, value: &T2) {
     let value_nodes = value.to_vec_nodes();
     let self_nodes = var.to_vec_nodes();
@@ -93,6 +95,7 @@ fn _store<T1: Aggregate, T2: Aggregate>(var: &T1, value: &T2) {
         }
     })
 }
+
 #[inline(always)]
 pub fn __new_user_node<T: UserNodeData>(data: T) -> NodeRef {
     use luisa_compute_ir::ir::new_user_node;
@@ -147,6 +150,7 @@ pub fn select<M: _Mask, A: Aggregate>(mask: M, a: A, b: A) -> A {
     });
     A::from_vec_nodes(ret)
 }
+
 impl FromNode for bool {
     fn from_node(_: NodeRef) -> Self {
         panic!("don't call this")
@@ -155,7 +159,9 @@ impl FromNode for bool {
         const_(*self).node()
     }
 }
+
 unsafe impl _Mask for bool {}
+
 unsafe impl _Mask for Bool {}
 
 pub trait ExprProxy: Copy + Aggregate + FromNode {
@@ -185,27 +191,30 @@ pub struct PrimExpr<T> {
     pub(crate) node: NodeRef,
     pub(crate) _phantom: std::marker::PhantomData<T>,
 }
+
 #[derive(Clone, Copy, Debug)]
 pub struct PrimVar<T> {
     pub(crate) node: NodeRef,
     pub(crate) _phantom: std::marker::PhantomData<T>,
 }
+
 impl<T> Aggregate for PrimExpr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
             _phantom: std::marker::PhantomData,
         }
     }
 }
+
 impl<T> Aggregate for PrimVar<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
             _phantom: std::marker::PhantomData,
@@ -305,14 +314,15 @@ macro_rules! cpu_dbg {
     }};
 }
 pub fn __cpu_dbg<T: ExprProxy>(arg: T, file: &'static str, line: u32)
-where
-    T::Value: Debug,
+    where
+        T::Value: Debug,
 {
     let f = CpuFn::new(move |x: &mut T::Value| {
         println!("[{}:{}] {:?}", file, line, x);
     });
     let _ = f.call(arg);
 }
+
 extern "C" fn _trampoline<T, F: FnMut(&mut T)>(data: *mut u8, args: *mut u8) {
     unsafe {
         let container = &*(data as *const ClosureContainer<T>);
@@ -321,6 +331,7 @@ extern "C" fn _trampoline<T, F: FnMut(&mut T)>(data: *mut u8, args: *mut u8) {
         f(args);
     }
 }
+
 extern "C" fn _drop<T>(data: *mut u8) {
     unsafe {
         let _ = Box::from_raw(data as *mut T);
@@ -332,6 +343,7 @@ Interestingly, Box::into_raw(Box<Closure>) does not give a valid pointer.
 struct ClosureContainer<T> {
     f: Arc<dyn Fn(&mut T) + 'static + Send + Sync>,
 }
+
 impl<T: Value> CpuFn<T> {
     pub fn new<F: Fn(&mut T) + 'static + Send + Sync>(f: F) -> Self {
         let f_ptr = Box::into_raw(Box::new(ClosureContainer::<T> { f: Arc::new(f) }));
@@ -346,7 +358,7 @@ impl<T: Value> CpuFn<T> {
             _marker: std::marker::PhantomData,
         }
     }
-    pub fn call(&self, arg: impl ExprProxy<Value = T>) -> Expr<T> {
+    pub fn call(&self, arg: impl ExprProxy<Value=T>) -> Expr<T> {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(r.lock);
@@ -377,6 +389,7 @@ impl<T: Value> CpuFn<T> {
         }))
     }
 }
+
 pub(crate) struct Recorder {
     scopes: Vec<IrBuilder>,
     lock: bool,
@@ -388,6 +401,7 @@ pub(crate) struct Recorder {
     pools: Option<CArc<ModulePools>>,
     arena: Bump,
 }
+
 impl Recorder {
     fn reset(&mut self) {
         self.scopes.clear();
@@ -422,6 +436,7 @@ pub fn __current_scope<F: FnOnce(&mut IrBuilder) -> R, R>(f: F) -> R {
         f(s.last_mut().unwrap())
     })
 }
+
 pub fn __invoke_callable(
     callable: &CallableModuleRef,
     args: &[NodeRef],
@@ -429,6 +444,7 @@ pub fn __invoke_callable(
 ) -> NodeRef {
     __current_scope(|b| b.call(Func::Callable(callable.clone()), args, ret_type.clone()))
 }
+
 // Don't call this function directly unless you know what you are doing
 pub fn __pop_scope() -> Pooled<BasicBlock> {
     RECORDER.with(|r| {
@@ -437,6 +453,7 @@ pub fn __pop_scope() -> Pooled<BasicBlock> {
         s.pop().unwrap().finish()
     })
 }
+
 pub fn __module_pools() -> &'static CArc<ModulePools> {
     RECORDER.with(|r| {
         let r = r.borrow();
@@ -445,6 +462,7 @@ pub fn __module_pools() -> &'static CArc<ModulePools> {
         unsafe { std::mem::transmute(pool) }
     })
 }
+
 pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
     let inst = &node.get().instruction;
     __current_scope(|b| {
@@ -457,6 +475,7 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
         node
     })
 }
+
 pub fn __insert<T: Value>(node: NodeRef, index: usize, value: NodeRef) -> NodeRef {
     let inst = &node.get().instruction;
     __current_scope(|b| {
@@ -469,6 +488,7 @@ pub fn __insert<T: Value>(node: NodeRef, index: usize, value: NodeRef) -> NodeRe
         node
     })
 }
+
 pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
     let ty = <T as TypeOf>::type_();
     match ty.as_ref() {
@@ -516,11 +536,13 @@ macro_rules! var {
 pub fn local<T: Value>(init: Expr<T>) -> Var<T> {
     Var::<T>::from_node(__current_scope(|b| b.local(init.node())))
 }
+
 pub fn local_zeroed<T: Value>() -> Var<T> {
     Var::<T>::from_node(__current_scope(|b| {
         b.local_zero_init(<T as TypeOf>::type_())
     }))
 }
+
 pub fn thread_id() -> Expr<Uint3> {
     Expr::<Uint3>::from_node(__current_scope(|b| {
         b.call(Func::ThreadId, &[], Uint3::type_())
@@ -532,16 +554,19 @@ pub fn block_id() -> Expr<Uint3> {
         b.call(Func::BlockId, &[], Uint3::type_())
     }))
 }
+
 pub fn dispatch_id() -> Expr<Uint3> {
     Expr::<Uint3>::from_node(__current_scope(|b| {
         b.call(Func::DispatchId, &[], Uint3::type_())
     }))
 }
+
 pub fn dispatch_size() -> Expr<Uint3> {
     Expr::<Uint3>::from_node(__current_scope(|b| {
         b.call(Func::DispatchSize, &[], Uint3::type_())
     }))
 }
+
 pub fn set_block_size(size: [u32; 3]) {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
@@ -554,6 +579,7 @@ pub fn set_block_size(size: [u32; 3]) {
         r.block_size = Some(size);
     });
 }
+
 pub fn block_size() -> Expr<Uint3> {
     RECORDER.with(|r| {
         let r = r.borrow();
@@ -561,11 +587,14 @@ pub fn block_size() -> Expr<Uint3> {
         const_::<Uint3>(Uint3::new(s[0], s[1], s[2]))
     })
 }
+
 pub type Expr<T> = <T as Value>::Expr;
 pub type Var<T> = <T as Value>::Var;
+
 pub fn zeroed<T: Value>() -> T::Expr {
     FromNode::from_node(__current_scope(|b| b.zero_initializer(T::type_())))
 }
+
 pub fn const_<T: Value + Copy + 'static>(value: T) -> T::Expr {
     let node = __current_scope(|s| -> NodeRef {
         let any = &value as &dyn Any;
@@ -597,6 +626,7 @@ pub fn const_<T: Value + Copy + 'static>(value: T) -> T::Expr {
     });
     FromNode::from_node(node)
 }
+
 pub fn bitcast<From: Value, To: Value>(expr: Expr<From>) -> Expr<To> {
     assert_eq!(std::mem::size_of::<From>(), std::mem::size_of::<To>());
     Expr::<To>::from_node(__current_scope(|b| {
@@ -611,11 +641,13 @@ impl<T: Value, const N: usize> Value for [T; N] {
         todo!("why this method exists?")
     }
 }
+
 #[derive(Clone, Copy, Debug)]
 pub struct VLArrayExpr<T: Value> {
     marker: std::marker::PhantomData<T>,
     node: NodeRef,
 }
+
 impl<T: Value> FromNode for VLArrayExpr<T> {
     fn from_node(node: NodeRef) -> Self {
         Self {
@@ -627,19 +659,22 @@ impl<T: Value> FromNode for VLArrayExpr<T> {
         self.node
     }
 }
+
 impl<T: Value> Aggregate for VLArrayExpr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
+
 #[derive(Clone, Copy, Debug)]
 pub struct VLArrayVar<T: Value> {
     marker: std::marker::PhantomData<T>,
     node: NodeRef,
 }
+
 impl<T: Value> FromNode for VLArrayVar<T> {
     fn from_node(node: NodeRef) -> Self {
         Self {
@@ -651,14 +686,16 @@ impl<T: Value> FromNode for VLArrayVar<T> {
         self.node
     }
 }
+
 impl<T: Value> Aggregate for VLArrayVar<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
+
 impl<T: Value> VLArrayVar<T> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
@@ -712,6 +749,7 @@ impl<T: Value> VLArrayVar<T> {
         }))
     }
 }
+
 impl<T: Value> VLArrayExpr<T> {
     pub fn zero(length: usize) -> Self {
         let node = __current_scope(|b| {
@@ -749,16 +787,19 @@ impl<T: Value> VLArrayExpr<T> {
         }
     }
 }
+
 #[derive(Clone, Copy, Debug)]
 pub struct ArrayExpr<T: Value, const N: usize> {
     marker: std::marker::PhantomData<T>,
     node: NodeRef,
 }
+
 #[derive(Clone, Copy, Debug)]
 pub struct ArrayVar<T: Value, const N: usize> {
     marker: std::marker::PhantomData<T>,
     node: NodeRef,
 }
+
 impl<T: Value, const N: usize> FromNode for ArrayExpr<T, N> {
     fn from_node(node: NodeRef) -> Self {
         Self {
@@ -770,14 +811,16 @@ impl<T: Value, const N: usize> FromNode for ArrayExpr<T, N> {
         self.node
     }
 }
+
 impl<T: Value, const N: usize> Aggregate for ArrayExpr<T, N> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
+
 impl<T: Value, const N: usize> FromNode for ArrayVar<T, N> {
     fn from_node(node: NodeRef) -> Self {
         Self {
@@ -789,20 +832,24 @@ impl<T: Value, const N: usize> FromNode for ArrayVar<T, N> {
         self.node
     }
 }
+
 impl<T: Value, const N: usize> Aggregate for ArrayVar<T, N> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
+
 impl<T: Value, const N: usize> ExprProxy for ArrayExpr<T, N> {
     type Value = [T; N];
 }
+
 impl<T: Value, const N: usize> VarProxy for ArrayVar<T, N> {
     type Value = [T; N];
 }
+
 impl<T: Value, const N: usize> ArrayVar<T, N> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
@@ -829,6 +876,7 @@ impl<T: Value, const N: usize> ArrayVar<T, N> {
         });
     }
 }
+
 impl<T: Value, const N: usize> ArrayExpr<T, N> {
     pub fn zero() -> Self {
         let node = __current_scope(|b| b.call(Func::ZeroInitializer, &[], <[T; N]>::type_()));
@@ -859,16 +907,19 @@ pub struct BufferVar<T: Value> {
 impl<T: Value> Drop for BufferVar<T> {
     fn drop(&mut self) {}
 }
+
 pub struct BindlessArrayVar {
     pub(crate) node: NodeRef,
     #[allow(dead_code)]
     handle: Option<Arc<BindlessArrayHandle>>,
 }
+
 pub struct BindlessBufferVar<T> {
     array: NodeRef,
     buffer_index: Expr<u32>,
     _marker: std::marker::PhantomData<T>,
 }
+
 impl<T: Value> BindlessBufferVar<T> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
@@ -902,10 +953,12 @@ impl<T: Value> BindlessBufferVar<T> {
         }))
     }
 }
+
 pub struct BindlessTex2dVar {
     array: NodeRef,
     tex2d_index: Expr<u32>,
 }
+
 impl BindlessTex2dVar {
     pub fn sample(&self, uv: Expr<Float2>) -> Expr<Float4> {
         Expr::<Float4>::from_node(__current_scope(|b| {
@@ -992,6 +1045,7 @@ pub struct BindlessTex3dVar {
     array: NodeRef,
     tex3d_index: Expr<u32>,
 }
+
 impl BindlessTex3dVar {
     pub fn sample(&self, uv: Expr<Float3>) -> Expr<Float4> {
         Expr::<Float4>::from_node(__current_scope(|b| {
@@ -1073,6 +1127,7 @@ impl BindlessTex3dVar {
         }))
     }
 }
+
 impl BindlessArrayVar {
     pub fn tex2d(&self, tex2d_index: impl Into<Expr<u32>>) -> BindlessTex2dVar {
         let v = BindlessTex2dVar {
@@ -1104,8 +1159,8 @@ impl BindlessArrayVar {
                         let mut stderr = std::io::stderr().lock();
                         use std::io::Write;
                         writeln!(stderr,
-                                "Bindless buffer type mismatch: expected hash {:?}, got {:?}; host backtrace:\n {:?}",
-                                expected, t, backtrace
+                                 "Bindless buffer type mismatch: expected hash {:?}, got {:?}; host backtrace:\n {:?}",
+                                 expected, t, backtrace
                         ).unwrap();
                     }
                     abort();
@@ -1120,8 +1175,8 @@ impl BindlessArrayVar {
                         let mut stderr = std::io::stderr().lock();
                         use std::io::Write;
                         writeln!(stderr,
-                            "Bindless buffer type mismatch: expected hash {:?}, got {:?}; set LUISA_BACKTRACE=1 for more info",
-                            expected, t,
+                                 "Bindless buffer type mismatch: expected hash {:?}, got {:?}; set LUISA_BACKTRACE=1 for more info",
+                                 expected, t,
                         ).unwrap();
                     }
                     abort();
@@ -1161,6 +1216,7 @@ impl BindlessArrayVar {
         }
     }
 }
+
 impl<T: Value> BufferVar<T> {
     pub fn new(buffer: &BufferView<'_, T>) -> Self {
         let node = RECORDER.with(|r| {
@@ -1475,6 +1531,7 @@ impl<T: IoTexel> Tex2dVar<T> {
         })
     }
 }
+
 impl<T: IoTexel> Tex3dVar<T> {
     pub fn new(view: Tex3dView<'_, T>) -> Self {
         let node = RECORDER.with(|r| {
@@ -1523,6 +1580,7 @@ impl<T: IoTexel> Tex3dVar<T> {
         })
     }
 }
+
 pub struct Tex3dVar<T: IoTexel> {
     pub(crate) node: NodeRef,
     #[allow(dead_code)]
@@ -1531,6 +1589,7 @@ pub struct Tex3dVar<T: IoTexel> {
     #[allow(dead_code)]
     level: Option<u32>,
 }
+
 pub struct AccelVar {
     node: NodeRef,
     #[allow(dead_code)]
@@ -1546,7 +1605,9 @@ pub struct RtxRay {
     pub dir: PackedFloat3,
     pub tmax: f32,
 }
+
 pub type RtxIndex = PackedUint3;
+
 #[repr(C)]
 #[repr(align(16))]
 #[derive(Clone, Copy, __Value)]
@@ -1556,6 +1617,7 @@ pub struct RtxHit {
     pub u: f32,
     pub v: f32,
 }
+
 #[cfg(test)]
 mod test {
     #[test]
@@ -1566,11 +1628,13 @@ mod test {
         assert_eq!(std::mem::size_of::<RtxIndex>(), 12);
     }
 }
+
 impl RtxHitExpr {
     pub fn valid(&self) -> Expr<bool> {
         self.inst_id().cmpne(u32::MAX) & self.prim_id().cmpne(u32::MAX)
     }
 }
+
 impl AccelVar {
     #[inline]
     pub fn trace_closest_masked(
@@ -1643,6 +1707,7 @@ pub struct KernelBuilder {
     device: crate::runtime::Device,
     args: Vec<NodeRef>,
 }
+
 pub trait CallableParameter {
     fn def_param(builder: &mut KernelBuilder) -> Self;
 }
@@ -1650,35 +1715,41 @@ pub trait CallableParameter {
 pub trait KernelParameter {
     fn def_param(builder: &mut KernelBuilder) -> Self;
 }
+
 impl<T: Value, U> KernelParameter for U
-where
-    U: ExprProxy<Value = T>,
-    T: Value<Expr = U>,
+    where
+        U: ExprProxy<Value=T>,
+        T: Value<Expr=U>,
 {
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.uniform::<T>()
     }
 }
+
 impl<T: Value> KernelParameter for BufferVar<T> {
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.buffer()
     }
 }
+
 impl<T: IoTexel> KernelParameter for Tex2dVar<T> {
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.tex2d()
     }
 }
+
 impl<T: IoTexel> KernelParameter for Tex3dVar<T> {
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.tex3d()
     }
 }
+
 impl KernelParameter for BindlessArrayVar {
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.bindless_array()
     }
 }
+
 impl KernelParameter for AccelVar {
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.accel()
@@ -1911,6 +1982,7 @@ impl KernelBuilder {
         )
     }
 }
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct KernelBuildOptions {
     pub enable_debug_info: bool,
@@ -1919,6 +1991,7 @@ pub struct KernelBuildOptions {
     pub enable_cache: bool,
     pub enable_fast_math: bool,
 }
+
 impl Default for KernelBuildOptions {
     fn default() -> Self {
         Self {
@@ -1930,6 +2003,7 @@ impl Default for KernelBuildOptions {
         }
     }
 }
+
 pub trait KernelBuildFn {
     fn build_kernel(
         &self,
@@ -1938,6 +2012,7 @@ pub trait KernelBuildFn {
     ) -> Result<crate::runtime::RawKernel, crate::backend::BackendError>;
     fn build_callable(&self, builder: &mut KernelBuilder) -> CallableModuleRef;
 }
+
 pub trait CallableSignature<'a, R: CallableRet> {
     type Callable;
     type Fn: KernelBuildFn;
@@ -2103,6 +2178,7 @@ pub fn if_then_else<R: Aggregate>(
     });
     R::from_vec_nodes(phis)
 }
+
 pub fn generic_loop(cond: impl FnOnce() -> Bool, body: impl FnOnce(), update: impl FnOnce()) {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
@@ -2138,6 +2214,7 @@ pub fn generic_loop(cond: impl FnOnce() -> Bool, body: impl FnOnce(), update: im
         b.generic_loop(prepare, cond_v, body, update);
     });
 }
+
 pub struct SwitchBuilder<R: Aggregate> {
     cases: Vec<(i32, Pooled<BasicBlock>, Vec<NodeRef>)>,
     default: Option<(Pooled<BasicBlock>, Vec<NodeRef>)>,
@@ -2145,9 +2222,11 @@ pub struct SwitchBuilder<R: Aggregate> {
     _marker: PhantomData<R>,
     depth: usize,
 }
+
 pub fn switch<R: Aggregate>(node: Expr<i32>) -> SwitchBuilder<R> {
     SwitchBuilder::new(node)
 }
+
 impl<R: Aggregate> SwitchBuilder<R> {
     pub fn new(node: Expr<i32>) -> Self {
         SwitchBuilder {
@@ -2263,7 +2342,7 @@ macro_rules! while_ {
     };
 }
 #[inline]
-pub fn for_range(r:impl RangeBounds<Expr<i32>>, body: impl FnOnce(Expr<i32>)) {
+pub fn for_range(r: impl RangeBounds<Expr<i32>>, body: impl FnOnce(Expr<i32>)) {
     let start = match r.start_bound() {
         Bound::Included(v) => *v,
         Bound::Excluded(v) => *v + 1,
@@ -2280,16 +2359,21 @@ pub fn for_range(r:impl RangeBounds<Expr<i32>>, body: impl FnOnce(Expr<i32>)) {
         i.store(i.load() + 1);
     });
 }
+
+#[inline]
 pub fn break_() {
     __current_scope(|b| {
         b.break_();
     });
 }
+
+#[inline]
 pub fn continue_() {
     __current_scope(|b| {
         b.continue_();
     });
 }
+
 // pub fn return_v<T: FromNode>(v: T) {
 //     __current_scope(|b| {
 //         b.return_(Some(v.node()));
@@ -2300,11 +2384,13 @@ pub fn return_() {
         b.return_(INVALID_REF);
     });
 }
+
 struct AdContext {
     started: bool,
     backward_called: bool,
     forward: Option<Pooled<BasicBlock>>,
 }
+
 impl AdContext {
     fn new() -> Self {
         Self {
@@ -2325,6 +2411,7 @@ pub fn requires_grad(var: impl ExprProxy) {
         b.call(Func::RequiresGradient, &[var.node()], Type::void());
     });
 }
+
 pub fn backward<T: ExprProxy>(out: T) {
     backward_with_grad(
         out,
@@ -2341,6 +2428,7 @@ pub fn backward<T: ExprProxy>(out: T) {
         })),
     );
 }
+
 pub fn backward_with_grad<T: ExprProxy>(out: T, grad: T) {
     AD_CONTEXT.with(|c| {
         let mut c = c.borrow_mut();
@@ -2365,14 +2453,17 @@ pub fn backward_with_grad<T: ExprProxy>(out: T, grad: T) {
         s.push(IrBuilder::new(pools));
     });
 }
+
 pub fn gradient<T: ExprProxy>(var: T) -> T {
     T::from_node(__current_scope(|b| {
         b.call(Func::Gradient, &[var.node()], var.node().type_().clone())
     }))
 }
+
 pub fn grad<T: ExprProxy>(var: T) -> T {
     gradient(var)
 }
+
 // pub fn detach<R: Aggregate>(body: impl FnOnce() -> R) -> R {
 //     RECORDER.with(|r| {
 //         let mut r = r.borrow_mut();
@@ -2397,6 +2488,7 @@ pub fn detach<T: FromNode>(v: T) -> T {
     let node = __current_scope(|b| b.call(Func::Detach, &[v], v.type_().clone()));
     T::from_node(node)
 }
+
 pub fn autodiff(body: impl FnOnce()) {
     AD_CONTEXT.with(|c| {
         let mut c = c.borrow_mut();
@@ -2441,6 +2533,7 @@ pub fn autodiff(body: impl FnOnce()) {
         b.append_block(epilogue);
     })
 }
+
 pub fn is_cpu_backend() -> bool {
     RECORDER.with(|r| {
         let r = r.borrow();
@@ -2453,12 +2546,14 @@ pub fn is_cpu_backend() -> bool {
             .unwrap_or(false)
     })
 }
+
 pub fn __env_need_backtrace() -> bool {
     match std::env::var("LUISA_BACKTRACE") {
         Ok(s) => s == "1" || s == "ON",
         Err(_) => false,
     }
 }
+
 pub fn assert(cond: Expr<bool>) {
     if is_cpu_backend() && __env_need_backtrace() {
         let backtrace = backtrace::Backtrace::new();
@@ -2471,7 +2566,7 @@ pub fn assert(cond: Expr<bool>) {
                     "assertion failed with host backtrace:\n {:?}",
                     backtrace
                 )
-                .unwrap();
+                    .unwrap();
             }
         });
         let _ = assert_fn.call(cond);

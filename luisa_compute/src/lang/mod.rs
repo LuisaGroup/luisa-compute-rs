@@ -363,14 +363,14 @@ impl<T: Value> CpuFn<T> {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(r.lock);
-            assert!(
+            assert_eq!(
                 r.device
                     .as_ref()
                     .unwrap()
                     .inner
                     .query("device_name")
-                    .unwrap()
-                    == "cpu",
+                    .unwrap(),
+                "cpu",
                 "CpuFn can only be used in cpu backend"
             );
             let addr = CArc::as_ptr(&self.op) as u64;
@@ -1155,7 +1155,6 @@ impl BindlessArrayVar {
         if __env_need_backtrace() {
             let backtrace = backtrace::Backtrace::new();
             let check_type = CpuFn::new(move |t: &mut u64| {
-                let expected = type_hash(&T::type_());
                 if *t != expected {
                     {
                         let mut stderr = std::io::stderr().lock();

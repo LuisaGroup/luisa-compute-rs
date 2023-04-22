@@ -442,6 +442,8 @@ fn main() {
 
             // workaround a rust-analyzer bug
             let r = 1.055f32 * radiance.powf(1.0 / 2.4) - 0.055;
+
+            // FIXME: tone mapping behavior is inconsistent between OS
             let srgb = Float3Expr::select(radiance.cmplt(0.0031308), radiance * 12.92, r);
             display.write(coord, make_float4(srgb.x(), srgb.y(), srgb.z(), 1.0f32));
         })

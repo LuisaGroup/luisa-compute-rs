@@ -1428,7 +1428,7 @@ impl<T: IoTexel> Tex2dVar<T> {
             } else {
                 let node = new_node(
                     r.pools.as_ref().unwrap(),
-                    Node::new(CArc::new(Instruction::Texture2D), Type::void()),
+                    Node::new(CArc::new(Instruction::Texture2D), T::RwType::type_()),
                 );
                 let i = r.captured_buffer.len();
                 r.captured_buffer
@@ -1482,7 +1482,7 @@ impl<T: IoTexel> Tex3dVar<T> {
             } else {
                 let node = new_node(
                     r.pools.as_ref().unwrap(),
-                    Node::new(CArc::new(Instruction::Texture3D), Type::void()),
+                    Node::new(CArc::new(Instruction::Texture3D), T::RwType::type_()),
                 );
                 let i = r.captured_buffer.len();
                 r.captured_buffer

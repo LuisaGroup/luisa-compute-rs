@@ -391,8 +391,8 @@ fn main() {
                             let occluded = accel.trace_any(shadow_ray);
                             let cos_wi_light = wi_light.dot(n);
                             let cos_light = -light_normal.dot(wi_light);
-                            // cpu_dbg!(pp_light);
-                            if_!(occluded.not() & cos_wi_light.cmpgt(1e-4f32) & cos_light.cmpgt(1e-4f32), {
+
+                            if_!(!occluded & cos_wi_light.cmpgt(1e-4f32) & cos_light.cmpgt(1e-4f32), {
                                 let pdf_light = (d_light * d_light) / (light_area * cos_light);
                                 let pdf_bsdf = cos_wi_light * std::f32::consts::FRAC_1_PI;
                                 let mis_weight = balanced_heuristic(pdf_light, pdf_bsdf);
@@ -405,7 +405,6 @@ fn main() {
                         let ux = lcg(state);
                         let uy = lcg(state);
                         let new_direction = onb.to_world(cosine_sample_hemisphere(make_float2(ux, uy)));
-                        // cpu_dbg!(make_float2(ux, uy));
                         ray.store(make_ray(pp, new_direction, 0.0f32.into(), std::f32::MAX.into()));
                         beta.store(beta.load() * albedo);
                         pdf_bsdf.store(cos_wi * std::f32::consts::FRAC_1_PI);
@@ -426,7 +425,6 @@ fn main() {
                 seed_image.write(coord, state.load());
                 if_!(radiance.load().is_nan().any(), { radiance.store(make_float3(0.0f32, 0.0f32, 0.0f32)); });
                 let radiance = radiance.load().clamp(0.0f32, 30.0f32);
-                // let radiance = make_float3(1.0,1.0,1.0);
                 let old = image.read(dispatch_id().xy());
                 let spp = old.w();
                 let radiance = radiance + old.xyz();

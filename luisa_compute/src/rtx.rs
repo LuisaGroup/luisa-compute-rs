@@ -204,6 +204,7 @@ pub fn offset_ray_origin(p:Expr<Float3>, n:Expr<Float3>) -> Expr<Float3> {
 pub type Index = PackedUint3;
 
 #[repr(C)]
+#[repr(align(8))]
 #[derive(Clone, Copy, __Value, Debug)]
 pub struct Hit {
     pub inst_id: u32,

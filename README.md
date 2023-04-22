@@ -21,7 +21,7 @@ Rust frontend to LuisaCompute and more! (WIP) ⚠ A stable version will be relea
 * [Citation](#citation)
 
 ## Example
-Try `cargo run --release --example raytracing`!
+Try `cargo run --release --example path_tracer`!
 ### Vecadd
 ```rust
 use luisa::prelude::*;

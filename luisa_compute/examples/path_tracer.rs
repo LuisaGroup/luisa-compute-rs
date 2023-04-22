@@ -323,8 +323,7 @@ fn main() {
                 let radiance = var!(Float3);
                 radiance.store(make_float3(0.0f32, 0.0f32, 0.0f32));
 
-                let loop_index = var!(u32);
-                while_!(loop_index.load().cmplt(SPP_PER_DISPATCH), {
+                for_range(const_(0i32)..const_(SPP_PER_DISPATCH as i32), |i| {
                     let init_ray = generate_ray(pixel * make_float2(1.0f32, -1.0f32));
                     let ray = var!(Ray);
                     ray.store(init_ray);
@@ -419,7 +418,6 @@ fn main() {
 
                         depth.store(depth.load() + 1)
                     });
-                    loop_index.store(loop_index.load() + 1)
                 });
                 radiance.store(radiance.load() / SPP_PER_DISPATCH as f32);
                 seed_image.write(coord, state.load());

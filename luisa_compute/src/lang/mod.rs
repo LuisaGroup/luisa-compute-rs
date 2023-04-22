@@ -1583,7 +1583,11 @@ impl<T: IoTexel> Tex2dVar<T> {
     pub fn read(&self, uv: impl Into<Expr<Uint2>>) -> Expr<T> {
         let uv = uv.into();
         T::convert_from_read(Expr::<T::RwType>::from_node(__current_scope(|b| {
-            b.call(Func::Texture2dRead, &[self.node, uv.node()], T::RwType::type_())
+            b.call(
+                Func::Texture2dRead,
+                &[self.node, uv.node()],
+                T::RwType::type_(),
+            )
         })))
     }
     pub fn write(&self, uv: impl Into<Expr<Uint2>>, v: impl Into<Expr<T>>) {
@@ -1633,7 +1637,11 @@ impl<T: IoTexel> Tex3dVar<T> {
     pub fn read(&self, uv: impl Into<Expr<Uint3>>) -> Expr<T> {
         let uv = uv.into();
         T::convert_from_read(Expr::<T::RwType>::from_node(__current_scope(|b| {
-            b.call(Func::Texture3dRead, &[self.node, uv.node()], T::RwType::type_())
+            b.call(
+                Func::Texture3dRead,
+                &[self.node, uv.node()],
+                T::RwType::type_(),
+            )
         })))
     }
     pub fn write(&self, uv: impl Into<Expr<Uint3>>, v: impl Into<Expr<T>>) {
@@ -1667,7 +1675,7 @@ pub struct AccelVar {
 
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Clone, Copy, __Value)]
+#[derive(Clone, Copy, __Value, Debug)]
 pub struct RtxRay {
     pub orig: PackedFloat3,
     pub tmin: f32,
@@ -1679,7 +1687,7 @@ pub type RtxIndex = PackedUint3;
 
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Clone, Copy, __Value)]
+#[derive(Clone, Copy, __Value, Debug)]
 pub struct RtxHit {
     pub inst_id: u32,
     pub prim_id: u32,

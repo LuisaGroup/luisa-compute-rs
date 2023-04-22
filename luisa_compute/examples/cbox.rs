@@ -1,5 +1,9 @@
+use rand::Rng;
 use std::env::current_exe;
 use std::ops::Not;
+use std::time::Instant;
+use winit::event::{Event, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
 
 #[allow(unused_imports)]
 use luisa::prelude::*;
@@ -235,16 +239,17 @@ fn main() {
         vertex_heap.emplace_buffer(index, vertex_buffers.last().unwrap());
         index_heap.emplace_buffer(index, index_buffers.last().unwrap());
         mesh.build(AccelBuildRequest::ForceBuild);
-        accel.push_mesh(&mesh, glam::Mat4::IDENTITY.into(), 255, true);
+        accel.push_mesh(&mesh, glam::Mat4::IDENTITY.into(), u8::MAX, true);
     }
     accel.build(AccelBuildRequest::ForceBuild);
 
-    let raytracing_kernel = device
-        .create_kernel::<(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>(
+    // use create_kernel_async to compile multiple kernels in parallel
+    let path_tracer = device
+        .create_kernel_async::<(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>(
             &|image: Tex2dVar<Float4>,
               seed_image: Tex2dVar<u32>,
               accel: AccelVar,
-              resolution: Uint2Expr| {
+              resolution: Expr<Uint2>| {
                 set_block_size([16u32, 16u32, 1u32]);
 
                 let cbox_materials: Expr<[Float3; 8]> = const_([
@@ -258,11 +263,11 @@ fn main() {
                     Float3::new(0.000f32, 0.000f32, 0.000f32), // light
                 ]);
 
-                let lcg = |state: U32Var| -> PrimExpr<f32> {
+                let lcg = |state: Var<u32>| -> Expr<f32> {
                     const LCG_A: u32 = 1664525u32;
                     const LCG_C: u32 = 1013904223u32;
                     state.store(LCG_A * state.load() + LCG_C);
-                    (state.load() & 0x00ffffffu32).float() * (1.0f32 / f32::from_bits(0x01000000u32))
+                    (state.load() & 0x00ffffffu32).float() * (1.0f32 / u32::MAX as f32)
                 };
 
                 let make_ray = |o: Expr<Float3>, d: Expr<Float3>, tmin: Expr<f32>, tmax: Expr<f32>| -> Expr<RtxRay> {
@@ -283,7 +288,7 @@ fn main() {
                     make_ray(origin, direction, 0.0f32.into(), f32::MAX.into())
                 };
 
-                let balanced_heuristic = |pdf_a: PrimExpr<f32>, pdf_b: PrimExpr<f32>| {
+                let balanced_heuristic = |pdf_a: Expr<f32>, pdf_b: Expr<f32>| {
                     pdf_a / (pdf_a + pdf_b).max(1e-4f32)
                 };
 
@@ -330,7 +335,7 @@ fn main() {
                     let init_ray = generate_ray(pixel * make_float2(1.0f32, -1.0f32));
                     let ray = var!(RtxRay);
                     ray.store(init_ray);
-
+                    // cpu_dbg!(init_ray);
                     let beta = var!(Float3);
                     beta.store(make_float3(1.0f32, 1.0f32, 1.0f32));
                     let pdf_bsdf = var!(f32);
@@ -346,7 +351,7 @@ fn main() {
                     let depth = var!(u32);
                     while_!(depth.load().cmplt(10u32), {
                         let hit = accel.trace_closest(ray);
-                        if_!(hit.inst_id().cmpeq(u32::MAX), {
+                        if_!(!hit.valid(), {
                             break_();
                         });
 
@@ -426,8 +431,94 @@ fn main() {
                 seed_image.write(coord, state.load());
                 if_!(radiance.load().is_nan().any(), { radiance.store(make_float3(0.0f32, 0.0f32, 0.0f32)); });
                 let radiance = radiance.load().clamp(0.0f32, 30.0f32);
-                image.write(dispatch_id().xy(), make_float4(radiance.x(), radiance.y(), radiance.z(), 1.0f32));
+                // let radiance = make_float3(1.0,1.0,1.0);
+                let old = image.read(dispatch_id().xy());
+                let spp = old.w();
+                let radiance = radiance + old.xyz();
+                image.write(dispatch_id().xy(), make_float4(radiance.x(), radiance.y(), radiance.z(), spp + 1.0f32));
             },
         )
         .unwrap();
+    let display = device
+        .create_kernel_async::<(Tex2d<Float4>, Tex2d<Float4>)>(&|acc, display| {
+            let coord = dispatch_id().xy();
+            let radiance = acc.read(coord);
+            let spp = radiance.w();
+            let radiance = radiance.xyz() / spp;
+            // workaround a rust-analyzer bug
+            let r = 1.055 * radiance.powf(1.0 / 2.4) - 0.055;
+            let srgb = Float3Expr::select(radiance.cmplt(0.0031308), radiance * 12.92, r);
+            display.write(coord, make_float4(srgb.x(), srgb.y(), srgb.z(), 1.0f32));
+        })
+        .unwrap();
+    let img_w = 1024;
+    let img_h = 1024;
+    let display_img = device
+        .create_tex2d::<Float4>(PixelStorage::Byte4, img_w, img_h, 1)
+        .unwrap();
+    let acc_img = device
+        .create_tex2d::<Float4>(PixelStorage::Float4, img_w, img_h, 1)
+        .unwrap();
+    let seed_img = device
+        .create_tex2d::<u32>(PixelStorage::Int1, img_w, img_h, 1)
+        .unwrap();
+    {
+        let mut rng = rand::thread_rng();
+        let seed_buffer = (0..img_w * img_h)
+            .map(|_| rng.gen::<u32>())
+            .collect::<Vec<_>>();
+        seed_img.view(0).copy_from(&seed_buffer);
+    }
+    let event_loop = EventLoop::new();
+    let window = winit::window::WindowBuilder::new()
+        .with_title("Luisa Compute Rust - Ray Tracing")
+        .with_inner_size(winit::dpi::LogicalSize::new(img_w, img_h))
+        .build(&event_loop)
+        .unwrap();
+    let swapchain = device
+        .create_swapchain(
+            &window,
+            &device.default_stream(),
+            img_w,
+            img_h,
+            false,
+            true,
+            3,
+        )
+        .unwrap();
+    event_loop.run(move |event, _, control_flow| {
+        control_flow.set_wait();
+        match event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                window_id,
+            } if window_id == window.id() => *control_flow = ControlFlow::Exit,
+            Event::MainEventsCleared => {
+                window.request_redraw();
+            }
+            Event::RedrawRequested(_) => {
+                let tic = Instant::now();
+                {
+                    let scope = device.default_stream().scope();
+                    scope.present(&swapchain, &display_img).unwrap();
+                    scope
+                        .submit([
+                            path_tracer.dispatch_async(
+                                [img_w, img_h, 1],
+                                &acc_img,
+                                &seed_img,
+                                &accel,
+                                &Uint2::new(img_w, img_h),
+                            ),
+                            display.dispatch_async([img_w, img_h, 1], &acc_img, &display_img),
+                        ])
+                        .unwrap();
+                }
+                let toc = Instant::now();
+                let elapsed = (toc - tic).as_secs_f32();
+                log::info!("time: {}ms", elapsed * 1e3);
+            }
+            _ => (),
+        }
+    });
 }

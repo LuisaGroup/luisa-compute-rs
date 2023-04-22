@@ -96,7 +96,7 @@ impl<'a, T: Value> BufferView<'a, T> {
     pub fn fill(&self, value: T) {
         self.fill_fn(|_| value);
     }
-    pub fn copy_to_buffer_async(&self, dst: &BufferView<'a, T>) -> Command<'a> {
+    pub fn copy_to_buffer_async(&self, dst: BufferView<'a, T>) -> Command<'a> {
         assert_eq!(self.len, dst.len);
         let mut rt = ResourceTracker::new();
         rt.add(self.buffer.handle.clone());
@@ -113,7 +113,7 @@ impl<'a, T: Value> BufferView<'a, T> {
             resource_tracker: rt,
         }
     }
-    pub fn copy_to_buffer(&self, dst: &BufferView<T>) {
+    pub fn copy_to_buffer(&self, dst: BufferView<T>) {
         submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_buffer_async(dst)])
             .unwrap();
     }
@@ -143,10 +143,10 @@ impl<T: Value> Buffer<T> {
         self.view(..).copy_to_vec()
     }
     pub fn copy_to_buffer(&self, dst: &Buffer<T>) {
-        self.view(..).copy_to_buffer(&dst.view(..));
+        self.view(..).copy_to_buffer(dst.view(..));
     }
     pub fn copy_to_buffer_async<'a>(&'a self, dst: &'a Buffer<T>) -> Command<'a> {
-        self.view(..).copy_to_buffer_async(&dst.view(..))
+        self.view(..).copy_to_buffer_async(dst.view(..))
     }
     pub fn fill_fn<F: FnMut(usize) -> T>(&self, f: F) {
         self.view(..).fill_fn(f);
@@ -559,17 +559,17 @@ impl_storage_texel!(Short4, Short4, f32, Float2, Float4, Int2, Int4, Uint2, Uint
 impl_storage_texel!([i16; 2], Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 impl_storage_texel!([i16; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
-impl_storage_texel!(u32, Int1, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
-impl_storage_texel!(Uint2, Int2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
-impl_storage_texel!(Uint4, Int4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
-impl_storage_texel!([u32; 2], Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
-impl_storage_texel!([u32; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(u32, Int1, i32, u32, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Uint2, Int2, i32, u32,f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Uint4, Int4, i32, u32,f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([u32; 2], Byte2, i32, u32,f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([u32; 4], Byte4, i32, u32,f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
-impl_storage_texel!(i32, Int1, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
-impl_storage_texel!(Int2, Int2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
-impl_storage_texel!(Int4, Int4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
-impl_storage_texel!([i32; 2], Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
-impl_storage_texel!([i32; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(i32, Int1, i32, u32, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Int2, Int2, i32, u32, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Int4, Int4, i32, u32, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([i32; 2], Byte2, i32, u32, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([i32; 4], Byte4, i32, u32, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
 impl_storage_texel!(f32, Float1, f32, Float2, Float4,);
 impl_storage_texel!(Float2, Float2, f32, Float2, Float4,);
@@ -714,7 +714,7 @@ macro_rules! impl_tex_view {
             }
             pub fn copy_from_buffer_async<U: StorageTexel<T> + Value>(
                 &'a self,
-                buffer_view: &BufferView<U>,
+                buffer_view: BufferView<U>,
             ) -> Command<'a> {
                 let mut rt = ResourceTracker::new();
                 rt.add(self.tex.handle.clone());
@@ -736,7 +736,7 @@ macro_rules! impl_tex_view {
             }
             pub fn copy_from_buffer<U: StorageTexel<T> + Value>(
                 &'a self,
-                buffer_view: &BufferView<U>,
+                buffer_view: BufferView<U>,
             ) {
                 submit_default_stream_and_sync(
                     &self.tex.handle.device,

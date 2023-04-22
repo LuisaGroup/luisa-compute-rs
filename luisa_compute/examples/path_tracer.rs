@@ -169,7 +169,7 @@ v	 0.23  1.98  -0.22
 v	 0.23  1.98   0.16
 f -4 -3 -2 -1";
 
-const SPP_PER_DISPATCH: u32 = 1u32;
+const SPP_PER_DISPATCH: u32 = 64u32;
 
 fn main() {
     use luisa::*;

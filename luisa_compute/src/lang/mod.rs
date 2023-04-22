@@ -1151,6 +1151,7 @@ impl BindlessArrayVar {
             _marker: std::marker::PhantomData,
         };
         let vt = v.__type();
+        let expected = type_hash(&T::type_());
         if __env_need_backtrace() {
             let backtrace = backtrace::Backtrace::new();
             let check_type = CpuFn::new(move |t: &mut u64| {
@@ -1169,21 +1170,7 @@ impl BindlessArrayVar {
             });
             let _ = check_type.call(vt);
         } else {
-            let check_type = CpuFn::new(move |t: &mut u64| {
-                let expected = type_hash(&T::type_());
-                if *t != expected as u64 {
-                    {
-                        let mut stderr = std::io::stderr().lock();
-                        use std::io::Write;
-                        writeln!(stderr,
-                                 "Bindless buffer type mismatch: expected hash {:?}, got {:?}; set LUISA_BACKTRACE=1 for more info",
-                                 expected, t,
-                        ).unwrap();
-                    }
-                    abort();
-                }
-            });
-            let _ = check_type.call(vt);
+            assert(vt.cmpeq(expected));
         }
         v
     }

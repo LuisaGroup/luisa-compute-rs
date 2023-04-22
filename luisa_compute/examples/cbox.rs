@@ -211,7 +211,7 @@ fn main() {
     for (index, model) in models.iter().enumerate() {
         let vertex_buffer = device
             .create_buffer_from_slice(unsafe {
-                let vertex_ptr = &model.mesh.positions as *const _ as *const f32;
+                let vertex_ptr = model.mesh.positions.as_ptr();
                 std::slice::from_raw_parts(
                     vertex_ptr as *const PackedFloat3,
                     model.mesh.positions.len() / 3,
@@ -220,7 +220,7 @@ fn main() {
             .unwrap();
         let index_buffer = device
             .create_buffer_from_slice(unsafe {
-                let index_ptr = &model.mesh.indices as *const _ as *const u32;
+                let index_ptr = model.mesh.indices.as_ptr();
                 std::slice::from_raw_parts(
                     index_ptr as *const RtxIndex,
                     model.mesh.indices.len() / 3,
@@ -242,7 +242,16 @@ fn main() {
         accel.push_mesh(&mesh, glam::Mat4::IDENTITY.into(), u8::MAX, true);
     }
     accel.build(AccelBuildRequest::ForceBuild);
-
+    let cbox_materials = device.create_buffer_from_slice::<Float3>(&[
+        Float3::new(0.725f32, 0.710f32, 0.680f32), // floor
+        Float3::new(0.725f32, 0.710f32, 0.680f32), // ceiling
+        Float3::new(0.725f32, 0.710f32, 0.680f32), // back wall
+        Float3::new(0.140f32, 0.450f32, 0.091f32), // right wall
+        Float3::new(0.630f32, 0.065f32, 0.050f32), // left wall
+        Float3::new(0.725f32, 0.710f32, 0.680f32), // short box
+        Float3::new(0.725f32, 0.710f32, 0.680f32), // tall box
+        Float3::new(0.000f32, 0.000f32, 0.000f32), // light
+    ]).unwrap();
     // use create_kernel_async to compile multiple kernels in parallel
     let path_tracer = device
         .create_kernel_async::<(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>(
@@ -252,22 +261,13 @@ fn main() {
               resolution: Expr<Uint2>| {
                 set_block_size([16u32, 16u32, 1u32]);
 
-                let cbox_materials: Expr<[Float3; 8]> = const_([
-                    Float3::new(0.725f32, 0.710f32, 0.680f32), // floor
-                    Float3::new(0.725f32, 0.710f32, 0.680f32), // ceiling
-                    Float3::new(0.725f32, 0.710f32, 0.680f32), // back wall
-                    Float3::new(0.140f32, 0.450f32, 0.091f32), // right wall
-                    Float3::new(0.630f32, 0.065f32, 0.050f32), // left wall
-                    Float3::new(0.725f32, 0.710f32, 0.680f32), // short box
-                    Float3::new(0.725f32, 0.710f32, 0.680f32), // tall box
-                    Float3::new(0.000f32, 0.000f32, 0.000f32), // light
-                ]);
+                let cbox_materials = cbox_materials.var();
 
                 let lcg = |state: Var<u32>| -> Expr<f32> {
                     const LCG_A: u32 = 1664525u32;
                     const LCG_C: u32 = 1013904223u32;
                     state.store(LCG_A * state.load() + LCG_C);
-                    (state.load() & 0x00ffffffu32).float() * (1.0f32 / u32::MAX as f32)
+                    (state.load() & 0x00ffffffu32).float() * (1.0f32 / 0x01000000u32 as f32)
                 };
 
                 let make_ray = |o: Expr<Float3>, d: Expr<Float3>, tmin: Expr<f32>, tmax: Expr<f32>| -> Expr<RtxRay> {
@@ -293,12 +293,13 @@ fn main() {
                 };
 
                 let offset_ray_origin = |p: Expr<Float3>, n: Expr<Float3>| -> Expr<Float3> {
-                    const ORIGIN: f32 = 1.0f32 / 32.0f32;
-                    const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
-                    const INT_SCALE: f32 = 256.0f32;
-                    let of_i = (INT_SCALE * n).int();
-                    let p_i = p.int() + Int3Expr::select(p.cmplt(0.0f32), -of_i, of_i);
-                    Float3Expr::select(p.abs().cmplt(ORIGIN), p + FLOAT_SCALE * n, p_i.float())
+                    // const ORIGIN: f32 = 1.0f32 / 32.0f32;
+                    // const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
+                    // const INT_SCALE: f32 = 256.0f32;
+                    // let of_i = (INT_SCALE * n).int();
+                    // let p_i = p.int() + Int3Expr::select(p.cmplt(0.0f32), -of_i, of_i);
+                    // Float3Expr::select(p.abs().cmplt(ORIGIN), p + FLOAT_SCALE * n, p_i.float())
+                    p + 1e-3 * n
                 };
 
                 let make_onb = |normal: Expr<Float3>| -> Expr<Onb> {
@@ -355,12 +356,15 @@ fn main() {
                             break_();
                         });
 
+                        // cpu_dbg!(ray.load());
                         let vertex_buffer = vertex_heap.var().buffer::<PackedFloat3>(hit.inst_id());
                         let triangle = index_heap
                             .var()
                             .buffer::<RtxIndex>(hit.inst_id())
                             .read(hit.prim_id());
                         let p0: Expr<Float3> = vertex_buffer.read(triangle.x()).into();
+                        //  radiance.store(radiance.load() + p0);
+                        // break_();
                         let p1: Expr<Float3> = vertex_buffer.read(triangle.y()).into();
                         let p2: Expr<Float3> = vertex_buffer.read(triangle.z()).into();
                         let p = p0 * (1.0f32 - hit.u() - hit.v()) + p1 * hit.u() + p2 * hit.v();
@@ -372,45 +376,48 @@ fn main() {
                         if_!(cos_wi.cmplt(1e-4f32), {
                             break_();
                         });
-
+                        let pp = offset_ray_origin(p, n);
+                        let albedo = cbox_materials.read(hit.inst_id());
                         // hit light
                         if_!(hit.inst_id().cmpeq(7u32), {
                             if_!(depth.load().cmpeq(0u32), {
                                 radiance.store(radiance.load() + light_emission);
                             }, else {
-                                let pdf_light = (p - origin).length_squared();
+                                let pdf_light = (p - origin).length_squared() / (light_area * cos_wi);
                                 let mis_weight = balanced_heuristic(pdf_bsdf.load(), pdf_light);
                                 radiance.store(radiance.load() + mis_weight * beta.load() * light_emission);
                             });
                             break_();
-                        });
+                        }, else{
 
-                        // sample light
-                        let ux_light = lcg(state);
-                        let uy_light = lcg(state);
-                        let p_light = light_position + ux_light * light_u + uy_light * light_v;
-                        let pp = offset_ray_origin(p, n);
-                        let pp_light = offset_ray_origin(p_light, light_normal);
-                        let d_light = (pp - pp_light).length();
-                        let wi_light = (pp_light - pp).normalize();
-                        let shadow_ray = make_ray(offset_ray_origin(pp, n), wi_light, 0.0f32.into(), d_light);
-                        let occluded = accel.trace_any(shadow_ray);
-                        let cos_wi_light = wi_light.dot(n);
-                        let cos_light = -light_normal.dot(wi_light);
-                        let albedo = cbox_materials.read(hit.inst_id());
-                        if_!(occluded.not() & cos_wi_light.cmpgt(1e-4f32) & cos_light.cmpgt(1e-4f32), {
-                            let pdf_light = (d_light * d_light) / (light_area * cos_light);
-                            let pdf_bsdf = cos_wi_light * std::f32::consts::FRAC_1_PI;
-                            let mis_weight = balanced_heuristic(pdf_light, pdf_bsdf);
-                            let bsdf = albedo * std::f32::consts::FRAC_1_PI * cos_wi_light;
-                            radiance.store(radiance.load() + beta.load() * bsdf * mis_weight * light_emission / pdf_light.max(1e-4f32));
-                        });
+                            // sample light
+                            let ux_light = lcg(state);
+                            let uy_light = lcg(state);
+                            let p_light = light_position + ux_light * light_u + uy_light * light_v;
 
+                            let pp_light = offset_ray_origin(p_light, light_normal);
+                            let d_light = (pp - pp_light).length();
+                            let wi_light = (pp_light - pp).normalize();
+                            let shadow_ray = make_ray(offset_ray_origin(pp, n), wi_light, 0.0f32.into(), d_light);
+                            let occluded = accel.trace_any(shadow_ray);
+                            let cos_wi_light = wi_light.dot(n);
+                            let cos_light = -light_normal.dot(wi_light);
+                            // cpu_dbg!(pp_light);
+                            if_!(occluded.not() & cos_wi_light.cmpgt(1e-4f32) & cos_light.cmpgt(1e-4f32), {
+                                let pdf_light = (d_light * d_light) / (light_area * cos_light);
+                                let pdf_bsdf = cos_wi_light * std::f32::consts::FRAC_1_PI;
+                                let mis_weight = balanced_heuristic(pdf_light, pdf_bsdf);
+                                let bsdf = albedo * std::f32::consts::FRAC_1_PI * cos_wi_light;
+                                radiance.store(radiance.load() + beta.load() * bsdf * mis_weight * light_emission / pdf_light.max(1e-4f32));
+                            });
+                        });
+                        // break_();
                         // sample BSDF
                         let onb = make_onb(n);
                         let ux = lcg(state);
                         let uy = lcg(state);
                         let new_direction = onb.to_world(cosine_sample_hemisphere(make_float2(ux, uy)));
+                        // cpu_dbg!(make_float2(ux, uy));
                         ray.store(make_ray(pp, new_direction, 0.0f32.into(), std::f32::MAX.into()));
                         beta.store(beta.load() * albedo);
                         pdf_bsdf.store(cos_wi * std::f32::consts::FRAC_1_PI);
@@ -441,6 +448,7 @@ fn main() {
         .unwrap();
     let display = device
         .create_kernel_async::<(Tex2d<Float4>, Tex2d<Float4>)>(&|acc, display| {
+            set_block_size([16, 16, 1]);
             let coord = dispatch_id().xy();
             let radiance = acc.read(coord);
             let spp = radiance.w();
@@ -473,6 +481,7 @@ fn main() {
     let window = winit::window::WindowBuilder::new()
         .with_title("Luisa Compute Rust - Ray Tracing")
         .with_inner_size(winit::dpi::LogicalSize::new(img_w, img_h))
+        .with_resizable(false)
         .build(&event_loop)
         .unwrap();
     let swapchain = device
@@ -517,6 +526,7 @@ fn main() {
                 let toc = Instant::now();
                 let elapsed = (toc - tic).as_secs_f32();
                 log::info!("time: {}ms", elapsed * 1e3);
+                window.request_redraw();
             }
             _ => (),
         }

@@ -1601,5 +1601,7 @@ mod test {
         assert_size!(Short2, Short3, Short4, Ushort2, Ushort3, Ushort4);
         assert_size!(Long2, Long3, Long4, Ulong2, Ulong3, Ulong4);
         assert_size!(Mat2, Mat3, Mat4);
+        assert_size!(PackedFloat2, PackedFloat3, PackedFloat4);
+        assert_eq!(std::mem::size_of::<PackedFloat3>(), 12);
     }
 }

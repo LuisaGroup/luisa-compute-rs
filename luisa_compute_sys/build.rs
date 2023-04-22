@@ -41,7 +41,11 @@ fn cmake_build() -> PathBuf {
     config.define("LUISA_COMPUTE_ENABLE_CPU", "OFF");
     config.define("LUISA_COMPUTE_ENABLE_REMOTE", "OFF");
     config.define("LUISA_COMPUTE_ENABLE_RUST", "ON");
-    config.define("CMAKE_BUILD_TYPE", "Release");
+    if env::var("PROFILE").unwrap_or("release".to_string()) == "release" {
+        config.define("CMAKE_BUILD_TYPE", "Release");
+    } else {
+        config.define("CMAKE_BUILD_TYPE", "Debug");
+    }
     // set compiler based on env
     println!("cargo:rerun-if-env-changed=CC");
     if let Ok(v) = env::var("CC") {
@@ -75,8 +79,8 @@ fn copy_dlls(out_dir: &PathBuf) {
         let path = entry.path();
         if path.extension().is_some()
             && (path.extension().unwrap() == "dll"
-                || path.extension().unwrap() == "so"
-                || path.extension().unwrap() == "dylib")
+            || path.extension().unwrap() == "so"
+            || path.extension().unwrap() == "dylib")
         {
             // let target_dir = get_output_path();
             let comps: Vec<_> = path.components().collect();
@@ -154,3 +158,4 @@ fn main() {
     let out_dir = cmake_build();
     copy_dlls(&out_dir);
 }
+

@@ -242,16 +242,18 @@ fn main() {
         accel.push_mesh(&mesh, glam::Mat4::IDENTITY.into(), u8::MAX, true);
     }
     accel.build(AccelBuildRequest::ForceBuild);
-    let cbox_materials = device.create_buffer_from_slice::<Float3>(&[
-        Float3::new(0.725f32, 0.710f32, 0.680f32), // floor
-        Float3::new(0.725f32, 0.710f32, 0.680f32), // ceiling
-        Float3::new(0.725f32, 0.710f32, 0.680f32), // back wall
-        Float3::new(0.140f32, 0.450f32, 0.091f32), // right wall
-        Float3::new(0.630f32, 0.065f32, 0.050f32), // left wall
-        Float3::new(0.725f32, 0.710f32, 0.680f32), // short box
-        Float3::new(0.725f32, 0.710f32, 0.680f32), // tall box
-        Float3::new(0.000f32, 0.000f32, 0.000f32), // light
-    ]).unwrap();
+    let cbox_materials = device
+        .create_buffer_from_slice::<Float3>(&[
+            Float3::new(0.725f32, 0.710f32, 0.680f32), // floor
+            Float3::new(0.725f32, 0.710f32, 0.680f32), // ceiling
+            Float3::new(0.725f32, 0.710f32, 0.680f32), // back wall
+            Float3::new(0.140f32, 0.450f32, 0.091f32), // right wall
+            Float3::new(0.630f32, 0.065f32, 0.050f32), // left wall
+            Float3::new(0.725f32, 0.710f32, 0.680f32), // short box
+            Float3::new(0.725f32, 0.710f32, 0.680f32), // tall box
+            Float3::new(0.000f32, 0.000f32, 0.000f32), // light
+        ])
+        .unwrap();
     // use create_kernel_async to compile multiple kernels in parallel
     let path_tracer = device
         .create_kernel_async::<(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>(
@@ -526,7 +528,11 @@ fn main() {
                 }
                 let toc = Instant::now();
                 let elapsed = (toc - tic).as_secs_f32();
-                log::info!("time: {}ms", elapsed * 1e3);
+                log::info!(
+                    "time: {}ms {}ms/spp",
+                    elapsed * 1e3,
+                    elapsed * 1e3 / SPP_PER_DISPATCH as f32
+                );
                 window.request_redraw();
             }
             _ => (),

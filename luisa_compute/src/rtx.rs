@@ -204,7 +204,6 @@ pub fn offset_ray_origin(p:Expr<Float3>, n:Expr<Float3>) -> Expr<Float3> {
 pub type Index = PackedUint3;
 
 #[repr(C)]
-#[repr(align(16))]
 #[derive(Clone, Copy, __Value, Debug)]
 pub struct Hit {
     pub inst_id: u32,
@@ -220,7 +219,7 @@ mod test {
     fn rtx_layout() {
         use super::*;
         assert_eq!(std::mem::align_of::<Ray>(), 16);
-        assert_eq!(std::mem::align_of::<Hit>(), 16);
+        assert_eq!(std::mem::size_of::<Hit>(), 20);
         assert_eq!(std::mem::size_of::<Index>(), 12);
     }
 }

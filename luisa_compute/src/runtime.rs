@@ -252,7 +252,7 @@ impl Device {
     pub fn create_mesh<V: Value>(
         &self,
         vbuffer: BufferView<'_, V>,
-        tbuffer: BufferView<'_, RtxIndex>,
+        tbuffer: BufferView<'_, rtx::Index>,
         option: AccelOption,
     ) -> backend::Result<Mesh> {
         let mesh = self.inner.create_mesh(option)?;
@@ -269,9 +269,9 @@ impl Device {
             vertex_buffer_size: vbuffer.len * std::mem::size_of::<V>() as usize,
             vertex_stride: std::mem::size_of::<V>() as usize,
             index_buffer: tbuffer.handle(),
-            index_buffer_offset: tbuffer.offset * std::mem::size_of::<RtxIndex>() as usize,
-            index_buffer_size: tbuffer.len * std::mem::size_of::<RtxIndex>() as usize,
-            index_stride: std::mem::size_of::<RtxIndex>() as usize,
+            index_buffer_offset: tbuffer.offset * std::mem::size_of::<rtx::Index>() as usize,
+            index_buffer_size: tbuffer.len * std::mem::size_of::<rtx::Index>() as usize,
+            index_stride: std::mem::size_of::<rtx::Index>() as usize,
         };
         Ok(mesh)
     }
@@ -714,55 +714,55 @@ pub trait KernelArg {
 }
 
 impl<T: Value> KernelArg for Buffer<T> {
-    type Parameter = lang::BufferVar<T>;
+    type Parameter = BufferVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.buffer(self);
     }
 }
 impl<T: Value> KernelArg for T {
-    type Parameter = lang::Expr<T>;
+    type Parameter = Expr<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.uniform(*self)
     }
 }
 impl<'a, T: Value> KernelArg for BufferView<'a, T> {
-    type Parameter = lang::BufferVar<T>;
+    type Parameter = BufferVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.buffer_view(self);
     }
 }
 impl<T: IoTexel> KernelArg for Tex2d<T> {
-    type Parameter = lang::Tex2dVar<T>;
+    type Parameter = Tex2dVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex2d(&self.view(0));
     }
 }
 impl<T: IoTexel> KernelArg for Tex3d<T> {
-    type Parameter = lang::Tex3dVar<T>;
+    type Parameter = Tex3dVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex3d(&self.view(0));
     }
 }
 impl<'a, T: IoTexel> KernelArg for Tex2dView<'a, T> {
-    type Parameter = lang::Tex2dVar<T>;
+    type Parameter = Tex2dVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex2d(self);
     }
 }
 impl<'a, T: IoTexel> KernelArg for Tex3dView<'a, T> {
-    type Parameter = lang::Tex3dVar<T>;
+    type Parameter = Tex3dVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex3d(self);
     }
 }
 impl KernelArg for BindlessArray {
-    type Parameter = lang::BindlessArrayVar;
+    type Parameter = BindlessArrayVar;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.bindless_array(self);
     }
 }
 impl KernelArg for Accel {
-    type Parameter = lang::AccelVar;
+    type Parameter = rtx::AccelVar;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.accel(self)
     }

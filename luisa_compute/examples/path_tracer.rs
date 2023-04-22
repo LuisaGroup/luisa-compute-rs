@@ -7,7 +7,7 @@ use winit::event_loop::{ControlFlow, EventLoop};
 
 #[allow(unused_imports)]
 use luisa::prelude::*;
-use luisa::rtx::Accel;
+use luisa::rtx::{Accel, Ray, Index, offset_ray_origin, AccelVar};
 use luisa::{Expr, Float3, Value};
 use luisa_compute as luisa;
 
@@ -205,7 +205,7 @@ fn main() {
     let vertex_heap = device.create_bindless_array(65536).unwrap();
     let index_heap = device.create_bindless_array(65536).unwrap();
     let mut vertex_buffers: Vec<Buffer<PackedFloat3>> = vec![];
-    let mut index_buffers: Vec<Buffer<RtxIndex>> = vec![];
+    let mut index_buffers: Vec<Buffer<Index>> = vec![];
     let accel = device.create_accel(AccelOption::default()).unwrap();
 
     for (index, model) in models.iter().enumerate() {
@@ -222,7 +222,7 @@ fn main() {
             .create_buffer_from_slice(unsafe {
                 let index_ptr = model.mesh.indices.as_ptr();
                 std::slice::from_raw_parts(
-                    index_ptr as *const RtxIndex,
+                    index_ptr as *const Index,
                     model.mesh.indices.len() / 3,
                 )
             })
@@ -272,11 +272,11 @@ fn main() {
                     (state.load() & 0x00ffffffu32).float() * (1.0f32 / 0x01000000u32 as f32)
                 };
 
-                let make_ray = |o: Expr<Float3>, d: Expr<Float3>, tmin: Expr<f32>, tmax: Expr<f32>| -> Expr<RtxRay> {
-                    RtxRayExpr::new(o, tmin, d, tmax)
+                let make_ray = |o: Expr<Float3>, d: Expr<Float3>, tmin: Expr<f32>, tmax: Expr<f32>| -> Expr<Ray> {
+                    rtx::RayExpr::new(o, tmin, d, tmax)
                 };
 
-                let generate_ray = |p: Expr<Float2>| -> Expr<RtxRay> {
+                let generate_ray = |p: Expr<Float2>| -> Expr<Ray> {
                     const FOV: f32 = 27.8f32 * std::f32::consts::PI / 180.0f32;
                     let origin = make_float3(-0.01f32, 0.995f32, 5.0f32);
 
@@ -292,16 +292,6 @@ fn main() {
 
                 let balanced_heuristic = |pdf_a: Expr<f32>, pdf_b: Expr<f32>| {
                     pdf_a / (pdf_a + pdf_b).max(1e-4f32)
-                };
-
-                let offset_ray_origin = |p: Expr<Float3>, n: Expr<Float3>| -> Expr<Float3> {
-                    // const ORIGIN: f32 = 1.0f32 / 32.0f32;
-                    // const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
-                    // const INT_SCALE: f32 = 256.0f32;
-                    // let of_i = (INT_SCALE * n).int();
-                    // let p_i = p.int() + Int3Expr::select(p.cmplt(0.0f32), -of_i, of_i);
-                    // Float3Expr::select(p.abs().cmplt(ORIGIN), p + FLOAT_SCALE * n, p_i.float())
-                    p + 1e-3 * n
                 };
 
                 let make_onb = |normal: Expr<Float3>| -> Expr<Onb> {
@@ -329,16 +319,16 @@ fn main() {
                 let ry = lcg(state);
 
                 let pixel = (coord.float() + make_float2(rx, ry)) / frame_size * 2.0f32 - 1.0f32;
-                // let mut radiance = make_float3(0.0f32, 0.0f32, 0.0f32);
+
                 let radiance = var!(Float3);
                 radiance.store(make_float3(0.0f32, 0.0f32, 0.0f32));
 
                 let loop_index = var!(u32);
                 while_!(loop_index.load().cmplt(SPP_PER_DISPATCH), {
                     let init_ray = generate_ray(pixel * make_float2(1.0f32, -1.0f32));
-                    let ray = var!(RtxRay);
+                    let ray = var!(Ray);
                     ray.store(init_ray);
-                    // cpu_dbg!(init_ray);
+
                     let beta = var!(Float3);
                     beta.store(make_float3(1.0f32, 1.0f32, 1.0f32));
                     let pdf_bsdf = var!(f32);
@@ -357,16 +347,13 @@ fn main() {
                         if_!(!hit.valid(), {
                             break_();
                         });
-
-                        // cpu_dbg!(ray.load());
                         let vertex_buffer = vertex_heap.var().buffer::<PackedFloat3>(hit.inst_id());
                         let triangle = index_heap
                             .var()
-                            .buffer::<RtxIndex>(hit.inst_id())
+                            .buffer::<Index>(hit.inst_id())
                             .read(hit.prim_id());
+
                         let p0: Expr<Float3> = vertex_buffer.read(triangle.x()).into();
-                        //  radiance.store(radiance.load() + p0);
-                        // break_();
                         let p1: Expr<Float3> = vertex_buffer.read(triangle.y()).into();
                         let p2: Expr<Float3> = vertex_buffer.read(triangle.z()).into();
                         let p = p0 * (1.0f32 - hit.u() - hit.v()) + p1 * hit.u() + p2 * hit.v();
@@ -413,7 +400,6 @@ fn main() {
                                 radiance.store(radiance.load() + beta.load() * bsdf * mis_weight * light_emission / pdf_light.max(1e-4f32));
                             });
                         });
-                        // break_();
                         // sample BSDF
                         let onb = make_onb(n);
                         let ux = lcg(state);

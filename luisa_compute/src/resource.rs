@@ -2,13 +2,12 @@ use crate::*;
 use api::BufferDownloadCommand;
 use api::BufferUploadCommand;
 use api::INVALID_RESOURCE_HANDLE;
-use lang::BindlessArrayVar;
-use lang::BufferVar;
 use lang::Value;
 use libc::c_void;
 use runtime::*;
 use std::cell::RefCell;
 use std::ops::RangeBounds;
+use std::process::abort;
 use std::sync::Arc;
 pub struct Buffer<T: Value> {
     pub(crate) device: Device,
@@ -391,6 +390,9 @@ impl BindlessArray {
     }
 }
 pub use api::{PixelFormat, PixelStorage, Sampler, SamplerAddress, SamplerFilter};
+use luisa_compute_ir::context::type_hash;
+use luisa_compute_ir::ir::{Binding, BindlessArrayBinding, BufferBinding, Func, Instruction, new_node, Node, TextureBinding};
+
 pub(crate) struct TextureHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::Texture,
@@ -835,4 +837,695 @@ impl<T: IoTexel> Tex3d<T> {
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         self.handle.native_handle
     }
+}
+
+
+
+pub struct BufferVar<T: Value> {
+    pub(crate) marker: std::marker::PhantomData<T>,
+    #[allow(dead_code)]
+    pub(crate) handle: Option<Arc<BufferHandle>>,
+    pub(crate) node: NodeRef,
+}
+
+impl<T: Value> Drop for BufferVar<T> {
+    fn drop(&mut self) {}
+}
+
+pub struct BindlessArrayVar {
+    pub(crate) node: NodeRef,
+    #[allow(dead_code)]
+    pub(crate) handle: Option<Arc<BindlessArrayHandle>>,
+}
+
+pub struct BindlessBufferVar<T> {
+    array: NodeRef,
+    buffer_index: Expr<u32>,
+    _marker: std::marker::PhantomData<T>,
+}
+
+impl<T: Value> BindlessBufferVar<T> {
+    pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
+        let i = i.into();
+        if __env_need_backtrace() {
+            assert(i.cmplt(self.len()));
+        }
+        Expr::<T>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessBufferRead,
+                &[self.array, self.buffer_index.node(), FromNode::node(&i)],
+                T::type_(),
+            )
+        }))
+    }
+    pub fn len(&self) -> Expr<u32> {
+        Expr::<u32>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessBufferSize(T::type_()),
+                &[self.array, self.buffer_index.node()],
+                T::type_(),
+            )
+        }))
+    }
+    pub fn __type(&self) -> Expr<u64> {
+        Expr::<u64>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessBufferType,
+                &[self.array, self.buffer_index.node()],
+                u64::type_(),
+            )
+        }))
+    }
+}
+
+pub struct BindlessTex2dVar {
+    array: NodeRef,
+    tex2d_index: Expr<u32>,
+}
+
+impl BindlessTex2dVar {
+    pub fn sample(&self, uv: Expr<Float2>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture2dSample,
+                &[self.array, self.tex2d_index.node(), uv.node()],
+                Float4::type_(),
+            )
+        }))
+    }
+    pub fn sample_level(&self, uv: Expr<Float2>, level: Expr<f32>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture2dSampleLevel,
+                &[self.array, self.tex2d_index.node(), uv.node(), level.node()],
+                Float4::type_(),
+            )
+        }))
+    }
+    pub fn sample_grad(
+        &self,
+        uv: Expr<Float2>,
+        ddx: Expr<Float2>,
+        ddy: Expr<Float2>,
+    ) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture2dSampleLevel,
+                &[
+                    self.array,
+                    self.tex2d_index.node(),
+                    uv.node(),
+                    ddx.node(),
+                    ddy.node(),
+                ],
+                Float4::type_(),
+            )
+        }))
+    }
+    pub fn read(&self, coord: Expr<Uint2>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture2dRead,
+                &[self.array, self.tex2d_index.node(), coord.node()],
+                Float4::type_(),
+            )
+        }))
+    }
+    pub fn read_level(&self, coord: Expr<Uint2>, level: Expr<u32>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture2dReadLevel,
+                &[
+                    self.array,
+                    self.tex2d_index.node(),
+                    coord.node(),
+                    level.node(),
+                ],
+                Float4::type_(),
+            )
+        }))
+    }
+    pub fn size(&self) -> Expr<Uint2> {
+        Expr::<Uint2>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture2dSize,
+                &[self.array, self.tex2d_index.node()],
+                Uint2::type_(),
+            )
+        }))
+    }
+    pub fn size_level(&self, level: Expr<u32>) -> Expr<Uint2> {
+        Expr::<Uint2>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture2dSizeLevel,
+                &[self.array, self.tex2d_index.node(), level.node()],
+                Uint2::type_(),
+            )
+        }))
+    }
+}
+
+pub struct BindlessTex3dVar {
+    array: NodeRef,
+    tex3d_index: Expr<u32>,
+}
+
+impl BindlessTex3dVar {
+    pub fn sample(&self, uv: Expr<Float3>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture3dSample,
+                &[self.array, self.tex3d_index.node(), uv.node()],
+                Float4::type_(),
+            )
+        }))
+    }
+    pub fn sample_level(&self, uv: Expr<Float3>, level: Expr<f32>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture3dSampleLevel,
+                &[self.array, self.tex3d_index.node(), uv.node(), level.node()],
+                Float4::type_(),
+            )
+        }))
+    }
+    pub fn sample_grad(
+        &self,
+        uv: Expr<Float3>,
+        ddx: Expr<Float3>,
+        ddy: Expr<Float3>,
+    ) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture3dSampleLevel,
+                &[
+                    self.array,
+                    self.tex3d_index.node(),
+                    uv.node(),
+                    ddx.node(),
+                    ddy.node(),
+                ],
+                Float4::type_(),
+            )
+        }))
+    }
+    pub fn read(&self, coord: Expr<Uint3>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture3dRead,
+                &[self.array, self.tex3d_index.node(), coord.node()],
+                Float4::type_(),
+            )
+        }))
+    }
+    pub fn read_level(&self, coord: Expr<Uint3>, level: Expr<u32>) -> Expr<Float4> {
+        Expr::<Float4>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture3dReadLevel,
+                &[
+                    self.array,
+                    self.tex3d_index.node(),
+                    coord.node(),
+                    level.node(),
+                ],
+                Float4::type_(),
+            )
+        }))
+    }
+    pub fn size(&self) -> Expr<Uint3> {
+        Expr::<Uint3>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture3dSize,
+                &[self.array, self.tex3d_index.node()],
+                Uint3::type_(),
+            )
+        }))
+    }
+    pub fn size_level(&self, level: Expr<u32>) -> Expr<Uint3> {
+        Expr::<Uint3>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessTexture3dSizeLevel,
+                &[self.array, self.tex3d_index.node(), level.node()],
+                Uint3::type_(),
+            )
+        }))
+    }
+}
+
+impl BindlessArrayVar {
+    pub fn tex2d(&self, tex2d_index: impl Into<Expr<u32>>) -> BindlessTex2dVar {
+        let v = BindlessTex2dVar {
+            array: self.node,
+            tex2d_index: tex2d_index.into(),
+        };
+        v
+    }
+    pub fn tex3d(&self, tex3d_index: impl Into<Expr<u32>>) -> BindlessTex3dVar {
+        let v = BindlessTex3dVar {
+            array: self.node,
+            tex3d_index: tex3d_index.into(),
+        };
+        v
+    }
+    pub fn buffer<T: Value>(&self, buffer_index: impl Into<Expr<u32>>) -> BindlessBufferVar<T> {
+        let v = BindlessBufferVar {
+            array: self.node,
+            buffer_index: buffer_index.into(),
+            _marker: std::marker::PhantomData,
+        };
+        let vt = v.__type();
+        let expected = type_hash(&T::type_());
+        if __env_need_backtrace() {
+            let backtrace = backtrace::Backtrace::new();
+            let check_type = CpuFn::new(move |t: &mut u64| {
+                if *t != expected {
+                    {
+                        let mut stderr = std::io::stderr().lock();
+                        use std::io::Write;
+                        writeln!(stderr,
+                                 "Bindless buffer type mismatch: expected hash {:?}, got {:?}; host backtrace:\n {:?}",
+                                 expected, t, backtrace
+                        ).unwrap();
+                    }
+                    abort();
+                }
+            });
+            let _ = check_type.call(vt);
+        } else {
+            assert(vt.cmpeq(expected));
+        }
+        v
+    }
+
+    pub fn new(array: &BindlessArray) -> Self {
+        let node = RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            assert!(
+                r.lock,
+                "BindlessArrayVar must be created from within a kernel"
+            );
+            let handle: u64 = array.handle().0;
+            let binding = Binding::BindlessArray(BindlessArrayBinding { handle });
+
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
+                *node
+            } else {
+                let node = new_node(
+                    r.pools.as_ref().unwrap(),
+                    Node::new(CArc::new(Instruction::Bindless), Type::void()),
+                );
+                let i = r.captured_buffer.len();
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, array.handle.clone()));
+                node
+            }
+        });
+        Self {
+            node,
+            handle: Some(array.handle.clone()),
+        }
+    }
+}
+
+impl<T: Value> BufferVar<T> {
+    pub fn new(buffer: &BufferView<'_, T>) -> Self {
+        let node = RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            assert!(r.lock, "BufferVar must be created from within a kernel");
+            let binding = Binding::Buffer(BufferBinding {
+                handle: buffer.handle().0,
+                size: buffer.len * std::mem::size_of::<T>(),
+                offset: (buffer.offset * std::mem::size_of::<T>()) as u64,
+            });
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
+                *node
+            } else {
+                let node = new_node(
+                    r.pools.as_ref().unwrap(),
+                    Node::new(CArc::new(Instruction::Buffer), T::type_()),
+                );
+                let i = r.captured_buffer.len();
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, buffer.buffer.handle.clone()));
+                node
+            }
+        });
+        Self {
+            node,
+            marker: std::marker::PhantomData,
+            handle: Some(buffer.buffer.handle.clone()),
+        }
+    }
+    pub fn len(&self) -> Expr<u32> {
+        FromNode::from_node(
+            __current_scope(|b| b.call(Func::BufferSize, &[self.node], u32::type_())).into(),
+        )
+    }
+    pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
+        let i = i.into();
+        if __env_need_backtrace() {
+            assert(i.cmplt(self.len()));
+        }
+        __current_scope(|b| {
+            FromNode::from_node(b.call(
+                Func::BufferRead,
+                &[self.node, FromNode::node(&i)],
+                T::type_(),
+            ))
+        })
+    }
+    pub fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, v: V) {
+        let i = i.into();
+        let v = v.into();
+        if __env_need_backtrace() {
+            assert(i.cmplt(self.len()));
+        }
+        __current_scope(|b| {
+            b.call(
+                Func::BufferWrite,
+                &[self.node, FromNode::node(&i), v.node()],
+                Type::void(),
+            )
+        });
+    }
+}
+
+macro_rules! impl_atomic {
+    ($t:ty) => {
+        impl BufferVar<$t> {
+            pub fn atomic_exchange<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
+                Expr::<$t>::from_node(__current_scope(|b| {
+                    b.call(
+                        Func::AtomicExchange,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_(),
+                    )
+                }))
+            }
+            pub fn atomic_compare_exchange<
+                I: Into<Expr<u32>>,
+                V0: Into<Expr<$t>>,
+                V1: Into<Expr<$t>>,
+            >(
+                &self,
+                i: I,
+                expected: V0,
+                desired: V1,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let expected = expected.into();
+                let desired = desired.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
+                Expr::<$t>::from_node(__current_scope(|b| {
+                    b.call(
+                        Func::AtomicCompareExchange,
+                        &[
+                            self.node,
+                            FromNode::node(&i),
+                            expected.node(),
+                            desired.node(),
+                        ],
+                        <$t>::type_(),
+                    )
+                }))
+            }
+            pub fn atomic_fetch_add<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
+                Expr::<$t>::from_node(__current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchAdd,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_(),
+                    )
+                }))
+            }
+            pub fn atomic_fetch_sub<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
+                Expr::<$t>::from_node(__current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchSub,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_(),
+                    )
+                }))
+            }
+            pub fn atomic_fetch_min<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
+                Expr::<$t>::from_node(__current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchMin,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_(),
+                    )
+                }))
+            }
+            pub fn atomic_fetch_max<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
+                Expr::<$t>::from_node(__current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchMax,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_(),
+                    )
+                }))
+            }
+        }
+    };
+}
+macro_rules! impl_atomic_bit {
+    ($t:ty) => {
+        impl BufferVar<$t> {
+            pub fn atomic_fetch_and<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
+                Expr::<$t>::from_node(__current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchAnd,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_(),
+                    )
+                }))
+            }
+            pub fn atomic_fetch_or<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
+                Expr::<$t>::from_node(__current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchOr,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_(),
+                    )
+                }))
+            }
+            pub fn atomic_fetch_xor<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
+                let i = i.into();
+                let v = v.into();
+                if __env_need_backtrace() {
+                    assert(i.cmplt(self.len()));
+                }
+                Expr::<$t>::from_node(__current_scope(|b| {
+                    b.call(
+                        Func::AtomicFetchXor,
+                        &[self.node, FromNode::node(&i), v.node()],
+                        <$t>::type_(),
+                    )
+                }))
+            }
+        }
+    };
+}
+impl_atomic!(i32);
+impl_atomic!(u32);
+impl_atomic!(i64);
+impl_atomic!(u64);
+impl_atomic!(f32);
+impl_atomic_bit!(u32);
+impl_atomic_bit!(u64);
+impl_atomic_bit!(i32);
+impl_atomic_bit!(i64);
+pub struct Tex2dVar<T: IoTexel> {
+    pub(crate) node: NodeRef,
+    #[allow(dead_code)]
+    pub(crate) handle: Option<Arc<TextureHandle>>,
+    pub(crate) marker: std::marker::PhantomData<T>,
+    #[allow(dead_code)]
+    pub(crate) level: Option<u32>,
+}
+
+impl<T: IoTexel> Tex2dVar<T> {
+    pub fn new(view: Tex2dView<'_, T>) -> Self {
+        let node = RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            assert!(r.lock, "Tex2dVar<T> must be created from within a kernel");
+            let handle: u64 = view.tex.handle().0;
+            let binding = Binding::Texture(TextureBinding {
+                handle,
+                level: view.level,
+            });
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
+                *node
+            } else {
+                let node = new_node(
+                    r.pools.as_ref().unwrap(),
+                    Node::new(CArc::new(Instruction::Texture2D), Type::void()),
+                );
+                let i = r.captured_buffer.len();
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, view.tex.handle.clone()));
+                node
+            }
+        });
+        Self {
+            node,
+            handle: Some(view.tex.handle.clone()),
+            level: Some(view.level),
+            marker: std::marker::PhantomData,
+        }
+    }
+    pub fn read(&self, uv: impl Into<Expr<Uint2>>) -> Expr<T> {
+        let uv = uv.into();
+        T::convert_from_read(Expr::<T::RwType>::from_node(__current_scope(|b| {
+            b.call(
+                Func::Texture2dRead,
+                &[self.node, uv.node()],
+                T::RwType::type_(),
+            )
+        })))
+    }
+    pub fn write(&self, uv: impl Into<Expr<Uint2>>, v: impl Into<Expr<T>>) {
+        let uv = uv.into();
+        let v = v.into();
+        let v = T::convert_to_write(v);
+        __current_scope(|b| {
+            b.call(
+                Func::Texture2dWrite,
+                &[self.node, uv.node(), v.node()],
+                Type::void(),
+            );
+        })
+    }
+}
+
+impl<T: IoTexel> Tex3dVar<T> {
+    pub fn new(view: Tex3dView<'_, T>) -> Self {
+        let node = RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            assert!(r.lock, "Tex3dVar<T> must be created from within a kernel");
+            let handle: u64 = view.tex.handle().0;
+            let binding = Binding::Texture(TextureBinding {
+                handle,
+                level: view.level,
+            });
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
+                *node
+            } else {
+                let node = new_node(
+                    r.pools.as_ref().unwrap(),
+                    Node::new(CArc::new(Instruction::Texture3D), Type::void()),
+                );
+                let i = r.captured_buffer.len();
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, view.tex.handle.clone()));
+                node
+            }
+        });
+        Self {
+            node,
+            handle: Some(view.tex.handle.clone()),
+            level: Some(view.level),
+            marker: std::marker::PhantomData,
+        }
+    }
+    pub fn read(&self, uv: impl Into<Expr<Uint3>>) -> Expr<T> {
+        let uv = uv.into();
+        T::convert_from_read(Expr::<T::RwType>::from_node(__current_scope(|b| {
+            b.call(
+                Func::Texture3dRead,
+                &[self.node, uv.node()],
+                T::RwType::type_(),
+            )
+        })))
+    }
+    pub fn write(&self, uv: impl Into<Expr<Uint3>>, v: impl Into<Expr<T>>) {
+        let uv = uv.into();
+        let v = v.into();
+        let v = T::convert_to_write(v);
+        __current_scope(|b| {
+            b.call(
+                Func::Texture3dWrite,
+                &[self.node, uv.node(), v.node()],
+                Type::void(),
+            );
+        })
+    }
+}
+
+pub struct Tex3dVar<T: IoTexel> {
+    pub(crate) node: NodeRef,
+    #[allow(dead_code)]
+    pub(crate) handle: Option<Arc<TextureHandle>>,
+    pub(crate) marker: std::marker::PhantomData<T>,
+    #[allow(dead_code)]
+    pub(crate) level: Option<u32>,
 }

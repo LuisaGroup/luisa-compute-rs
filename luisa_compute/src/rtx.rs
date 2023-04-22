@@ -1,9 +1,11 @@
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
-use crate::{lang::AccelVar, runtime::submit_default_stream_and_sync, ResourceTracker, *};
+use crate::{runtime::submit_default_stream_and_sync, ResourceTracker, *};
 use api::AccelBuildRequest;
 use luisa_compute_api_types as api;
 use parking_lot::RwLock;
+use luisa_compute_ir::ir::{AccelBinding, Binding, Func, Instruction, new_node, Node};
+use luisa_compute_derive::__Value;
 pub(crate) struct AccelHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::Accel,
@@ -172,5 +174,125 @@ impl Accel {
     }
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         self.handle.native_handle
+    }
+}
+
+pub struct AccelVar {
+    pub(crate) node: NodeRef,
+    #[allow(dead_code)]
+    pub(crate) handle: Option<Arc<AccelHandle>>,
+}
+
+#[repr(C)]
+#[repr(align(16))]
+#[derive(Clone, Copy, __Value, Debug)]
+pub struct Ray {
+    pub orig: PackedFloat3,
+    pub tmin: f32,
+    pub dir: PackedFloat3,
+    pub tmax: f32,
+}
+
+pub fn offset_ray_origin(p:Expr<Float3>, n:Expr<Float3>) -> Expr<Float3> {
+    const ORIGIN: f32 = 1.0f32 / 32.0f32;
+    const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
+    const INT_SCALE: f32 = 256.0f32;
+    let of_i = (INT_SCALE * n).int();
+    let p_i = p.bitcast::<Int3>() + Int3Expr::select(p.cmplt(0.0f32), -of_i, of_i);
+    Float3Expr::select(p.abs().cmplt(ORIGIN), p + FLOAT_SCALE * n, p_i.bitcast::<Float3>())
+}
+pub type Index = PackedUint3;
+
+#[repr(C)]
+#[repr(align(16))]
+#[derive(Clone, Copy, __Value, Debug)]
+pub struct Hit {
+    pub inst_id: u32,
+    pub prim_id: u32,
+    pub u: f32,
+    pub v: f32,
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn rtx_layout() {
+        use super::*;
+        assert_eq!(std::mem::align_of::<Ray>(), 16);
+        assert_eq!(std::mem::align_of::<Hit>(), 16);
+        assert_eq!(std::mem::size_of::<Index>(), 12);
+    }
+}
+
+impl HitExpr {
+    pub fn valid(&self) -> Expr<bool> {
+        self.inst_id().cmpne(u32::MAX) & self.prim_id().cmpne(u32::MAX)
+    }
+}
+
+impl AccelVar {
+    #[inline]
+    pub fn trace_closest_masked(
+        &self,
+        ray: impl Into<Expr<Ray>>,
+        mask: impl Into<Expr<u32>>,
+    ) -> Expr<Hit> {
+        let ray = ray.into();
+        let mask = mask.into();
+        FromNode::from_node(__current_scope(|b| {
+            b.call(
+                Func::RayTracingTraceClosest,
+                &[self.node, ray.node(), mask.node()],
+                Hit::type_(),
+            )
+        }))
+    }
+    #[inline]
+    pub fn trace_any_masked(
+        &self,
+        ray: impl Into<Expr<Ray>>,
+        mask: impl Into<Expr<u32>>,
+    ) -> Expr<bool> {
+        let ray = ray.into();
+        let mask = mask.into();
+        FromNode::from_node(__current_scope(|b| {
+            b.call(
+                Func::RayTracingTraceAny,
+                &[self.node, ray.node(), mask.node()],
+                bool::type_(),
+            )
+        }))
+    }
+    #[inline]
+    pub fn trace_closest(&self, ray: impl Into<Expr<Ray>>) -> Expr<Hit> {
+        self.trace_closest_masked(ray, 0xff)
+    }
+    #[inline]
+    pub fn trace_any(&self, ray: impl Into<Expr<Ray>>) -> Expr<bool> {
+        self.trace_any_masked(ray, 0xff)
+    }
+    pub fn new(accel: &rtx::Accel) -> Self {
+        let node = RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            assert!(r.lock, "BufferVar must be created from within a kernel");
+            let handle: u64 = accel.handle().0;
+            let binding = Binding::Accel(AccelBinding { handle });
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
+                *node
+            } else {
+                let node = new_node(
+                    r.pools.as_ref().unwrap(),
+                    Node::new(CArc::new(Instruction::Accel), Type::void()),
+                );
+                let i = r.captured_buffer.len();
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, accel.handle.clone()));
+                node
+            }
+        });
+        Self {
+            node,
+            handle: Some(accel.handle.clone()),
+        }
     }
 }

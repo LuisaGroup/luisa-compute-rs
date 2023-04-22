@@ -36,6 +36,7 @@ use luisa_compute_api_types::Accel;
 use luisa_compute_derive::__Value;
 use luisa_compute_ir as ir;
 
+use luisa_compute_ir::ir::{Primitive, VectorElementType};
 pub use luisa_compute_ir::{
     context::register_type,
     ffi::CBoxedSlice,
@@ -59,8 +60,8 @@ pub use math::*;
 pub use poly::*;
 
 pub trait Value: Copy + ir::TypeOf {
-    type Expr: ExprProxy<Value=Self>;
-    type Var: VarProxy<Value=Self>;
+    type Expr: ExprProxy<Value = Self>;
+    type Var: VarProxy<Value = Self>;
     fn fields() -> Vec<String>;
 }
 
@@ -77,7 +78,7 @@ pub trait Aggregate: Sized {
         ret
     }
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>);
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self;
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self;
 }
 
 pub trait FromNode {
@@ -202,7 +203,7 @@ impl<T> Aggregate for PrimExpr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
             _phantom: std::marker::PhantomData,
@@ -214,7 +215,7 @@ impl<T> Aggregate for PrimVar<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
             _phantom: std::marker::PhantomData,
@@ -314,8 +315,8 @@ macro_rules! cpu_dbg {
     }};
 }
 pub fn __cpu_dbg<T: ExprProxy>(arg: T, file: &'static str, line: u32)
-    where
-        T::Value: Debug,
+where
+    T::Value: Debug,
 {
     let f = CpuFn::new(move |x: &mut T::Value| {
         println!("[{}:{}] {:?}", file, line, x);
@@ -358,7 +359,7 @@ impl<T: Value> CpuFn<T> {
             _marker: std::marker::PhantomData,
         }
     }
-    pub fn call(&self, arg: impl ExprProxy<Value=T>) -> Expr<T> {
+    pub fn call(&self, arg: impl ExprProxy<Value = T>) -> Expr<T> {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(r.lock);
@@ -664,7 +665,7 @@ impl<T: Value> Aggregate for VLArrayExpr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -691,7 +692,7 @@ impl<T: Value> Aggregate for VLArrayVar<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -816,7 +817,7 @@ impl<T: Value, const N: usize> Aggregate for ArrayExpr<T, N> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -837,7 +838,7 @@ impl<T: Value, const N: usize> Aggregate for ArrayVar<T, N> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -1483,6 +1484,72 @@ pub struct Tex2dVar<T: IoTexel> {
     level: Option<u32>,
 }
 
+// fn texel_write_convert_pixel(node: NodeRef) -> NodeRef {
+//     let ty = node.type_();
+//     match ty.as_ref() {
+//         Type::Primitive(p) => match *p {
+//             Primitive::Float32 => __current_scope(|b| b.call(Func::Vec, &[node], Float4::type_())),
+//             Primitive::Uint32 => __current_scope(|b| b.call(Func::Vec, &[node], Uint4::type_())),
+//             Primitive::Int32 => __current_scope(|b| b.call(Func::Vec, &[node], Int4::type_())),
+//             _ => unreachable!(),
+//         },
+//         Type::Vector(vt) => {
+//             let len = vt.length;
+//
+//             match vt.element {
+//                 VectorElementType::Scalar(p) => match p {
+//                     Primitive::Float32 => {
+//                         let mut comps = (0..len)
+//                             .map(|i| __extract::<f32>(node, i as usize))
+//                             .collect::<Vec<_>>();
+//                         let zero = const_(0.0f32).node;
+//                         comps.resize(4, zero);
+//                         __current_scope(|b| b.call(Func::Vec4, &comps, Float4::type_()))
+//                     }
+//                     Primitive::Uint32 => {
+//                         let mut comps = (0..len)
+//                             .map(|i| __extract::<u32>(node, i as usize))
+//                             .collect::<Vec<_>>();
+//                         let zero = const_(0u32).node;
+//                         comps.resize(4, zero);
+//                         __current_scope(|b| b.call(Func::Vec4, &comps, Uint4::type_()))
+//                     }
+//                     Primitive::Int32 => {
+//                         let mut comps = (0..len)
+//                             .map(|i| __extract::<i32>(node, i as usize))
+//                             .collect::<Vec<_>>();
+//                         let zero = const_(0i32).node;
+//                         comps.resize(4, zero);
+//                         __current_scope(|b| b.call(Func::Vec4, &comps, Int4::type_()))
+//                     }
+//                     _ => unreachable!(),
+//                 },
+//                 _ => unreachable!(),
+//             }
+//         }
+//         _ => unreachable!(),
+//     }
+// }
+// fn texel_read_convert_pixel(node: NodeRef, ty: &Type) -> NodeRef {
+//     match ty {
+//         Type::Primitive(p) => match *p {
+//             Primitive::Float32 => __extract::<f32>(node, 0),
+//             Primitive::Uint32 => __extract::<u32>(node, 0),
+//             Primitive::Int32 => __extract::<i32>(node, 0),
+//             _ => unreachable!(),
+//         },
+//         Type::Vector(vt) => {
+//             let len = vt.length;
+//             match vt.element {
+//                 VectorElementType::Scalar(p) => match p {
+//                     Primitive::Float32 => {}
+//                 }
+//                 _=>unreachable!()
+//             }
+//         }
+//         _ => unreachable!(),
+//     }
+// }
 impl<T: IoTexel> Tex2dVar<T> {
     pub fn new(view: Tex2dView<'_, T>) -> Self {
         let node = RECORDER.with(|r| {
@@ -1515,13 +1582,14 @@ impl<T: IoTexel> Tex2dVar<T> {
     }
     pub fn read(&self, uv: impl Into<Expr<Uint2>>) -> Expr<T> {
         let uv = uv.into();
-        Expr::<T>::from_node(__current_scope(|b| {
-            b.call(Func::Texture2dRead, &[self.node, uv.node()], T::type_())
-        }))
+        T::convert_from_read(Expr::<T::RwType>::from_node(__current_scope(|b| {
+            b.call(Func::Texture2dRead, &[self.node, uv.node()], T::RwType::type_())
+        })))
     }
     pub fn write(&self, uv: impl Into<Expr<Uint2>>, v: impl Into<Expr<T>>) {
         let uv = uv.into();
         let v = v.into();
+        let v = T::convert_to_write(v);
         __current_scope(|b| {
             b.call(
                 Func::Texture2dWrite,
@@ -1564,13 +1632,14 @@ impl<T: IoTexel> Tex3dVar<T> {
     }
     pub fn read(&self, uv: impl Into<Expr<Uint3>>) -> Expr<T> {
         let uv = uv.into();
-        Expr::<T>::from_node(__current_scope(|b| {
-            b.call(Func::Texture3dRead, &[self.node, uv.node()], T::type_())
-        }))
+        T::convert_from_read(Expr::<T::RwType>::from_node(__current_scope(|b| {
+            b.call(Func::Texture3dRead, &[self.node, uv.node()], T::RwType::type_())
+        })))
     }
     pub fn write(&self, uv: impl Into<Expr<Uint3>>, v: impl Into<Expr<T>>) {
         let uv = uv.into();
         let v = v.into();
+        let v = T::convert_to_write(v);
         __current_scope(|b| {
             b.call(
                 Func::Texture3dWrite,
@@ -1717,9 +1786,9 @@ pub trait KernelParameter {
 }
 
 impl<T: Value, U> KernelParameter for U
-    where
-        U: ExprProxy<Value=T>,
-        T: Value<Expr=U>,
+where
+    U: ExprProxy<Value = T>,
+    T: Value<Expr = U>,
 {
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.uniform::<T>()
@@ -2566,7 +2635,7 @@ pub fn assert(cond: Expr<bool>) {
                     "assertion failed with host backtrace:\n {:?}",
                     backtrace
                 )
-                    .unwrap();
+                .unwrap();
             }
         });
         let _ = assert_fn.call(cond);

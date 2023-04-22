@@ -275,10 +275,10 @@ fn main() {
 
                     let pixel = origin
                         + make_float3(
-                            p.x() * f32::tan(0.5f32 * FOV),
-                            p.y() * f32::tan(0.5f32 * FOV),
-                            -1.0f32,
-                        );
+                        p.x() * f32::tan(0.5f32 * FOV),
+                        p.y() * f32::tan(0.5f32 * FOV),
+                        -1.0f32,
+                    );
                     let direction = (pixel - origin).normalize();
                     make_ray(origin, direction, 0.0f32.into(), f32::MAX.into())
                 };

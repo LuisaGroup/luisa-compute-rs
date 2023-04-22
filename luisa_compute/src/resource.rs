@@ -461,21 +461,35 @@ impl GetPixelFormat for u32 {
 // Type that can be converted from a pixel format
 // This is the type that is read from/written to a texture
 pub trait IoTexel: Value {
+    type RwType: Value;
     fn pixel_format(storage: PixelStorage) -> PixelFormat;
+    fn convert_from_read(texel: Expr<Self::RwType>) -> Expr<Self>;
+    fn convert_to_write(value: Expr<Self>) -> Expr<Self::RwType>;
 }
 
 macro_rules! impl_io_texel {
-    ($t:ty,$el:ty) => {
+    ($t:ty,$el:ty, $rw:ty, $cvt_from:expr, $cvt_to:expr) => {
         impl IoTexel for $t {
+            type RwType = $rw;
             fn pixel_format(storage: PixelStorage) -> PixelFormat {
                 <$el as GetPixelFormat>::pixel_format(storage)
+            }
+            fn convert_from_read(texel: Expr<Self::RwType>) -> Expr<Self> {
+                ($cvt_from)(texel)
+            }
+            fn convert_to_write(value: Expr<Self>) -> Expr<Self::RwType> {
+                ($cvt_to)(value)
             }
         }
     };
 }
-impl_io_texel!(f32, f32);
-impl_io_texel!(Float2, f32);
-impl_io_texel!(Float4, f32);
+impl_io_texel!(f32, f32, Float4, |x: Float4Expr| x.x(), |x| {
+    Float4Expr::splat(x)
+});
+impl_io_texel!(Float2, f32, Float4, |x: Float4Expr| x.xy(), |x:Float2Expr| {
+    make_float4(x.x(), x.y(), 0.0, 0.0)
+});
+impl_io_texel!(Float4, f32, Float4, |x: Float4Expr| x, |x:Float4Expr| x);
 
 // impl_io_texel!(u16,);
 // impl_io_texel!(i16,);
@@ -483,12 +497,25 @@ impl_io_texel!(Float4, f32);
 // impl_io_texel!(Short2,);
 // impl_io_texel!(Ushort4,);
 // impl_io_texel!(Short4,);
-impl_io_texel!(u32, u32);
-impl_io_texel!(i32, i32);
-impl_io_texel!(Uint2, u32);
-impl_io_texel!(Int2, i32);
-impl_io_texel!(Uint4, u32);
-impl_io_texel!(Int4, i32);
+impl_io_texel!(u32, u32, Uint4, |x: Uint4Expr| x.x(), |x| Uint4Expr::splat(
+    x
+));
+impl_io_texel!(i32, i32, Int4, |x: Int4Expr| x.x(), |x| Int4Expr::splat(x));
+impl_io_texel!(
+    Uint2,
+    u32,
+    Uint4,
+    |x: Uint4Expr| x.xy(),
+    |x:Uint2Expr| make_uint4(x.x(), x.y(), 0u32, 0u32)
+);
+impl_io_texel!(Int2, i32, Int4, |x: Int4Expr| x.xy(), |x:Int2Expr| make_int4(
+    x.x(),
+    x.y(),
+    0i32,
+    0i32
+));
+impl_io_texel!(Uint4, u32, Uint4, |x: Uint4Expr| x, |x| x);
+impl_io_texel!(Int4, i32, Int4, |x: Int4Expr| x, |x| x);
 
 // Types that is stored in a texture
 pub trait StorageTexel<T: IoTexel> {

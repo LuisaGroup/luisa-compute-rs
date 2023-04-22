@@ -220,7 +220,7 @@ mod test {
     fn rtx_layout() {
         use super::*;
         assert_eq!(std::mem::align_of::<Ray>(), 16);
-        assert_eq!(std::mem::size_of::<Hit>(), 20);
+        assert_eq!(std::mem::size_of::<Hit>(), 24);
         assert_eq!(std::mem::size_of::<Index>(), 12);
     }
 }

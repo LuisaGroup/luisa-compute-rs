@@ -2,6 +2,7 @@ use rand::Rng;
 use std::env::current_exe;
 use std::ops::Not;
 use std::time::Instant;
+use image::Rgb;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
@@ -169,7 +170,7 @@ v	 0.23  1.98  -0.22
 v	 0.23  1.98   0.16
 f -4 -3 -2 -1";
 
-const SPP_PER_DISPATCH: u32 = 64u32;
+const SPP_PER_DISPATCH: u32 = 32u32;
 
 fn main() {
     use luisa::*;
@@ -323,7 +324,9 @@ fn main() {
                 let radiance = var!(Float3);
                 radiance.store(make_float3(0.0f32, 0.0f32, 0.0f32));
 
-                for_range(const_(0i32)..const_(SPP_PER_DISPATCH as i32), |i| {
+                // for_range(const_(0i32)..const_(SPP_PER_DISPATCH as i32), |i| {
+                let loop_var = var!(u32);
+                while_!(loop_var.load().cmplt(SPP_PER_DISPATCH), {
                     let init_ray = generate_ray(pixel * make_float2(1.0f32, -1.0f32));
                     let ray = var!(Ray);
                     ray.store(init_ray);
@@ -343,9 +346,11 @@ fn main() {
                     let depth = var!(u32);
                     while_!(depth.load().cmplt(10u32), {
                         let hit = accel.trace_closest(ray);
+
                         if_!(!hit.valid(), {
                             break_();
                         });
+
                         let vertex_buffer = vertex_heap.var().buffer::<PackedFloat3>(hit.inst_id());
                         let triangle = index_heap
                             .var()
@@ -418,6 +423,7 @@ fn main() {
 
                         depth.store(depth.load() + 1)
                     });
+                    loop_var.store(loop_var.load() + 1u32);
                 });
                 radiance.store(radiance.load() / SPP_PER_DISPATCH as f32);
                 seed_image.write(coord, state.load());
@@ -488,7 +494,26 @@ fn main() {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 window_id,
-            } if window_id == window.id() => *control_flow = ControlFlow::Exit,
+            } if window_id == window.id() => {
+                let mut img_buffer = vec![[0u8; 4]; (img_w * img_h) as usize];
+                {
+                    let scope = device.default_stream().scope();
+                    scope
+                        .submit([
+                            display_img.view(0).copy_to_async(&mut img_buffer),
+                        ])
+                        .unwrap();
+                }
+                {
+                    let img = image::RgbImage::from_fn(img_w, img_h, |x, y| {
+                        let i = x + y * img_w;
+                        let px = img_buffer[i as usize];
+                        Rgb([px[0], px[1], px[2]])
+                    });
+                    img.save("cbox.png").unwrap();
+                }
+                *control_flow = ControlFlow::Exit
+            },
             Event::MainEventsCleared => {
                 window.request_redraw();
             }
@@ -522,4 +547,5 @@ fn main() {
             _ => (),
         }
     });
+
 }

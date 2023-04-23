@@ -77,7 +77,7 @@ impl Mesh {
 
 impl Accel {
     fn push_handle(&self, handle: Arc<MeshHandle>, transform: Mat4, visible: u8, opaque: bool) {
-        let mut flags = api::AccelBuildModificationFlags::PRIMITIVE;
+        let mut flags = api::AccelBuildModificationFlags::PRIMITIVE | AccelBuildModificationFlags::TRANSFORM;
 
         flags |= api::AccelBuildModificationFlags::VISIBILITY;
 
@@ -161,7 +161,7 @@ impl Accel {
                 instance_count: mesh_handles.len() as u32,
                 modifications: m.as_ptr(),
                 modifications_count: m.len(),
-                build_accel: true,
+                update_instance_buffer_only: false,
             }),
             resource_tracker: rt,
         }
@@ -220,14 +220,19 @@ mod test {
     fn rtx_layout() {
         use super::*;
         assert_eq!(std::mem::align_of::<Ray>(), 16);
+        assert_eq!(std::mem::size_of::<Ray>(), 32);
         assert_eq!(std::mem::size_of::<Hit>(), 24);
+        assert_eq!(std::mem::align_of::<Hit>(), 8);
         assert_eq!(std::mem::size_of::<Index>(), 12);
     }
 }
 
 impl HitExpr {
     pub fn valid(&self) -> Expr<bool> {
-        self.inst_id().cmpne(u32::MAX) & self.prim_id().cmpne(u32::MAX)
+        self.inst_id().cmpne(u32::MAX) //& self.prim_id().cmpne(u32::MAX)
+    }
+    pub fn miss(&self) -> Expr<bool> {
+        self.inst_id().cmpeq(u32::MAX)
     }
 }
 

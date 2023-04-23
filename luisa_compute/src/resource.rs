@@ -1093,27 +1093,25 @@ impl BindlessArrayVar {
             buffer_index: buffer_index.into(),
             _marker: std::marker::PhantomData,
         };
-        // let vt = v.__type();
-        // let expected = type_hash(&T::type_());
-        // if __env_need_backtrace() {
-        //     let backtrace = backtrace::Backtrace::new();
-        //     let check_type = CpuFn::new(move |t: &mut u64| {
-        //         if *t != expected {
-        //             {
-        //                 let mut stderr = std::io::stderr().lock();
-        //                 use std::io::Write;
-        //                 writeln!(stderr,
-        //                          "Bindless buffer type mismatch: expected hash {:?}, got {:?}; host backtrace:\n {:?}",
-        //                          expected, t, backtrace
-        //                 ).unwrap();
-        //             }
-        //             abort();
-        //         }
-        //     });
-        //     let _ = check_type.call(vt);
-        // } else {
-        //     assert(vt.cmpeq(expected));
-        // }
+        if __env_need_backtrace() {
+            let vt = v.__type();
+            let expected = type_hash(&T::type_());
+            let backtrace = backtrace::Backtrace::new();
+            let check_type = CpuFn::new(move |t: &mut u64| {
+                if *t != expected {
+                    {
+                        let mut stderr = std::io::stderr().lock();
+                        use std::io::Write;
+                        writeln!(stderr,
+                                 "Bindless buffer type mismatch: expected hash {:?}, got {:?}; host backtrace:\n {:?}",
+                                 expected, t, backtrace
+                        ).unwrap();
+                    }
+                    abort();
+                }
+            });
+            let _ = check_type.call(vt);
+        }
         v
     }
 

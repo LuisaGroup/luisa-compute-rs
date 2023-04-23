@@ -387,6 +387,10 @@ impl Swapchain {
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         self.handle.native_handle
     }
+    #[inline]
+    pub fn pixel_storage(&self) -> PixelStorage {
+        self.handle.pixel_storage
+    }
 }
 pub struct Stream {
     #[allow(dead_code)]

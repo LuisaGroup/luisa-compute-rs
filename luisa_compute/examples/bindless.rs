@@ -3,10 +3,24 @@ use std::{env::current_exe, path::PathBuf};
 use image::io::Reader as ImageReader;
 use luisa::*;
 use luisa_compute as luisa;
+
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    assert!(
+        args.len() <= 2,
+        "Usage: {} <backend>. <backend>: cpu, cuda, dx, metal, remote",
+        args[0]
+    );
+
     init_logger();
     let ctx = Context::new(current_exe().unwrap());
-    let device = ctx.create_device("cpu").unwrap();
+    let device = ctx
+        .create_device(if args.len() == 2 {
+            args[1].as_str()
+        } else {
+            "cpu"
+        })
+        .unwrap();
     let x = device.create_buffer::<f32>(1024).unwrap();
     let y = device.create_buffer::<f32>(1024).unwrap();
     let z = device.create_buffer::<f32>(1024).unwrap();
@@ -50,7 +64,7 @@ fn main() {
     bindless.emplace_tex2d_async(0, &img, Sampler::default());
     bindless.update();
     let kernel = device
-        .create_kernel::<(BufferView<f32>,)>(&|buf_z| {
+        .create_kernel::<(BufferView<f32>, )>(&|buf_z| {
             let bindless = bindless.var();
             let tid = dispatch_id().x();
             let buf_x = bindless.buffer::<f32>(Uint::from(0));

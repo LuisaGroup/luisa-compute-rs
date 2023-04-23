@@ -201,7 +201,7 @@ fn main() {
         },
         |p| tobj::load_mtl(p),
     )
-    .unwrap();
+        .unwrap();
 
     let vertex_heap = device.create_bindless_array(65536).unwrap();
     let index_heap = device.create_bindless_array(65536).unwrap();
@@ -453,9 +453,6 @@ fn main() {
         .unwrap();
     let img_w = 1024;
     let img_h = 1024;
-    let display_img = device
-        .create_tex2d::<Float4>(PixelStorage::Byte4, img_w, img_h, 1)
-        .unwrap();
     let acc_img = device
         .create_tex2d::<Float4>(PixelStorage::Float4, img_w, img_h, 1)
         .unwrap();
@@ -483,17 +480,21 @@ fn main() {
             img_w,
             img_h,
             false,
-            true,
+            false,
             3,
         )
         .unwrap();
+    let display_img = device
+        .create_tex2d::<Float4>(swapchain.pixel_storage(), img_w, img_h, 1)
+        .unwrap();
     event_loop.run(move |event, _, control_flow| {
-        control_flow.set_wait();
+        control_flow.set_poll();
         match event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 window_id,
             } if window_id == window.id() => {
+                // FIXME: support half4 pixel storage
                 let mut img_buffer = vec![[0u8; 4]; (img_w * img_h) as usize];
                 {
                     let scope = device.default_stream().scope();
@@ -512,7 +513,7 @@ fn main() {
                     img.save("cbox.png").unwrap();
                 }
                 *control_flow = ControlFlow::Exit
-            },
+            }
             Event::MainEventsCleared => {
                 window.request_redraw();
             }
@@ -546,5 +547,4 @@ fn main() {
             _ => (),
         }
     });
-
 }

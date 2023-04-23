@@ -1111,6 +1111,9 @@ impl BindlessArrayVar {
                 }
             });
             let _ = check_type.call(vt);
+        } else if is_cpu_backend() {
+            let expected = type_hash(&T::type_());
+            assert(v.__type().cmpeq(expected));
         }
         v
     }

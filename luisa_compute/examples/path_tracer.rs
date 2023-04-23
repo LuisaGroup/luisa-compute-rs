@@ -1,14 +1,14 @@
+use image::Rgb;
 use rand::Rng;
 use std::env::current_exe;
 use std::ops::Not;
 use std::time::Instant;
-use image::Rgb;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 #[allow(unused_imports)]
 use luisa::prelude::*;
-use luisa::rtx::{Accel, Ray, Index, offset_ray_origin, AccelVar};
+use luisa::rtx::{offset_ray_origin, Accel, AccelVar, Index, Ray};
 use luisa::{Expr, Float3, Value};
 use luisa_compute as luisa;
 
@@ -201,7 +201,7 @@ fn main() {
         },
         |p| tobj::load_mtl(p),
     )
-        .unwrap();
+    .unwrap();
 
     let vertex_heap = device.create_bindless_array(65536).unwrap();
     let index_heap = device.create_bindless_array(65536).unwrap();
@@ -222,10 +222,7 @@ fn main() {
         let index_buffer = device
             .create_buffer_from_slice(unsafe {
                 let index_ptr = model.mesh.indices.as_ptr();
-                std::slice::from_raw_parts(
-                    index_ptr as *const Index,
-                    model.mesh.indices.len() / 3,
-                )
+                std::slice::from_raw_parts(index_ptr as *const Index, model.mesh.indices.len() / 3)
             })
             .unwrap();
         let mesh = device
@@ -243,18 +240,7 @@ fn main() {
         accel.push_mesh(&mesh, glam::Mat4::IDENTITY.into(), u8::MAX, true);
     }
     accel.build(AccelBuildRequest::ForceBuild);
-    let cbox_materials = device
-        .create_buffer_from_slice::<Float3>(&[
-            Float3::new(0.725f32, 0.710f32, 0.680f32), // floor
-            Float3::new(0.725f32, 0.710f32, 0.680f32), // ceiling
-            Float3::new(0.725f32, 0.710f32, 0.680f32), // back wall
-            Float3::new(0.140f32, 0.450f32, 0.091f32), // right wall
-            Float3::new(0.630f32, 0.065f32, 0.050f32), // left wall
-            Float3::new(0.725f32, 0.710f32, 0.680f32), // short box
-            Float3::new(0.725f32, 0.710f32, 0.680f32), // tall box
-            Float3::new(0.000f32, 0.000f32, 0.000f32), // light
-        ])
-        .unwrap();
+
     // use create_kernel_async to compile multiple kernels in parallel
     let path_tracer = device
         .create_kernel_async::<(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>(
@@ -263,8 +249,16 @@ fn main() {
               accel: AccelVar,
               resolution: Expr<Uint2>| {
                 set_block_size([16u32, 16u32, 1u32]);
-
-                let cbox_materials = cbox_materials.var();
+                let cbox_materials = const_([
+                        Float3::new(0.725f32, 0.710f32, 0.680f32), // floor
+                        Float3::new(0.725f32, 0.710f32, 0.680f32), // ceiling
+                        Float3::new(0.725f32, 0.710f32, 0.680f32), // back wall
+                        Float3::new(0.140f32, 0.450f32, 0.091f32), // right wall
+                        Float3::new(0.630f32, 0.065f32, 0.050f32), // left wall
+                        Float3::new(0.725f32, 0.710f32, 0.680f32), // short box
+                        Float3::new(0.725f32, 0.710f32, 0.680f32), // tall box
+                        Float3::new(0.000f32, 0.000f32, 0.000f32), // light
+                    ]);
 
                 let lcg = |state: Var<u32>| -> Expr<f32> {
                     const LCG_A: u32 = 1664525u32;
@@ -324,9 +318,7 @@ fn main() {
                 let radiance = var!(Float3);
                 radiance.store(make_float3(0.0f32, 0.0f32, 0.0f32));
 
-                // for_range(const_(0i32)..const_(SPP_PER_DISPATCH as i32), |i| {
-                let loop_var = var!(u32);
-                while_!(loop_var.load().cmplt(SPP_PER_DISPATCH), {
+                for_range(const_(0i32)..const_(SPP_PER_DISPATCH as i32), |_| {
                     let init_ray = generate_ray(pixel * make_float2(1.0f32, -1.0f32));
                     let ray = var!(Ray);
                     ray.store(init_ray);
@@ -423,7 +415,6 @@ fn main() {
 
                         depth.store(depth.load() + 1)
                     });
-                    loop_var.store(loop_var.load() + 1u32);
                 });
                 radiance.store(radiance.load() / SPP_PER_DISPATCH as f32);
                 seed_image.write(coord, state.load());
@@ -499,9 +490,7 @@ fn main() {
                 {
                     let scope = device.default_stream().scope();
                     scope
-                        .submit([
-                            display_img.view(0).copy_to_async(&mut img_buffer),
-                        ])
+                        .submit([display_img.view(0).copy_to_async(&mut img_buffer)])
                         .unwrap();
                 }
                 {

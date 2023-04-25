@@ -391,7 +391,9 @@ impl BindlessArray {
 }
 pub use api::{PixelFormat, PixelStorage, Sampler, SamplerAddress, SamplerFilter};
 use luisa_compute_ir::context::type_hash;
-use luisa_compute_ir::ir::{Binding, BindlessArrayBinding, BufferBinding, Func, Instruction, new_node, Node, TextureBinding};
+use luisa_compute_ir::ir::{
+    new_node, Binding, BindlessArrayBinding, BufferBinding, Func, Instruction, Node, TextureBinding,
+};
 
 pub(crate) struct TextureHandle {
     pub(crate) device: Device,
@@ -488,10 +490,14 @@ macro_rules! impl_io_texel {
 impl_io_texel!(f32, f32, Float4, |x: Float4Expr| x.x(), |x| {
     Float4Expr::splat(x)
 });
-impl_io_texel!(Float2, f32, Float4, |x: Float4Expr| x.xy(), |x:Float2Expr| {
-    make_float4(x.x(), x.y(), 0.0, 0.0)
-});
-impl_io_texel!(Float4, f32, Float4, |x: Float4Expr| x, |x:Float4Expr| x);
+impl_io_texel!(
+    Float2,
+    f32,
+    Float4,
+    |x: Float4Expr| x.xy(),
+    |x: Float2Expr| { make_float4(x.x(), x.y(), 0.0, 0.0) }
+);
+impl_io_texel!(Float4, f32, Float4, |x: Float4Expr| x, |x: Float4Expr| x);
 
 // impl_io_texel!(u16,);
 // impl_io_texel!(i16,);
@@ -503,19 +509,12 @@ impl_io_texel!(u32, u32, Uint4, |x: Uint4Expr| x.x(), |x| Uint4Expr::splat(
     x
 ));
 impl_io_texel!(i32, i32, Int4, |x: Int4Expr| x.x(), |x| Int4Expr::splat(x));
-impl_io_texel!(
-    Uint2,
-    u32,
-    Uint4,
-    |x: Uint4Expr| x.xy(),
-    |x:Uint2Expr| make_uint4(x.x(), x.y(), 0u32, 0u32)
-);
-impl_io_texel!(Int2, i32, Int4, |x: Int4Expr| x.xy(), |x:Int2Expr| make_int4(
-    x.x(),
-    x.y(),
-    0i32,
-    0i32
-));
+impl_io_texel!(Uint2, u32, Uint4, |x: Uint4Expr| x.xy(), |x: Uint2Expr| {
+    make_uint4(x.x(), x.y(), 0u32, 0u32)
+});
+impl_io_texel!(Int2, i32, Int4, |x: Int4Expr| x.xy(), |x: Int2Expr| {
+    make_int4(x.x(), x.y(), 0i32, 0i32)
+});
 impl_io_texel!(Uint4, u32, Uint4, |x: Uint4Expr| x, |x| x);
 impl_io_texel!(Int4, i32, Int4, |x: Int4Expr| x, |x| x);
 
@@ -562,10 +561,10 @@ impl_storage_texel!([i16; 2], Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uin
 impl_storage_texel!([i16; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
 impl_storage_texel!(u32, Int1, i32, u32, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
-impl_storage_texel!(Uint2, Int2, i32, u32,f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
-impl_storage_texel!(Uint4, Int4, i32, u32,f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
-impl_storage_texel!([u32; 2], Byte2, i32, u32,f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
-impl_storage_texel!([u32; 4], Byte4, i32, u32,f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Uint2, Int2, i32, u32, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!(Uint4, Int4, i32, u32, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([u32; 2], Byte2, i32, u32, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
+impl_storage_texel!([u32; 4], Byte4, i32, u32, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
 impl_storage_texel!(i32, Int1, i32, u32, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 impl_storage_texel!(Int2, Int2, i32, u32, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
@@ -588,6 +587,8 @@ impl_storage_texel!([f16; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uin
 // `T` is the read out type of the texture, which is not necessarily the same as the storage type
 // In fact, the texture can be stored in any format as long as it can be converted to `T`
 pub struct Tex2d<T: IoTexel> {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
 }
@@ -595,6 +596,9 @@ pub struct Tex2d<T: IoTexel> {
 // `T` is the read out type of the texture, which is not necessarily the same as the storage type
 // In fact, the texture can be stored in any format as long as it can be converted to `T`
 pub struct Tex3d<T: IoTexel> {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) depth: u32,
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
 }
@@ -829,6 +833,15 @@ impl<T: IoTexel> Tex2d<T> {
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         self.handle.native_handle
     }
+    pub fn width(&self) -> u32 {
+        self.handle.width
+    }
+    pub fn height(&self) -> u32 {
+        self.handle.height
+    }
+    pub fn format(&self) -> PixelFormat {
+        self.handle.format
+    }
 }
 impl<T: IoTexel> Tex3d<T> {
     pub fn view(&self, level: u32) -> Tex3dView<T> {
@@ -837,9 +850,19 @@ impl<T: IoTexel> Tex3d<T> {
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         self.handle.native_handle
     }
+    pub fn width(&self) -> u32 {
+        self.handle.width
+    }
+    pub fn height(&self) -> u32 {
+        self.handle.height
+    }
+    pub fn depth(&self) -> u32 {
+        self.handle.depth
+    }
+    pub fn format(&self) -> PixelFormat {
+        self.handle.format
+    }
 }
-
-
 
 pub struct BufferVar<T: Value> {
     pub(crate) marker: std::marker::PhantomData<T>,

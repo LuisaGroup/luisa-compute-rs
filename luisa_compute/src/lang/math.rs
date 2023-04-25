@@ -844,6 +844,13 @@ macro_rules! impl_arith_binop_for_mat {
                 }))
             }
         }
+        impl $proxy {
+            pub fn comp_mul(&self, other:Self)->Self {
+                <$proxy>::from_node(__current_scope(|s| {
+                    s.call(Func::MatCompMul, &[self.node, other.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
     }
 }
 macro_rules! impl_int_binop {

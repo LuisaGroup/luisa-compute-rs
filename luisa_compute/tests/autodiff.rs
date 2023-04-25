@@ -501,6 +501,54 @@ fn autodiff_matmul_2() {
     });
 }
 #[test]
+fn autodiff_matmul_4() {
+    autodiff_helper(-2.0..2.0, 1024 * 1024, 12, |inputs| {
+        let ax = inputs[0];
+        let ay = inputs[1];
+        let az = inputs[2];
+        let a = make_float3(ax, ay, az);
+        let bx = inputs[0 + 3];
+        let by = inputs[1 + 3];
+        let bz = inputs[2 + 3];
+        let b = make_float3(bx, by, bz);
+        let cx = inputs[0 + 6];
+        let cy = inputs[1 + 6];
+        let cz = inputs[2 + 6];
+        let c = make_float3(cx, cy, cz);
+        let dx = inputs[0 + 9];
+        let dy = inputs[1 + 9];
+        let dz = inputs[2 + 9];
+        let d = make_float3(dx, dy, dz);
+        let m = Mat3Expr::new(a, b, c);
+        let o = (m * m) * d;
+        o.z()
+    });
+}
+#[test]
+fn autodiff_matmul_5() {
+    autodiff_helper(-2.0..2.0, 1024 * 1024, 12, |inputs| {
+        let ax = inputs[0];
+        let ay = inputs[1];
+        let az = inputs[2];
+        let a = make_float3(ax, ay, az);
+        let bx = inputs[0 + 3];
+        let by = inputs[1 + 3];
+        let bz = inputs[2 + 3];
+        let b = make_float3(bx, by, bz);
+        let cx = inputs[0 + 6];
+        let cy = inputs[1 + 6];
+        let cz = inputs[2 + 6];
+        let c = make_float3(cx, cy, cz);
+        let dx = inputs[0 + 9];
+        let dy = inputs[1 + 9];
+        let dz = inputs[2 + 9];
+        let d = make_float3(dx, dy, dz);
+        let m = Mat3Expr::new(a, b, c);
+        let o = m.comp_mul(m) * d;
+        o.z()
+    });
+}
+#[test]
 fn autodiff_mat_det() {
     autodiff_helper(-2.0..2.0, 1024 * 1024, 9, |inputs| {
         let ax = inputs[0];

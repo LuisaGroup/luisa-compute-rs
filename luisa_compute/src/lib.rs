@@ -69,6 +69,8 @@ impl Context {
     // if the current_exe() is in the same directory as libluisa-*, then passing current_exe() is enough
     pub fn new(lib_path: impl AsRef<Path>) -> Self {
         let mut lib_path = lib_path.as_ref().to_path_buf();
+        lib_path = lib_path.canonicalize().unwrap();
+        dbg!(lib_path.as_path());
         if lib_path.is_file() {
             lib_path = lib_path.parent().unwrap().to_path_buf();
         }

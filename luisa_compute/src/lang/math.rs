@@ -756,6 +756,60 @@ macro_rules! impl_binop {
         }
     };
 }
+macro_rules! impl_binop_for_mat {
+    ($t:ty, $scalar:ty, $proxy:ty, $tr:ident, $m:ident, $tr_assign:ident, $m_assign:ident) => {
+        impl std::ops::$tr_assign<$proxy> for $proxy {
+            fn $m_assign(&mut self, rhs: $proxy) {
+                use std::ops::$tr;
+                *self = (*self).$m(rhs);
+            }
+        }
+        impl std::ops::$tr for $proxy {
+            type Output = $proxy;
+            fn $m(self, rhs: $proxy) -> Self::Output {
+                <$proxy>::from_node(__current_scope(|s| {
+                    s.call(Func::$tr, &[self.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+        impl std::ops::$tr<$scalar> for $proxy {
+            type Output = $proxy;
+            fn $m(self, rhs: $scalar) -> Self::Output {
+                let rhs = Self::fill(rhs);
+                <$proxy>::from_node(__current_scope(|s| {
+                    s.call(Func::$tr, &[self.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+        impl std::ops::$tr<$proxy> for $scalar {
+            type Output = $proxy;
+            fn $m(self, rhs: $proxy) -> Self::Output {
+                let lhs = <$proxy>::fill(self);
+                <$proxy>::from_node(__current_scope(|s| {
+                    s.call(Func::$tr, &[lhs.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+        impl std::ops::$tr<PrimExpr<$scalar>> for $proxy {
+            type Output = $proxy;
+            fn $m(self, rhs: PrimExpr<$scalar>) -> Self::Output {
+                let rhs = Self::fill(rhs);
+                <$proxy>::from_node(__current_scope(|s| {
+                    s.call(Func::$tr, &[self.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+        impl std::ops::$tr<$proxy> for PrimExpr<$scalar> {
+            type Output = $proxy;
+            fn $m(self, rhs: $proxy) -> Self::Output {
+                let lhs = <$proxy>::fill(self);
+                <$proxy>::from_node(__current_scope(|s| {
+                    s.call(Func::$tr, &[lhs.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+    }
+}
 macro_rules! impl_arith_binop {
     ($t:ty, $scalar:ty, $proxy:ty) => {
         impl_common_op!($t, $scalar, $proxy);
@@ -774,6 +828,23 @@ macro_rules! impl_arith_binop {
             }
         }
     };
+}
+macro_rules! impl_arith_binop_for_mat {
+    ($t:ty, $scalar:ty, $proxy:ty) => {
+        impl_binop_for_mat!($t, $scalar, $proxy, Add, add, AddAssign, add_assign);
+        impl_binop_for_mat!($t, $scalar, $proxy, Sub, sub, SubAssign, sub_assign);
+        impl_binop_for_mat!($t, $scalar, $proxy, Mul, mul, MulAssign, mul_assign);
+        impl_binop_for_mat!($t, $scalar, $proxy, Div, div, DivAssign, div_assign);
+        impl_binop_for_mat!($t, $scalar, $proxy, Rem, rem, RemAssign, rem_assign);
+        impl std::ops::Neg for $proxy {
+            type Output = $proxy;
+            fn neg(self) -> Self::Output {
+                <$proxy>::from_node(__current_scope(|s| {
+                    s.call(Func::Neg, &[self.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+    }
 }
 macro_rules! impl_int_binop {
     ($t:ty, $scalar:ty, $proxy:ty) => {
@@ -1340,6 +1411,9 @@ impl Mul<Float2Expr> for Mat2Expr {
     }
 }
 impl Mat2Expr {
+    pub fn fill(e: impl Into<Expr<f32>> + Copy) -> Self {
+        Self::new(make_float2(e, e), make_float2(e, e))
+    }
     pub fn eye(e: Expr<Float2>) -> Self {
         Self::new(make_float2(e.x(), 0.0), make_float2(0.0, e.y()))
     }
@@ -1359,6 +1433,7 @@ impl Mat2Expr {
         }))
     }
 }
+impl_arith_binop_for_mat!(Mat2, f32, Mat2Expr);
 impl Mul<Float3Expr> for Mat3Expr {
     type Output = Float3Expr;
     #[inline]
@@ -1373,6 +1448,13 @@ impl Mul<Float3Expr> for Mat3Expr {
     }
 }
 impl Mat3Expr {
+    pub fn fill(e: impl Into<PrimExpr<f32>> + Copy) -> Self {
+        Self::new(
+            make_float3(e, e, e),
+            make_float3(e, e, e),
+            make_float3(e, e, e),
+        )
+    }
     pub fn eye(e: Expr<Float3>) -> Self {
         Self::new(
             make_float3(e.x(), 0.0, 0.0),
@@ -1409,88 +1491,16 @@ impl Mul<Float4Expr> for Mat4Expr {
         }))
     }
 }
-impl Add for Mat2Expr {
-    type Output = Self;
-    #[inline]
-    fn add(self, rhs: Self) -> Self::Output {
-        Self::from_node(__current_scope(|s| {
-            s.call(Func::Add, &[self.node, rhs.node], <Mat2 as TypeOf>::type_())
-        }))
-    }
-}
-impl Add for Mat3Expr {
-    type Output = Self;
-    #[inline]
-    fn add(self, rhs: Self) -> Self::Output {
-        Self::from_node(__current_scope(|s| {
-            s.call(Func::Add, &[self.node, rhs.node], <Mat3 as TypeOf>::type_())
-        }))
-    }
-}
-impl Add for Mat4Expr {
-    type Output = Self;
-    #[inline]
-    fn add(self, rhs: Self) -> Self::Output {
-        Self::from_node(__current_scope(|s| {
-            s.call(Func::Add, &[self.node, rhs.node], <Mat4 as TypeOf>::type_())
-        }))
-    }
-}
-impl Sub for Mat2Expr {
-    type Output = Self;
-    #[inline]
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self::from_node(__current_scope(|s| {
-            s.call(Func::Sub, &[self.node, rhs.node], <Mat2 as TypeOf>::type_())
-        }))
-    }
-}
-impl Sub for Mat3Expr {
-    type Output = Self;
-    #[inline]
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self::from_node(__current_scope(|s| {
-            s.call(Func::Sub, &[self.node, rhs.node], <Mat3 as TypeOf>::type_())
-        }))
-    }
-}
-impl Sub for Mat4Expr {
-    type Output = Self;
-    #[inline]
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self::from_node(__current_scope(|s| {
-            s.call(Func::Sub, &[self.node, rhs.node], <Mat4 as TypeOf>::type_())
-        }))
-    }
-}
-impl Mul for Mat2Expr {
-    type Output = Self;
-    #[inline]
-    fn mul(self, rhs: Self) -> Self::Output {
-        Self::from_node(__current_scope(|s| {
-            s.call(Func::Mul, &[self.node, rhs.node], <Mat2 as TypeOf>::type_())
-        }))
-    }
-}
-impl Mul for Mat3Expr {
-    type Output = Self;
-    #[inline]
-    fn mul(self, rhs: Self) -> Self::Output {
-        Self::from_node(__current_scope(|s| {
-            s.call(Func::Mul, &[self.node, rhs.node], <Mat3 as TypeOf>::type_())
-        }))
-    }
-}
-impl Mul for Mat4Expr {
-    type Output = Self;
-    #[inline]
-    fn mul(self, rhs: Self) -> Self::Output {
-        Self::from_node(__current_scope(|s| {
-            s.call(Func::Mul, &[self.node, rhs.node], <Mat4 as TypeOf>::type_())
-        }))
-    }
-}
+impl_arith_binop_for_mat!(Mat3, f32, Mat3Expr);
 impl Mat4Expr {
+    pub fn fill(e: impl Into<PrimExpr<f32>> + Copy) -> Self {
+        Self::new(
+            make_float4(e, e, e, e),
+            make_float4(e, e, e, e),
+            make_float4(e, e, e, e),
+            make_float4(e, e, e, e),
+        )
+    }
     pub fn eye(e: Expr<Float4>) -> Self {
         Self::new(
             make_float4(e.x(), 0.0, 0.0, 0.0),
@@ -1515,6 +1525,7 @@ impl Mat4Expr {
         }))
     }
 }
+impl_arith_binop_for_mat!(Mat4, f32, Mat4Expr);
 #[inline]
 pub fn make_float2<X: Into<PrimExpr<f32>>, Y: Into<PrimExpr<f32>>>(x: X, y: Y) -> Expr<Float2> {
     Expr::<Float2>::new(x.into(), y.into())
@@ -1540,6 +1551,32 @@ pub fn make_float4<
     w: W,
 ) -> Expr<Float4> {
     Expr::<Float4>::new(x.into(), y.into(), z.into(), w.into())
+}
+#[inline]
+pub fn make_float2x2<X: Into<Expr<Float2>>, Y: Into<Expr<Float2>>>(x: X, y: Y) -> Expr<Mat2> {
+    Expr::<Mat2>::new(x.into(), y.into())
+}
+#[inline]
+pub fn make_float3x3<X: Into<Expr<Float3>>, Y: Into<Expr<Float3>>, Z: Into<Expr<Float3>>>(
+    x: X,
+    y: Y,
+    z: Z,
+) -> Expr<Mat3> {
+    Expr::<Mat3>::new(x.into(), y.into(), z.into())
+}
+#[inline]
+pub fn make_float4x4<
+    X: Into<Expr<Float4>>,
+    Y: Into<Expr<Float4>>,
+    Z: Into<Expr<Float4>>,
+    W: Into<Expr<Float4>>,
+>(
+    x: X,
+    y: Y,
+    z: Z,
+    w: W,
+) -> Expr<Mat4> {
+    Expr::<Mat4>::new(x.into(), y.into(), z.into(), w.into())
 }
 
 #[inline]

@@ -1,7 +1,6 @@
 use image::Rgb;
 use rand::Rng;
 use std::env::current_exe;
-use std::ops::Not;
 use std::time::Instant;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};

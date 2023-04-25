@@ -194,6 +194,8 @@ impl Device {
             storage: format.storage(),
         });
         let tex = Tex2d {
+            width,
+            height,
             handle,
             marker: std::marker::PhantomData {},
         };
@@ -223,6 +225,9 @@ impl Device {
             storage: format.storage(),
         });
         let tex = Tex3d {
+            width,
+            height,
+            depth,
             handle,
             marker: std::marker::PhantomData {},
         };

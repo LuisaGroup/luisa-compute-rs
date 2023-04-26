@@ -1,11 +1,15 @@
-use std::env::current_exe;
+use std::{env::current_exe, time::Instant};
 
 use luisa::init_logger;
 #[allow(unused_imports)]
 use luisa::prelude::*;
 use luisa::*;
 use luisa_compute as luisa;
-use winit::event_loop::EventLoop;
+use rand::Rng;
+use winit::{
+    event::{Event, WindowEvent},
+    event_loop::{EventLoop, ControlFlow},
+};
 
 const N_GRID: usize = 128;
 const N_STEPS: usize = 50;
@@ -39,10 +43,33 @@ fn main() {
             "cpu"
         })
         .unwrap();
-    let x = device.create_buffer::<Float2>(N_PARTICLES).unwrap();
-    let v = device.create_buffer::<Float2>(N_PARTICLES).unwrap();
-    let C = device.create_buffer::<Mat2>(N_PARTICLES).unwrap();
-    let J = device.create_buffer::<f32>(N_PARTICLES).unwrap();
+
+    let mut rng = rand::thread_rng();
+    let x = device
+        .create_buffer_from_slice(
+            (0..N_PARTICLES)
+                .map(|_| {
+                    let rx: f32 = rng.gen();
+                    let ry: f32 = rng.gen();
+                    Float2::new(rx * 0.4f32 + 0.2f32, ry * 0.4f32 + 0.2f32)
+                })
+                .collect::<Vec<_>>()
+                .as_slice(),
+        )
+        .unwrap();
+    let v = device
+        .create_buffer_from_slice(&[Float2::new(0.0f32, -1.0f32); N_PARTICLES])
+        .unwrap();
+    let C = device
+        .create_buffer_from_slice(
+            &[Mat2 {
+                cols: [Float2::new(0.0f32, 0.0f32); 2],
+            }; N_PARTICLES],
+        )
+        .unwrap();
+    let J = device
+        .create_buffer_from_slice(&[1.0f32; N_PARTICLES])
+        .unwrap();
     let grid_v = device.create_buffer::<f32>(N_GRID * N_GRID * 2).unwrap();
     let grid_m = device.create_buffer::<f32>(N_GRID * N_GRID).unwrap();
 
@@ -215,4 +242,40 @@ fn main() {
             }
         })
         .unwrap();
+    event_loop.run(move |event, _, control_flow| {
+        control_flow.set_poll();
+        match event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                window_id,
+            } if window_id == window.id() => {
+                *control_flow = ControlFlow::Exit;
+            }
+            Event::MainEventsCleared => {
+                window.request_redraw();
+            }
+            Event::RedrawRequested(_) => {
+                let tic = Instant::now();
+                {
+                    let scope = device.default_stream().scope();
+                    scope.present(&swapchain, &display).unwrap();
+                    let mut commands = Vec::new();
+                    for _ in 0 .. N_STEPS {
+                        commands.push(clear_grid.dispatch_async([N_GRID as u32, N_GRID as u32, 1]));
+                        commands.push(point_to_grid.dispatch_async([N_PARTICLES as u32, 1, 1]));
+                        commands.push(simulate_grid.dispatch_async([N_GRID as u32, N_GRID as u32, 1]));
+                        commands.push(grid_to_point.dispatch_async([N_PARTICLES as u32, 1, 1]));
+                    }
+                    commands.push(clear_display.dispatch_async([RESOLUTION as u32, RESOLUTION as u32, 1]));
+                    commands.push(draw_particles.dispatch_async([N_PARTICLES as u32, 1, 1]));
+                    scope.submit(commands).unwrap();
+                }
+                let toc = Instant::now();
+                let elapsed = (toc - tic).as_secs_f32();
+                log::info!("time: {}ms", elapsed * 1e3);
+                window.request_redraw();
+            }
+            _ => (),
+        }
+    });
 }

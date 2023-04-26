@@ -834,8 +834,22 @@ macro_rules! impl_arith_binop_for_mat {
         impl_binop_for_mat!($t, $scalar, $proxy, Add, add, AddAssign, add_assign);
         impl_binop_for_mat!($t, $scalar, $proxy, Sub, sub, SubAssign, sub_assign);
         impl_binop_for_mat!($t, $scalar, $proxy, Mul, mul, MulAssign, mul_assign);
-        impl_binop_for_mat!($t, $scalar, $proxy, Div, div, DivAssign, div_assign);
         impl_binop_for_mat!($t, $scalar, $proxy, Rem, rem, RemAssign, rem_assign);
+        impl std::ops::DivAssign<$scalar> for $proxy {
+            fn div_assign(&mut self, rhs: $scalar) {
+                use std::ops::Div;
+                *self = (*self).div(rhs);
+            }
+        }
+        impl std::ops::Div<$scalar> for $proxy {
+            type Output = $proxy;
+            fn div(self, rhs: $scalar) -> Self::Output {
+                let rhs: PrimExpr::<$scalar> = rhs.into();
+                <$proxy>::from_node(__current_scope(|s| {
+                    s.call(Func::Div, &[self.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
         impl std::ops::Neg for $proxy {
             type Output = $proxy;
             fn neg(self) -> Self::Output {

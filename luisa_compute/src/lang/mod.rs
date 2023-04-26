@@ -1196,7 +1196,7 @@ impl Default for KernelBuildOptions {
             enable_optimization: true,
             async_compile: false,
             enable_cache: true,
-            enable_fast_math: false,
+            enable_fast_math: true,
         }
     }
 }

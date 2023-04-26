@@ -44,7 +44,7 @@ pub use runtime::*;
 pub mod macros {
     pub use crate::{cpu_dbg, lc_dbg, lc_assert, if_, impl_polymorphic, var, while_};
 }
-
+pub use backend::{Result, BackendError, BackendErrorKind};
 use lazy_static::lazy_static;
 pub use luisa_compute_sys as sys;
 use parking_lot::Mutex;

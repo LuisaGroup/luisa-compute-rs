@@ -312,10 +312,10 @@ macro_rules! lc_dbg {
 #[macro_export]
 macro_rules! lc_assert {
     ($arg:expr) => {
-        assert($arg, stringify!($arg), file!(), line!(), column!())
+        __assert($arg, stringify!($arg), file!(), line!(), column!())
     };
     ($arg:expr, $msg:expr) => {
-        assert($arg, $msg, file!(), line!(), column!())
+        __assert($arg, $msg, file!(), line!(), column!())
     };
 }
 pub fn __cpu_dbg<T: ExprProxy>(arg: T, file: &'static str, line: u32)
@@ -1106,10 +1106,10 @@ impl KernelBuilder {
         &mut self,
         options: KernelBuildOptions,
         body: impl FnOnce(&mut Self),
-    ) -> Result<crate::runtime::RawKernel, crate::backend::BackendError> {
+    ) -> Result<crate::runtime::RawKernel> {
         body(self);
         RECORDER.with(
-            |r| -> Result<crate::runtime::RawKernel, crate::backend::BackendError> {
+            |r| -> Result<crate::runtime::RawKernel> {
                 let mut resource_tracker = ResourceTracker::new();
                 let mut r = r.borrow_mut();
                 assert!(r.lock);
@@ -1206,7 +1206,7 @@ pub trait KernelBuildFn {
         &self,
         builder: &mut KernelBuilder,
         options: KernelBuildOptions,
-    ) -> Result<crate::runtime::RawKernel, crate::backend::BackendError>;
+    ) -> Result<crate::runtime::RawKernel>;
     fn build_callable(&self, builder: &mut KernelBuilder) -> CallableModuleRef;
 }
 
@@ -1221,8 +1221,8 @@ pub trait KernelSignature<'a> {
     type Kernel;
 
     fn wrap_raw_kernel(
-        kernel: Result<crate::runtime::RawKernel, crate::backend::BackendError>,
-    ) -> Result<Self::Kernel, crate::backend::BackendError>;
+        kernel: Result<crate::runtime::RawKernel>,
+    ) -> Result<Self::Kernel>;
 }
 macro_rules! impl_callable_signature {
     ()=>{
@@ -1257,7 +1257,7 @@ macro_rules! impl_kernel_signature {
         impl<'a> KernelSignature<'a> for () {
             type Fn = &'a dyn Fn();
             type Kernel = Kernel<()>;
-            fn wrap_raw_kernel(kernel: Result<crate::runtime::RawKernel, crate::backend::BackendError>) -> Result<Self::Kernel, crate::backend::BackendError> {
+            fn wrap_raw_kernel(kernel: Result<crate::runtime::RawKernel>) -> Result<Self::Kernel> {
                 Ok(Self::Kernel{
                     inner:kernel?,
                     _marker:std::marker::PhantomData,
@@ -1269,7 +1269,7 @@ macro_rules! impl_kernel_signature {
         impl<'a, $first:KernelArg +'static, $($rest: KernelArg +'static),*> KernelSignature<'a> for ($first, $($rest,)*) {
             type Fn = &'a dyn Fn($first::Parameter, $($rest::Parameter),*);
             type Kernel = Kernel<($first, $($rest,)*)>;
-            fn wrap_raw_kernel(kernel: Result<crate::runtime::RawKernel, crate::backend::BackendError>) -> Result<Self::Kernel, crate::backend::BackendError> {
+            fn wrap_raw_kernel(kernel: Result<crate::runtime::RawKernel>) -> Result<Self::Kernel> {
                 Ok(Self::Kernel{
                     inner:kernel?,
                     _marker:std::marker::PhantomData,
@@ -1284,7 +1284,7 @@ impl_kernel_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 macro_rules! impl_kernel_build_for_fn {
     ()=>{
         impl KernelBuildFn for &dyn Fn() {
-            fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> Result<crate::runtime::RawKernel, crate::backend::BackendError> {
+            fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> Result<crate::runtime::RawKernel> {
                 builder.build_kernel(options, |_| {
                     self()
                 })
@@ -1299,7 +1299,7 @@ macro_rules! impl_kernel_build_for_fn {
     ($first:ident  $($rest:ident)*) => {
         impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelBuildFn for &dyn Fn($first, $($rest,)*) {
             #[allow(non_snake_case)]
-            fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> Result<crate::runtime::RawKernel, crate::backend::BackendError>  {
+            fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> Result<crate::runtime::RawKernel>  {
                 builder.build_kernel(options, |builder| {
                     let $first = $first::def_param(builder);
                     $(let $rest = $rest::def_param(builder);)*
@@ -1756,7 +1756,7 @@ pub fn __env_need_backtrace() -> bool {
     }
 }
 #[inline]
-pub(crate) fn assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, col: u32) {
+pub fn __assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, col: u32) {
     let cond = cond.into();
     let path = std::path::Path::new(file);
     let pretty_filename: String;

@@ -303,7 +303,7 @@ impl Device {
     pub fn create_kernel<'a, S: KernelSignature<'a>>(
         &self,
         f: S::Fn,
-    ) -> Result<S::Kernel, crate::backend::BackendError> {
+    ) -> Result<S::Kernel> {
         let mut builder = KernelBuilder::new(self.clone(), true);
         let raw_kernel =
             KernelBuildFn::build_kernel(&f, &mut builder, KernelBuildOptions::default());
@@ -312,7 +312,7 @@ impl Device {
     pub fn create_kernel_async<'a, S: KernelSignature<'a>>(
         &self,
         f: S::Fn,
-    ) -> Result<S::Kernel, crate::backend::BackendError> {
+    ) -> Result<S::Kernel> {
         let mut builder = KernelBuilder::new(self.clone(), true);
         let raw_kernel = KernelBuildFn::build_kernel(
             &f,

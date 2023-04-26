@@ -18,7 +18,9 @@ cmake = "0.1.48"
 
 
 [features]
-default = ["cuda"]
+default = ["cuda", "cpu", "remote"]
 cuda = []
 strict = []
+cpu = []
+remote = []
 

@@ -10,6 +10,8 @@ fn cmake_build() -> PathBuf {
     println!("cargo:rerun-if-changed=./LuisaCompute/src/core");
     println!("cargo:rerun-if-changed=./LuisaCompute/src/gui");
     println!("cargo:rerun-if-changed=./LuisaCompute/src/ir");
+    println!("cargo:rerun-if-changed=./LuisaCompute/src/rust/luisa_compute_backend_impl");
+    println!("cargo:rerun-if-changed=./LuisaCompute/src/rust/CMakeLists.txt");
     println!("cargo:rerun-if-changed=./LuisaCompute/src/py");
     println!("cargo:rerun-if-changed=./LuisaCompute/src/runtime");
     println!("cargo:rerun-if-changed=./LuisaCompute/src/vstl");
@@ -32,6 +34,8 @@ fn cmake_build() -> PathBuf {
         };
     }
     set_from_env!("DX", "LUISA_COMPUTE_ENABLE_DX");
+    set_from_env!("CPU", "LUISA_COMPUTE_ENABLE_CPU");
+    set_from_env!("REMOTE", "LUISA_COMPUTE_ENABLE_REMOTE");
     set_from_env!("CUDA", "LUISA_COMPUTE_ENABLE_CUDA");
     set_from_env!("METAL", "LUISA_COMPUTE_ENABLE_METAL");
     set_from_env!("PYTHON", "LUISA_COMPUTE_ENABLE_PYTHON");
@@ -45,10 +49,7 @@ fn cmake_build() -> PathBuf {
         },
     );
     config.define("LUISA_COMPUTE_BUILD_TESTS", "OFF");
-    config.define("LUISA_COMPUTE_COMPILED_BY_RUST_FRONTEND", "ON");
     config.define("LUISA_COMPUTE_ENABLE_DSL", "OFF");
-    config.define("LUISA_COMPUTE_ENABLE_CPU", "OFF");
-    config.define("LUISA_COMPUTE_ENABLE_REMOTE", "OFF");
     config.define("LUISA_COMPUTE_ENABLE_RUST", "ON");
     if env::var("PROFILE").unwrap_or("release".to_string()) == "release" {
         config.define("CMAKE_BUILD_TYPE", "Release");

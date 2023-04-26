@@ -51,6 +51,8 @@ fn cmake_build() -> PathBuf {
     config.define("LUISA_COMPUTE_BUILD_TESTS", "OFF");
     config.define("LUISA_COMPUTE_ENABLE_DSL", "OFF");
     config.define("LUISA_COMPUTE_ENABLE_RUST", "ON");
+    config.define("LUISA_COMPUTE_COMPILED_BY_RUST", "ON");
+    println!("cargo:rerun-if-env-changed=PROFILE");
     if env::var("PROFILE").unwrap_or("release".to_string()) == "release" {
         config.define("CMAKE_BUILD_TYPE", "Release");
     } else {

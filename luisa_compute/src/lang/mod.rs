@@ -9,8 +9,8 @@ use crate::{rtx, ResourceTracker};
 use bumpalo::Bump;
 pub use ir::ir::NodeRef;
 use ir::ir::{
-    ArrayType, CallableModule, CallableModuleRef, ModulePools,
-    SwitchCase, TextureBinding, UserNodeData, INVALID_REF,
+    ArrayType, CallableModule, CallableModuleRef, ModulePools, SwitchCase, TextureBinding,
+    UserNodeData, INVALID_REF,
 };
 pub use ir::CArc;
 use ir::Pooled;
@@ -33,6 +33,7 @@ pub use luisa_compute_ir::{
 };
 use math::{Bool2Expr, Bool3Expr, Bool4Expr, Uint3};
 use std::cell::RefCell;
+use std::ffi::CString;
 use std::ops::{Bound, RangeBounds};
 
 use self::math::{Float2, Float3, Float4, Uint2};
@@ -302,10 +303,28 @@ macro_rules! cpu_dbg {
         __cpu_dbg($arg, file!(), line!())
     }};
 }
+#[macro_export]
+macro_rules! lc_dbg {
+    ($arg:expr) => {{
+        __cpu_dbg($arg, file!(), line!())
+    }};
+}
+#[macro_export]
+macro_rules! lc_assert {
+    ($arg:expr) => {
+        assert($arg, stringify!($arg), file!(), line!(), column!())
+    };
+    ($arg:expr, $msg:expr) => {
+        assert($arg, $msg, file!(), line!(), column!())
+    };
+}
 pub fn __cpu_dbg<T: ExprProxy>(arg: T, file: &'static str, line: u32)
 where
     T::Value: Debug,
 {
+    if !is_cpu_backend() {
+        return;
+    }
     let f = CpuFn::new(move |x: &mut T::Value| {
         println!("[{}:{}] {:?}", file, line, x);
     });
@@ -688,9 +707,9 @@ impl<T: Value> Aggregate for VLArrayVar<T> {
 impl<T: Value> VLArrayVar<T> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
-        if __env_need_backtrace() {
-            assert(i.cmplt(self.len()));
-        }
+
+        lc_assert!(i.cmplt(self.len()), "VLArrayVar::read out of bounds");
+
         Expr::<T>::from_node(__current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
             b.call(Func::Load, &[gep], T::type_())
@@ -711,9 +730,9 @@ impl<T: Value> VLArrayVar<T> {
     pub fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, value: V) {
         let i = i.into();
         let value = value.into();
-        if __env_need_backtrace() {
-            assert(i.cmplt(self.len()));
-        }
+
+        lc_assert!(i.cmplt(self.len()), "VLArrayVar::write out of bounds");
+
         __current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
             b.update(gep, value.node());
@@ -761,9 +780,9 @@ impl<T: Value> VLArrayExpr<T> {
     }
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
-        if __env_need_backtrace() {
-            assert(i.cmplt(self.len()));
-        }
+
+        lc_assert!(i.cmplt(self.len()));
+
         Expr::<T>::from_node(__current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
             b.call(Func::Load, &[gep], T::type_())
@@ -842,9 +861,9 @@ impl<T: Value, const N: usize> VarProxy for ArrayVar<T, N> {
 impl<T: Value, const N: usize> ArrayVar<T, N> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
-        if __env_need_backtrace() {
-            assert(i.cmplt(const_(N as u32)));
-        }
+
+        lc_assert!(i.cmplt(const_(N as u32)));
+
         Expr::<T>::from_node(__current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
             b.call(Func::Load, &[gep], T::type_())
@@ -856,9 +875,9 @@ impl<T: Value, const N: usize> ArrayVar<T, N> {
     pub fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, value: V) {
         let i = i.into();
         let value = value.into();
-        if __env_need_backtrace() {
-            assert(i.cmplt(const_(N as u32)));
-        }
+
+        lc_assert!(i.cmplt(const_(N as u32)));
+
         __current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
             b.update(gep, value.node());
@@ -873,9 +892,9 @@ impl<T: Value, const N: usize> ArrayExpr<T, N> {
     }
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
-        if __env_need_backtrace() {
-            assert(i.cmplt(const_(N as u32)));
-        }
+
+        lc_assert!(i.cmplt(const_(N as u32)));
+
         Expr::<T>::from_node(__current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
             b.call(Func::Load, &[gep], T::type_())
@@ -1103,10 +1122,7 @@ impl KernelBuilder {
                 captured_buffers.sort_by_key(|(i, _, _, _)| *i);
                 for (j, (i, node, binding, handle)) in captured_buffers.into_iter().enumerate() {
                     assert_eq!(j, i);
-                    captured.push(Capture {
-                        node,
-                        binding,
-                    });
+                    captured.push(Capture { node, binding });
                     resource_tracker.add_any(handle);
                 }
                 let mut cpu_custom_ops: Vec<_> = r.cpu_custom_ops.values().cloned().collect();
@@ -1474,8 +1490,13 @@ impl<R: Aggregate> SwitchBuilder<R> {
                 s.push(IrBuilder::new(pools));
             });
             for i in 0..phi_count {
+                let msg = CString::new("unreachable code in switch statement!").unwrap();
                 let default_node = __current_scope(|b| {
-                    b.call(Func::Unreachable, &[], case_phis[0][i].type_().clone())
+                    b.call(
+                        Func::Unreachable(CBoxedSlice::from(msg)),
+                        &[],
+                        case_phis[0][i].type_().clone(),
+                    )
                 });
                 default_nodes.push(default_node);
             }
@@ -1734,25 +1755,37 @@ pub fn __env_need_backtrace() -> bool {
         Err(_) => false,
     }
 }
-
-pub fn assert(cond: Expr<bool>) {
-    if is_cpu_backend() && __env_need_backtrace() {
-        let backtrace = backtrace::Backtrace::new();
-        let assert_fn = CpuFn::new(move |b: &mut bool| {
-            if !*b {
-                let mut stderr = std::io::stderr();
-                use std::io::Write;
-                writeln!(
-                    stderr,
-                    "assertion failed with host backtrace:\n {:?}",
-                    backtrace
-                )
-                .unwrap();
-            }
-        });
-        let _ = assert_fn.call(cond);
+#[inline]
+pub(crate) fn assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, col: u32) {
+    let cond = cond.into();
+    let path = std::path::Path::new(file);
+    let pretty_filename: String;
+    if path.exists() {
+        pretty_filename = std::fs::canonicalize(path)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+    } else {
+        pretty_filename = file.to_string();
     }
+    let msg = if is_cpu_backend() && __env_need_backtrace() {
+        let backtrace = backtrace::Backtrace::new();
+        format!(
+            "assertion failed: {} at {}:{}:{} \nbacktrace: {:?}",
+            msg, pretty_filename, line, col, backtrace
+        )
+    } else {
+        format!(
+            "assertion failed: {} at {}:{}:{} \n",
+            msg, pretty_filename, line, col
+        )
+    };
     __current_scope(|b| {
-        b.call(Func::Assert, &[cond.node()], Type::void());
+        b.call(
+            Func::Assert(CBoxedSlice::new(CString::new(msg).unwrap().into_bytes_with_nul())),
+            &[cond.node()],
+            Type::void(),
+        );
     });
 }

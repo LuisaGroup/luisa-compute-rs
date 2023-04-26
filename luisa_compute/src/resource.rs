@@ -9,6 +9,7 @@ use std::cell::RefCell;
 use std::ops::RangeBounds;
 use std::process::abort;
 use std::sync::Arc;
+use crate::macros::lc_assert;
 pub struct Buffer<T: Value> {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BufferHandle>,
@@ -408,6 +409,8 @@ pub(crate) struct TextureHandle {
     #[allow(dead_code)]
     pub(crate) levels: u32,
 }
+unsafe impl Send for TextureHandle {}
+unsafe impl Sync for TextureHandle {}
 trait GetPixelFormat {
     fn pixel_format(storage: PixelStorage) -> PixelFormat;
 }
@@ -656,10 +659,10 @@ macro_rules! impl_tex_view {
             }
             pub fn copy_to_vec<U: StorageTexel<T>>(&'a self) -> Vec<U> {
                 let mut data = Vec::with_capacity(self.texel_count() as usize);
-                self.copy_to(&mut data);
                 unsafe {
                     data.set_len(self.texel_count() as usize);
                 }
+                self.copy_to(&mut data);
                 data
             }
             pub fn copy_from_async<U: StorageTexel<T>>(&'a self, data: &'a [U]) -> Command<'a> {
@@ -890,9 +893,9 @@ pub struct BindlessBufferVar<T> {
 impl<T: Value> BindlessBufferVar<T> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
-        if __env_need_backtrace() {
-            assert(i.cmplt(self.len()));
-        }
+
+        lc_assert!(i.cmplt(self.len()));
+
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessBufferRead,
@@ -906,7 +909,7 @@ impl<T: Value> BindlessBufferVar<T> {
             b.call(
                 Func::BindlessBufferSize(T::type_()),
                 &[self.array, self.buffer_index.node()],
-                T::type_(),
+                u32::type_(),
             )
         }))
     }
@@ -1136,7 +1139,7 @@ impl BindlessArrayVar {
             let _ = check_type.call(vt);
         } else if is_cpu_backend() {
             let expected = type_hash(&T::type_());
-            assert(v.__type().cmpeq(expected));
+            lc_assert!(v.__type().cmpeq(expected));
         }
         v
     }
@@ -1208,7 +1211,7 @@ impl<T: Value> BufferVar<T> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
         if __env_need_backtrace() {
-            assert(i.cmplt(self.len()));
+            lc_assert!(i.cmplt(self.len()));
         }
         __current_scope(|b| {
             FromNode::from_node(b.call(
@@ -1222,7 +1225,7 @@ impl<T: Value> BufferVar<T> {
         let i = i.into();
         let v = v.into();
         if __env_need_backtrace() {
-            assert(i.cmplt(self.len()));
+            lc_assert!(i.cmplt(self.len()));
         }
         __current_scope(|b| {
             b.call(
@@ -1245,7 +1248,7 @@ macro_rules! impl_atomic {
                 let i = i.into();
                 let v = v.into();
                 if __env_need_backtrace() {
-                    assert(i.cmplt(self.len()));
+                    lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1269,7 +1272,7 @@ macro_rules! impl_atomic {
                 let expected = expected.into();
                 let desired = desired.into();
                 if __env_need_backtrace() {
-                    assert(i.cmplt(self.len()));
+                    lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1292,7 +1295,7 @@ macro_rules! impl_atomic {
                 let i = i.into();
                 let v = v.into();
                 if __env_need_backtrace() {
-                    assert(i.cmplt(self.len()));
+                    lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1310,7 +1313,7 @@ macro_rules! impl_atomic {
                 let i = i.into();
                 let v = v.into();
                 if __env_need_backtrace() {
-                    assert(i.cmplt(self.len()));
+                    lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1328,7 +1331,7 @@ macro_rules! impl_atomic {
                 let i = i.into();
                 let v = v.into();
                 if __env_need_backtrace() {
-                    assert(i.cmplt(self.len()));
+                    lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1346,7 +1349,7 @@ macro_rules! impl_atomic {
                 let i = i.into();
                 let v = v.into();
                 if __env_need_backtrace() {
-                    assert(i.cmplt(self.len()));
+                    lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1370,7 +1373,7 @@ macro_rules! impl_atomic_bit {
                 let i = i.into();
                 let v = v.into();
                 if __env_need_backtrace() {
-                    assert(i.cmplt(self.len()));
+                    lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1388,7 +1391,7 @@ macro_rules! impl_atomic_bit {
                 let i = i.into();
                 let v = v.into();
                 if __env_need_backtrace() {
-                    assert(i.cmplt(self.len()));
+                    lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1406,7 +1409,7 @@ macro_rules! impl_atomic_bit {
                 let i = i.into();
                 let v = v.into();
                 if __env_need_backtrace() {
-                    assert(i.cmplt(self.len()));
+                    lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(

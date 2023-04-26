@@ -42,7 +42,7 @@ pub use luisa_compute_ir::ir::UserNodeData;
 pub use resource::*;
 pub use runtime::*;
 pub mod macros {
-    pub use crate::{cpu_dbg, if_, impl_polymorphic, var, while_};
+    pub use crate::{cpu_dbg, lc_dbg, lc_assert, if_, impl_polymorphic, var, while_};
 }
 
 use lazy_static::lazy_static;

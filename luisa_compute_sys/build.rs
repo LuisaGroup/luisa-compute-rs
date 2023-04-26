@@ -4,6 +4,15 @@ use std::{env, fs, path::PathBuf};
 
 fn cmake_build() -> PathBuf {
     let mut config = cmake::Config::new("./LuisaCompute");
+    println!("cargo:rerun-if-changed=./LuisaCompute/src/api");
+    println!("cargo:rerun-if-changed=./LuisaCompute/src/ast");
+    println!("cargo:rerun-if-changed=./LuisaCompute/src/backends");
+    println!("cargo:rerun-if-changed=./LuisaCompute/src/core");
+    println!("cargo:rerun-if-changed=./LuisaCompute/src/gui");
+    println!("cargo:rerun-if-changed=./LuisaCompute/src/ir");
+    println!("cargo:rerun-if-changed=./LuisaCompute/src/py");
+    println!("cargo:rerun-if-changed=./LuisaCompute/src/runtime");
+    println!("cargo:rerun-if-changed=./LuisaCompute/src/vstl");
     macro_rules! set_from_env {
         ($feature:literal, $opt:literal) => {
             let var = format!("CARGO_FEATURE_{}", $feature);

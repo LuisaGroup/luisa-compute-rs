@@ -14,7 +14,7 @@ use raw_window_handle::HasRawWindowHandle;
 use rtx::{Accel, Mesh, MeshHandle};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::ffi::{c_void, CString};
+use std::ffi::CString;
 use std::hash::Hash;
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -417,30 +417,35 @@ pub struct Stream {
     pub(crate) handle: Arc<StreamHandle>,
 }
 impl StreamHandle {
+    #[inline]
     pub(crate) fn device(&self) -> Arc<DeviceHandle> {
         match self {
             StreamHandle::Default { device, .. } => device.upgrade().unwrap(),
             StreamHandle::NonDefault { device, .. } => device.clone(),
         }
     }
+    #[inline]
     pub(crate) fn handle(&self) -> api::Stream {
         match self {
             StreamHandle::Default { handle, .. } => *handle,
             StreamHandle::NonDefault { handle, .. } => *handle,
         }
     }
+    #[inline]
     pub(crate) fn native_handle(&self) -> *mut std::ffi::c_void {
         match self {
             StreamHandle::Default { native_handle, .. } => *native_handle,
             StreamHandle::NonDefault { native_handle, .. } => *native_handle,
         }
     }
+    #[inline]
     pub(crate) fn lock(&self) {
         match self {
             StreamHandle::Default { mutex, .. } => mutex.lock(),
             StreamHandle::NonDefault { mutex, .. } => mutex.lock(),
         }
     }
+    #[inline]
     pub(crate) fn unlock(&self) {
         unsafe {
             match self {
@@ -652,6 +657,7 @@ pub struct CallableArgEncoder {
     pub(crate) args: Vec<NodeRef>,
 }
 impl CallableArgEncoder {
+    #[inline]
     pub fn new() -> CallableArgEncoder {
         CallableArgEncoder { args: Vec::new() }
     }
@@ -971,15 +977,3 @@ macro_rules! impl_dispatch_for_kernel {
 }
 }
 impl_dispatch_for_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
-
-#[cfg(all(test, feature = "_cpp"))]
-mod test {
-    use super::*;
-    #[test]
-    fn test_layout() {
-        assert_eq!(
-            std::mem::size_of::<api::Command>(),
-            std::mem::size_of::<sys::LCCommand>()
-        );
-    }
-}

@@ -1157,7 +1157,9 @@ impl KernelBuilder {
                     enable_fast_math: options.enable_fast_math,
                     enable_debug_info: options.enable_debug_info,
                     compile_only: false,
-                    name: NO_NAME.as_ptr() as *const i8,
+                    name: options.name.map_or(NO_NAME.as_ptr() as *const i8, |name| {
+                        name.as_str().as_ptr() as *const i8
+                    }),
                 };
                 let artifact = if options.async_compile {
                     ShaderArtifact::Async(AsyncShaderArtifact::new(
@@ -1180,13 +1182,14 @@ impl KernelBuilder {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct KernelBuildOptions {
     pub enable_debug_info: bool,
     pub enable_optimization: bool,
     pub async_compile: bool,
     pub enable_cache: bool,
     pub enable_fast_math: bool,
+    pub name: Option<String>,
 }
 
 impl Default for KernelBuildOptions {
@@ -1197,6 +1200,7 @@ impl Default for KernelBuildOptions {
             async_compile: false,
             enable_cache: true,
             enable_fast_math: true,
+            name: None,
         }
     }
 }

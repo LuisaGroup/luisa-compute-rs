@@ -8,12 +8,13 @@ use lang::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSignature};
 pub use luisa_compute_api_types as api;
 use luisa_compute_ir::ir::{self, KernelModule};
 use luisa_compute_ir::CArc;
-use parking_lot::{Condvar, Mutex, RwLock};
+use parking_lot::lock_api::RawMutex as RawMutexTrait;
+use parking_lot::{Condvar, Mutex, RawMutex, RwLock};
 use raw_window_handle::HasRawWindowHandle;
 use rtx::{Accel, Mesh, MeshHandle};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::ffi::CString;
+use std::ffi::{c_void, CString};
 use std::hash::Hash;
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -37,8 +38,10 @@ impl PartialEq for Device {
 impl Eq for Device {}
 pub(crate) struct DeviceHandle {
     pub(crate) backend: Arc<dyn Backend>,
-    pub(crate) default_stream: api::Stream,
+    pub(crate) default_stream: Option<Arc<StreamHandle>>,
 }
+unsafe impl Send for DeviceHandle {}
+unsafe impl Sync for DeviceHandle {}
 impl Deref for DeviceHandle {
     type Target = dyn Backend;
     fn deref(&self) -> &Self::Target {
@@ -50,7 +53,10 @@ unsafe impl Sync for Device {}
 
 impl Drop for DeviceHandle {
     fn drop(&mut self) {
-        self.backend.destroy_stream(self.default_stream);
+        if let Some(s) = &self.default_stream {
+            let handle = s.handle();
+            self.backend.destroy_stream(handle);
+        }
     }
 }
 impl Device {
@@ -238,10 +244,7 @@ impl Device {
     pub fn default_stream(&self) -> Stream {
         Stream {
             device: self.clone(),
-            handle: Arc::new(StreamHandle::Default(
-                self.inner.clone(),
-                self.inner.default_stream,
-            )),
+            handle: self.inner.default_stream.clone().unwrap(),
         }
     }
     pub fn create_stream(&self, tag: api::StreamTag) -> backend::Result<Stream> {
@@ -252,6 +255,7 @@ impl Device {
                 device: self.inner.clone(),
                 handle: api::Stream(stream.handle),
                 native_handle: stream.native_handle,
+                mutex: RawMutex::INIT,
             }),
         })
     }
@@ -301,19 +305,13 @@ impl Device {
         let raw_callable = KernelBuildFn::build_callable(&f, &mut builder);
         S::wrap_raw_callable(raw_callable)
     }
-    pub fn create_kernel<'a, S: KernelSignature<'a>>(
-        &self,
-        f: S::Fn,
-    ) -> Result<S::Kernel> {
+    pub fn create_kernel<'a, S: KernelSignature<'a>>(&self, f: S::Fn) -> Result<S::Kernel> {
         let mut builder = KernelBuilder::new(self.clone(), true);
         let raw_kernel =
             KernelBuildFn::build_kernel(&f, &mut builder, KernelBuildOptions::default());
         S::wrap_raw_kernel(raw_kernel)
     }
-    pub fn create_kernel_async<'a, S: KernelSignature<'a>>(
-        &self,
-        f: S::Fn,
-    ) -> Result<S::Kernel> {
+    pub fn create_kernel_async<'a, S: KernelSignature<'a>>(&self, f: S::Fn) -> Result<S::Kernel> {
         let mut builder = KernelBuilder::new(self.clone(), true);
         let raw_kernel = KernelBuildFn::build_kernel(
             &f,
@@ -331,11 +329,7 @@ impl Device {
         options: KernelBuildOptions,
     ) -> Result<S::Kernel> {
         let mut builder = KernelBuilder::new(self.clone(), true);
-        let raw_kernel = KernelBuildFn::build_kernel(
-            &f,
-            &mut builder,
-            options,
-        );
+        let raw_kernel = KernelBuildFn::build_kernel(&f, &mut builder, options);
         S::wrap_raw_kernel(raw_kernel)
     }
 }
@@ -372,11 +366,17 @@ macro_rules! create_kernel {
     }};
 }
 pub(crate) enum StreamHandle {
-    Default(Arc<DeviceHandle>, api::Stream),
+    Default {
+        device: Weak<DeviceHandle>,
+        handle: api::Stream,
+        native_handle: *mut std::ffi::c_void,
+        mutex: RawMutex,
+    },
     NonDefault {
         device: Arc<DeviceHandle>,
         handle: api::Stream,
         native_handle: *mut std::ffi::c_void,
+        mutex: RawMutex,
     },
 }
 pub(crate) struct SwapchainHandle {
@@ -419,27 +419,41 @@ pub struct Stream {
 impl StreamHandle {
     pub(crate) fn device(&self) -> Arc<DeviceHandle> {
         match self {
-            StreamHandle::Default(device, _) => device.clone(),
+            StreamHandle::Default { device, .. } => device.upgrade().unwrap(),
             StreamHandle::NonDefault { device, .. } => device.clone(),
         }
     }
     pub(crate) fn handle(&self) -> api::Stream {
         match self {
-            StreamHandle::Default(_, stream) => *stream,
+            StreamHandle::Default { handle, .. } => *handle,
             StreamHandle::NonDefault { handle, .. } => *handle,
         }
     }
     pub(crate) fn native_handle(&self) -> *mut std::ffi::c_void {
         match self {
-            StreamHandle::Default(_, _) => todo!(),
+            StreamHandle::Default { native_handle, .. } => *native_handle,
             StreamHandle::NonDefault { native_handle, .. } => *native_handle,
+        }
+    }
+    pub(crate) fn lock(&self) {
+        match self {
+            StreamHandle::Default { mutex, .. } => mutex.lock(),
+            StreamHandle::NonDefault { mutex, .. } => mutex.lock(),
+        }
+    }
+    pub(crate) fn unlock(&self) {
+        unsafe {
+            match self {
+                StreamHandle::Default { mutex, .. } => mutex.unlock(),
+                StreamHandle::NonDefault { mutex, .. } => mutex.unlock(),
+            }
         }
     }
 }
 impl Drop for StreamHandle {
     fn drop(&mut self) {
         match self {
-            StreamHandle::Default(_, _) => {}
+            StreamHandle::Default { .. } => {}
             StreamHandle::NonDefault { device, handle, .. } => {
                 device.destroy_stream(*handle);
             }
@@ -460,7 +474,7 @@ impl<'a> Scope<'a> {
     #[inline]
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         match self.handle.as_ref() {
-            StreamHandle::Default(_, _) => todo!(),
+            StreamHandle::Default { native_handle, .. } => *native_handle,
             StreamHandle::NonDefault { native_handle, .. } => *native_handle,
         }
     }
@@ -531,6 +545,7 @@ impl<'a> Drop for Scope<'a> {
         if !self.synchronized.get() {
             self.synchronize().unwrap();
         }
+        self.handle.unlock();
     }
 }
 impl Stream {
@@ -541,6 +556,7 @@ impl Stream {
     }
     #[inline]
     pub fn scope<'a>(&self) -> Scope<'a> {
+        self.handle.lock();
         Scope {
             handle: self.handle.clone(),
             marker: std::marker::PhantomData {},
@@ -595,7 +611,7 @@ pub struct Command<'a> {
 }
 pub(crate) struct AsyncShaderArtifact {
     shader: Option<backend::Result<api::CreatedShaderInfo>>, // strange naming, huh?
-    name:Arc<CString>,
+    name: Arc<CString>,
 }
 pub(crate) enum ShaderArtifact {
     Async(Arc<(Mutex<AsyncShaderArtifact>, Condvar)>),
@@ -606,7 +622,7 @@ impl AsyncShaderArtifact {
         device: Device,
         kernel: CArc<KernelModule>,
         options: api::ShaderOption,
-        name:Arc<CString>,
+        name: Arc<CString>,
     ) -> Arc<(Mutex<AsyncShaderArtifact>, Condvar)> {
         let artifact = Arc::new((
             Mutex::new(AsyncShaderArtifact { shader: None, name }),
@@ -839,11 +855,7 @@ impl RawKernel {
             }
         }
     }
-    pub fn dispatch_async(
-        &self,
-        args: KernelArgEncoder,
-        dispatch_size: [u32; 3],
-    ) -> Command {
+    pub fn dispatch_async(&self, args: KernelArgEncoder, dispatch_size: [u32; 3]) -> Command {
         let mut rt = ResourceTracker::new();
         rt.add(Arc::new(args.uniform_data));
         let args = args.args;

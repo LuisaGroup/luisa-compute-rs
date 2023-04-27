@@ -42,15 +42,16 @@ pub use luisa_compute_ir::ir::UserNodeData;
 pub use resource::*;
 pub use runtime::*;
 pub mod macros {
-    pub use crate::{cpu_dbg, lc_dbg, lc_assert, if_, impl_polymorphic, var, while_};
+    pub use crate::{cpu_dbg, if_, impl_polymorphic, lc_assert, lc_dbg, var, while_};
 }
-pub use backend::{Result, BackendError, BackendErrorKind};
+pub use backend::{BackendError, BackendErrorKind, Result};
 use lazy_static::lazy_static;
 pub use luisa_compute_sys as sys;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RawMutex};
 pub use runtime::{CommandList, Device, Stream};
 use std::collections::HashMap;
 use std::sync::Weak;
+use parking_lot::lock_api::RawMutex as RawMutexTrait;
 
 pub struct Context {
     inner: Arc<backend::Context>,
@@ -99,11 +100,23 @@ impl Context {
 
     pub fn create_device(&self, device: &str) -> backend::Result<Device> {
         let backend = self.inner.create_device(device)?;
-        let default_stream = api::Stream(backend.create_stream(api::StreamTag::Graphics)?.handle);
+        let default_stream = backend.create_stream(api::StreamTag::Graphics)?;
+        // Ok(Device {
+        //     inner: Arc::new(DeviceHandle {
+        //         backend,
+        //         default_stream: api::Stream(default_stream.handle),
+        //         default_stream_native_handle: default_stream.native_handle,
+        //     }),
+        // })
         Ok(Device {
-            inner: Arc::new(DeviceHandle {
+            inner: Arc::new_cyclic(|weak| DeviceHandle {
                 backend,
-                default_stream,
+                default_stream: Some(Arc::new(StreamHandle::Default {
+                    handle: api::Stream(default_stream.handle),
+                    native_handle: default_stream.native_handle,
+                    device: weak.clone(),
+                    mutex: RawMutex::INIT,
+                })),
             }),
         })
     }

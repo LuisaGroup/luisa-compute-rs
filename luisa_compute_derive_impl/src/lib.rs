@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
-use proc_macro2::TokenStream;
+use proc_macro2::{TokenStream, TokenTree};
 use quote::{quote, quote_spanned};
-use syn::{spanned::Spanned, Attribute, Item, ItemEnum, ItemFn, ItemStruct, ItemTrait, NestedMeta};
+use syn::{spanned::Spanned, Attribute, Item, ItemEnum, ItemFn, ItemStruct, ItemTrait};
 pub struct Compiler {
     inside_crate: bool,
 }
@@ -17,22 +17,37 @@ impl Compiler {
     pub fn new(inside_crate: bool) -> Self {
         Self { inside_crate }
     }
-    pub fn compile_fn(&self, args: &Vec<NestedMeta>, func: &ItemFn) -> TokenStream {
-        quote!(#func)
-    }
     pub fn compile_kernel(&self, func: &ItemFn) -> TokenStream {
         todo!()
     }
     fn check_repr_c(&self, attribtes: &Vec<Attribute>) {
         let mut has_repr_c = false;
         for attr in attribtes {
-            let path = attr.path.get_ident().unwrap().to_string();
-            if path == "repr" {
-                let tokens = attr.tokens.to_string();
-                if tokens == "(C)" {
-                    has_repr_c = true;
+            let meta = &attr.meta;
+            match meta {
+                syn::Meta::List(list) => {
+                    let path = &list.path;
+                    if path.is_ident("repr") {
+                        for tok in list.tokens.clone().into_iter() {
+                            match tok {
+                                TokenTree::Ident(ident) => {
+                                    if ident == "C" {
+                                        has_repr_c = true;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
                 }
+                _ => {}
             }
+            // if path == "repr" {
+            //     let tokens = attr.bracket_token.to_string();
+            //     if tokens == "(C)" {
+            //         has_repr_c = true;
+            //     }
+            // }
         }
         if !has_repr_c {
             panic!("Struct must have repr(C) attribute");
@@ -51,16 +66,14 @@ impl Compiler {
             .filter(|f| {
                 let attrs = &f.attrs;
                 for attr in attrs {
-                    let meta = attr.parse_meta().unwrap();
+                    let meta = &attr.meta;
                     match meta {
                         syn::Meta::List(list) => {
-                            for attr in &list.nested {
-                                match attr {
-                                    NestedMeta::Meta(syn::Meta::Path(path)) => {
-                                        if let Some(ident) = path.get_ident() {
-                                            if ident == "exclude" || ident == "ignore" {
-                                                return false;
-                                            }
+                            for tok in list.tokens.clone().into_iter() {
+                                match tok {
+                                    TokenTree::Ident(ident) => {
+                                        if ident == "exclude" || ident == "ignore" {
+                                            return false;
                                         }
                                     }
                                     _ => {}

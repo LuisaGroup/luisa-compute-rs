@@ -21,14 +21,6 @@ pub fn derive_aggregate(item: TokenStream) -> TokenStream {
     compiler.derive_aggregate(&item).into()
 }
 
-#[proc_macro_attribute]
-pub fn function(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let item: syn::ItemFn = syn::parse(item).unwrap();
-    let args = syn::parse_macro_input!(attr as syn::AttributeArgs);
-    let compiler = luisa_compute_derive_impl::Compiler::new(false);
-    compiler.compile_fn(&args, &item).into()
-}
-
 #[proc_macro_derive(__Value)]
 pub fn _derive_value(item: TokenStream) -> TokenStream {
     let item: syn::ItemStruct = syn::parse(item).unwrap();

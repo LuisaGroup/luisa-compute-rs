@@ -324,6 +324,19 @@ impl Device {
         );
         S::wrap_raw_kernel(raw_kernel)
     }
+    pub fn create_kernel_with_options<'a, S: KernelSignature<'a>>(
+        &self,
+        f: S::Fn,
+        options: KernelBuildOptions,
+    ) -> Result<S::Kernel> {
+        let mut builder = KernelBuilder::new(self.clone(), true);
+        let raw_kernel = KernelBuildFn::build_kernel(
+            &f,
+            &mut builder,
+            options,
+        );
+        S::wrap_raw_kernel(raw_kernel)
+    }
 }
 #[macro_export]
 macro_rules! fn_n_args {

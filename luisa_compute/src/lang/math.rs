@@ -833,8 +833,50 @@ macro_rules! impl_arith_binop_for_mat {
     ($t:ty, $scalar:ty, $proxy:ty) => {
         impl_binop_for_mat!($t, $scalar, $proxy, Add, add, AddAssign, add_assign);
         impl_binop_for_mat!($t, $scalar, $proxy, Sub, sub, SubAssign, sub_assign);
-        impl_binop_for_mat!($t, $scalar, $proxy, Mul, mul, MulAssign, mul_assign);
+        // impl_binop_for_mat!($t, $scalar, $proxy, Mul, mul, MulAssign, mul_assign);
         impl_binop_for_mat!($t, $scalar, $proxy, Rem, rem, RemAssign, rem_assign);
+        impl std::ops::MulAssign<$scalar> for $proxy {
+            fn mul_assign(&mut self, rhs: $scalar) {
+                use std::ops::Mul;
+                *self = (*self).mul(rhs);
+            }
+        }
+        impl std::ops::Mul<$scalar> for $proxy {
+            type Output = $proxy;
+            fn mul(self, rhs: $scalar) -> Self::Output {
+                let rhs = Self::fill(rhs);
+                <$proxy>::from_node(__current_scope(|s| {
+                    s.call(Func::MatCompMul, &[self.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+        impl std::ops::Mul<$proxy> for $scalar {
+            type Output = $proxy;
+            fn mul(self, rhs: $proxy) -> Self::Output {
+                let lhs = <$proxy>::fill(self);
+                <$proxy>::from_node(__current_scope(|s| {
+                    s.call(Func::MatCompMul, &[lhs.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+        impl std::ops::Mul<PrimExpr<$scalar>> for $proxy {
+            type Output = $proxy;
+            fn mul(self, rhs: PrimExpr<$scalar>) -> Self::Output {
+                let rhs = Self::fill(rhs);
+                <$proxy>::from_node(__current_scope(|s| {
+                    s.call(Func::MatCompMul, &[self.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+        impl std::ops::Mul<$proxy> for PrimExpr<$scalar> {
+            type Output = $proxy;
+            fn mul(self, rhs: $proxy) -> Self::Output {
+                let lhs = <$proxy>::fill(self);
+                <$proxy>::from_node(__current_scope(|s| {
+                    s.call(Func::MatCompMul, &[lhs.node, rhs.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
         impl std::ops::DivAssign<$scalar> for $proxy {
             fn div_assign(&mut self, rhs: $scalar) {
                 use std::ops::Div;

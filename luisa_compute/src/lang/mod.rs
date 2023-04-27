@@ -1158,7 +1158,7 @@ impl KernelBuilder {
                     enable_debug_info: options.enable_debug_info,
                     compile_only: false,
                     name: options.name.map_or(NO_NAME.as_ptr() as *const i8, |name| {
-                        name.as_str().as_ptr() as *const i8
+                        name.as_ptr() as *const i8
                     }),
                 };
                 let artifact = if options.async_compile {
@@ -1189,7 +1189,7 @@ pub struct KernelBuildOptions {
     pub async_compile: bool,
     pub enable_cache: bool,
     pub enable_fast_math: bool,
-    pub name: Option<String>,
+    pub name: Option<&'static str>, // TODO fix leak
 }
 
 impl Default for KernelBuildOptions {

@@ -13,6 +13,7 @@ use raw_window_handle::HasRawWindowHandle;
 use rtx::{Accel, Mesh, MeshHandle};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::ffi::CString;
 use std::hash::Hash;
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -594,6 +595,7 @@ pub struct Command<'a> {
 }
 pub(crate) struct AsyncShaderArtifact {
     shader: Option<backend::Result<api::CreatedShaderInfo>>, // strange naming, huh?
+    name:Arc<CString>,
 }
 pub(crate) enum ShaderArtifact {
     Async(Arc<(Mutex<AsyncShaderArtifact>, Condvar)>),
@@ -604,9 +606,10 @@ impl AsyncShaderArtifact {
         device: Device,
         kernel: CArc<KernelModule>,
         options: api::ShaderOption,
+        name:Arc<CString>,
     ) -> Arc<(Mutex<AsyncShaderArtifact>, Condvar)> {
         let artifact = Arc::new((
-            Mutex::new(AsyncShaderArtifact { shader: None }),
+            Mutex::new(AsyncShaderArtifact { shader: None, name }),
             Condvar::new(),
         ));
         {
@@ -836,11 +839,11 @@ impl RawKernel {
             }
         }
     }
-    pub fn dispatch_async<'a>(
-        &'a self,
+    pub fn dispatch_async(
+        &self,
         args: KernelArgEncoder,
         dispatch_size: [u32; 3],
-    ) -> Command<'a> {
+    ) -> Command {
         let mut rt = ResourceTracker::new();
         rt.add(Arc::new(args.uniform_data));
         let args = args.args;

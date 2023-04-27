@@ -3,6 +3,8 @@ use std::env::current_exe;
 use luisa::*;
 use luisa_compute as luisa;
 use rand::prelude::*;
+use winit::window::CursorIcon::Default;
+
 fn get_device() -> Device {
     let ctx = Context::new(current_exe().unwrap());
     let device = match std::env::var("LUISA_TEST_DEVICE") {
@@ -19,12 +21,15 @@ fn vec_cast() {
     f.view(..)
         .fill_fn(|i| Float2::new(i as f32 + 0.5, i as f32 + 1.5));
     let kernel = device
-        .create_kernel::<()>(&|| {
+        .create_kernel_with_options::<()>(&|| {
             let f = f.var();
             let i = i.var();
             let tid = dispatch_id().x();
             let v = f.read(tid);
             i.write(tid, v.int());
+        }, KernelBuildOptions{
+            name: Some("vec_cast".to_string()),
+            ..KernelBuildOptions::default()
         })
         .unwrap();
     kernel.dispatch([1024, 1, 1]).unwrap();

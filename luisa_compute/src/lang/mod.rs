@@ -1152,20 +1152,21 @@ impl KernelBuilder {
 
                 let module = CArc::new(module);
                 static NO_NAME: &'static [u8] = b"\0";
+                let name =  options.name.unwrap_or("".to_string());
+                let name = Arc::new(CString::new(name).unwrap());
                 let shader_options = api::ShaderOption {
                     enable_cache: options.enable_cache,
                     enable_fast_math: options.enable_fast_math,
                     enable_debug_info: options.enable_debug_info,
                     compile_only: false,
-                    name: options.name.map_or(NO_NAME.as_ptr() as *const i8, |name| {
-                        name.as_ptr() as *const i8
-                    }),
+                    name: name.as_ptr(),
                 };
                 let artifact = if options.async_compile {
                     ShaderArtifact::Async(AsyncShaderArtifact::new(
                         self.device.clone(),
                         module,
                         shader_options,
+                        name,
                     ))
                 } else {
                     ShaderArtifact::Sync(self.device.inner.create_shader(module, &shader_options)?)
@@ -1189,7 +1190,7 @@ pub struct KernelBuildOptions {
     pub async_compile: bool,
     pub enable_cache: bool,
     pub enable_fast_math: bool,
-    pub name: Option<&'static str>, // TODO fix leak
+    pub name: Option<String>,
 }
 
 impl Default for KernelBuildOptions {

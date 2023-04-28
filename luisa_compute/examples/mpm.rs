@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 use std::{env::current_exe, time::Instant};
 
 use luisa::init_logger;

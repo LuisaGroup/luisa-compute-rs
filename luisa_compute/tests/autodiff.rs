@@ -8,7 +8,18 @@ use rayon::{
     prelude::{IntoParallelIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
+fn _signal_handler(signal: libc::c_int) {
+    if signal == libc::SIGSEGV {
+        panic!("segfault detected");
+    }
+}
+static ONCE: std::sync::Once = std::sync::Once::new();
 fn get_device() -> Device {
+    ONCE.call_once(||{
+        unsafe {
+            libc::signal(libc::SIGSEGV, _signal_handler as usize);
+        }
+    });
     let ctx = Context::new(current_exe().unwrap());
     let device = match std::env::var("LUISA_TEST_DEVICE") {
         Ok(device) => device,

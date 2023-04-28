@@ -1146,7 +1146,7 @@ impl KernelBuilder {
                     shared: CBoxedSlice::new(vec![]),
                     callables: CBoxedSlice::new(vec![]),
                     args: CBoxedSlice::new(self.args.clone()),
-                    block_size: r.block_size.unwrap_or([1, 1, 1]),
+                    block_size: r.block_size.unwrap_or([64, 1, 1]),
                     pools: r.pools.clone().unwrap(),
                 };
 

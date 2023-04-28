@@ -34,10 +34,9 @@ jobs:
     #   uses: Jimver/cuda-toolkit@v0.2.8
     #   with:
     #     linux-local-args: '["--toolkit"]'
-    - name: "Build"
-      run: CC=clang-14 CXX=clang++-14 cargo build --verbose --release
     - name: "Run Tests"
       run: |
+        RUST_BACKTRACE=full CC=clang-14 CXX=clang++-14 cargo test --verbose
         RUST_BACKTRACE=full CC=clang-14 CXX=clang++-14 cargo test --verbose --release
         RUST_BACKTRACE=full bash run_tests.sh
 #     - name: "Run CUDA Tests"

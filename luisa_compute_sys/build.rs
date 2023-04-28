@@ -80,6 +80,26 @@ fn cmake_build() -> PathBuf {
 
     config.build()
 }
+fn is_path_dll(path: &PathBuf) -> bool {
+    let basic_check = path.extension().is_some()
+        && (path.extension().unwrap() == "dll"
+        || path.extension().unwrap() == "lib" // lib is also need on Windows for linking DLLs
+        || path.extension().unwrap() == "so"
+        || path.extension().unwrap() == "dylib");
+    if basic_check {
+        return true;
+    }
+    if cfg!(target_os = "linux") {
+        if let Some(stem) = path.file_stem() {
+            if let Some(ext) = PathBuf::from(stem).extension() {
+                if ext == "so" {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
 
 fn copy_dlls(out_dir: &PathBuf) {
     let mut out_dir = out_dir.clone();
@@ -89,10 +109,7 @@ fn copy_dlls(out_dir: &PathBuf) {
     for entry in std::fs::read_dir(out_dir).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
-        if path.extension().is_some()
-            && (path.extension().unwrap() == "dll"
-            || path.extension().unwrap() == "so"
-            || path.extension().unwrap() == "dylib")
+        if is_path_dll(&path)
         {
             // let target_dir = get_output_path();
             let comps: Vec<_> = path.components().collect();

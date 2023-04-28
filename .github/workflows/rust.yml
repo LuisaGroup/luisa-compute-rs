@@ -38,7 +38,7 @@ jobs:
       run: CC=clang-14 CXX=clang++-14 cargo build --verbose --release
     - name: "Run Tests"
       run: |
-        CC=clang-14 CXX=clang++-14 cargo test --verbose --release
-        bash run_tests.sh
+        RUST_BACKTRACE=1 CC=clang-14 CXX=clang++-14 cargo test --verbose --release
+        RUST_BACKTRACE=1 bash run_tests.sh
 #     - name: "Run CUDA Tests"
 #       run: CC=clang-14 CXX=clang++-14 LUISA_TEST_DEVICE=cuda cargo test --features cuda --verbose --release 

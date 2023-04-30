@@ -20,6 +20,8 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::window::Window;
+use luisa_compute_backend::proxy::ProxyBackend;
+
 #[derive(Clone)]
 pub struct Device {
     pub(crate) inner: Arc<DeviceHandle>,
@@ -37,15 +39,15 @@ impl PartialEq for Device {
 }
 impl Eq for Device {}
 pub(crate) struct DeviceHandle {
-    pub(crate) backend: Arc<dyn Backend>,
+    pub(crate) backend: ProxyBackend,
     pub(crate) default_stream: Option<Arc<StreamHandle>>,
 }
 unsafe impl Send for DeviceHandle {}
 unsafe impl Sync for DeviceHandle {}
 impl Deref for DeviceHandle {
-    type Target = dyn Backend;
+    type Target = ProxyBackend;
     fn deref(&self) -> &Self::Target {
-        self.backend.deref()
+        &self.backend
     }
 }
 unsafe impl Send for Device {}

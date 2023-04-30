@@ -46,13 +46,13 @@ pub mod macros {
 }
 pub use backend::{BackendError, BackendErrorKind, Result};
 use lazy_static::lazy_static;
+use luisa_compute_backend::Backend;
 pub use luisa_compute_sys as sys;
+use parking_lot::lock_api::RawMutex as RawMutexTrait;
 use parking_lot::{Mutex, RawMutex};
 pub use runtime::{CommandList, Device, Stream};
 use std::collections::HashMap;
 use std::sync::Weak;
-use parking_lot::lock_api::RawMutex as RawMutexTrait;
-
 pub struct Context {
     inner: Arc<backend::Context>,
 }
@@ -97,17 +97,16 @@ impl Context {
     pub fn create_cpu_device(&self) -> backend::Result<Device> {
         self.create_device("cpu")
     }
-
     pub fn create_device(&self, device: &str) -> backend::Result<Device> {
-        let backend = self.inner.create_device(device)?;
+        self.create_device_with_config(device, serde_json::json!({}))
+    }
+    pub fn create_device_with_config(
+        &self,
+        device: &str,
+        config: serde_json::Value,
+    ) -> backend::Result<Device> {
+        let backend = self.inner.create_device(device, config)?;
         let default_stream = backend.create_stream(api::StreamTag::Graphics)?;
-        // Ok(Device {
-        //     inner: Arc::new(DeviceHandle {
-        //         backend,
-        //         default_stream: api::Stream(default_stream.handle),
-        //         default_stream_native_handle: default_stream.native_handle,
-        //     }),
-        // })
         Ok(Device {
             inner: Arc::new_cyclic(|weak| DeviceHandle {
                 backend,

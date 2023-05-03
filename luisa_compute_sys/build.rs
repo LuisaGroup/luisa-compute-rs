@@ -53,11 +53,6 @@ fn cmake_build() -> PathBuf {
     config.define("LUISA_COMPUTE_ENABLE_RUST", "ON");
     config.define("LUISA_COMPUTE_COMPILED_BY_RUST", "ON");
     println!("cargo:rerun-if-env-changed=PROFILE");
-    if env::var("PROFILE").unwrap_or("release".to_string()) == "release" {
-        config.define("CMAKE_BUILD_TYPE", "Release");
-    } else {
-        config.define("CMAKE_BUILD_TYPE", "Debug");
-    }
     // set compiler based on env
     println!("cargo:rerun-if-env-changed=CC");
     if let Ok(v) = env::var("CC") {
@@ -69,9 +64,9 @@ fn cmake_build() -> PathBuf {
         println!("CXX={}", v);
         config.define("CMAKE_CXX_COMPILER", v);
     }
-    config.profile("Release");
     config.generator("Ninja");
-    config.no_build_target(true);
+    // config.no_build_target(true);
+    config.build_target("luisa-compute-api");
 
     // if cfg!(target_os="windows") {
     //     config.build_arg("--config");

@@ -1,4 +1,5 @@
 #![allow(unused_unsafe)]
+
 use std::path::Path;
 use std::{any::Any, sync::Arc};
 
@@ -6,9 +7,11 @@ pub mod lang;
 pub mod resource;
 pub mod rtx;
 pub mod runtime;
+
 pub use half::f16;
 use luisa_compute_api_types as api;
 pub use luisa_compute_backend as backend;
+
 pub mod prelude {
     pub use crate::lang::poly::PolymorphicImpl;
     pub use crate::lang::traits::VarTrait;
@@ -25,6 +28,7 @@ pub mod prelude {
     pub use crate::runtime::KernelArg;
     pub use luisa_compute_ir::TypeOf;
 }
+
 pub use api::{
     AccelBuildModificationFlags, AccelBuildRequest, AccelOption, AccelUsageHint, MeshType,
     PixelFormat, PixelStorage,
@@ -41,9 +45,11 @@ pub use luisa_compute_derive::*;
 pub use luisa_compute_ir::ir::UserNodeData;
 pub use resource::*;
 pub use runtime::*;
+
 pub mod macros {
     pub use crate::{cpu_dbg, if_, impl_polymorphic, lc_assert, lc_dbg, var, while_};
 }
+
 pub use backend::{BackendError, BackendErrorKind, Result};
 use lazy_static::lazy_static;
 use luisa_compute_backend::Backend;
@@ -53,9 +59,11 @@ use parking_lot::{Mutex, RawMutex};
 pub use runtime::{CommandList, Device, Stream};
 use std::collections::HashMap;
 use std::sync::Weak;
+
 pub struct Context {
     inner: Arc<backend::Context>,
 }
+
 pub fn init_logger() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .format_timestamp_secs()
@@ -80,16 +88,11 @@ impl Context {
             if let Some(ctx) = cache.get(lib_path.to_str().unwrap()) {
                 if let Some(ctx) = ctx.upgrade() {
                     return Self { inner: ctx.clone() };
-                } else {
-                    let ctx = Arc::new(backend::Context::new(lib_path.clone()));
-                    cache.insert(lib_path.to_str().unwrap().to_string(), Arc::downgrade(&ctx));
-                    ctx
                 }
-            } else {
-                let ctx = Arc::new(backend::Context::new(lib_path.clone()));
-                cache.insert(lib_path.to_str().unwrap().to_string(), Arc::downgrade(&ctx));
-                ctx
             }
+            let ctx = Arc::new(backend::Context::new(lib_path.clone()));
+            cache.insert(lib_path.to_str().unwrap().to_string(), Arc::downgrade(&ctx));
+            ctx
         };
         Self { inner }
     }
@@ -120,9 +123,11 @@ impl Context {
         })
     }
 }
+
 pub struct ResourceTracker {
     resources: Vec<Arc<dyn Any>>,
 }
+
 impl ResourceTracker {
     pub fn add<T: Any>(&mut self, ptr: Arc<T>) -> &mut Self {
         self.resources.push(ptr);
@@ -136,5 +141,7 @@ impl ResourceTracker {
         Self { resources: vec![] }
     }
 }
+
 unsafe impl Send for ResourceTracker {}
+
 unsafe impl Sync for ResourceTracker {}

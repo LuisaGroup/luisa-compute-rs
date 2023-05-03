@@ -16,6 +16,7 @@ fn get_device() -> Device {
         unsafe {
             libc::signal(libc::SIGSEGV, _signal_handler as usize);
         }
+        init_logger();
     });
     let ctx = Context::new(current_exe().unwrap());
     let device = match std::env::var("LUISA_TEST_DEVICE") {

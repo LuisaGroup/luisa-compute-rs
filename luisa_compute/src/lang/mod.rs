@@ -9,14 +9,14 @@ use crate::{rtx, ResourceTracker};
 use bumpalo::Bump;
 pub use ir::ir::NodeRef;
 use ir::ir::{
-    ArrayType, CallableModule, CallableModuleRef, ModulePools, SwitchCase, TextureBinding,
+    ArrayType, CallableModule, CallableModuleRef, ModulePools, SwitchCase,
     UserNodeData, INVALID_REF,
 };
 pub use ir::CArc;
 use ir::Pooled;
 use ir::{
     ir::{
-        new_node, BasicBlock, Binding, BufferBinding, Capture, Const, CpuCustomOp, Func,
+        new_node, BasicBlock, Binding, Capture, Const, CpuCustomOp, Func,
         Instruction, IrBuilder, KernelModule, Module, ModuleKind, Node, PhiIncoming,
     },
     transform::{self, Transform},
@@ -24,20 +24,20 @@ use ir::{
 
 use luisa_compute_ir as ir;
 
-use luisa_compute_ir::ir::{Primitive, VectorElementType};
+
 pub use luisa_compute_ir::{
     context::register_type,
     ffi::CBoxedSlice,
     ir::{StructType, Type},
     TypeOf,
 };
-use math::{Bool2Expr, Bool3Expr, Bool4Expr, Uint3};
+use math::{Uint3};
 use std::cell::RefCell;
 use std::ffi::CString;
 use std::ops::{Bound, RangeBounds};
 
-use self::math::{Float2, Float3, Float4, Uint2};
-use self::traits::VarCmpEq;
+
+
 
 // use self::math::Uint3;
 pub mod math;

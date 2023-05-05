@@ -10,8 +10,8 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::ops::RangeBounds;
 use std::process::abort;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
+
+
 use std::sync::Arc;
 pub struct Buffer<T: Value> {
     pub(crate) device: Device,

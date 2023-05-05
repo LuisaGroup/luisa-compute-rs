@@ -3,7 +3,7 @@ use std::env::current_exe;
 use luisa::*;
 use luisa_compute as luisa;
 use rand::prelude::*;
-use winit::window::CursorIcon::Default;
+
 
 fn _signal_handler(signal: libc::c_int) {
     if signal == libc::SIGSEGV {

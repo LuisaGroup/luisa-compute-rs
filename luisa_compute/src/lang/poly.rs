@@ -58,6 +58,7 @@ struct PolyVec<K, T: ?Sized + 'static> {
     device: Device,
     push: Box<dyn Fn(&mut dyn Any, *const u8) -> u32>,
     get: Box<dyn Fn(&dyn Any, usize) -> &dyn Any>,
+    get_mut: Box<dyn Fn(&mut dyn Any, usize) -> &mut dyn Any>,
     build: Box<dyn Fn(&dyn Any, Device) -> crate::Result<PolyArray<K, T>>>,
     array: Box<dyn Any>,
 }
@@ -81,7 +82,6 @@ impl TagIndex {
     };
 }
 impl TagIndexExpr {
-    
     pub fn valid(&self) -> Expr<bool> {
         self.tag().cmpne(u32::MAX)
     }
@@ -118,6 +118,10 @@ impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBui
         let array = &self.arrays[tag_index.tag as usize];
         (array.get)(&*array.array, tag_index.index as usize)
     }
+    pub fn get_mut(&mut self, tag_index: TagIndex) -> &mut dyn Any {
+        let array = &mut self.arrays[tag_index.tag as usize];
+        (array.get_mut)(&mut *array.array, tag_index.index as usize)
+    }
     fn tag_from_key<U: PolymorphicImpl<T> + 'static>(&mut self, key: K) -> u32 {
         let pair = (key.clone(), TypeId::of::<U>());
         if let Some(t) = self.key_to_tag.get(&pair) {
@@ -140,6 +144,11 @@ impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBui
                     let array = array.downcast_ref::<Vec<U>>().unwrap();
                     let r = &array[index];
                     r as &dyn Any
+                }),
+                get_mut: Box::new(|array: &mut dyn Any, index: usize| -> &mut dyn Any {
+                    let array = array.downcast_mut::<Vec<U>>().unwrap();
+                    let r = &mut array[index];
+                    r as &mut dyn Any
                 }),
                 build: Box::new(
                     move |array: &dyn Any, device: Device| -> crate::Result<PolyArray<K, T>> {

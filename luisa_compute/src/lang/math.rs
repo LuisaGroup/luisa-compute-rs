@@ -662,9 +662,19 @@ macro_rules! impl_packed_cvt {
                 Self::new($(v.$comp()), *)
             }
         }
+        impl $packed {
+            pub fn unpack(&self) -> $vec {
+                (*self).into()
+            }
+        }
         impl From<$packed> for $vec {
             fn from(v: $packed) -> Self {
                 Self::new($(v.$comp()), *)
+            }
+        }
+        impl $vec {
+            pub fn pack(&self) -> $packed {
+                (*self).into()
             }
         }
     }

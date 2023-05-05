@@ -1,3 +1,4 @@
+use crate::macros::lc_assert;
 use crate::*;
 use api::BufferDownloadCommand;
 use api::BufferUploadCommand;
@@ -5,11 +6,13 @@ use api::INVALID_RESOURCE_HANDLE;
 use lang::Value;
 use libc::c_void;
 use runtime::*;
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::ops::RangeBounds;
 use std::process::abort;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use crate::macros::lc_assert;
 pub struct Buffer<T: Value> {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BufferHandle>,
@@ -55,6 +58,7 @@ impl<'a, T: Value> BufferView<'a, T> {
             }),
             marker: std::marker::PhantomData,
             resource_tracker: rt,
+            callback: None,
         }
     }
     pub fn copy_to_vec(&self) -> Vec<T> {
@@ -85,6 +89,7 @@ impl<'a, T: Value> BufferView<'a, T> {
             }),
             marker: std::marker::PhantomData,
             resource_tracker: rt,
+            callback: None,
         }
     }
     pub fn copy_from(&self, data: &[T]) {
@@ -111,6 +116,7 @@ impl<'a, T: Value> BufferView<'a, T> {
             }),
             marker: std::marker::PhantomData,
             resource_tracker: rt,
+            callback: None,
         }
     }
     pub fn copy_to_buffer(&self, dst: BufferView<T>) {
@@ -202,13 +208,41 @@ impl Drop for BindlessArrayHandle {
         self.device.inner.destroy_bindless_array(self.handle);
     }
 }
+#[derive(Clone)]
+pub(crate) struct BindlessArraySlot {
+    pub(crate) buffer: Option<Arc<BufferHandle>>,
+    pub(crate) tex2d: Option<Arc<TextureHandle>>,
+    pub(crate) tex3d: Option<Arc<TextureHandle>>,
+}
 pub struct BindlessArray {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BindlessArrayHandle>,
     pub(crate) modifications: RefCell<Vec<api::BindlessArrayUpdateModification>>,
-    pub(crate) resource_tracker: RefCell<ResourceTracker>,
+    pub(crate) slots: RefCell<Vec<BindlessArraySlot>>,
+    pub(crate) pending_slots: RefCell<Vec<BindlessArraySlot>>,
+    pub(crate) lock: Arc<RawMutex>,
+    pub(crate) dirty:Cell<bool>,
 }
 impl BindlessArray {
+    fn lock(&self) {
+        self.lock.lock();
+    }
+    fn unlock(&self) {
+        unsafe {
+            self.lock.unlock();
+        }
+    }
+    fn make_pending_slots(&self) {
+        let mut pending = self.pending_slots.borrow_mut();
+        if self.dirty.get() {
+            let mut slots = self.slots.borrow_mut();
+            *slots = pending.clone();
+            self.dirty.set(false);
+        }
+        if pending.is_empty() {
+            *pending = self.slots.borrow().clone();
+        }
+    }
     pub fn var(&self) -> BindlessArrayVar {
         BindlessArrayVar::new(self)
     }
@@ -216,6 +250,7 @@ impl BindlessArray {
         self.handle.handle
     }
     pub fn emplace_buffer_async<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
+        self.lock();
         self.modifications
             .borrow_mut()
             .push(api::BindlessArrayUpdateModification {
@@ -228,15 +263,17 @@ impl BindlessArray {
                 tex2d: api::BindlessArrayUpdateTexture::default(),
                 tex3d: api::BindlessArrayUpdateTexture::default(),
             });
-        self.resource_tracker
-            .borrow_mut()
-            .add(buffer.handle.clone());
+        self.make_pending_slots();
+        let mut pending = self.pending_slots.borrow_mut();
+        pending[index].buffer = Some(buffer.handle.clone());
+        self.unlock();
     }
     pub fn emplace_bufferview_async<'a, T: Value>(
         &self,
         index: usize,
         bufferview: &BufferView<'a, T>,
     ) {
+        self.lock();
         self.modifications
             .borrow_mut()
             .push(api::BindlessArrayUpdateModification {
@@ -249,9 +286,10 @@ impl BindlessArray {
                 tex2d: api::BindlessArrayUpdateTexture::default(),
                 tex3d: api::BindlessArrayUpdateTexture::default(),
             });
-        self.resource_tracker
-            .borrow_mut()
-            .add(bufferview.buffer.handle.clone());
+        self.make_pending_slots();
+        let mut pending = self.pending_slots.borrow_mut();
+        pending[index].buffer = Some(bufferview.buffer.handle.clone());
+        self.unlock();
     }
     pub fn emplace_tex2d_async<T: IoTexel>(
         &self,
@@ -259,6 +297,7 @@ impl BindlessArray {
         texture: &Tex2d<T>,
         sampler: Sampler,
     ) {
+        self.lock();
         self.modifications
             .borrow_mut()
             .push(api::BindlessArrayUpdateModification {
@@ -271,9 +310,10 @@ impl BindlessArray {
                 },
                 tex3d: api::BindlessArrayUpdateTexture::default(),
             });
-        self.resource_tracker
-            .borrow_mut()
-            .add(texture.handle.clone());
+        self.make_pending_slots();
+        let mut pending = self.pending_slots.borrow_mut();
+        pending[index].tex2d = Some(texture.handle.clone());
+        self.unlock();
     }
     pub fn emplace_tex3d_async<T: IoTexel>(
         &self,
@@ -281,6 +321,7 @@ impl BindlessArray {
         texture: &Tex3d<T>,
         sampler: Sampler,
     ) {
+        self.lock();
         self.modifications
             .borrow_mut()
             .push(api::BindlessArrayUpdateModification {
@@ -293,11 +334,13 @@ impl BindlessArray {
                     sampler,
                 },
             });
-        self.resource_tracker
-            .borrow_mut()
-            .add(texture.handle.clone());
+        self.make_pending_slots();
+        let mut pending = self.pending_slots.borrow_mut();
+        pending[index].tex3d = Some(texture.handle.clone());
+        self.unlock();
     }
     pub fn remove_buffer_async(&self, index: usize) {
+        self.lock();
         self.modifications
             .borrow_mut()
             .push(api::BindlessArrayUpdateModification {
@@ -310,8 +353,13 @@ impl BindlessArray {
                 tex2d: api::BindlessArrayUpdateTexture::default(),
                 tex3d: api::BindlessArrayUpdateTexture::default(),
             });
+        self.make_pending_slots();
+        let mut pending = self.pending_slots.borrow_mut();
+        pending[index].buffer = None;
+        self.unlock();
     }
     pub fn remove_tex2d_async(&self, index: usize) {
+        self.lock();
         self.modifications
             .borrow_mut()
             .push(api::BindlessArrayUpdateModification {
@@ -323,9 +371,14 @@ impl BindlessArray {
                     sampler: Sampler::default(),
                 },
                 tex3d: api::BindlessArrayUpdateTexture::default(),
-            })
+            });
+        self.make_pending_slots();
+        let mut pending = self.pending_slots.borrow_mut();
+        pending[index].tex2d = None;
+        self.unlock();
     }
     pub fn remove_tex3d_async(&self, index: usize) {
+        self.lock();
         self.modifications
             .borrow_mut()
             .push(api::BindlessArrayUpdateModification {
@@ -337,7 +390,11 @@ impl BindlessArray {
                     handle: api::Texture(INVALID_RESOURCE_HANDLE),
                     sampler: Sampler::default(),
                 },
-            })
+            });
+        self.make_pending_slots();
+        let mut pending = self.pending_slots.borrow_mut();
+        pending[index].tex3d = None;
+        self.unlock();
     }
     pub fn emplace_buffer<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
         self.emplace_buffer_async(index, buffer);
@@ -371,14 +428,15 @@ impl BindlessArray {
         submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
     }
     pub fn update_async<'a>(&'a self) -> Command<'a> {
-        let mut rt = self.resource_tracker.borrow_mut();
-        let mut new_rt = std::mem::replace(&mut *rt, ResourceTracker::new());
-        new_rt.add(self.handle.clone());
+        self.lock();
+        let mut rt = ResourceTracker::new();
         let modifications = Arc::new(std::mem::replace(
             &mut *self.modifications.borrow_mut(),
             Vec::new(),
         ));
-        new_rt.add(modifications.clone());
+        rt.add(modifications.clone());
+        self.dirty.set(true);
+        let lock = self.lock.clone();
         Command {
             inner: api::Command::BindlessArrayUpdate(api::BindlessArrayUpdateCommand {
                 handle: self.handle.handle,
@@ -386,7 +444,10 @@ impl BindlessArray {
                 modifications_count: modifications.len(),
             }),
             marker: std::marker::PhantomData,
-            resource_tracker: new_rt,
+            resource_tracker: rt,
+            callback: Some(Box::new(move || unsafe {
+                lock.unlock();
+            })),
         }
     }
 }
@@ -649,6 +710,7 @@ macro_rules! impl_tex_view {
                     }),
                     resource_tracker: rt,
                     marker: std::marker::PhantomData,
+                    callback: None,
                 }
             }
             pub fn copy_to<U: StorageTexel<T>>(&'a self, data: &'a mut [U]) {
@@ -680,6 +742,7 @@ macro_rules! impl_tex_view {
                     }),
                     resource_tracker: rt,
                     marker: std::marker::PhantomData,
+                    callback: None,
                 }
             }
             pub fn copy_from<U: StorageTexel<T>>(&'a self, data: &[U]) {
@@ -709,6 +772,7 @@ macro_rules! impl_tex_view {
                     }),
                     resource_tracker: rt,
                     marker: std::marker::PhantomData,
+                    callback: None,
                 }
             }
             pub fn copy_to_buffer<U: StorageTexel<T> + Value>(
@@ -741,6 +805,7 @@ macro_rules! impl_tex_view {
                     }),
                     resource_tracker: rt,
                     marker: std::marker::PhantomData,
+                    callback: None,
                 }
             }
             pub fn copy_from_buffer<U: StorageTexel<T> + Value>(
@@ -771,6 +836,7 @@ macro_rules! impl_tex_view {
                     }),
                     resource_tracker: rt,
                     marker: std::marker::PhantomData,
+                    callback: None,
                 }
             }
             pub fn copy_to_texture(&'a self, other: $name<T>) {

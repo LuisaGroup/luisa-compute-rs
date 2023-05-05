@@ -93,10 +93,10 @@ impl ShaderNode for AddShaderExpr {
     }
 }
 impl_polymorphic!(ShaderNode, AddShader);
-fn main() {
+fn main() -> luisa::Result<()> {
     use luisa::*;
     let ctx = Context::new(current_exe().unwrap());
-    let device = ctx.create_device("cpu").unwrap();
+    let device = ctx.create_device("cpu")?;
     let mut builder =
         PolymorphicBuilder::<ShaderDevirtualizationKey, dyn ShaderNode>::new(device.clone());
     // build shader = sin(x) + (1.0 + 2.0)
@@ -131,7 +131,7 @@ fn main() {
             shader_b: shader_add_1_2,
         },
     );
-    let poly_shader = builder.build();
+    let poly_shader = builder.build()?;
     let result = device.create_buffer::<f32>(100).unwrap();
     let kernel = device
         .create_kernel::<()>(&|| {
@@ -156,4 +156,5 @@ fn main() {
         assert!((result[i] - v).abs() < 1e-5);
     }
     println!("OK");
+    Ok(())
 }

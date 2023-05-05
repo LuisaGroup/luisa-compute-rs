@@ -17,6 +17,7 @@ pub struct PolyArray<K, T: ?Sized + 'static> {
     get: Box<dyn Fn(&Self, Uint) -> Box<T>>,
     _marker: std::marker::PhantomData<T>,
 }
+
 impl<K, T: ?Sized + 'static> PolyArray<K, T> {
     pub fn new(tag: i32, key: K, get: Box<dyn Fn(&Self, Uint) -> Box<T>>) -> Self {
         Self {
@@ -30,6 +31,7 @@ impl<K, T: ?Sized + 'static> PolyArray<K, T> {
         self.tag
     }
 }
+
 pub trait PolymorphicImpl<T: ?Sized + 'static>: Value {
     fn new_poly_array<K>(buffer: &Buffer<Self>, tag: i32, key: K) -> PolyArray<K, T>;
 }
@@ -55,39 +57,55 @@ macro_rules! impl_polymorphic {
 struct PolyVec<K, T: ?Sized + 'static> {
     device: Device,
     push: Box<dyn Fn(&mut dyn Any, *const u8) -> u32>,
-    build: Box<dyn Fn(&dyn Any, Device) -> PolyArray<K, T>>,
+    get: Box<dyn Fn(&dyn Any, usize) -> &dyn Any>,
+    build: Box<dyn Fn(&dyn Any, Device) -> crate::Result<PolyArray<K, T>>>,
     array: Box<dyn Any>,
 }
+
 impl<K: 'static, T: ?Sized + 'static> PolyVec<K, T> {
-    fn build(&self) -> PolyArray<K, T> {
+    fn build(&self) -> crate::Result<PolyArray<K, T>> {
         (self.build)(&*self.array.as_ref(), self.device.clone())
     }
 }
 
-#[derive(Clone, Copy, Debug, __Value)]
+#[derive(Clone, Copy, Debug, __Value, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(C)]
 pub struct TagIndex {
     pub tag: u32,
     pub index: u32,
 }
-/**
- * A  de-virtualized polymorphic array builder
- * K: the key type for de-virtualization
-        Objects with the same key will shared the same tag
-        Due to the multi-stage nature of the library, the keys can be different
-        for the same types.
-        If K is (), the the array is devirtualized by type only.
- * T: The trait to be de-virtualized
+impl TagIndex {
+    pub const INVALID: Self = TagIndex {
+        tag: u32::MAX,
+        index: u32::MAX,
+    };
+}
+impl TagIndexExpr {
+    
+    pub fn valid(&self) -> Expr<bool> {
+        self.tag().cmpne(u32::MAX)
+    }
+}
 
- * This class works by maintaining two HashMaps, one containing (Key, TypeId) -> Tag
-    and the other containing Key -> Tag.
-    Thus a tag can be retrieved by either (Key, TypeId) or Key alone if the key is unique for all types.
-*/
+/**
+* A  de-virtualized polymorphic array builder
+* K: the key type for de-virtualization
+       Objects with the same key will shared the same tag
+       Due to the multi-stage nature of the library, the keys can be different
+       for the same types.
+       If K is (), the the array is devirtualized by type only.
+* T: The trait to be de-virtualized
+
+* This class works by maintaining two HashMaps, one containing (Key, TypeId) -> Tag
+   and the other containing Key -> Tag.
+   Thus a tag can be retrieved by either (Key, TypeId) or Key alone if the key is unique for all types.
+ */
 pub struct PolymorphicBuilder<DevirtualizationKey: Hash + Eq + Clone, Trait: ?Sized + 'static> {
     device: Device,
     key_to_tag: HashMap<(DevirtualizationKey, TypeId), u32>,
     arrays: Vec<PolyVec<DevirtualizationKey, Trait>>,
 }
+
 impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBuilder<K, T> {
     pub fn new(device: Device) -> Self {
         Self {
@@ -95,6 +113,10 @@ impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBui
             arrays: vec![],
             device,
         }
+    }
+    pub fn get(&self, tag_index: TagIndex) -> &dyn Any {
+        let array = &self.arrays[tag_index.tag as usize];
+        (array.get)(&*array.array, tag_index.index as usize)
     }
     fn tag_from_key<U: PolymorphicImpl<T> + 'static>(&mut self, key: K) -> u32 {
         let pair = (key.clone(), TypeId::of::<U>());
@@ -114,11 +136,22 @@ impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBui
                     array.push(*value);
                     index
                 }),
-                build: Box::new(move |array: &dyn Any, device: Device| -> PolyArray<K, T> {
+                get: Box::new(|array: &dyn Any, index: usize| -> &dyn Any {
                     let array = array.downcast_ref::<Vec<U>>().unwrap();
-                    let buffer = device.create_buffer_from_slice(&array).unwrap();
-                    PolymorphicImpl::<T>::new_poly_array(&buffer, tag as i32, key.clone())
+                    let r = &array[index];
+                    r as &dyn Any
                 }),
+                build: Box::new(
+                    move |array: &dyn Any, device: Device| -> crate::Result<PolyArray<K, T>> {
+                        let array = array.downcast_ref::<Vec<U>>().unwrap();
+                        let buffer = device.create_buffer_from_slice(&array)?;
+                        Ok(PolymorphicImpl::<T>::new_poly_array(
+                            &buffer,
+                            tag as i32,
+                            key.clone(),
+                        ))
+                    },
+                ),
                 array: Box::new(Vec::<U>::new()),
             });
             tag
@@ -131,7 +164,7 @@ impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBui
         let index = (array.push)(&mut *array.array, &value as *const U as *const u8);
         TagIndex { tag, index }
     }
-    pub fn build(self) -> Polymorphic<K, T> {
+    pub fn build(self) -> crate::Result<Polymorphic<K, T>> {
         let mut poly = Polymorphic::new();
         poly.key_typeid_to_tag = self.key_to_tag;
         for ((key, _), tag) in &poly.key_typeid_to_tag {
@@ -142,34 +175,37 @@ impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBui
             }
         }
         for a in &self.arrays {
-            poly.arrays.push(a.build());
+            poly.arrays.push(a.build()?);
         }
-        poly
+        Ok(poly)
     }
 }
-/**
- * A  de-virtualized polymorphic array
- * K: the key type for de-virtualization
-        Objects with the same key will shared the same tag
-        Due to the multi-stage nature of the library, the keys can be different
-        for the same types.
-        If K is (), the the array is devirtualized by type only.
- * T: The trait to be de-virtualized
 
- * This class works by maintaining two HashMaps, one containing (Key, TypeId) -> Tag
-    and the other containing Key -> Tag.
-    Thus a tag can be retrieved by either (Key, TypeId) or Key alone if the key is unique for all types.
-*/
+/**
+* A  de-virtualized polymorphic array
+* K: the key type for de-virtualization
+       Objects with the same key will shared the same tag
+       Due to the multi-stage nature of the library, the keys can be different
+       for the same types.
+       If K is (), the the array is devirtualized by type only.
+* T: The trait to be de-virtualized
+
+* This class works by maintaining two HashMaps, one containing (Key, TypeId) -> Tag
+   and the other containing Key -> Tag.
+   Thus a tag can be retrieved by either (Key, TypeId) or Key alone if the key is unique for all types.
+ */
 pub struct Polymorphic<DevirtualizationKey, Trait: ?Sized + 'static> {
     _marker: std::marker::PhantomData<Trait>,
     arrays: Vec<PolyArray<DevirtualizationKey, Trait>>,
     key_typeid_to_tag: HashMap<(DevirtualizationKey, TypeId), u32>,
     key_to_tag: HashMap<DevirtualizationKey, Option<u32>>,
 }
+
 pub struct PolymorphicRef<'a, DevirtualizationKey, Trait: ?Sized + 'static> {
     parent: &'a Polymorphic<DevirtualizationKey, Trait>,
     pub tag_index: Expr<TagIndex>,
 }
+
 impl<'a, K: Eq + Clone + Hash, T: ?Sized + 'static> PolymorphicRef<'a, K, T> {
     #[inline]
     pub fn dispatch<R: Aggregate>(&self, f: impl Fn(u32, &K, &T) -> R) -> R {

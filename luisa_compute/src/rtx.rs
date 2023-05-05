@@ -68,6 +68,7 @@ impl Mesh {
             }),
             marker: PhantomData,
             resource_tracker: rt,
+            callback: None,
         }
     }
     pub fn build(&self, request: AccelBuildRequest) {
@@ -164,6 +165,7 @@ impl Accel {
                 update_instance_buffer_only: false,
             }),
             resource_tracker: rt,
+            callback: None,
         }
     }
     pub fn var(&self) -> AccelVar {

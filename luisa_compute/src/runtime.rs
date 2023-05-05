@@ -6,6 +6,7 @@ use crate::{lang::Value, resource::*};
 use api::AccelOption;
 use lang::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSignature};
 pub use luisa_compute_api_types as api;
+use luisa_compute_backend::proxy::ProxyBackend;
 use luisa_compute_ir::ir::{self, KernelModule};
 use luisa_compute_ir::CArc;
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
@@ -20,7 +21,6 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::window::Window;
-use luisa_compute_backend::proxy::ProxyBackend;
 
 #[derive(Clone)]
 pub struct Device {
@@ -177,7 +177,17 @@ impl Device {
                 native_handle: array.native_handle,
             }),
             modifications: RefCell::new(Vec::new()),
-            resource_tracker: RefCell::new(ResourceTracker::new()),
+            slots: RefCell::new(vec![
+                BindlessArraySlot {
+                    buffer: None,
+                    tex2d: None,
+                    tex3d: None,
+                };
+                slots
+            ]),
+            pending_slots: RefCell::new(Vec::new()),
+            lock: Arc::new(RawMutex::INIT),
+            dirty:Cell::new(false),
         })
     }
     pub fn create_tex2d<T: IoTexel>(
@@ -502,10 +512,9 @@ impl<'a> Scope<'a> {
     pub fn submit(&self, commands: impl IntoIterator<Item = Command<'a>>) -> backend::Result<()> {
         self.submit_with_callback(commands, || {})
     }
-    #[inline]
-    pub fn submit_with_callback<F: FnOnce() + Send + 'static>(
+    fn submit_impl<F: FnOnce() + Send + 'static>(
         &self,
-        commands: impl IntoIterator<Item = Command<'a>>,
+        commands: Vec<Command<'a>>,
         callback: F,
     ) -> backend::Result<()> {
         self.synchronized.set(false);
@@ -527,6 +536,44 @@ impl<'a> Scope<'a> {
             &api_commands,
             (trampoline::<F>, ptr as *mut u8),
         )
+    }
+    #[inline]
+    pub fn submit_with_callback<F: FnOnce() + Send + 'static>(
+        &self,
+        commands: impl IntoIterator<Item = Command<'a>>,
+        callback: F,
+    ) -> backend::Result<()> {
+        let mut iter = commands.into_iter();
+        loop {
+            let mut commands = vec![];
+            let mut end = false;
+            loop {
+                if let Some(cmd) = iter.next() {
+                    let should_break = cmd.callback.is_some();
+                    commands.push(cmd);
+                    if should_break {
+                        break;
+                    }
+                } else {
+                    end = true;
+                    break;
+                }
+            }
+            // self.submit_impl(commands, callback)
+            let cb = commands.last_mut().unwrap().callback.take();
+            if end {
+                if let Some(cb) = cb {
+                    return self.submit_impl(commands, move || {
+                        cb();
+                        callback();
+                    });
+                } else {
+                    return self.submit_impl(commands, callback);
+                }
+            } else {
+                self.submit_impl(commands, cb.unwrap())?;
+            }
+        }
     }
     #[inline]
     pub fn present<T: IoTexel>(
@@ -613,6 +660,7 @@ pub struct Command<'a> {
     #[allow(dead_code)]
     pub(crate) inner: api::Command,
     pub(crate) marker: std::marker::PhantomData<&'a ()>,
+    pub(crate) callback: Option<Box<dyn FnOnce() + Send + 'static>>,
     #[allow(dead_code)]
     pub(crate) resource_tracker: ResourceTracker,
 }
@@ -638,7 +686,7 @@ impl AsyncShaderArtifact {
         {
             let artifact = artifact.clone();
             rayon::spawn(move || {
-                let shader = device.inner.create_shader(kernel, &options);
+                let shader = device.inner.create_shader(&kernel, &options);
                 {
                     let mut artifact = artifact.0.lock();
                     artifact.shader = Some(shader);
@@ -878,6 +926,7 @@ impl RawKernel {
             }),
             marker: std::marker::PhantomData,
             resource_tracker: rt,
+            callback: None,
         }
     }
     pub fn dispatch(&self, args: KernelArgEncoder, dispatch_size: [u32; 3]) -> backend::Result<()> {

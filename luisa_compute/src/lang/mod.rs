@@ -1169,7 +1169,7 @@ impl KernelBuilder {
                         name,
                     ))
                 } else {
-                    ShaderArtifact::Sync(self.device.inner.create_shader(module, &shader_options)?)
+                    ShaderArtifact::Sync(self.device.inner.create_shader(&module, &shader_options)?)
                 };
                 //
                 r.reset();

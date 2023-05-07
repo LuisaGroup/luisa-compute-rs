@@ -9,21 +9,20 @@ use crate::{rtx, ResourceTracker};
 use bumpalo::Bump;
 pub use ir::ir::NodeRef;
 use ir::ir::{
-    ArrayType, CallableModule, CallableModuleRef, ModulePools, SwitchCase,
-    UserNodeData, INVALID_REF,
+    ArrayType, CallableModule, CallableModuleRef, ModulePools, SwitchCase, UserNodeData,
+    INVALID_REF,
 };
 pub use ir::CArc;
 use ir::Pooled;
 use ir::{
     ir::{
-        new_node, BasicBlock, Binding, Capture, Const, CpuCustomOp, Func,
-        Instruction, IrBuilder, KernelModule, Module, ModuleKind, Node, PhiIncoming,
+        new_node, BasicBlock, Binding, Capture, Const, CpuCustomOp, Func, Instruction, IrBuilder,
+        KernelModule, Module, ModuleKind, Node, PhiIncoming,
     },
     transform::{self, Transform},
 };
 
 use luisa_compute_ir as ir;
-
 
 pub use luisa_compute_ir::{
     context::register_type,
@@ -31,13 +30,10 @@ pub use luisa_compute_ir::{
     ir::{StructType, Type},
     TypeOf,
 };
-use math::{Uint3};
+use math::Uint3;
 use std::cell::RefCell;
 use std::ffi::CString;
 use std::ops::{Bound, RangeBounds};
-
-
-
 
 // use self::math::Uint3;
 pub mod math;
@@ -131,11 +127,24 @@ pub fn select<M: _Mask, A: Aggregate>(mask: M, a: A, b: A) -> A {
             assert_eq!(a_node.type_(), b_node.type_());
             assert!(!a_node.is_local(), "cannot select local variables");
             assert!(!b_node.is_local(), "cannot select local variables");
-            ret.push(b.call(
-                Func::Select,
-                &[mask.node(), a_node, b_node],
-                a_node.type_().clone(),
-            ));
+            if a_node.is_user_data() || b_node.is_user_data() {
+                assert!(
+                    a_node.is_user_data() && b_node.is_user_data(),
+                    "cannot select user data and non-user data"
+                );
+                let a_data = a_node.get_user_data();
+                let b_data = b_node.get_user_data();
+                if a_data != b_data {
+                    panic!("cannot select different user data");
+                }
+                ret.push(a_node);
+            } else {
+                ret.push(b.call(
+                    Func::Select,
+                    &[mask.node(), a_node, b_node],
+                    a_node.type_().clone(),
+                ));
+            }
         }
     });
     A::from_vec_nodes(ret)
@@ -1108,78 +1117,76 @@ impl KernelBuilder {
         body: impl FnOnce(&mut Self),
     ) -> Result<crate::runtime::RawKernel> {
         body(self);
-        RECORDER.with(
-            |r| -> Result<crate::runtime::RawKernel> {
-                let mut resource_tracker = ResourceTracker::new();
-                let mut r = r.borrow_mut();
-                assert!(r.lock);
-                r.lock = false;
-                assert_eq!(r.scopes.len(), 1);
-                let scope = r.scopes.pop().unwrap();
-                let entry = scope.finish();
-                let mut captured: Vec<Capture> = Vec::new();
-                let mut captured_buffers: Vec<_> = r.captured_buffer.values().cloned().collect();
-                captured_buffers.sort_by_key(|(i, _, _, _)| *i);
-                for (j, (i, node, binding, handle)) in captured_buffers.into_iter().enumerate() {
-                    assert_eq!(j, i);
-                    captured.push(Capture { node, binding });
-                    resource_tracker.add_any(handle);
-                }
-                let mut cpu_custom_ops: Vec<_> = r.cpu_custom_ops.values().cloned().collect();
-                cpu_custom_ops.sort_by_key(|(i, _)| *i);
-                let cpu_custom_ops = cpu_custom_ops
-                    .iter()
-                    .enumerate()
-                    .map(|(j, (i, op))| {
-                        assert_eq!(j, *i);
-                        op.clone()
-                    })
-                    .collect::<Vec<_>>();
-                let module = KernelModule {
-                    module: Module {
-                        entry,
-                        kind: ModuleKind::Kernel,
-                        pools: r.pools.clone().unwrap(),
-                    },
-                    cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
-                    captures: CBoxedSlice::new(captured),
-                    shared: CBoxedSlice::new(vec![]),
-                    callables: CBoxedSlice::new(vec![]),
-                    args: CBoxedSlice::new(self.args.clone()),
-                    block_size: r.block_size.unwrap_or([64, 1, 1]),
-                    pools: r.pools.clone().unwrap(),
-                };
-
-                let module = CArc::new(module);
-                static NO_NAME: &'static [u8] = b"\0";
-                let name =  options.name.unwrap_or("".to_string());
-                let name = Arc::new(CString::new(name).unwrap());
-                let shader_options = api::ShaderOption {
-                    enable_cache: options.enable_cache,
-                    enable_fast_math: options.enable_fast_math,
-                    enable_debug_info: options.enable_debug_info,
-                    compile_only: false,
-                    name: name.as_ptr(),
-                };
-                let artifact = if options.async_compile {
-                    ShaderArtifact::Async(AsyncShaderArtifact::new(
-                        self.device.clone(),
-                        module,
-                        shader_options,
-                        name,
-                    ))
-                } else {
-                    ShaderArtifact::Sync(self.device.inner.create_shader(&module, &shader_options)?)
-                };
-                //
-                r.reset();
-                Ok(RawKernel {
-                    artifact,
-                    device: self.device.clone(),
-                    resource_tracker,
+        RECORDER.with(|r| -> Result<crate::runtime::RawKernel> {
+            let mut resource_tracker = ResourceTracker::new();
+            let mut r = r.borrow_mut();
+            assert!(r.lock);
+            r.lock = false;
+            assert_eq!(r.scopes.len(), 1);
+            let scope = r.scopes.pop().unwrap();
+            let entry = scope.finish();
+            let mut captured: Vec<Capture> = Vec::new();
+            let mut captured_buffers: Vec<_> = r.captured_buffer.values().cloned().collect();
+            captured_buffers.sort_by_key(|(i, _, _, _)| *i);
+            for (j, (i, node, binding, handle)) in captured_buffers.into_iter().enumerate() {
+                assert_eq!(j, i);
+                captured.push(Capture { node, binding });
+                resource_tracker.add_any(handle);
+            }
+            let mut cpu_custom_ops: Vec<_> = r.cpu_custom_ops.values().cloned().collect();
+            cpu_custom_ops.sort_by_key(|(i, _)| *i);
+            let cpu_custom_ops = cpu_custom_ops
+                .iter()
+                .enumerate()
+                .map(|(j, (i, op))| {
+                    assert_eq!(j, *i);
+                    op.clone()
                 })
-            },
-        )
+                .collect::<Vec<_>>();
+            let module = KernelModule {
+                module: Module {
+                    entry,
+                    kind: ModuleKind::Kernel,
+                    pools: r.pools.clone().unwrap(),
+                },
+                cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
+                captures: CBoxedSlice::new(captured),
+                shared: CBoxedSlice::new(vec![]),
+                callables: CBoxedSlice::new(vec![]),
+                args: CBoxedSlice::new(self.args.clone()),
+                block_size: r.block_size.unwrap_or([64, 1, 1]),
+                pools: r.pools.clone().unwrap(),
+            };
+
+            let module = CArc::new(module);
+            static NO_NAME: &'static [u8] = b"\0";
+            let name = options.name.unwrap_or("".to_string());
+            let name = Arc::new(CString::new(name).unwrap());
+            let shader_options = api::ShaderOption {
+                enable_cache: options.enable_cache,
+                enable_fast_math: options.enable_fast_math,
+                enable_debug_info: options.enable_debug_info,
+                compile_only: false,
+                name: name.as_ptr(),
+            };
+            let artifact = if options.async_compile {
+                ShaderArtifact::Async(AsyncShaderArtifact::new(
+                    self.device.clone(),
+                    module,
+                    shader_options,
+                    name,
+                ))
+            } else {
+                ShaderArtifact::Sync(self.device.inner.create_shader(&module, &shader_options)?)
+            };
+            //
+            r.reset();
+            Ok(RawKernel {
+                artifact,
+                device: self.device.clone(),
+                resource_tracker,
+            })
+        })
     }
 }
 
@@ -1225,9 +1232,7 @@ pub trait KernelSignature<'a> {
     type Fn: KernelBuildFn;
     type Kernel;
 
-    fn wrap_raw_kernel(
-        kernel: Result<crate::runtime::RawKernel>,
-    ) -> Result<Self::Kernel>;
+    fn wrap_raw_kernel(kernel: Result<crate::runtime::RawKernel>) -> Result<Self::Kernel>;
 }
 macro_rules! impl_callable_signature {
     ()=>{
@@ -1788,7 +1793,9 @@ pub fn __assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, c
     };
     __current_scope(|b| {
         b.call(
-            Func::Assert(CBoxedSlice::new(CString::new(msg).unwrap().into_bytes_with_nul())),
+            Func::Assert(CBoxedSlice::new(
+                CString::new(msg).unwrap().into_bytes_with_nul(),
+            )),
             &[cond.node()],
             Type::void(),
         );

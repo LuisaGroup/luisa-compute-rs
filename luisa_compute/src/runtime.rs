@@ -559,6 +559,9 @@ impl<'a> Scope<'a> {
                     break;
                 }
             }
+            if commands.is_empty() {
+                return Ok(());
+            }
             // self.submit_impl(commands, callback)
             let cb = commands.last_mut().unwrap().callback.take();
             if end {

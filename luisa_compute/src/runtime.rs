@@ -802,12 +802,7 @@ pub trait CallableArg {
     type Parameter: CallableParameter;
     fn encode(&self, encoder: &mut CallableArgEncoder);
 }
-// impl<T:Value> CallableArg for BufferVar<T> {
-//     type Parameter = BufferVar<T>;
-//     fn encode(&self, encoder: &mut CallableArgEncoder) {
-//         encoder.buffer(self);
-//     }
-// }
+
 pub trait KernelArg {
     type Parameter: KernelParameter;
     fn encode(&self, encoder: &mut KernelArgEncoder);

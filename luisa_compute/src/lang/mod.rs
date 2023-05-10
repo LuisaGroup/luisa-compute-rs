@@ -117,7 +117,7 @@ impl_aggregate_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15)
 
 pub unsafe trait _Mask: FromNode {}
 
-pub fn select<M: _Mask, A: Aggregate>(mask: M, a: A, b: A) -> A {
+pub fn select<A: Aggregate>(mask: impl _Mask, a: A, b: A) -> A {
     let a_nodes = a.to_vec_nodes();
     let b_nodes = b.to_vec_nodes();
     assert_eq!(a_nodes.len(), b_nodes.len());
@@ -1221,6 +1221,7 @@ pub trait KernelBuildFn {
     ) -> Result<crate::runtime::RawKernel>;
     fn build_callable(&self, builder: &mut KernelBuilder) -> CallableModuleRef;
 }
+
 
 pub trait CallableSignature<'a, R: CallableRet> {
     type Callable;

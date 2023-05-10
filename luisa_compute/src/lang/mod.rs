@@ -1,3 +1,4 @@
+use std::backtrace::Backtrace;
 use std::marker::PhantomData;
 use std::{any::Any, collections::HashMap, fmt::Debug, sync::Arc};
 
@@ -1143,12 +1144,19 @@ impl KernelBuilder {
                     op.clone()
                 })
                 .collect::<Vec<_>>();
+
+            let ir_module = Module {
+                entry,
+                kind: ModuleKind::Kernel,
+                pools: r.pools.clone().unwrap(),
+            };
+            let ir_module = {
+                // perform IR passes
+                let ad_transform = transform::autodiff::Autodiff;
+                ad_transform.transform(ir_module)
+            };
             let module = KernelModule {
-                module: Module {
-                    entry,
-                    kind: ModuleKind::Kernel,
-                    pools: r.pools.clone().unwrap(),
-                },
+                module: ir_module,
                 cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
                 captures: CBoxedSlice::new(captured),
                 shared: CBoxedSlice::new(vec![]),
@@ -1221,7 +1229,6 @@ pub trait KernelBuildFn {
     ) -> Result<crate::runtime::RawKernel>;
     fn build_callable(&self, builder: &mut KernelBuilder) -> CallableModuleRef;
 }
-
 
 pub trait CallableSignature<'a, R: CallableRet> {
     type Callable;
@@ -1601,7 +1608,7 @@ pub fn return_() {
 struct AdContext {
     started: bool,
     backward_called: bool,
-    forward: Option<Pooled<BasicBlock>>,
+    // forward: Option<Pooled<BasicBlock>>,
 }
 
 impl AdContext {
@@ -1609,7 +1616,7 @@ impl AdContext {
         Self {
             started: false,
             backward_called: false,
-            forward: None,
+            // forward: None,
         }
     }
     fn reset(&mut self) {
@@ -1653,17 +1660,7 @@ pub fn backward_with_grad<T: ExprProxy>(out: T, grad: T) {
     let grad = grad.node();
     __current_scope(|b| {
         b.call(Func::GradientMarker, &[out, grad], Type::void());
-    });
-    let fwd = __pop_scope();
-    AD_CONTEXT.with(|c| {
-        let mut c = c.borrow_mut();
-        c.forward = Some(fwd);
-    });
-    RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
-        let pools = r.pools.clone().unwrap();
-        let s = &mut r.scopes;
-        s.push(IrBuilder::new(pools));
+        b.call(Func::Backward, &[], Type::void());
     });
 }
 
@@ -1715,36 +1712,17 @@ pub fn autodiff(body: impl FnOnce()) {
         s.push(IrBuilder::new(pools));
     });
     body();
-    let fwd = AD_CONTEXT.with(|c| {
-        let mut c = c.borrow_mut();
-        assert!(c.started, "autodiff section is not started");
-        assert!(c.backward_called, "backward is not called");
-        c.forward.take().unwrap()
-    });
-    let fwd_module = Module {
-        kind: ModuleKind::Block,
-        entry: fwd,
-        pools: __module_pools().clone(),
-    };
-    let ad_transform = transform::autodiff::Autodiff;
-    let ad_module = ad_transform.transform(fwd_module);
-    let epilogue = RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
-        let s = &mut r.scopes;
-        s.pop().unwrap().finish()
-    });
-    let fwd_bwd = ad_module.entry;
-
     AD_CONTEXT.with(|c| {
         let mut c = c.borrow_mut();
         assert!(c.started, "autodiff section is not started");
         assert!(c.backward_called, "backward is not called");
         c.reset();
     });
+    let body = __pop_scope();
     __current_scope(|b| {
-        b.append_block(fwd_bwd);
-        b.append_block(epilogue);
-    })
+        let node = Node::new(CArc::new(Instruction::AdScope { body }), Type::void());
+        b.append(new_node(b.pools(), node))
+    });
 }
 
 pub fn is_cpu_backend() -> bool {
@@ -1766,6 +1744,7 @@ pub fn __env_need_backtrace() -> bool {
         Err(_) => false,
     }
 }
+
 #[inline]
 pub fn __assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, col: u32) {
     let cond = cond.into();
@@ -1781,9 +1760,9 @@ pub fn __assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, c
         pretty_filename = file.to_string();
     }
     let msg = if is_cpu_backend() && __env_need_backtrace() {
-        let backtrace = backtrace::Backtrace::new();
+        let backtrace = get_backtrace();
         format!(
-            "assertion failed: {} at {}:{}:{} \nbacktrace: {:?}",
+            "assertion failed: {} at {}:{}:{} \nbacktrace: {}",
             msg, pretty_filename, line, col, backtrace
         )
     } else {

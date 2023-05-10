@@ -4,7 +4,6 @@ name = "luisa_compute"
 version = "0.1.1-alpha.1"
 
 [dependencies]
-backtrace = "0.3.67"
 base64ct = {version = "1.5.0", features = ["alloc"]}
 bumpalo = "3.12.0"
 env_logger = "0.10.0"

@@ -1,5 +1,6 @@
 #![allow(unused_unsafe)]
 
+use std::backtrace::Backtrace;
 use std::path::Path;
 use std::{any::Any, sync::Arc};
 
@@ -145,3 +146,7 @@ impl ResourceTracker {
 unsafe impl Send for ResourceTracker {}
 
 unsafe impl Sync for ResourceTracker {}
+
+pub(crate) fn get_backtrace() -> Backtrace {
+    Backtrace::force_capture()
+}

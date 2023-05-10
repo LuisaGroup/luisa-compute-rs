@@ -1188,7 +1188,7 @@ impl BindlessArrayVar {
         if __env_need_backtrace() {
             let vt = v.__type();
             let expected = type_hash(&T::type_());
-            let backtrace = backtrace::Backtrace::new();
+            let backtrace = get_backtrace();
             let check_type = CpuFn::new(move |t: &mut u64| {
                 if *t != expected {
                     {

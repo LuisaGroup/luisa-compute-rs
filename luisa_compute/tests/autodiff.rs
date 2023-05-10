@@ -814,17 +814,19 @@ fn autodiff_if_phi() {
             let tid = dispatch_id().x();
             let x = buf_x.read(tid);
             let y = buf_y.read(tid);
-            autodiff(|| {
-                requires_grad(x);
-                requires_grad(y);
-                let z = if_!(x.cmpgt(y), {
-                    x * 4.0
-                }, else {
-                    y * 0.5
+            if_!(true, {
+                autodiff(|| {
+                    requires_grad(x);
+                    requires_grad(y);
+                    let z = if_!(x.cmpgt(y), {
+                        x * 4.0
+                    }, else {
+                        y * 0.5
+                    });
+                    backward(z);
+                    buf_dx.write(tid, gradient(x));
+                    buf_dy.write(tid, gradient(y));
                 });
-                backward(z);
-                buf_dx.write(tid, gradient(x));
-                buf_dy.write(tid, gradient(y));
             });
         })
         .unwrap();

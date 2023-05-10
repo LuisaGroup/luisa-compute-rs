@@ -1343,6 +1343,7 @@ pub fn if_then_else<R: Aggregate>(
     then: impl FnOnce() -> R,
     else_: impl FnOnce() -> R,
 ) -> R {
+    let cond = cond.node();
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
         let pools = r.pools.clone().unwrap();
@@ -1367,7 +1368,7 @@ pub fn if_then_else<R: Aggregate>(
     let then_nodes = then.to_vec_nodes();
     let else_nodes = else_.to_vec_nodes();
     __current_scope(|b| {
-        b.if_(cond.node(), then_block, else_block);
+        b.if_(cond, then_block, else_block);
     });
     assert_eq!(then_nodes.len(), else_nodes.len());
     let phis = __current_scope(|b| {

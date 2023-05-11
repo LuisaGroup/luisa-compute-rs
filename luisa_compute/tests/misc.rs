@@ -2,6 +2,7 @@ use std::env::current_exe;
 
 use luisa::*;
 use luisa_compute as luisa;
+use luisa_compute_api_types::StreamTag;
 use rand::prelude::*;
 
 fn _signal_handler(signal: libc::c_int) {
@@ -20,6 +21,44 @@ fn get_device() -> Device {
         Err(_) => "cpu".to_string(),
     };
     ctx.create_device(&device)
+}
+#[test]
+fn event() {
+    let device = get_device();
+    let a: Buffer<i32> = device.create_buffer_from_slice(&[0]);
+    let b: Buffer<i32> = device.create_buffer_from_slice(&[0]);
+    // compute (1 + 3) * (4 + 5)
+    let add = device.create_kernel::<(Buffer<i32>, i32)>(&|buf: BufferVar<i32>, v: Expr<i32>| {
+        buf.write(0, buf.read(0) + v);
+    });
+    let mul = device.create_kernel::<(Buffer<i32>, Buffer<i32>)>(
+        &|a: BufferVar<i32>, b: BufferVar<i32>| {
+            a.write(0, a.read(0) * b.read(0));
+        },
+    );
+    let stream_a = device.create_stream(StreamTag::Compute);
+    let stream_b = device.create_stream(StreamTag::Compute);
+    {
+        let scope_a = stream_a.scope();
+        let scope_b = stream_b.scope();
+        let event = device.create_event();
+        scope_a
+            .submit([add.dispatch_async([1, 1, 1], &a, &1)])
+            .submit([add.dispatch_async([1, 1, 1], &b, &4)])
+            .signal(&event);
+        scope_b
+            .wait(&event)
+            .submit([add.dispatch_async([1, 1, 1], &a, &3)])
+            .submit([add.dispatch_async([1, 1, 1], &b, &5)])
+            .signal(&event);
+        scope_a
+            .wait(&event)
+            .submit([mul.dispatch_async([1, 1, 1], &a, &b)])
+            .signal(&event);
+        event.synchronize();
+    }
+    let v = a.copy_to_vec();
+    assert_eq!(v[0], (1 + 3) * (4 + 5));
 }
 #[test]
 fn vec_cast() {

@@ -122,9 +122,11 @@ impl<'a, T: Value> BufferView<'a, T> {
     }
 }
 impl<T: Value> Buffer<T> {
+    #[inline]
     pub(crate) fn handle(&self) -> api::Buffer {
         self.handle.handle
     }
+    #[inline]
     pub unsafe fn shallow_clone(&self) -> Buffer<T> {
         Buffer {
             device: self.device.clone(),
@@ -133,27 +135,35 @@ impl<T: Value> Buffer<T> {
             _marker: std::marker::PhantomData,
         }
     }
+    #[inline]
     pub fn native_handle(&self) -> *mut c_void {
         self.handle.native_handle
     }
+    #[inline]
     pub fn copy_from(&self, data: &[T]) {
         self.view(..).copy_from(data);
     }
+    #[inline]
     pub fn copy_to(&self, data: &mut [T]) {
         self.view(..).copy_to(data);
     }
+    #[inline]
     pub fn copy_to_vec(&self) -> Vec<T> {
         self.view(..).copy_to_vec()
     }
+    #[inline]
     pub fn copy_to_buffer(&self, dst: &Buffer<T>) {
         self.view(..).copy_to_buffer(dst.view(..));
     }
+    #[inline]
     pub fn copy_to_buffer_async<'a>(&'a self, dst: &'a Buffer<T>) -> Command<'a> {
         self.view(..).copy_to_buffer_async(dst.view(..))
     }
+    #[inline]
     pub fn fill_fn<F: FnMut(usize) -> T>(&self, f: F) {
         self.view(..).fill_fn(f);
     }
+    #[inline]
     pub fn fill(&self, value: T) {
         self.view(..).fill(value);
     }
@@ -178,12 +188,15 @@ impl<T: Value> Buffer<T> {
             len: (upper - lower) as usize,
         }
     }
+    #[inline]
     pub fn len(&self) -> usize {
         self.len
     }
+    #[inline]
     pub fn size_bytes(&self) -> usize {
         self.len * std::mem::size_of::<T>()
     }
+    #[inline]
     pub fn var(&self) -> BufferVar<T> {
         BufferVar::new(&self.view(..))
     }
@@ -221,14 +234,17 @@ pub struct BindlessArray {
     pub(crate) dirty: Cell<bool>,
 }
 impl BindlessArray {
+    #[inline]
     fn lock(&self) {
         self.lock.lock();
     }
+    #[inline]
     fn unlock(&self) {
         unsafe {
             self.lock.unlock();
         }
     }
+    #[inline]
     fn make_pending_slots(&self) {
         let mut pending = self.pending_slots.borrow_mut();
         if self.dirty.get() {
@@ -240,12 +256,19 @@ impl BindlessArray {
             *pending = self.slots.borrow().clone();
         }
     }
+    #[inline]
     pub fn var(&self) -> BindlessArrayVar {
         BindlessArrayVar::new(self)
     }
+    #[inline]
     pub fn handle(&self) -> api::BindlessArray {
         self.handle.handle
     }
+    #[inline]
+    pub fn native_handle(&self) -> *mut std::ffi::c_void {
+        self.handle.native_handle
+    }
+
     pub fn emplace_buffer_async<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
         self.lock();
         self.modifications
@@ -393,34 +416,42 @@ impl BindlessArray {
         pending[index].tex3d = None;
         self.unlock();
     }
+    #[inline]
     pub fn emplace_buffer<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
         self.emplace_buffer_async(index, buffer);
         self.update();
     }
+    #[inline]
     pub fn emplace_buffer_view<T: Value>(&self, index: usize, buffer: &BufferView<T>) {
         self.emplace_bufferview_async(index, buffer);
         self.update();
     }
+    #[inline]
     pub fn set_tex2d<T: IoTexel>(&self, index: usize, texture: &Tex2d<T>, sampler: Sampler) {
         self.emplace_tex2d_async(index, texture, sampler);
         self.update();
     }
+    #[inline]
     pub fn set_tex3d<T: IoTexel>(&self, index: usize, texture: &Tex3d<T>, sampler: Sampler) {
         self.emplace_tex3d_async(index, texture, sampler);
         self.update();
     }
+    #[inline]
     pub fn remove_buffer(&self, index: usize) {
         self.remove_buffer_async(index);
         self.update();
     }
+    #[inline]
     pub fn remove_tex2d(&self, index: usize) {
         self.remove_tex2d_async(index);
         self.update();
     }
+    #[inline]
     pub fn remove_tex3d(&self, index: usize) {
         self.remove_tex3d_async(index);
         self.update();
     }
+    #[inline]
     pub fn update(&self) {
         submit_default_stream_and_sync(&self.device, [self.update_async()]);
     }

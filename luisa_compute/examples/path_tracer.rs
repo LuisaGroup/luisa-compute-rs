@@ -2,7 +2,8 @@ use image::Rgb;
 use rand::Rng;
 use std::env::current_exe;
 use std::time::Instant;
-use winit::event::{Event, WindowEvent};
+use winit::event::{WindowEvent};
+use winit::event::Event as WinitEvent;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 #[allow(unused_imports)]
@@ -462,7 +463,7 @@ fn main() {
     event_loop.run(move |event, _, control_flow| {
         control_flow.set_poll();
         match event {
-            Event::WindowEvent {
+            WinitEvent::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 window_id,
             } if window_id == window.id() => {
@@ -482,10 +483,10 @@ fn main() {
                 }
                 *control_flow = ControlFlow::Exit
             }
-            Event::MainEventsCleared => {
+            WinitEvent::MainEventsCleared => {
                 window.request_redraw();
             }
-            Event::RedrawRequested(_) => {
+            WinitEvent::RedrawRequested(_) => {
                 let tic = Instant::now();
                 {
                     let scope = device.default_stream().scope();

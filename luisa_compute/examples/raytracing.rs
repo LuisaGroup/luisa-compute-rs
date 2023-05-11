@@ -5,10 +5,10 @@ use image::Rgb;
 use luisa::prelude::*;
 use luisa_compute as luisa;
 use winit::{
-    event::{Event, WindowEvent},
+    event::{WindowEvent},
     event_loop::{ControlFlow, EventLoop},
 };
-
+use winit::event::Event as WinitEvent;
 fn main() {
     use luisa::*;
     init_logger();
@@ -95,14 +95,14 @@ fn main() {
     event_loop.run(move |event, _, control_flow| {
         control_flow.set_wait();
         match event {
-            Event::WindowEvent {
+            WinitEvent::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 window_id,
             } if window_id == window.id() => *control_flow = ControlFlow::Exit,
-            Event::MainEventsCleared => {
+            WinitEvent::MainEventsCleared => {
                 window.request_redraw();
             }
-            Event::RedrawRequested(_) => {
+            WinitEvent::RedrawRequested(_) => {
                 let scope = device.default_stream().scope();
                 scope.present(&swapchain, &img);
             }

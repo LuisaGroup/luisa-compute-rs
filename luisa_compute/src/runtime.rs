@@ -269,6 +269,16 @@ impl Device {
             }),
         }
     }
+    pub fn create_event(&self) -> Event {
+        let event = self.inner.create_event();
+        Event {
+            handle: Arc::new(EventHandle {
+                device: self.clone(),
+                handle: api::Event(event.handle),
+                native_handle: event.native_handle,
+            }),
+        }
+    }
     pub fn create_mesh<V: Value>(
         &self,
         vbuffer: BufferView<'_, V>,
@@ -421,6 +431,42 @@ impl Swapchain {
         self.handle.pixel_storage
     }
 }
+
+pub struct Event {
+    pub(crate) handle: Arc<EventHandle>,
+}
+impl Event {
+    #[inline]
+    pub fn handle(&self) -> api::Event {
+        self.handle.handle
+    }
+    #[inline]
+    pub fn native_handle(&self) -> *mut std::ffi::c_void {
+        self.handle.native_handle
+    }
+    #[inline]
+    pub fn synchronize(&self) {
+        self.handle
+            .device
+            .inner
+            .synchronize_event(self.handle.handle);
+    }
+}
+impl Drop for Event {
+    fn drop(&mut self) {
+        self.synchronize();
+    }
+}
+pub(crate) struct EventHandle {
+    pub(crate) device: Device,
+    handle: api::Event,
+    native_handle: *mut std::ffi::c_void,
+}
+impl Drop for EventHandle {
+    fn drop(&mut self) {
+        self.device.inner.destroy_event(self.handle);
+    }
+}
 pub struct Stream {
     #[allow(dead_code)]
     pub(crate) device: Device,
@@ -494,19 +540,20 @@ impl<'a> Scope<'a> {
         }
     }
     #[inline]
-    pub fn synchronize(&self) {
+    pub fn synchronize(&self) -> &Self {
         self.handle.device().synchronize_stream(self.handle());
         self.synchronized.set(true);
+        self
     }
     #[inline]
-    pub fn command_list(&self) -> CommandList<'a> {
+    fn command_list(&self) -> CommandList<'a> {
         CommandList::<'a> {
             marker: std::marker::PhantomData {},
             commands: Vec::new(),
         }
     }
     #[inline]
-    pub fn submit(&self, commands: impl IntoIterator<Item = Command<'a>>) {
+    pub fn submit(&self, commands: impl IntoIterator<Item = Command<'a>>) -> &Self {
         self.submit_with_callback(commands, || {})
     }
     fn submit_impl<F: FnOnce() + Send + 'static>(&self, commands: Vec<Command<'a>>, callback: F) {
@@ -535,7 +582,7 @@ impl<'a> Scope<'a> {
         &self,
         commands: impl IntoIterator<Item = Command<'a>>,
         callback: F,
-    ) {
+    ) -> &Self {
         let mut iter = commands.into_iter();
         loop {
             let mut commands = vec![];
@@ -553,18 +600,20 @@ impl<'a> Scope<'a> {
                 }
             }
             if commands.is_empty() {
-                return;
+                return self;
             }
             // self.submit_impl(commands, callback)
             let cb = commands.last_mut().unwrap().callback.take();
             if end {
                 if let Some(cb) = cb {
-                    return self.submit_impl(commands, move || {
+                    self.submit_impl(commands, move || {
                         cb();
                         callback();
                     });
+                    return self;
                 } else {
-                    return self.submit_impl(commands, callback);
+                    self.submit_impl(commands, callback);
+                    return self;
                 }
             } else {
                 self.submit_impl(commands, cb.unwrap());
@@ -572,7 +621,21 @@ impl<'a> Scope<'a> {
         }
     }
     #[inline]
-    pub fn present<T: IoTexel>(&self, swapchain: &Swapchain, image: &Tex2d<T>) {
+    pub fn wait(&self, event: &Event) -> &Self {
+        self.handle
+            .device()
+            .wait_event(event.handle(), self.handle());
+        self
+    }
+    #[inline]
+    pub fn signal(&self, event: &Event) -> &Self {
+        self.handle
+            .device()
+            .signal_event(event.handle(), self.handle());
+        self
+    }
+    #[inline]
+    pub fn present<T: IoTexel>(&self, swapchain: &Swapchain, image: &Tex2d<T>) -> &Self {
         assert_eq!(image.handle.storage, swapchain.handle.pixel_storage);
         let mut rt = self.resource_tracker.borrow_mut();
         rt.add(swapchain.handle.clone());
@@ -583,6 +646,7 @@ impl<'a> Scope<'a> {
             swapchain.handle(),
             image.handle(),
         );
+        self
     }
 }
 impl<'a> Drop for Scope<'a> {
@@ -618,7 +682,7 @@ impl Stream {
         self.handle.native_handle()
     }
 }
-pub struct CommandList<'a> {
+pub(crate) struct CommandList<'a> {
     marker: std::marker::PhantomData<&'a ()>,
     commands: Vec<Command<'a>>,
 }
@@ -644,7 +708,7 @@ pub fn submit_default_stream_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
     let default_stream = device.default_stream();
     default_stream.with_scope(|s| {
         s.submit(commands);
-        s.synchronize()
+        s.synchronize();
     })
 }
 pub struct Command<'a> {

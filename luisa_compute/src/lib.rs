@@ -56,7 +56,7 @@ use luisa_compute_backend::Backend;
 pub use luisa_compute_sys as sys;
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
 use parking_lot::{Mutex, RawMutex};
-pub use runtime::{CommandList, Device, Stream};
+pub use runtime::{Device, Scope, Stream};
 use std::collections::HashMap;
 use std::sync::Weak;
 
@@ -79,7 +79,6 @@ impl Context {
     pub fn new(lib_path: impl AsRef<Path>) -> Self {
         let mut lib_path = lib_path.as_ref().to_path_buf();
         lib_path = lib_path.canonicalize().unwrap();
-        dbg!(lib_path.as_path());
         if lib_path.is_file() {
             lib_path = lib_path.parent().unwrap().to_path_buf();
         }

@@ -1116,9 +1116,9 @@ impl KernelBuilder {
         &mut self,
         options: KernelBuildOptions,
         body: impl FnOnce(&mut Self),
-    ) -> Result<crate::runtime::RawKernel> {
+    ) -> crate::runtime::RawKernel {
         body(self);
-        RECORDER.with(|r| -> Result<crate::runtime::RawKernel> {
+        RECORDER.with(|r| -> crate::runtime::RawKernel {
             let mut resource_tracker = ResourceTracker::new();
             let mut r = r.borrow_mut();
             assert!(r.lock);
@@ -1185,15 +1185,15 @@ impl KernelBuilder {
                     name,
                 ))
             } else {
-                ShaderArtifact::Sync(self.device.inner.create_shader(&module, &shader_options)?)
+                ShaderArtifact::Sync(self.device.inner.create_shader(&module, &shader_options))
             };
             //
             r.reset();
-            Ok(RawKernel {
+            RawKernel {
                 artifact,
                 device: self.device.clone(),
                 resource_tracker,
-            })
+            }
         })
     }
 }
@@ -1226,7 +1226,7 @@ pub trait KernelBuildFn {
         &self,
         builder: &mut KernelBuilder,
         options: KernelBuildOptions,
-    ) -> Result<crate::runtime::RawKernel>;
+    ) -> crate::runtime::RawKernel;
     fn build_callable(&self, builder: &mut KernelBuilder) -> CallableModuleRef;
 }
 
@@ -1240,7 +1240,7 @@ pub trait KernelSignature<'a> {
     type Fn: KernelBuildFn;
     type Kernel;
 
-    fn wrap_raw_kernel(kernel: Result<crate::runtime::RawKernel>) -> Result<Self::Kernel>;
+    fn wrap_raw_kernel(kernel: crate::runtime::RawKernel) -> Self::Kernel;
 }
 macro_rules! impl_callable_signature {
     ()=>{
@@ -1275,11 +1275,11 @@ macro_rules! impl_kernel_signature {
         impl<'a> KernelSignature<'a> for () {
             type Fn = &'a dyn Fn();
             type Kernel = Kernel<()>;
-            fn wrap_raw_kernel(kernel: Result<crate::runtime::RawKernel>) -> Result<Self::Kernel> {
-                Ok(Self::Kernel{
-                    inner:kernel?,
+            fn wrap_raw_kernel(kernel: crate::runtime::RawKernel) -> Self::Kernel {
+                Self::Kernel{
+                    inner:kernel,
                     _marker:std::marker::PhantomData,
-                })
+                }
             }
         }
     };
@@ -1287,11 +1287,11 @@ macro_rules! impl_kernel_signature {
         impl<'a, $first:KernelArg +'static, $($rest: KernelArg +'static),*> KernelSignature<'a> for ($first, $($rest,)*) {
             type Fn = &'a dyn Fn($first::Parameter, $($rest::Parameter),*);
             type Kernel = Kernel<($first, $($rest,)*)>;
-            fn wrap_raw_kernel(kernel: Result<crate::runtime::RawKernel>) -> Result<Self::Kernel> {
-                Ok(Self::Kernel{
-                    inner:kernel?,
+            fn wrap_raw_kernel(kernel: crate::runtime::RawKernel) -> Self::Kernel {
+                Self::Kernel{
+                    inner:kernel,
                     _marker:std::marker::PhantomData,
-                })
+                }
             }
         }
         impl_kernel_signature!($($rest)*);
@@ -1302,7 +1302,7 @@ impl_kernel_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 macro_rules! impl_kernel_build_for_fn {
     ()=>{
         impl KernelBuildFn for &dyn Fn() {
-            fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> Result<crate::runtime::RawKernel> {
+            fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> crate::runtime::RawKernel {
                 builder.build_kernel(options, |_| {
                     self()
                 })
@@ -1317,7 +1317,7 @@ macro_rules! impl_kernel_build_for_fn {
     ($first:ident  $($rest:ident)*) => {
         impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelBuildFn for &dyn Fn($first, $($rest,)*) {
             #[allow(non_snake_case)]
-            fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> Result<crate::runtime::RawKernel>  {
+            fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> crate::runtime::RawKernel {
                 builder.build_kernel(options, |builder| {
                     let $first = $first::def_param(builder);
                     $(let $rest = $rest::def_param(builder);)*

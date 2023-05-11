@@ -15,10 +15,10 @@ fn main() {
     use luisa::*;
 
     let ctx = Context::new(current_exe().unwrap());
-    let device = ctx.create_device("cpu").unwrap();
-    let x = device.create_buffer::<f32>(1024).unwrap();
-    let y = device.create_buffer::<f32>(1024).unwrap();
-    let z = device.create_buffer::<f32>(1024).unwrap();
+    let device = ctx.create_device("cpu");
+    let x = device.create_buffer::<f32>(1024);
+    let y = device.create_buffer::<f32>(1024);
+    let z = device.create_buffer::<f32>(1024);
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
     let my_add = CpuFn::new(|args: &mut MyAddArgs| {
@@ -45,8 +45,8 @@ fn main() {
             });
             buf_z.write(tid, result.result());
         })
-        .unwrap();
-    shader.dispatch([1024, 1, 1], &z).unwrap();
+        ;
+    shader.dispatch([1024, 1, 1], &z);
     let mut z_data = vec![0.0; 1024];
     z.view(..).copy_to(&mut z_data);
     println!("{:?}", &z_data[0..16]);

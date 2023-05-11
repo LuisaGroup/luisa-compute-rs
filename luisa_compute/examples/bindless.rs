@@ -14,16 +14,14 @@ fn main() {
 
     init_logger();
     let ctx = Context::new(current_exe().unwrap());
-    let device = ctx
-        .create_device(if args.len() == 2 {
-            args[1].as_str()
-        } else {
-            "cpu"
-        })
-        .unwrap();
-    let x = device.create_buffer::<f32>(1024).unwrap();
-    let y = device.create_buffer::<f32>(1024).unwrap();
-    let z = device.create_buffer::<f32>(1024).unwrap();
+    let device = ctx.create_device(if args.len() == 2 {
+        args[1].as_str()
+    } else {
+        "cpu"
+    });
+    let x = device.create_buffer::<f32>(1024);
+    let y = device.create_buffer::<f32>(1024);
+    let z = device.create_buffer::<f32>(1024);
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
     let mut file_path = PathBuf::from(
@@ -38,9 +36,8 @@ fn main() {
 
     let img = {
         let img = ImageReader::open(file_path).unwrap().decode().unwrap();
-        let tex: Tex2d<Float4> = device
-            .create_tex2d(PixelStorage::Float4, img.width(), img.height(), mip_levels)
-            .unwrap();
+        let tex: Tex2d<Float4> =
+            device.create_tex2d(PixelStorage::Float4, img.width(), img.height(), mip_levels);
         for i in 0..mip_levels {
             let mip = img
                 .resize(
@@ -58,23 +55,21 @@ fn main() {
         }
         tex
     };
-    let bindless = device.create_bindless_array(2).unwrap();
+    let bindless = device.create_bindless_array(2);
     bindless.emplace_buffer_async(0, &x);
     bindless.emplace_buffer_async(1, &y);
     bindless.emplace_tex2d_async(0, &img, Sampler::default());
     bindless.update();
-    let kernel = device
-        .create_kernel::<(BufferView<f32>, )>(&|buf_z| {
-            let bindless = bindless.var();
-            let tid = dispatch_id().x();
-            let buf_x = bindless.buffer::<f32>(Uint::from(0));
-            let buf_y = bindless.buffer::<f32>(Uint::from(1));
-            let x = buf_x.read(tid).uint().float();
-            let y = buf_y.read(tid);
-            buf_z.write(tid, x + y);
-        })
-        .unwrap();
-    kernel.dispatch([1024, 1, 1], &z).unwrap();
+    let kernel = device.create_kernel::<(BufferView<f32>,)>(&|buf_z| {
+        let bindless = bindless.var();
+        let tid = dispatch_id().x();
+        let buf_x = bindless.buffer::<f32>(Uint::from(0));
+        let buf_y = bindless.buffer::<f32>(Uint::from(1));
+        let x = buf_x.read(tid).uint().float();
+        let y = buf_y.read(tid);
+        buf_z.write(tid, x + y);
+    });
+    kernel.dispatch([1024, 1, 1], &z);
     let mut z_data = vec![0.0; 1024];
     z.view(..).copy_to(&mut z_data);
     println!("{:?}", &z_data[0..16]);

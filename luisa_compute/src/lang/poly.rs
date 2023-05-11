@@ -59,12 +59,12 @@ struct PolyVec<K, T: ?Sized + 'static> {
     push: Box<dyn Fn(&mut dyn Any, *const u8) -> u32>,
     get: Box<dyn Fn(&dyn Any, usize) -> &dyn Any>,
     get_mut: Box<dyn Fn(&mut dyn Any, usize) -> &mut dyn Any>,
-    build: Box<dyn Fn(&dyn Any, Device) -> crate::Result<PolyArray<K, T>>>,
+    build: Box<dyn Fn(&dyn Any, Device) -> PolyArray<K, T>>,
     array: Box<dyn Any>,
 }
 
 impl<K: 'static, T: ?Sized + 'static> PolyVec<K, T> {
-    fn build(&self) -> crate::Result<PolyArray<K, T>> {
+    fn build(&self) -> PolyArray<K, T> {
         (self.build)(&*self.array.as_ref(), self.device.clone())
     }
 }
@@ -151,14 +151,14 @@ impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBui
                     r as &mut dyn Any
                 }),
                 build: Box::new(
-                    move |array: &dyn Any, device: Device| -> crate::Result<PolyArray<K, T>> {
+                    move |array: &dyn Any, device: Device| -> PolyArray<K, T> {
                         let array = array.downcast_ref::<Vec<U>>().unwrap();
-                        let buffer = device.create_buffer_from_slice(&array)?;
-                        Ok(PolymorphicImpl::<T>::new_poly_array(
+                        let buffer = device.create_buffer_from_slice(&array);
+                        PolymorphicImpl::<T>::new_poly_array(
                             &buffer,
                             tag as i32,
                             key.clone(),
-                        ))
+                        )
                     },
                 ),
                 array: Box::new(Vec::<U>::new()),
@@ -173,7 +173,7 @@ impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBui
         let index = (array.push)(&mut *array.array, &value as *const U as *const u8);
         TagIndex { tag, index }
     }
-    pub fn build(self) -> crate::Result<Polymorphic<K, T>> {
+    pub fn build(self) -> Polymorphic<K, T> {
         let mut poly = Polymorphic::new();
         poly.key_typeid_to_tag = self.key_to_tag;
         for ((key, _), tag) in &poly.key_typeid_to_tag {
@@ -184,9 +184,9 @@ impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBui
             }
         }
         for a in &self.arrays {
-            poly.arrays.push(a.build()?);
+            poly.arrays.push(a.build());
         }
-        Ok(poly)
+        poly
     }
 }
 

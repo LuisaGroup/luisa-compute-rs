@@ -72,7 +72,7 @@ impl Mesh {
         }
     }
     pub fn build(&self, request: AccelBuildRequest) {
-        submit_default_stream_and_sync(&self.handle.device, [self.build_async(request)]).unwrap();
+        submit_default_stream_and_sync(&self.handle.device, [self.build_async(request)]);
     }
 }
 
@@ -144,7 +144,7 @@ impl Accel {
         mesh_handles.pop().unwrap();
     }
     pub fn build(&self, request: api::AccelBuildRequest) {
-        submit_default_stream_and_sync(&self.handle.device, [self.build_async(request)]).unwrap()
+        submit_default_stream_and_sync(&self.handle.device, [self.build_async(request)])
     }
     pub fn build_async<'a>(&'a self, request: api::AccelBuildRequest) -> Command<'a> {
         let mut rt = ResourceTracker::new();

@@ -11,7 +11,6 @@ use std::cell::RefCell;
 use std::ops::RangeBounds;
 use std::process::abort;
 
-
 use std::sync::Arc;
 pub struct Buffer<T: Value> {
     pub(crate) device: Device,
@@ -72,8 +71,7 @@ impl<'a, T: Value> BufferView<'a, T> {
     }
     pub fn copy_to(&self, data: &mut [T]) {
         unsafe {
-            submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_async(data)])
-                .unwrap();
+            submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_async(data)]);
         }
     }
     pub fn copy_from_async(&'a self, data: &'a [T]) -> Command<'a> {
@@ -93,7 +91,7 @@ impl<'a, T: Value> BufferView<'a, T> {
         }
     }
     pub fn copy_from(&self, data: &[T]) {
-        submit_default_stream_and_sync(&self.buffer.device, [self.copy_from_async(data)]).unwrap();
+        submit_default_stream_and_sync(&self.buffer.device, [self.copy_from_async(data)]);
     }
     pub fn fill_fn<F: FnMut(usize) -> T>(&self, f: F) {
         self.copy_from(&(0..self.len).map(f).collect::<Vec<_>>());
@@ -120,8 +118,7 @@ impl<'a, T: Value> BufferView<'a, T> {
         }
     }
     pub fn copy_to_buffer(&self, dst: BufferView<T>) {
-        submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_buffer_async(dst)])
-            .unwrap();
+        submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_buffer_async(dst)]);
     }
 }
 impl<T: Value> Buffer<T> {
@@ -193,7 +190,7 @@ impl<T: Value> Buffer<T> {
 }
 impl<T: Value> Clone for Buffer<T> {
     fn clone(&self) -> Self {
-        let cloned = self.device.create_buffer(self.len).unwrap();
+        let cloned = self.device.create_buffer(self.len);
         self.copy_to_buffer(&cloned);
         cloned
     }
@@ -221,7 +218,7 @@ pub struct BindlessArray {
     pub(crate) slots: RefCell<Vec<BindlessArraySlot>>,
     pub(crate) pending_slots: RefCell<Vec<BindlessArraySlot>>,
     pub(crate) lock: Arc<RawMutex>,
-    pub(crate) dirty:Cell<bool>,
+    pub(crate) dirty: Cell<bool>,
 }
 impl BindlessArray {
     fn lock(&self) {
@@ -425,7 +422,7 @@ impl BindlessArray {
         self.update();
     }
     pub fn update(&self) {
-        submit_default_stream_and_sync(&self.device, [self.update_async()]).unwrap();
+        submit_default_stream_and_sync(&self.device, [self.update_async()]);
     }
     pub fn update_async<'a>(&'a self) -> Command<'a> {
         self.lock();
@@ -716,8 +713,7 @@ macro_rules! impl_tex_view {
             pub fn copy_to<U: StorageTexel<T>>(&'a self, data: &'a mut [U]) {
                 assert_eq!(data.len(), self.texel_count() as usize);
 
-                submit_default_stream_and_sync(&self.tex.handle.device, [self.copy_to_async(data)])
-                    .unwrap();
+                submit_default_stream_and_sync(&self.tex.handle.device, [self.copy_to_async(data)]);
             }
             pub fn copy_to_vec<U: StorageTexel<T>>(&'a self) -> Vec<U> {
                 let mut data = Vec::with_capacity(self.texel_count() as usize);
@@ -749,8 +745,7 @@ macro_rules! impl_tex_view {
                 submit_default_stream_and_sync(
                     &self.tex.handle.device,
                     [self.copy_from_async(data)],
-                )
-                .unwrap();
+                );
             }
             pub fn copy_to_buffer_async<U: StorageTexel<T> + Value>(
                 &'a self,
@@ -782,8 +777,7 @@ macro_rules! impl_tex_view {
                 submit_default_stream_and_sync(
                     &self.tex.handle.device,
                     [self.copy_to_buffer_async(buffer_view)],
-                )
-                .unwrap();
+                );
             }
             pub fn copy_from_buffer_async<U: StorageTexel<T> + Value>(
                 &'a self,
@@ -815,8 +809,7 @@ macro_rules! impl_tex_view {
                 submit_default_stream_and_sync(
                     &self.tex.handle.device,
                     [self.copy_from_buffer_async(buffer_view)],
-                )
-                .unwrap();
+                );
             }
             pub fn copy_to_texture_async(&'a self, other: $name<T>) -> Command<'a> {
                 let mut rt = ResourceTracker::new();
@@ -843,8 +836,7 @@ macro_rules! impl_tex_view {
                 submit_default_stream_and_sync(
                     &self.tex.handle.device,
                     [self.copy_to_texture_async(other)],
-                )
-                .unwrap();
+                );
             }
         }
     };

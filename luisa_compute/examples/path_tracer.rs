@@ -184,13 +184,11 @@ fn main() {
     );
 
     let ctx = Context::new(current_exe().unwrap());
-    let device = ctx
-        .create_device(if args.len() == 2 {
-            args[1].as_str()
-        } else {
-            "cpu"
-        })
-        .unwrap();
+    let device = ctx.create_device(if args.len() == 2 {
+        args[1].as_str()
+    } else {
+        "cpu"
+    });
     let mut buf = std::io::BufReader::new(CBOX_OBJ.as_bytes());
     let (models, _) = tobj::load_obj_buf(
         &mut buf,
@@ -202,35 +200,29 @@ fn main() {
     )
     .unwrap();
 
-    let vertex_heap = device.create_bindless_array(65536).unwrap();
-    let index_heap = device.create_bindless_array(65536).unwrap();
+    let vertex_heap = device.create_bindless_array(65536);
+    let index_heap = device.create_bindless_array(65536);
     let mut vertex_buffers: Vec<Buffer<PackedFloat3>> = vec![];
     let mut index_buffers: Vec<Buffer<Index>> = vec![];
-    let accel = device.create_accel(AccelOption::default()).unwrap();
+    let accel = device.create_accel(AccelOption::default());
 
     for (index, model) in models.iter().enumerate() {
-        let vertex_buffer = device
-            .create_buffer_from_slice(unsafe {
-                let vertex_ptr = model.mesh.positions.as_ptr();
-                std::slice::from_raw_parts(
-                    vertex_ptr as *const PackedFloat3,
-                    model.mesh.positions.len() / 3,
-                )
-            })
-            .unwrap();
-        let index_buffer = device
-            .create_buffer_from_slice(unsafe {
-                let index_ptr = model.mesh.indices.as_ptr();
-                std::slice::from_raw_parts(index_ptr as *const Index, model.mesh.indices.len() / 3)
-            })
-            .unwrap();
-        let mesh = device
-            .create_mesh(
-                vertex_buffer.view(..),
-                index_buffer.view(..),
-                AccelOption::default(),
+        let vertex_buffer = device.create_buffer_from_slice(unsafe {
+            let vertex_ptr = model.mesh.positions.as_ptr();
+            std::slice::from_raw_parts(
+                vertex_ptr as *const PackedFloat3,
+                model.mesh.positions.len() / 3,
             )
-            .unwrap();
+        });
+        let index_buffer = device.create_buffer_from_slice(unsafe {
+            let index_ptr = model.mesh.indices.as_ptr();
+            std::slice::from_raw_parts(index_ptr as *const Index, model.mesh.indices.len() / 3)
+        });
+        let mesh = device.create_mesh(
+            vertex_buffer.view(..),
+            index_buffer.view(..),
+            AccelOption::default(),
+        );
         vertex_buffers.push(vertex_buffer);
         index_buffers.push(index_buffer);
         vertex_heap.emplace_buffer(index, vertex_buffers.last().unwrap());
@@ -425,30 +417,24 @@ fn main() {
                 image.write(dispatch_id().xy(), make_float4(radiance.x(), radiance.y(), radiance.z(), spp + 1.0f32));
             },
         )
-        .unwrap();
-    let display = device
-        .create_kernel_async::<(Tex2d<Float4>, Tex2d<Float4>)>(&|acc, display| {
-            set_block_size([16, 16, 1]);
-            let coord = dispatch_id().xy();
-            let radiance = acc.read(coord);
-            let spp = radiance.w();
-            let radiance = radiance.xyz() / spp;
+        ;
+    let display = device.create_kernel_async::<(Tex2d<Float4>, Tex2d<Float4>)>(&|acc, display| {
+        set_block_size([16, 16, 1]);
+        let coord = dispatch_id().xy();
+        let radiance = acc.read(coord);
+        let spp = radiance.w();
+        let radiance = radiance.xyz() / spp;
 
-            // workaround a rust-analyzer bug
-            let r = 1.055f32 * radiance.powf(1.0 / 2.4) - 0.055;
+        // workaround a rust-analyzer bug
+        let r = 1.055f32 * radiance.powf(1.0 / 2.4) - 0.055;
 
-            let srgb = Float3Expr::select(radiance.cmplt(0.0031308), radiance * 12.92, r);
-            display.write(coord, make_float4(srgb.x(), srgb.y(), srgb.z(), 1.0f32));
-        })
-        .unwrap();
+        let srgb = Float3Expr::select(radiance.cmplt(0.0031308), radiance * 12.92, r);
+        display.write(coord, make_float4(srgb.x(), srgb.y(), srgb.z(), 1.0f32));
+    });
     let img_w = 1024;
     let img_h = 1024;
-    let acc_img = device
-        .create_tex2d::<Float4>(PixelStorage::Float4, img_w, img_h, 1)
-        .unwrap();
-    let seed_img = device
-        .create_tex2d::<u32>(PixelStorage::Int1, img_w, img_h, 1)
-        .unwrap();
+    let acc_img = device.create_tex2d::<Float4>(PixelStorage::Float4, img_w, img_h, 1);
+    let seed_img = device.create_tex2d::<u32>(PixelStorage::Int1, img_w, img_h, 1);
     {
         let mut rng = rand::thread_rng();
         let seed_buffer = (0..img_w * img_h)
@@ -463,20 +449,16 @@ fn main() {
         .with_resizable(false)
         .build(&event_loop)
         .unwrap();
-    let swapchain = device
-        .create_swapchain(
-            &window,
-            &device.default_stream(),
-            img_w,
-            img_h,
-            false,
-            false,
-            3,
-        )
-        .unwrap();
-    let display_img = device
-        .create_tex2d::<Float4>(swapchain.pixel_storage(), img_w, img_h, 1)
-        .unwrap();
+    let swapchain = device.create_swapchain(
+        &window,
+        &device.default_stream(),
+        img_w,
+        img_h,
+        false,
+        false,
+        3,
+    );
+    let display_img = device.create_tex2d::<Float4>(swapchain.pixel_storage(), img_w, img_h, 1);
     event_loop.run(move |event, _, control_flow| {
         control_flow.set_poll();
         match event {
@@ -488,9 +470,7 @@ fn main() {
                 let mut img_buffer = vec![[0u8; 4]; (img_w * img_h) as usize];
                 {
                     let scope = device.default_stream().scope();
-                    scope
-                        .submit([display_img.view(0).copy_to_async(&mut img_buffer)])
-                        .unwrap();
+                    scope.submit([display_img.view(0).copy_to_async(&mut img_buffer)]);
                 }
                 {
                     let img = image::RgbImage::from_fn(img_w, img_h, |x, y| {
@@ -509,19 +489,17 @@ fn main() {
                 let tic = Instant::now();
                 {
                     let scope = device.default_stream().scope();
-                    scope.present(&swapchain, &display_img).unwrap();
-                    scope
-                        .submit([
-                            path_tracer.dispatch_async(
-                                [img_w, img_h, 1],
-                                &acc_img,
-                                &seed_img,
-                                &accel,
-                                &Uint2::new(img_w, img_h),
-                            ),
-                            display.dispatch_async([img_w, img_h, 1], &acc_img, &display_img),
-                        ])
-                        .unwrap();
+                    scope.present(&swapchain, &display_img);
+                    scope.submit([
+                        path_tracer.dispatch_async(
+                            [img_w, img_h, 1],
+                            &acc_img,
+                            &seed_img,
+                            &accel,
+                            &Uint2::new(img_w, img_h),
+                        ),
+                        display.dispatch_async([img_w, img_h, 1], &acc_img, &display_img),
+                    ]);
                 }
                 let toc = Instant::now();
                 let elapsed = (toc - tic).as_secs_f32();

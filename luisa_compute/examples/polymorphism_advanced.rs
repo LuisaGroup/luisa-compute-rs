@@ -93,10 +93,9 @@ impl ShaderNode for AddShaderExpr {
     }
 }
 impl_polymorphic!(ShaderNode, AddShader);
-fn main() -> luisa::Result<()> {
-    use luisa::*;
-    let ctx = Context::new(current_exe().unwrap());
-    let device = ctx.create_device("cpu")?;
+fn main() {
+    let ctx = luisa::Context::new(current_exe().unwrap());
+    let device = ctx.create_device("cpu");
     let mut builder =
         PolymorphicBuilder::<ShaderDevirtualizationKey, dyn ShaderNode>::new(device.clone());
     // build shader = sin(x) + (1.0 + 2.0)
@@ -131,24 +130,22 @@ fn main() -> luisa::Result<()> {
             shader_b: shader_add_1_2,
         },
     );
-    let poly_shader = builder.build()?;
-    let result = device.create_buffer::<f32>(100).unwrap();
-    let kernel = device
-        .create_kernel::<()>(&|| {
-            let i = dispatch_id().x();
-            let x = i.float() / 100.0 * PI;
-            let ctx = ShaderEvalContext {
-                poly_shader: &poly_shader,
-                key: &shader_final_key,
-            };
-            let tag_index = TagIndexExpr::new(shader_final.tag, shader_final.index);
-            let v = poly_shader
-                .get(tag_index)
-                .dispatch(|_, _, shader| shader.evaluate(x, &ctx));
-            result.var().write(i, v);
-        })
-        .unwrap();
-    kernel.dispatch([100, 1, 1]).unwrap();
+    let poly_shader = builder.build();
+    let result = device.create_buffer::<f32>(100);
+    let kernel = device.create_kernel::<()>(&|| {
+        let i = dispatch_id().x();
+        let x = i.float() / 100.0 * PI;
+        let ctx = ShaderEvalContext {
+            poly_shader: &poly_shader,
+            key: &shader_final_key,
+        };
+        let tag_index = TagIndexExpr::new(shader_final.tag, shader_final.index);
+        let v = poly_shader
+            .get(tag_index)
+            .dispatch(|_, _, shader| shader.evaluate(x, &ctx));
+        result.var().write(i, v);
+    });
+    kernel.dispatch([100, 1, 1]);
     let result = result.copy_to_vec();
     for i in 0..100 {
         let x = i as f32 / 100.0 * PI;
@@ -156,5 +153,4 @@ fn main() -> luisa::Result<()> {
         assert!((result[i] - v).abs() < 1e-5);
     }
     println!("OK");
-    Ok(())
 }

@@ -12,9 +12,9 @@ struct MyArgStruct<T: Value> {
 }
 fn main() {
     let ctx = Context::new(current_exe().unwrap());
-    let device = ctx.create_device("cpu").unwrap();
-    let x = device.create_buffer::<f32>(1024).unwrap();
-    let y = device.create_buffer::<f32>(1024).unwrap();
+    let device = ctx.create_device("cpu");
+    let x = device.create_buffer::<f32>(1024);
+    let y = device.create_buffer::<f32>(1024);
     x.view(..).fill(1.0);
     y.view(..).fill(2.0);
     let my_args = MyArgStruct {
@@ -22,8 +22,6 @@ fn main() {
         y,
         exclude: 42.0,
     };
-    let shader = device
-        .create_kernel::<(MyArgStruct<f32>,)>(&|_args| {})
-        .unwrap();
-    shader.dispatch([1024, 1, 1], &my_args).unwrap();
+    let shader = device.create_kernel::<(MyArgStruct<f32>,)>(&|_args| {});
+    shader.dispatch([1024, 1, 1], &my_args);
 }

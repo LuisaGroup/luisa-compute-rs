@@ -71,7 +71,7 @@ impl Device {
         allow_hdr: bool,
         vsync: bool,
         back_buffer_size: u32,
-    ) -> backend::Result<Swapchain> {
+    ) -> Swapchain {
         let handle = window.raw_window_handle();
         let window_handle = match handle {
             raw_window_handle::RawWindowHandle::UiKit(_) => todo!(),
@@ -114,7 +114,7 @@ impl Device {
         allow_hdr: bool,
         vsync: bool,
         back_buffer_size: u32,
-    ) -> backend::Result<Swapchain> {
+    ) -> Swapchain {
         let swapchain = self.inner.create_swapchain(
             window_handle,
             stream.handle(),
@@ -123,7 +123,7 @@ impl Device {
             allow_hdr,
             vsync,
             back_buffer_size,
-        )?;
+        );
         let swapchain = Swapchain {
             device: self.clone(),
             handle: Arc::new(SwapchainHandle {
@@ -133,14 +133,14 @@ impl Device {
                 pixel_storage: swapchain.storage,
             }),
         };
-        Ok(swapchain)
+        swapchain
     }
-    pub fn create_buffer<T: Value>(&self, count: usize) -> backend::Result<Buffer<T>> {
+    pub fn create_buffer<T: Value>(&self, count: usize) -> Buffer<T> {
         assert!(
             std::mem::size_of::<T>() > 0,
             "size of T must be greater than 0"
         );
-        let buffer = self.inner.create_buffer(&T::type_(), count)?;
+        let buffer = self.inner.create_buffer(&T::type_(), count);
         let buffer = Buffer {
             device: self.clone(),
             handle: Arc::new(BufferHandle {
@@ -151,25 +151,25 @@ impl Device {
             _marker: std::marker::PhantomData {},
             len: count,
         };
-        Ok(buffer)
+        buffer
     }
-    pub fn create_buffer_from_slice<T: Value>(&self, data: &[T]) -> backend::Result<Buffer<T>> {
-        let buffer = self.create_buffer(data.len())?;
+    pub fn create_buffer_from_slice<T: Value>(&self, data: &[T]) -> Buffer<T> {
+        let buffer = self.create_buffer(data.len());
         buffer.view(..).copy_from(data);
-        Ok(buffer)
+        buffer
     }
     pub fn create_buffer_from_fn<T: Value>(
         &self,
         count: usize,
         f: impl FnMut(usize) -> T,
-    ) -> backend::Result<Buffer<T>> {
-        let buffer = self.create_buffer(count)?;
+    ) -> Buffer<T> {
+        let buffer = self.create_buffer(count);
         buffer.view(..).fill_fn(f);
-        Ok(buffer)
+        buffer
     }
-    pub fn create_bindless_array(&self, slots: usize) -> backend::Result<BindlessArray> {
-        let array = self.inner.create_bindless_array(slots)?;
-        Ok(BindlessArray {
+    pub fn create_bindless_array(&self, slots: usize) -> BindlessArray {
+        let array = self.inner.create_bindless_array(slots);
+        BindlessArray {
             device: self.clone(),
             handle: Arc::new(BindlessArrayHandle {
                 device: self.clone(),
@@ -187,8 +187,8 @@ impl Device {
             ]),
             pending_slots: RefCell::new(Vec::new()),
             lock: Arc::new(RawMutex::INIT),
-            dirty:Cell::new(false),
-        })
+            dirty: Cell::new(false),
+        }
     }
     pub fn create_tex2d<T: IoTexel>(
         &self,
@@ -196,11 +196,9 @@ impl Device {
         width: u32,
         height: u32,
         mips: u32,
-    ) -> backend::Result<Tex2d<T>> {
+    ) -> Tex2d<T> {
         let format = T::pixel_format(storage);
-        let texture = self
-            .inner
-            .create_texture(format, 2, width, height, 1, mips)?;
+        let texture = self.inner.create_texture(format, 2, width, height, 1, mips);
         let handle = Arc::new(TextureHandle {
             device: self.clone(),
             handle: api::Texture(texture.handle),
@@ -218,7 +216,7 @@ impl Device {
             handle,
             marker: std::marker::PhantomData {},
         };
-        Ok(tex)
+        tex
     }
     pub fn create_tex3d<T: IoTexel>(
         &self,
@@ -227,11 +225,11 @@ impl Device {
         height: u32,
         depth: u32,
         mips: u32,
-    ) -> backend::Result<Tex3d<T>> {
+    ) -> Tex3d<T> {
         let format = T::pixel_format(storage);
         let texture = self
             .inner
-            .create_texture(format, 3, width, height, depth, mips)?;
+            .create_texture(format, 3, width, height, depth, mips);
         let handle = Arc::new(TextureHandle {
             device: self.clone(),
             handle: api::Texture(texture.handle),
@@ -250,7 +248,7 @@ impl Device {
             handle,
             marker: std::marker::PhantomData {},
         };
-        Ok(tex)
+        tex
     }
 
     pub fn default_stream(&self) -> Stream {
@@ -259,9 +257,9 @@ impl Device {
             handle: self.inner.default_stream.clone().unwrap(),
         }
     }
-    pub fn create_stream(&self, tag: api::StreamTag) -> backend::Result<Stream> {
-        let stream = self.inner.create_stream(tag)?;
-        Ok(Stream {
+    pub fn create_stream(&self, tag: api::StreamTag) -> Stream {
+        let stream = self.inner.create_stream(tag);
+        Stream {
             device: self.clone(),
             handle: Arc::new(StreamHandle::NonDefault {
                 device: self.inner.clone(),
@@ -269,15 +267,15 @@ impl Device {
                 native_handle: stream.native_handle,
                 mutex: RawMutex::INIT,
             }),
-        })
+        }
     }
     pub fn create_mesh<V: Value>(
         &self,
         vbuffer: BufferView<'_, V>,
         tbuffer: BufferView<'_, rtx::Index>,
         option: AccelOption,
-    ) -> backend::Result<Mesh> {
-        let mesh = self.inner.create_mesh(option)?;
+    ) -> Mesh {
+        let mesh = self.inner.create_mesh(option);
         let handle = mesh.handle;
         let native_handle = mesh.native_handle;
         let mesh = Mesh {
@@ -295,11 +293,11 @@ impl Device {
             index_buffer_size: tbuffer.len * std::mem::size_of::<rtx::Index>() as usize,
             index_stride: std::mem::size_of::<rtx::Index>() as usize,
         };
-        Ok(mesh)
+        mesh
     }
-    pub fn create_accel(&self, option: api::AccelOption) -> backend::Result<rtx::Accel> {
-        let accel = self.inner.create_accel(option)?;
-        Ok(rtx::Accel {
+    pub fn create_accel(&self, option: api::AccelOption) -> rtx::Accel {
+        let accel = self.inner.create_accel(option);
+        rtx::Accel {
             handle: Arc::new(rtx::AccelHandle {
                 device: self.clone(),
                 handle: api::Accel(accel.handle),
@@ -307,7 +305,7 @@ impl Device {
             }),
             mesh_handles: RwLock::new(Vec::new()),
             modifications: RwLock::new(HashMap::new()),
-        })
+        }
     }
     pub fn create_callable<'a, S: CallableSignature<'a, R>, R: CallableRet>(
         &self,
@@ -317,13 +315,13 @@ impl Device {
         let raw_callable = KernelBuildFn::build_callable(&f, &mut builder);
         S::wrap_raw_callable(raw_callable)
     }
-    pub fn create_kernel<'a, S: KernelSignature<'a>>(&self, f: S::Fn) -> Result<S::Kernel> {
+    pub fn create_kernel<'a, S: KernelSignature<'a>>(&self, f: S::Fn) -> S::Kernel {
         let mut builder = KernelBuilder::new(self.clone(), true);
         let raw_kernel =
             KernelBuildFn::build_kernel(&f, &mut builder, KernelBuildOptions::default());
         S::wrap_raw_kernel(raw_kernel)
     }
-    pub fn create_kernel_async<'a, S: KernelSignature<'a>>(&self, f: S::Fn) -> Result<S::Kernel> {
+    pub fn create_kernel_async<'a, S: KernelSignature<'a>>(&self, f: S::Fn) -> S::Kernel {
         let mut builder = KernelBuilder::new(self.clone(), true);
         let raw_kernel = KernelBuildFn::build_kernel(
             &f,
@@ -339,7 +337,7 @@ impl Device {
         &self,
         f: S::Fn,
         options: KernelBuildOptions,
-    ) -> Result<S::Kernel> {
+    ) -> S::Kernel {
         let mut builder = KernelBuilder::new(self.clone(), true);
         let raw_kernel = KernelBuildFn::build_kernel(&f, &mut builder, options);
         S::wrap_raw_kernel(raw_kernel)
@@ -496,10 +494,9 @@ impl<'a> Scope<'a> {
         }
     }
     #[inline]
-    pub fn synchronize(&self) -> backend::Result<()> {
-        self.handle.device().synchronize_stream(self.handle())?;
+    pub fn synchronize(&self) {
+        self.handle.device().synchronize_stream(self.handle());
         self.synchronized.set(true);
-        Ok(())
     }
     #[inline]
     pub fn command_list(&self) -> CommandList<'a> {
@@ -509,14 +506,10 @@ impl<'a> Scope<'a> {
         }
     }
     #[inline]
-    pub fn submit(&self, commands: impl IntoIterator<Item = Command<'a>>) -> backend::Result<()> {
+    pub fn submit(&self, commands: impl IntoIterator<Item = Command<'a>>) {
         self.submit_with_callback(commands, || {})
     }
-    fn submit_impl<F: FnOnce() + Send + 'static>(
-        &self,
-        commands: Vec<Command<'a>>,
-        callback: F,
-    ) -> backend::Result<()> {
+    fn submit_impl<F: FnOnce() + Send + 'static>(&self, commands: Vec<Command<'a>>, callback: F) {
         self.synchronized.set(false);
         let mut command_buffer = self.command_list();
         command_buffer.extend(commands);
@@ -542,7 +535,7 @@ impl<'a> Scope<'a> {
         &self,
         commands: impl IntoIterator<Item = Command<'a>>,
         callback: F,
-    ) -> backend::Result<()> {
+    ) {
         let mut iter = commands.into_iter();
         loop {
             let mut commands = vec![];
@@ -560,7 +553,7 @@ impl<'a> Scope<'a> {
                 }
             }
             if commands.is_empty() {
-                return Ok(());
+                return;
             }
             // self.submit_impl(commands, callback)
             let cb = commands.last_mut().unwrap().callback.take();
@@ -574,16 +567,12 @@ impl<'a> Scope<'a> {
                     return self.submit_impl(commands, callback);
                 }
             } else {
-                self.submit_impl(commands, cb.unwrap())?;
+                self.submit_impl(commands, cb.unwrap());
             }
         }
     }
     #[inline]
-    pub fn present<T: IoTexel>(
-        &self,
-        swapchain: &Swapchain,
-        image: &Tex2d<T>,
-    ) -> backend::Result<()> {
+    pub fn present<T: IoTexel>(&self, swapchain: &Swapchain, image: &Tex2d<T>) {
         assert_eq!(image.handle.storage, swapchain.handle.pixel_storage);
         let mut rt = self.resource_tracker.borrow_mut();
         rt.add(swapchain.handle.clone());
@@ -594,13 +583,12 @@ impl<'a> Scope<'a> {
             swapchain.handle(),
             image.handle(),
         );
-        Ok(())
     }
 }
 impl<'a> Drop for Scope<'a> {
     fn drop(&mut self) {
         if !self.synchronized.get() {
-            self.synchronize().unwrap();
+            self.synchronize();
         }
         self.handle.unlock();
     }
@@ -652,10 +640,10 @@ impl<'a> CommandList<'a> {
 pub fn submit_default_stream_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
     device: &Device,
     commands: I,
-) -> backend::Result<()> {
+) {
     let default_stream = device.default_stream();
     default_stream.with_scope(|s| {
-        s.submit(commands)?;
+        s.submit(commands);
         s.synchronize()
     })
 }
@@ -668,7 +656,7 @@ pub struct Command<'a> {
     pub(crate) resource_tracker: ResourceTracker,
 }
 pub(crate) struct AsyncShaderArtifact {
-    shader: Option<backend::Result<api::CreatedShaderInfo>>, // strange naming, huh?
+    shader: Option<api::CreatedShaderInfo>, // strange naming, huh?
     name: Arc<CString>,
 }
 pub(crate) enum ShaderArtifact {
@@ -893,19 +881,10 @@ impl RawKernel {
                 let condvar = &artifact.1;
                 let mut artifact = artifact.0.lock();
                 if let Some(shader) = &artifact.shader {
-                    return api::Shader(shader.as_ref().unwrap().resource.handle);
+                    return api::Shader(shader.resource.handle);
                 }
                 condvar.wait(&mut artifact);
-                api::Shader(
-                    artifact
-                        .shader
-                        .as_ref()
-                        .unwrap()
-                        .as_ref()
-                        .unwrap()
-                        .resource
-                        .handle,
-                )
+                api::Shader(artifact.shader.as_ref().unwrap().resource.handle)
             }
         }
     }
@@ -927,7 +906,7 @@ impl RawKernel {
             callback: None,
         }
     }
-    pub fn dispatch(&self, args: KernelArgEncoder, dispatch_size: [u32; 3]) -> backend::Result<()> {
+    pub fn dispatch(&self, args: KernelArgEncoder, dispatch_size: [u32; 3]) {
         submit_default_stream_and_sync(&self.device, vec![self.dispatch_async(args, dispatch_size)])
     }
 }
@@ -992,7 +971,7 @@ macro_rules! impl_dispatch_for_kernel {
    ($first:ident  $($rest:ident)*) => {
         impl <$first:KernelArg, $($rest: KernelArg),*> Kernel<($first, $($rest,)*)> {
             #[allow(non_snake_case)]
-            pub fn dispatch(&self, dispatch_size: [u32; 3], $first:&impl AsKernelArg<$first>, $($rest:&impl AsKernelArg<$rest>),*) -> backend::Result<()> {
+            pub fn dispatch(&self, dispatch_size: [u32; 3], $first:&impl AsKernelArg<$first>, $($rest:&impl AsKernelArg<$rest>),*)  {
                 let mut encoder = KernelArgEncoder::new();
                 $first.encode(&mut encoder);
                 $($rest.encode(&mut encoder);)*
@@ -1013,7 +992,7 @@ macro_rules! impl_dispatch_for_kernel {
    };
    ()=>{
     impl Kernel<()> {
-        pub fn dispatch(&self, dispatch_size: [u32; 3]) -> backend::Result<()> {
+        pub fn dispatch(&self, dispatch_size: [u32; 3])  {
             self.inner.dispatch(KernelArgEncoder::new(), dispatch_size)
         }
         pub fn dispatch_async<'a>(

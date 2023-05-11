@@ -25,7 +25,7 @@ fn get_device() -> Device {
         Ok(device) => device,
         Err(_) => "cpu".to_string(),
     };
-    ctx.create_device(&device).unwrap()
+    ctx.create_device(&device)
 }
 fn finite_difference(inputs: &[Float], f: impl Fn(&[Float]) -> Float) -> Vec<Float> {
     let eps = 1e-4;
@@ -49,13 +49,13 @@ fn autodiff_helper<F: Fn(&[Float]) -> Float>(
 ) {
     let device = get_device();
     let inputs = (0..n_inputs)
-        .map(|_| device.create_buffer::<f32>(repeats).unwrap())
+        .map(|_| device.create_buffer::<f32>(repeats))
         .collect::<Vec<_>>();
     let grad_fd = (0..n_inputs)
-        .map(|_| device.create_buffer::<f32>(repeats).unwrap())
+        .map(|_| device.create_buffer::<f32>(repeats))
         .collect::<Vec<_>>();
     let grad_ad = (0..n_inputs)
-        .map(|_| device.create_buffer::<f32>(repeats).unwrap())
+        .map(|_| device.create_buffer::<f32>(repeats))
         .collect::<Vec<_>>();
     let tic = std::time::Instant::now();
     let tmp: Vec<Vec<f32>> = (0..n_inputs)
@@ -107,9 +107,9 @@ fn autodiff_helper<F: Fn(&[Float]) -> Float>(
                 grad_fd_vars[i].write(tid, fd[i]);
             }
         })
-        .unwrap();
+        ;
     let tic = std::time::Instant::now();
-    kernel.dispatch([repeats as u32, 1, 1]).unwrap();
+    kernel.dispatch([repeats as u32, 1, 1]);
     println!("kernel time: {:?}", tic.elapsed());
     let grad_ad_datas = grad_ad
         .iter()
@@ -135,7 +135,7 @@ fn autodiff_helper<F: Fn(&[Float]) -> Float>(
             data
         })
         .collect::<Vec<_>>();
-    let kernel_dir = kernel.cache_dir().unwrap();
+    let kernel_dir = kernel.cache_dir();
     let mut rel_errors = vec![];
     let mut abs_errors = vec![];
     for r in 0..repeats {
@@ -604,10 +604,10 @@ fn autodiff_mat_det() {
 #[test]
 fn autodiff_select() {
     let device = get_device();
-    let x: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let y: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dy: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let x: Buffer<f32> = device.create_buffer(1024);
+    let y: Buffer<f32> = device.create_buffer(1024);
+    let dx: Buffer<f32> = device.create_buffer(1024);
+    let dy: Buffer<f32> = device.create_buffer(1024);
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
@@ -629,13 +629,13 @@ fn autodiff_select() {
                 buf_dy.write(tid, gradient(y));
             });
         })
-        .unwrap();
-    kernel.dispatch([1024, 1, 1]).unwrap();
+        ;
+    kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
     let x = x.view(..).copy_to_vec();
     let y = y.view(..).copy_to_vec();
-    let cache_dir = kernel.cache_dir().unwrap();
+    let cache_dir = kernel.cache_dir();
     for i in 0..1024 {
         if x[i] > y[i] {
             assert_eq!(dx[i], 4.0, "{} cache_dir: {:?}", dx[i], cache_dir);
@@ -650,10 +650,10 @@ fn autodiff_select() {
 #[test]
 fn autodiff_detach() {
     let device = get_device();
-    let x: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let y: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dy: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let x: Buffer<f32> = device.create_buffer(1024);
+    let y: Buffer<f32> = device.create_buffer(1024);
+    let dx: Buffer<f32> = device.create_buffer(1024);
+    let dy: Buffer<f32> = device.create_buffer(1024);
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
@@ -676,13 +676,13 @@ fn autodiff_detach() {
                 buf_dy.write(tid, gradient(y));
             });
         })
-        .unwrap();
-    kernel.dispatch([1024, 1, 1]).unwrap();
+        ;
+    kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
     let x = x.view(..).copy_to_vec();
     let y = y.view(..).copy_to_vec();
-    let cache_dir = kernel.cache_dir().unwrap();
+    let cache_dir = kernel.cache_dir();
     for i in 0..1024 {
         let k = x[i] * y[i];
         assert!(
@@ -702,10 +702,10 @@ fn autodiff_detach() {
 #[test]
 fn autodiff_select_nan() {
     let device = get_device();
-    let x: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let y: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dy: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let x: Buffer<f32> = device.create_buffer(1024);
+    let y: Buffer<f32> = device.create_buffer(1024);
+    let dx: Buffer<f32> = device.create_buffer(1024);
+    let dy: Buffer<f32> = device.create_buffer(1024);
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen::<f32>() + 10.0);
@@ -729,13 +729,13 @@ fn autodiff_select_nan() {
                 buf_dy.write(tid, gradient(y));
             });
         })
-        .unwrap();
-    kernel.dispatch([1024, 1, 1]).unwrap();
+        ;
+    kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
     let x = x.view(..).copy_to_vec();
     let y = y.view(..).copy_to_vec();
-    let cache_dir = kernel.cache_dir().unwrap();
+    let cache_dir = kernel.cache_dir();
     for i in 0..1024 {
         assert!(x[i] < y[i]);
         assert_eq!(dx[i], 0.0, "{} cache_dir: {:?}", dx[i], cache_dir);
@@ -745,10 +745,10 @@ fn autodiff_select_nan() {
 #[test]
 fn autodiff_if_nan() {
     let device = get_device();
-    let x: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let y: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dy: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let x: Buffer<f32> = device.create_buffer(1024);
+    let y: Buffer<f32> = device.create_buffer(1024);
+    let dx: Buffer<f32> = device.create_buffer(1024);
+    let dy: Buffer<f32> = device.create_buffer(1024);
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen::<f32>() + 10.0);
@@ -777,13 +777,13 @@ fn autodiff_if_nan() {
                 buf_dy.write(tid, gradient(y));
             });
         })
-        .unwrap();
-    kernel.dispatch([1024, 1, 1]).unwrap();
+        ;
+    kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
     let x = x.view(..).copy_to_vec();
     let y = y.view(..).copy_to_vec();
-    let cache_dir = kernel.cache_dir().unwrap();
+    let cache_dir = kernel.cache_dir();
     for i in 0..1024 {
         assert!(x[i] < y[i]);
         // if x[i] > y[i] {
@@ -798,10 +798,10 @@ fn autodiff_if_nan() {
 #[test]
 fn autodiff_if_phi() {
     let device = get_device();
-    let x: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let y: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dy: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let x: Buffer<f32> = device.create_buffer(1024);
+    let y: Buffer<f32> = device.create_buffer(1024);
+    let dx: Buffer<f32> = device.create_buffer(1024);
+    let dy: Buffer<f32> = device.create_buffer(1024);
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
@@ -829,13 +829,13 @@ fn autodiff_if_phi() {
                 });
             });
         })
-        .unwrap();
-    kernel.dispatch([1024, 1, 1]).unwrap();
+        ;
+    kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
     let x = x.view(..).copy_to_vec();
     let y = y.view(..).copy_to_vec();
-    let cache_dir = kernel.cache_dir().unwrap();
+    let cache_dir = kernel.cache_dir();
     for i in 0..1024 {
         if x[i] > y[i] {
             assert_eq!(dx[i], 4.0, "{} cache_dir: {:?}", dx[i], cache_dir);
@@ -850,10 +850,10 @@ fn autodiff_if_phi() {
 #[test]
 fn autodiff_if_phi2() {
     let device = get_device();
-    let x: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let y: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dy: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let x: Buffer<f32> = device.create_buffer(1024);
+    let y: Buffer<f32> = device.create_buffer(1024);
+    let dx: Buffer<f32> = device.create_buffer(1024);
+    let dy: Buffer<f32> = device.create_buffer(1024);
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
@@ -883,13 +883,13 @@ fn autodiff_if_phi2() {
                 buf_dy.write(tid, gradient(y));
             });
         })
-        .unwrap();
-    kernel.dispatch([1024, 1, 1]).unwrap();
+        ;
+    kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
     let x = x.view(..).copy_to_vec();
     let y = y.view(..).copy_to_vec();
-    let cache_dir = kernel.cache_dir().unwrap();
+    let cache_dir = kernel.cache_dir();
     for i in 0..1024 {
         if x[i] > y[i] {
             if x[i] > 3.0 {
@@ -908,10 +908,10 @@ fn autodiff_if_phi2() {
 #[test]
 fn autodiff_if_phi3() {
     let device = get_device();
-    let x: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let y: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dy: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let x: Buffer<f32> = device.create_buffer(1024);
+    let y: Buffer<f32> = device.create_buffer(1024);
+    let dx: Buffer<f32> = device.create_buffer(1024);
+    let dy: Buffer<f32> = device.create_buffer(1024);
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
@@ -941,13 +941,13 @@ fn autodiff_if_phi3() {
                 buf_dy.write(tid, gradient(y));
             });
         })
-        .unwrap();
-    kernel.dispatch([1024, 1, 1]).unwrap();
+        ;
+    kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
     let x = x.view(..).copy_to_vec();
     let y = y.view(..).copy_to_vec();
-    let cache_dir = kernel.cache_dir().unwrap();
+    let cache_dir = kernel.cache_dir();
     for i in 0..1024 {
         if x[i] > y[i] {
             if x[i] > 3.0 {
@@ -966,11 +966,11 @@ fn autodiff_if_phi3() {
 #[test]
 fn autodiff_switch() {
     let device = get_device();
-    let t: Buffer<i32> = device.create_buffer(1024).unwrap();
-    let x: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let y: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dx: Buffer<f32> = device.create_buffer(1024).unwrap();
-    let dy: Buffer<f32> = device.create_buffer(1024).unwrap();
+    let t: Buffer<i32> = device.create_buffer(1024);
+    let x: Buffer<f32> = device.create_buffer(1024);
+    let y: Buffer<f32> = device.create_buffer(1024);
+    let dx: Buffer<f32> = device.create_buffer(1024);
+    let dy: Buffer<f32> = device.create_buffer(1024);
     let mut rng = rand::thread_rng();
     t.view(..).fill_fn(|_| rng.gen_range(0..3));
     x.view(..).fill_fn(|_| rng.gen());
@@ -999,12 +999,12 @@ fn autodiff_switch() {
                 buf_dy.write(tid, gradient(y));
             });
         })
-        .unwrap();
-    kernel.dispatch([1024, 1, 1]).unwrap();
+        ;
+    kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
     let t = t.view(..).copy_to_vec();
-    let cache_dir = kernel.cache_dir().unwrap();
+    let cache_dir = kernel.cache_dir();
     for i in 0..1024 {
         match t[i] {
             0 => {

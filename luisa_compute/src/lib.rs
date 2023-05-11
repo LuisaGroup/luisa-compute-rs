@@ -51,7 +51,6 @@ pub mod macros {
     pub use crate::{cpu_dbg, if_, impl_polymorphic, lc_assert, lc_dbg, var, while_};
 }
 
-pub use backend::{BackendError, BackendErrorKind, Result};
 use lazy_static::lazy_static;
 use luisa_compute_backend::Backend;
 pub use luisa_compute_sys as sys;
@@ -98,20 +97,16 @@ impl Context {
         Self { inner }
     }
     #[inline]
-    pub fn create_cpu_device(&self) -> backend::Result<Device> {
+    pub fn create_cpu_device(&self) -> Device {
         self.create_device("cpu")
     }
-    pub fn create_device(&self, device: &str) -> backend::Result<Device> {
+    pub fn create_device(&self, device: &str) -> Device {
         self.create_device_with_config(device, serde_json::json!({}))
     }
-    pub fn create_device_with_config(
-        &self,
-        device: &str,
-        config: serde_json::Value,
-    ) -> backend::Result<Device> {
-        let backend = self.inner.create_device(device, config)?;
-        let default_stream = backend.create_stream(api::StreamTag::Graphics)?;
-        Ok(Device {
+    pub fn create_device_with_config(&self, device: &str, config: serde_json::Value) -> Device {
+        let backend = self.inner.create_device(device, config);
+        let default_stream = backend.create_stream(api::StreamTag::Graphics);
+        Device {
             inner: Arc::new_cyclic(|weak| DeviceHandle {
                 backend,
                 default_stream: Some(Arc::new(StreamHandle::Default {
@@ -121,7 +116,7 @@ impl Context {
                     mutex: RawMutex::INIT,
                 })),
             }),
-        })
+        }
     }
 }
 

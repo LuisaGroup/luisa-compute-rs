@@ -48,7 +48,7 @@ pub use resource::*;
 pub use runtime::*;
 
 pub mod macros {
-    pub use crate::{cpu_dbg, if_, impl_polymorphic, lc_assert, lc_dbg, var, while_};
+    pub use crate::{cpu_dbg, if_, impl_polymorphic, lc_assert, lc_dbg, var, while_, loop_};
 }
 
 use lazy_static::lazy_static;

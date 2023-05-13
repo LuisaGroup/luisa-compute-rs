@@ -850,11 +850,6 @@ impl KernelArgEncoder {
         self.args.push(api::Argument::Accel(accel.handle.handle));
     }
 }
-pub trait CallableArg {
-    type Parameter: CallableParameter;
-    fn encode(&self, encoder: &mut CallableArgEncoder);
-}
-
 pub trait KernelArg {
     type Parameter: KernelParameter;
     fn encode(&self, encoder: &mut KernelArgEncoder);

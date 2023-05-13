@@ -923,8 +923,33 @@ pub struct KernelBuilder {
 
 pub trait CallableParameter {
     fn def_param(builder: &mut KernelBuilder) -> Self;
+    fn encode(&self, encoder: &mut CallableArgEncoder);
 }
 
+// impl<T: Value> CallableParameter for T::Expr
+// where
+//     U: ExprProxy<Value = T>,
+//     T: Value<Expr = U>,
+// {
+//     fn def_param(builder: &mut KernelBuilder) -> Self {
+//         builder.value::<T>()
+//     }
+//     fn encode(&self, encoder: &mut CallableArgEncoder) {
+//         encoder.value::<T>(*self)
+//     }
+// }
+// impl<T: Value, U> CallableParameter for U
+// where
+//     U: VarProxy<Value = T>,
+//     T: Value<Var = U>,
+// {
+//     fn def_param(builder: &mut KernelBuilder) -> Self {
+//         builder.var::<T>()
+//     }
+//     fn encode(&self, encoder: &mut CallableArgEncoder) {
+//         encoder.var::<T>(*self)
+//     }
+// }
 pub trait KernelParameter {
     fn def_param(builder: &mut KernelBuilder) -> Self;
 }
@@ -1007,6 +1032,28 @@ impl KernelBuilder {
             device,
             args: vec![],
         }
+    }
+    pub fn value<T: Value>(&mut self) -> Expr<T> {
+        let node = new_node(
+            __module_pools(),
+            Node::new(
+                CArc::new(Instruction::Argument { by_value: true }),
+                T::type_(),
+            ),
+        );
+        self.args.push(node);
+        FromNode::from_node(node)
+    }
+    pub fn var<T: Value>(&mut self) -> Var<T> {
+        let node = new_node(
+            __module_pools(),
+            Node::new(
+                CArc::new(Instruction::Argument { by_value: false }),
+                T::type_(),
+            ),
+        );
+        self.args.push(node);
+        FromNode::from_node(node)
     }
     pub fn uniform<T: Value>(&mut self) -> Expr<T> {
         let node = new_node(
@@ -1167,7 +1214,6 @@ impl KernelBuilder {
             };
 
             let module = CArc::new(module);
-            static NO_NAME: &'static [u8] = b"\0";
             let name = options.name.unwrap_or("".to_string());
             let name = Arc::new(CString::new(name).unwrap());
             let shader_options = api::ShaderOption {
@@ -1560,6 +1606,12 @@ macro_rules! if_ {
 macro_rules! while_ {
     ($cond:expr,$body:block) => {
         generic_loop(|| $cond, || $body, || {})
+    };
+}
+#[macro_export]
+macro_rules! loop_ {
+    ($body:block) => {
+        while_!(const_(true), $body)
     };
 }
 #[inline]

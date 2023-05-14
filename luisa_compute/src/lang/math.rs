@@ -8,7 +8,6 @@ use luisa_compute_ir::{
     TypeOf,
 };
 use std::ops::Mul;
-use std::ops::*;
 
 macro_rules! def_vec {
     ($name:ident, $glam_type:ident, $scalar:ty, $align:literal, $($comp:ident), *) => {
@@ -516,6 +515,7 @@ macro_rules! impl_vec_proxy {
                 var.load()
             }
         }
+        impl_callable_param!($vec, $expr_proxy, $var_proxy);
         $(impl_proxy_fields!($vec, $expr_proxy, $scalar, $comp);)*
         $(impl_var_proxy_fields!($var_proxy, $scalar, $comp);)*
         impl $expr_proxy {
@@ -605,6 +605,7 @@ macro_rules! impl_mat_proxy {
                 var.load()
             }
         }
+        impl_callable_param!($mat, $expr_proxy, $var_proxy);
         impl $expr_proxy {
             #[inline]
             pub fn new($($comp: Expr<$vec>), *) -> Self {

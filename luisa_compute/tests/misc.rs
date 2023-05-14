@@ -61,6 +61,33 @@ fn event() {
     assert_eq!(v[0], (1 + 3) * (4 + 5));
 }
 #[test]
+fn callable() {
+    let device = get_device();
+    let write = device.create_callable::<(BufferVar<f32>, Expr<u32>, Expr<f32>), ()>(
+        &|buf: BufferVar<f32>, i: Expr<u32>, v: Expr<f32>| {
+            buf.write(i, v);
+        },
+    );
+    let add = device.create_callable::<(Expr<f32>, Expr<f32>), Expr<f32>>(&|a, b| a + b);
+    let x = device.create_buffer::<f32>(1024);
+    let y = device.create_buffer::<f32>(1024);
+    let z = device.create_buffer::<f32>(1024);
+    x.view(..).fill_fn(|i| i as f32);
+    y.view(..).fill_fn(|i| 1000.0 * i as f32);
+    let kernel = device.create_kernel::<(Buffer<f32>,)>(&|buf_z| {
+        let buf_x = x.var();
+        let buf_y = y.var();
+        let tid = dispatch_id().x();
+        let x = buf_x.read(tid);
+        let y = buf_y.read(tid);
+
+        write.call(buf_z, tid, add.call(x, y));
+    });
+    kernel.dispatch([1024, 1, 1], &z);
+    let z_data = z.view(..).copy_to_vec();
+    println!("{:?}", &z_data[0..16]);
+}
+#[test]
 fn vec_cast() {
     let device = get_device();
     let f: Buffer<Float2> = device.create_buffer(1024);

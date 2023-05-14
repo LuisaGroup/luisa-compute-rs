@@ -274,6 +274,23 @@ impl Compiler {
                 }
             }
 
+            impl #impl_generics #crate_path ::CallableParameter for #expr_proxy_name #ty_generics #where_clause {
+                fn def_param(builder: &mut #crate_path ::KernelBuilder) -> Self {
+                    builder.value::<#name #ty_generics>()
+                }
+                fn encode(&self, encoder: &mut #crate_path ::CallableArgEncoder) {
+                    encoder.var(*self)
+                }
+            }
+            impl #impl_generics #crate_path ::CallableParameter for #var_proxy_name #ty_generics #where_clause  {
+                fn def_param(builder: &mut #crate_path ::KernelBuilder) -> Self {
+                    builder.var::<#name #ty_generics>()
+                }
+                fn encode(&self, encoder: &mut #crate_path ::CallableArgEncoder) {
+                    encoder.var(*self)
+                }
+            }
+
         );
         let test_name = syn::Ident::new(&format!("test_{}", name), name.span());
         let test = quote! {

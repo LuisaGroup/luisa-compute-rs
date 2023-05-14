@@ -322,7 +322,7 @@ impl Device {
         f: S::Fn,
     ) -> S::Callable {
         let mut builder = KernelBuilder::new(self.clone(), false);
-        let raw_callable = KernelBuildFn::build_callable(&f, &mut builder);
+        let raw_callable = CallableBuildFn::build_callable(&f, &mut builder);
         S::wrap_raw_callable(raw_callable)
     }
     pub fn create_kernel<'a, S: KernelSignature<'a>>(&self, f: S::Fn) -> S::Kernel {
@@ -778,11 +778,11 @@ impl CallableArgEncoder {
     pub fn bindless_array(&mut self, array: &BindlessArrayVar) {
         self.args.push(array.node);
     }
-    pub fn value<T: Value>(&mut self, value: Expr<T>) {
+    pub fn var(&mut self, value: impl FromNode) {
         self.args.push(value.node());
     }
-    pub fn var<T: Value>(&mut self, var: Var<T>) {
-        self.args.push(var.node());
+    pub fn accel(&mut self, accel: &rtx::AccelVar) {
+        self.args.push(accel.node);
     }
 }
 pub struct KernelArgEncoder {
@@ -969,13 +969,16 @@ impl RawKernel {
         submit_default_stream_and_sync(&self.device, vec![self.dispatch_async(args, dispatch_size)])
     }
 }
-pub trait CallableRet {}
-impl CallableRet for () {}
-impl<T: Value> CallableRet for T {}
-pub struct Callable<T: KernelArg, R: CallableRet> {
+
+pub struct Callable<T: CallableParameter, R: CallableRet> {
     #[allow(dead_code)]
-    pub(crate) inner: ir::CallableModuleRef,
+    pub(crate) inner: RawCallable,
     pub(crate) _marker: std::marker::PhantomData<(T, R)>,
+}
+pub struct RawCallable {
+    pub(crate) module: ir::CallableModuleRef,
+    #[allow(dead_code)]
+    pub(crate) resource_tracker: ResourceTracker
 }
 pub struct Kernel<T: KernelArg> {
     pub(crate) inner: RawKernel,
@@ -1006,25 +1009,28 @@ impl AsKernelArg<BindlessArray> for BindlessArray {}
 impl AsKernelArg<Accel> for Accel {}
 macro_rules! impl_call_for_callable {
     ($first:ident  $($rest:ident)*) => {
-        impl <R:CallableRet, $first:KernelArg, $($rest: KernelArg),*> Callable<($first, $($rest,)*), R> {
+        impl <R:CallableRet, $first:CallableParameter, $($rest: CallableParameter),*> Callable<($first, $($rest,)*), R> {
             #[allow(non_snake_case)]
-            pub fn call(&self, $first:&impl AsKernelArg<$first>, $($rest:&impl AsKernelArg<$rest>),*) -> ->Expr<R> {
-                let mut encoder = KernelArgEncoder::new();
+            pub fn call(&self, $first:$first, $($rest:$rest),*) -> R {
+                let mut encoder = CallableArgEncoder::new();
                 $first.encode(&mut encoder);
                 $($rest.encode(&mut encoder);)*
-                self.inner.dispatch(encoder, dispatch_size)
+                CallableRet::_from_return(
+                    lang::__invoke_callable(&self.inner.module, &encoder.args))
             }
         }
-        impl_dispatch_for_kernel!($($rest)*);
+        impl_call_for_callable!($($rest)*);
    };
    ()=>{
         impl<R:CallableRet> Callable<(), R> {
-            pub fn call(&self)->Expr<R> {
-
+            pub fn call(&self)->R {
+                CallableRet::_from_return(
+                    lang::__invoke_callable(&self.inner.module, &[]))
             }
         }
     }
 }
+impl_call_for_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 macro_rules! impl_dispatch_for_kernel {
 
    ($first:ident  $($rest:ident)*) => {

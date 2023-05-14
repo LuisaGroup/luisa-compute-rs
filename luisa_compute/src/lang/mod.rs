@@ -1,13 +1,16 @@
 use std::backtrace::Backtrace;
+use std::collections::HashSet;
 use std::marker::PhantomData;
+use std::unreachable;
 use std::{any::Any, collections::HashMap, fmt::Debug, sync::Arc};
 
 use crate::lang::traits::VarCmp;
-
+pub use crate::runtime::CallableArgEncoder;
 use crate::runtime::{AsyncShaderArtifact, ShaderArtifact};
 use crate::*;
 use crate::{rtx, ResourceTracker};
 use bumpalo::Bump;
+use indexmap::IndexMap;
 pub use ir::ir::NodeRef;
 use ir::ir::{
     ArrayType, CallableModule, CallableModuleRef, ModulePools, SwitchCase, UserNodeData,
@@ -221,6 +224,28 @@ impl<T> Aggregate for PrimVar<T> {
         }
     }
 }
+#[macro_export]
+macro_rules! impl_callable_param {
+    ($t:ty, $e:ty, $v:ty) => {
+        impl CallableParameter for $e {
+            fn def_param(builder: &mut KernelBuilder) -> Self {
+                builder.value::<$t>()
+            }
+            fn encode(&self, encoder: &mut CallableArgEncoder) {
+                encoder.var(*self)
+            }
+        }
+        impl CallableParameter for $v {
+            fn def_param(builder: &mut KernelBuilder) -> Self {
+                builder.var::<$t>()
+            }
+            fn encode(&self, encoder: &mut CallableArgEncoder) {
+                encoder.var(*self)
+            }
+        }
+    };
+}
+
 macro_rules! impl_prim {
     ($t:ty) => {
         impl From<$t> for PrimExpr<$t> {
@@ -252,6 +277,7 @@ macro_rules! impl_prim {
                 vec![]
             }
         }
+        impl_callable_param!($t, PrimExpr<$t>, PrimVar<$t>);
     };
 }
 
@@ -411,8 +437,9 @@ impl<T: Value> CpuFn<T> {
 pub(crate) struct Recorder {
     pub(crate) scopes: Vec<IrBuilder>,
     pub(crate) lock: bool,
-    pub(crate) captured_buffer: HashMap<Binding, (usize, NodeRef, Binding, Arc<dyn Any>)>,
-    pub(crate) cpu_custom_ops: HashMap<u64, (usize, CArc<CpuCustomOp>)>,
+    pub(crate) captured_buffer: IndexMap<Binding, (usize, NodeRef, Binding, Arc<dyn Any>)>,
+    pub(crate) cpu_custom_ops: IndexMap<u64, (usize, CArc<CpuCustomOp>)>,
+    pub(crate) callables: IndexMap<u64, CallableModuleRef>,
     pub(crate) device: Option<Device>,
     pub(crate) block_size: Option<[u32; 3]>,
     pub(crate) building_kernel: bool,
@@ -435,8 +462,9 @@ thread_local! {
     pub(crate) static RECORDER: RefCell<Recorder> = RefCell::new(Recorder {
         scopes: vec![],
         lock:false,
-        captured_buffer: HashMap::new(),
-        cpu_custom_ops: HashMap::new(),
+        captured_buffer: IndexMap::new(),
+        cpu_custom_ops: IndexMap::new(),
+        callables:IndexMap::new(),
         device:None,
         block_size: None,
         pools: None,
@@ -455,12 +483,14 @@ pub fn __current_scope<F: FnOnce(&mut IrBuilder) -> R, R>(f: F) -> R {
     })
 }
 
-pub fn __invoke_callable(
-    callable: &CallableModuleRef,
-    args: &[NodeRef],
-    ret_type: &CArc<Type>,
-) -> NodeRef {
-    __current_scope(|b| b.call(Func::Callable(callable.clone()), args, ret_type.clone()))
+pub(crate) fn __invoke_callable(callable: &CallableModuleRef, args: &[NodeRef]) -> NodeRef {
+    __current_scope(|b| {
+        b.call(
+            Func::Callable(callable.clone()),
+            args,
+            callable.0.ret_type.clone(),
+        )
+    })
 }
 
 // Don't call this function directly unless you know what you are doing
@@ -925,31 +955,79 @@ pub trait CallableParameter {
     fn def_param(builder: &mut KernelBuilder) -> Self;
     fn encode(&self, encoder: &mut CallableArgEncoder);
 }
+macro_rules! impl_callable_parameter_for_tuple {
+    ()=>{
+        impl CallableParameter for () {
+            fn def_param(_: &mut KernelBuilder) {}
+            fn encode(&self, _: &mut CallableArgEncoder) { }
+        }
+    };
+    ($first:ident  $($rest:ident) *) => {
+        impl<$first:CallableParameter, $($rest: CallableParameter),*> CallableParameter for ($first, $($rest,)*) {
+            #[allow(non_snake_case)]
+            fn def_param(builder: &mut KernelBuilder) -> Self {
+                let $first = $first::def_param(builder);
+                let ($($rest,)*) = ($($rest::def_param(builder),)*);
+                ($first, $($rest,)*)
+            }
+            #[allow(non_snake_case)]
+            fn encode(&self, encoder: &mut CallableArgEncoder) {
+                let ($first, $($rest,)*) = self;
+                $first.encode(encoder);
+                $($rest.encode(encoder);)*
+            }
+        }
+        impl_callable_parameter_for_tuple!($($rest)*);
+    };
 
-// impl<T: Value> CallableParameter for T::Expr
-// where
-//     U: ExprProxy<Value = T>,
-//     T: Value<Expr = U>,
-// {
-//     fn def_param(builder: &mut KernelBuilder) -> Self {
-//         builder.value::<T>()
-//     }
-//     fn encode(&self, encoder: &mut CallableArgEncoder) {
-//         encoder.value::<T>(*self)
-//     }
-// }
-// impl<T: Value, U> CallableParameter for U
-// where
-//     U: VarProxy<Value = T>,
-//     T: Value<Var = U>,
-// {
-//     fn def_param(builder: &mut KernelBuilder) -> Self {
-//         builder.var::<T>()
-//     }
-//     fn encode(&self, encoder: &mut CallableArgEncoder) {
-//         encoder.var::<T>(*self)
-//     }
-// }
+}
+impl_callable_parameter_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
+
+impl<T: Value> CallableParameter for BufferVar<T> {
+    fn def_param(builder: &mut KernelBuilder) -> Self {
+        builder.buffer()
+    }
+    fn encode(&self, encoder: &mut CallableArgEncoder) {
+        encoder.buffer(self)
+    }
+}
+
+impl<T: IoTexel> CallableParameter for Tex2dVar<T> {
+    fn def_param(builder: &mut KernelBuilder) -> Self {
+        builder.tex2d()
+    }
+    fn encode(&self, encoder: &mut CallableArgEncoder) {
+        encoder.tex2d(self)
+    }
+}
+
+impl<T: IoTexel> CallableParameter for Tex3dVar<T> {
+    fn def_param(builder: &mut KernelBuilder) -> Self {
+        builder.tex3d()
+    }
+    fn encode(&self, encoder: &mut CallableArgEncoder) {
+        encoder.tex3d(self)
+    }
+}
+
+impl CallableParameter for BindlessArrayVar {
+    fn def_param(builder: &mut KernelBuilder) -> Self {
+        builder.bindless_array()
+    }
+    fn encode(&self, encoder: &mut CallableArgEncoder) {
+        encoder.bindless_array(self)
+    }
+}
+
+impl CallableParameter for rtx::AccelVar {
+    fn def_param(builder: &mut KernelBuilder) -> Self {
+        builder.accel()
+    }
+    fn encode(&self, encoder: &mut CallableArgEncoder) {
+        encoder.accel(self)
+    }
+}
+
 pub trait KernelParameter {
     fn def_param(builder: &mut KernelBuilder) -> Self;
 }
@@ -1117,16 +1195,17 @@ impl KernelBuilder {
         self.args.push(node);
         rtx::AccelVar { node, handle: None }
     }
-    fn build_callable(&mut self, body: impl FnOnce(&mut Self)) -> CallableModuleRef {
-        body(self);
+    fn collect(
+        &self,
+    ) -> (
+        ResourceTracker,
+        Vec<CArc<CpuCustomOp>>,
+        Vec<Capture>,
+        Vec<CallableModuleRef>,
+    ) {
         RECORDER.with(|r| {
             let mut resource_tracker = ResourceTracker::new();
-            let mut r = r.borrow_mut();
-            assert!(r.lock);
-            r.lock = false;
-            assert_eq!(r.scopes.len(), 1);
-            let scope = r.scopes.pop().unwrap();
-            let entry = scope.finish();
+            let r = r.borrow_mut();
             let mut captured: Vec<Capture> = Vec::new();
             let mut captured_buffers: Vec<_> = r.captured_buffer.values().cloned().collect();
             captured_buffers.sort_by_key(|(i, _, _, _)| *i);
@@ -1145,18 +1224,59 @@ impl KernelBuilder {
                     op.clone()
                 })
                 .collect::<Vec<_>>();
+            let callables: Vec<CallableModuleRef> = r.callables.values().cloned().collect();
+            let mut captured_set = HashSet::<Capture>::new();
+            let mut cpu_custom_ops_set = HashSet::<u64>::new();
+            let mut callable_set = HashSet::<u64>::new();
+            for capture in captured.iter() {
+                captured_set.insert(*capture);
+            }
+            for op in &cpu_custom_ops {
+                cpu_custom_ops_set.insert(CArc::as_ptr(op) as u64);
+            }
+            for c in &callables {
+                callable_set.insert(CArc::as_ptr(&c.0) as u64);
+                for capture in c.0.captures.as_ref() {
+                    captured_set.insert(*capture);
+                }
+                for op in c.0.cpu_custom_ops.as_ref() {
+                    cpu_custom_ops_set.insert(CArc::as_ptr(op) as u64);
+                }
+            }
+
+            (resource_tracker, cpu_custom_ops, captured, callables)
+        })
+    }
+    fn build_callable<R: CallableRet>(&mut self, body: impl FnOnce(&mut Self) -> R) -> RawCallable {
+        let ret = body(self);
+        ret._return();
+        let (rt, cpu_custom_ops, captures, callables) = self.collect();
+        RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            assert!(r.lock);
+            r.lock = false;
+            assert_eq!(r.scopes.len(), 1);
+            let scope = r.scopes.pop().unwrap();
+            let entry = scope.finish();
+
             let module = CallableModule {
                 module: Module {
                     entry,
                     kind: ModuleKind::Kernel,
                     pools: r.pools.clone().unwrap(),
                 },
+                ret_type: R::_ret_type(),
                 cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
-                captures: CBoxedSlice::new(captured),
+                captures: CBoxedSlice::new(captures),
+                callables: CBoxedSlice::new(callables),
                 args: CBoxedSlice::new(self.args.clone()),
                 pools: r.pools.clone().unwrap(),
             };
-            CallableModuleRef(CArc::new(module))
+            let module = CallableModuleRef(CArc::new(module));
+            RawCallable {
+                module,
+                resource_tracker: rt,
+            }
         })
     }
     fn build_kernel(
@@ -1165,32 +1285,14 @@ impl KernelBuilder {
         body: impl FnOnce(&mut Self),
     ) -> crate::runtime::RawKernel {
         body(self);
+        let (rt, cpu_custom_ops, captures, callables) = self.collect();
         RECORDER.with(|r| -> crate::runtime::RawKernel {
-            let mut resource_tracker = ResourceTracker::new();
             let mut r = r.borrow_mut();
             assert!(r.lock);
             r.lock = false;
             assert_eq!(r.scopes.len(), 1);
             let scope = r.scopes.pop().unwrap();
             let entry = scope.finish();
-            let mut captured: Vec<Capture> = Vec::new();
-            let mut captured_buffers: Vec<_> = r.captured_buffer.values().cloned().collect();
-            captured_buffers.sort_by_key(|(i, _, _, _)| *i);
-            for (j, (i, node, binding, handle)) in captured_buffers.into_iter().enumerate() {
-                assert_eq!(j, i);
-                captured.push(Capture { node, binding });
-                resource_tracker.add_any(handle);
-            }
-            let mut cpu_custom_ops: Vec<_> = r.cpu_custom_ops.values().cloned().collect();
-            cpu_custom_ops.sort_by_key(|(i, _)| *i);
-            let cpu_custom_ops = cpu_custom_ops
-                .iter()
-                .enumerate()
-                .map(|(j, (i, op))| {
-                    assert_eq!(j, *i);
-                    op.clone()
-                })
-                .collect::<Vec<_>>();
 
             let ir_module = Module {
                 entry,
@@ -1205,9 +1307,9 @@ impl KernelBuilder {
             let module = KernelModule {
                 module: ir_module,
                 cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
-                captures: CBoxedSlice::new(captured),
+                captures: CBoxedSlice::new(captures),
                 shared: CBoxedSlice::new(vec![]),
-                callables: CBoxedSlice::new(vec![]),
+                callables: CBoxedSlice::new(callables),
                 args: CBoxedSlice::new(self.args.clone()),
                 block_size: r.block_size.unwrap_or([64, 1, 1]),
                 pools: r.pools.clone().unwrap(),
@@ -1238,7 +1340,7 @@ impl KernelBuilder {
             RawKernel {
                 artifact,
                 device: self.device.clone(),
-                resource_tracker,
+                resource_tracker: rt,
             }
         })
     }
@@ -1273,13 +1375,40 @@ pub trait KernelBuildFn {
         builder: &mut KernelBuilder,
         options: KernelBuildOptions,
     ) -> crate::runtime::RawKernel;
-    fn build_callable(&self, builder: &mut KernelBuilder) -> CallableModuleRef;
 }
-
+pub trait CallableBuildFn {
+    fn build_callable(&self, builder: &mut KernelBuilder) -> RawCallable;
+}
+// @FIXME: this looks redundant
+pub unsafe trait CallableRet {
+    fn _return(&self);
+    fn _from_return(node: NodeRef) -> Self;
+    fn _ret_type() -> CArc<Type>;
+}
+unsafe impl CallableRet for () {
+    fn _return(&self) {}
+    fn _from_return(_: NodeRef) -> Self {}
+    fn _ret_type() -> CArc<Type> {
+        Type::void()
+    }
+}
+unsafe impl<T: ExprProxy> CallableRet for T {
+    fn _return(&self) {
+        __current_scope(|b| {
+            b.return_(self.node());
+        })
+    }
+    fn _from_return(node: NodeRef) -> Self {
+        Self::from_node(node)
+    }
+    fn _ret_type() -> CArc<Type> {
+        T::Value::type_()
+    }
+}
 pub trait CallableSignature<'a, R: CallableRet> {
     type Callable;
-    type Fn: KernelBuildFn;
-    fn wrap_raw_callable(callable: CallableModuleRef) -> Self::Callable;
+    type Fn: CallableBuildFn;
+    fn wrap_raw_callable(callable: RawCallable) -> Self::Callable;
 }
 
 pub trait KernelSignature<'a> {
@@ -1290,10 +1419,10 @@ pub trait KernelSignature<'a> {
 }
 macro_rules! impl_callable_signature {
     ()=>{
-        impl<'a, R: CallableRet> CallableSignature<'a, R> for () {
-            type Fn = &'a dyn Fn();
+        impl<'a, R: CallableRet +'static> CallableSignature<'a, R> for () {
+            type Fn = &'a dyn Fn()->R;
             type Callable = Callable<(), R>;
-            fn wrap_raw_callable(callable: CallableModuleRef) -> Self::Callable{
+            fn wrap_raw_callable(callable: RawCallable) -> Self::Callable{
                 Callable {
                     inner: callable,
                     _marker:std::marker::PhantomData,
@@ -1302,10 +1431,10 @@ macro_rules! impl_callable_signature {
         }
     };
     ($first:ident  $($rest:ident)*) => {
-        impl<'a, R:CallableRet, $first:KernelArg +'static, $($rest: KernelArg +'static),*> CallableSignature<'a, R> for ($first, $($rest,)*) {
-            type Fn = &'a dyn Fn($first::Parameter, $($rest::Parameter),*);
+        impl<'a, R:CallableRet +'static, $first:CallableParameter +'static, $($rest: CallableParameter +'static),*> CallableSignature<'a, R> for ($first, $($rest,)*) {
+            type Fn = &'a dyn Fn($first, $($rest),*)->R;
             type Callable = Callable<($first, $($rest,)*), R>;
-            fn wrap_raw_callable(callable: CallableModuleRef) -> Self::Callable{
+            fn wrap_raw_callable(callable: RawCallable) -> Self::Callable{
                 Callable {
                     inner: callable,
                     _marker:std::marker::PhantomData,
@@ -1345,16 +1474,36 @@ macro_rules! impl_kernel_signature {
 }
 impl_kernel_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
+macro_rules! impl_callable_build_for_fn {
+    ()=>{
+        impl<R:CallableRet +'static> CallableBuildFn for &dyn Fn()->R {
+            fn build_callable(&self, builder: &mut KernelBuilder)->RawCallable {
+                builder.build_callable( |_| {
+                    self()
+                })
+            }
+        }
+    };
+    ($first:ident  $($rest:ident)*) => {
+        impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for &dyn Fn($first, $($rest,)*)->R {
+            #[allow(non_snake_case)]
+            fn build_callable(&self, builder: &mut KernelBuilder)->RawCallable {
+                builder.build_callable( |builder| {
+                    let $first = $first::def_param(builder);
+                    $(let $rest = $rest::def_param(builder);)*
+                    self($first, $($rest,)*)
+                })
+            }
+        }
+        impl_callable_build_for_fn!($($rest)*);
+    };
+}
+impl_callable_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 macro_rules! impl_kernel_build_for_fn {
     ()=>{
         impl KernelBuildFn for &dyn Fn() {
             fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> crate::runtime::RawKernel {
                 builder.build_kernel(options, |_| {
-                    self()
-                })
-            }
-            fn build_callable(&self, builder: &mut KernelBuilder)->CallableModuleRef {
-                builder.build_callable( |_| {
                     self()
                 })
             }
@@ -1365,14 +1514,6 @@ macro_rules! impl_kernel_build_for_fn {
             #[allow(non_snake_case)]
             fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> crate::runtime::RawKernel {
                 builder.build_kernel(options, |builder| {
-                    let $first = $first::def_param(builder);
-                    $(let $rest = $rest::def_param(builder);)*
-                    self($first, $($rest,)*)
-                })
-            }
-            #[allow(non_snake_case)]
-            fn build_callable(&self, builder: &mut KernelBuilder)->CallableModuleRef {
-                builder.build_callable( |builder| {
                     let $first = $first::def_param(builder);
                     $(let $rest = $rest::def_param(builder);)*
                     self($first, $($rest,)*)

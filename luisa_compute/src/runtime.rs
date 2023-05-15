@@ -26,31 +26,40 @@ use winit::window::Window;
 pub struct Device {
     pub(crate) inner: Arc<DeviceHandle>,
 }
+
 impl Hash for Device {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         let ptr = Arc::as_ptr(&self.inner);
         ptr.hash(state);
     }
 }
+
 impl PartialEq for Device {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.inner, &other.inner)
     }
 }
+
 impl Eq for Device {}
+
 pub(crate) struct DeviceHandle {
     pub(crate) backend: ProxyBackend,
     pub(crate) default_stream: Option<Arc<StreamHandle>>,
 }
+
 unsafe impl Send for DeviceHandle {}
+
 unsafe impl Sync for DeviceHandle {}
+
 impl Deref for DeviceHandle {
     type Target = ProxyBackend;
     fn deref(&self) -> &Self::Target {
         &self.backend
     }
 }
+
 unsafe impl Send for Device {}
+
 unsafe impl Sync for Device {}
 
 impl Drop for DeviceHandle {
@@ -61,6 +70,7 @@ impl Drop for DeviceHandle {
         }
     }
 }
+
 impl Device {
     pub fn create_swapchain(
         &self,
@@ -321,18 +331,18 @@ impl Device {
         &self,
         f: S::Fn,
     ) -> S::Callable {
-        let mut builder = KernelBuilder::new(self.clone(), false);
+        let mut builder = KernelBuilder::new(Some(self.clone()), false);
         let raw_callable = CallableBuildFn::build_callable(&f, &mut builder);
         S::wrap_raw_callable(raw_callable)
     }
     pub fn create_kernel<'a, S: KernelSignature<'a>>(&self, f: S::Fn) -> S::Kernel {
-        let mut builder = KernelBuilder::new(self.clone(), true);
+        let mut builder = KernelBuilder::new(Some(self.clone()), true);
         let raw_kernel =
             KernelBuildFn::build_kernel(&f, &mut builder, KernelBuildOptions::default());
         S::wrap_raw_kernel(raw_kernel)
     }
     pub fn create_kernel_async<'a, S: KernelSignature<'a>>(&self, f: S::Fn) -> S::Kernel {
-        let mut builder = KernelBuilder::new(self.clone(), true);
+        let mut builder = KernelBuilder::new(Some(self.clone()), true);
         let raw_kernel = KernelBuildFn::build_kernel(
             &f,
             &mut builder,
@@ -348,10 +358,18 @@ impl Device {
         f: S::Fn,
         options: KernelBuildOptions,
     ) -> S::Kernel {
-        let mut builder = KernelBuilder::new(self.clone(), true);
+        let mut builder = KernelBuilder::new(Some(self.clone()), true);
         let raw_kernel = KernelBuildFn::build_kernel(&f, &mut builder, options);
         S::wrap_raw_kernel(raw_kernel)
     }
+}
+
+pub fn create_static_callable<S: CallableSignature<'static, R>, R: CallableRet>(
+    f: S::StaticFn,
+) -> S::Callable {
+    let mut builder = KernelBuilder::new(None, false);
+    let raw_callable = CallableBuildFn::build_callable(&f, &mut builder);
+    S::wrap_raw_callable(raw_callable)
 }
 #[macro_export]
 macro_rules! fn_n_args {
@@ -399,24 +417,30 @@ pub(crate) enum StreamHandle {
         mutex: RawMutex,
     },
 }
+
 pub(crate) struct SwapchainHandle {
     pub(crate) device: Arc<DeviceHandle>,
     pub(crate) handle: api::Swapchain,
     pub(crate) native_handle: *mut std::ffi::c_void,
     pub(crate) pixel_storage: PixelStorage,
 }
+
 unsafe impl Send for SwapchainHandle {}
+
 unsafe impl Sync for SwapchainHandle {}
+
 impl Drop for SwapchainHandle {
     fn drop(&mut self) {
         self.device.destroy_swapchain(self.handle);
     }
 }
+
 pub struct Swapchain {
     pub(crate) handle: Arc<SwapchainHandle>,
     #[allow(dead_code)]
     pub(crate) device: Device,
 }
+
 impl Swapchain {
     #[inline]
     pub fn handle(&self) -> api::Swapchain {
@@ -435,6 +459,7 @@ impl Swapchain {
 pub struct Event {
     pub(crate) handle: Arc<EventHandle>,
 }
+
 impl Event {
     #[inline]
     pub fn handle(&self) -> api::Event {
@@ -452,26 +477,31 @@ impl Event {
             .synchronize_event(self.handle.handle);
     }
 }
+
 impl Drop for Event {
     fn drop(&mut self) {
         self.synchronize();
     }
 }
+
 pub(crate) struct EventHandle {
     pub(crate) device: Device,
     handle: api::Event,
     native_handle: *mut std::ffi::c_void,
 }
+
 impl Drop for EventHandle {
     fn drop(&mut self) {
         self.device.inner.destroy_event(self.handle);
     }
 }
+
 pub struct Stream {
     #[allow(dead_code)]
     pub(crate) device: Device,
     pub(crate) handle: Arc<StreamHandle>,
 }
+
 impl StreamHandle {
     #[inline]
     pub(crate) fn device(&self) -> Arc<DeviceHandle> {
@@ -511,6 +541,7 @@ impl StreamHandle {
         }
     }
 }
+
 impl Drop for StreamHandle {
     fn drop(&mut self) {
         match self {
@@ -521,12 +552,14 @@ impl Drop for StreamHandle {
         }
     }
 }
+
 pub struct Scope<'a> {
     handle: Arc<StreamHandle>,
     marker: std::marker::PhantomData<&'a ()>,
     synchronized: Cell<bool>,
     resource_tracker: RefCell<ResourceTracker>,
 }
+
 impl<'a> Scope<'a> {
     #[inline]
     pub fn handle(&self) -> api::Stream {
@@ -649,6 +682,7 @@ impl<'a> Scope<'a> {
         self
     }
 }
+
 impl<'a> Drop for Scope<'a> {
     fn drop(&mut self) {
         if !self.synchronized.get() {
@@ -657,6 +691,7 @@ impl<'a> Drop for Scope<'a> {
         self.handle.unlock();
     }
 }
+
 impl Stream {
     #[inline]
     pub fn with_scope<'a, R>(&self, f: impl FnOnce(&Scope<'a>) -> R) -> R {
@@ -682,10 +717,12 @@ impl Stream {
         self.handle.native_handle()
     }
 }
+
 pub(crate) struct CommandList<'a> {
     marker: std::marker::PhantomData<&'a ()>,
     commands: Vec<Command<'a>>,
 }
+
 struct CommandCallbackCtx<'a, F: FnOnce() + Send + 'static> {
     #[allow(dead_code)]
     commands: Vec<Command<'a>>,
@@ -711,6 +748,7 @@ pub fn submit_default_stream_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
         s.synchronize();
     })
 }
+
 pub struct Command<'a> {
     #[allow(dead_code)]
     pub(crate) inner: api::Command,
@@ -719,14 +757,18 @@ pub struct Command<'a> {
     #[allow(dead_code)]
     pub(crate) resource_tracker: ResourceTracker,
 }
+
 pub(crate) struct AsyncShaderArtifact {
-    shader: Option<api::CreatedShaderInfo>, // strange naming, huh?
+    shader: Option<api::CreatedShaderInfo>,
+    // strange naming, huh?
     name: Arc<CString>,
 }
+
 pub(crate) enum ShaderArtifact {
     Async(Arc<(Mutex<AsyncShaderArtifact>, Condvar)>),
     Sync(api::CreatedShaderInfo),
 }
+
 impl AsyncShaderArtifact {
     pub(crate) fn new(
         device: Device,
@@ -752,15 +794,18 @@ impl AsyncShaderArtifact {
         artifact
     }
 }
+
 pub struct RawKernel {
     pub(crate) device: Device,
     pub(crate) artifact: ShaderArtifact,
     #[allow(dead_code)]
     pub(crate) resource_tracker: ResourceTracker,
 }
+
 pub struct CallableArgEncoder {
     pub(crate) args: Vec<NodeRef>,
 }
+
 impl CallableArgEncoder {
     #[inline]
     pub fn new() -> CallableArgEncoder {
@@ -785,10 +830,12 @@ impl CallableArgEncoder {
         self.args.push(accel.node);
     }
 }
+
 pub struct KernelArgEncoder {
     pub(crate) args: Vec<api::Argument>,
     pub(crate) uniform_data: Vec<Box<[u8]>>,
 }
+
 impl KernelArgEncoder {
     pub fn new() -> KernelArgEncoder {
         KernelArgEncoder {
@@ -850,6 +897,7 @@ impl KernelArgEncoder {
         self.args.push(api::Argument::Accel(accel.handle.handle));
     }
 }
+
 pub trait KernelArg {
     type Parameter: KernelParameter;
     fn encode(&self, encoder: &mut KernelArgEncoder);
@@ -861,48 +909,56 @@ impl<T: Value> KernelArg for Buffer<T> {
         encoder.buffer(self);
     }
 }
+
 impl<T: Value> KernelArg for T {
     type Parameter = Expr<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.uniform(*self)
     }
 }
+
 impl<'a, T: Value> KernelArg for BufferView<'a, T> {
     type Parameter = BufferVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.buffer_view(self);
     }
 }
+
 impl<T: IoTexel> KernelArg for Tex2d<T> {
     type Parameter = Tex2dVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex2d(&self.view(0));
     }
 }
+
 impl<T: IoTexel> KernelArg for Tex3d<T> {
     type Parameter = Tex3dVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex3d(&self.view(0));
     }
 }
+
 impl<'a, T: IoTexel> KernelArg for Tex2dView<'a, T> {
     type Parameter = Tex2dVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex2d(self);
     }
 }
+
 impl<'a, T: IoTexel> KernelArg for Tex3dView<'a, T> {
     type Parameter = Tex3dVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex3d(self);
     }
 }
+
 impl KernelArg for BindlessArray {
     type Parameter = BindlessArrayVar;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.bindless_array(self);
     }
 }
+
 impl KernelArg for Accel {
     type Parameter = rtx::AccelVar;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
@@ -975,15 +1031,19 @@ pub struct Callable<T: CallableParameter, R: CallableRet> {
     pub(crate) inner: RawCallable,
     pub(crate) _marker: std::marker::PhantomData<(T, R)>,
 }
+unsafe impl Send for RawCallable {}
+unsafe impl Sync for RawCallable {}
 pub struct RawCallable {
     pub(crate) module: ir::CallableModuleRef,
     #[allow(dead_code)]
-    pub(crate) resource_tracker: ResourceTracker
+    pub(crate) resource_tracker: ResourceTracker,
 }
+
 pub struct Kernel<T: KernelArg> {
     pub(crate) inner: RawKernel,
     pub(crate) _marker: std::marker::PhantomData<T>,
 }
+
 impl<T: KernelArg> Kernel<T> {
     pub fn cache_dir(&self) -> Option<PathBuf> {
         let handle = self.inner.unwrap();
@@ -991,21 +1051,37 @@ impl<T: KernelArg> Kernel<T> {
         device.inner.shader_cache_dir(handle)
     }
 }
+
 pub trait AsKernelArg<T: KernelArg>: KernelArg {}
+
 impl<T: Value> AsKernelArg<T> for T {}
+
 impl<T: Value> AsKernelArg<Buffer<T>> for Buffer<T> {}
+
 impl<'a, T: Value> AsKernelArg<Buffer<T>> for BufferView<'a, T> {}
+
 impl<'a, T: Value> AsKernelArg<BufferView<'a, T>> for BufferView<'a, T> {}
+
 impl<'a, T: Value> AsKernelArg<BufferView<'a, T>> for Buffer<T> {}
+
 impl<'a, T: IoTexel> AsKernelArg<Tex2d<T>> for Tex2dView<'a, T> {}
+
 impl<'a, T: IoTexel> AsKernelArg<Tex3d<T>> for Tex3dView<'a, T> {}
+
 impl<'a, T: IoTexel> AsKernelArg<Tex3dView<'a, T>> for Tex2dView<'a, T> {}
+
 impl<'a, T: IoTexel> AsKernelArg<Tex3dView<'a, T>> for Tex3dView<'a, T> {}
+
 impl<'a, T: IoTexel> AsKernelArg<Tex3dView<'a, T>> for Tex2d<T> {}
+
 impl<'a, T: IoTexel> AsKernelArg<Tex3dView<'a, T>> for Tex3d<T> {}
+
 impl<T: IoTexel> AsKernelArg<Tex2d<T>> for Tex2d<T> {}
+
 impl<T: IoTexel> AsKernelArg<Tex3d<T>> for Tex3d<T> {}
+
 impl AsKernelArg<BindlessArray> for BindlessArray {}
+
 impl AsKernelArg<Accel> for Accel {}
 macro_rules! impl_call_for_callable {
     ($first:ident  $($rest:ident)*) => {

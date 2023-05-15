@@ -460,6 +460,12 @@ pub trait FloatVarTrait:
             Self::from_node(ret)
         })
     }
+    fn sqr(&self) -> Self {
+        *self * *self
+    }
+    fn cube(&self) -> Self {
+        *self * *self * *self
+    }
     fn powi(&self, exp: impl Into<Self::Int>) -> Self {
         let exp = exp.into();
         __current_scope(|s| {

@@ -49,8 +49,8 @@ pub use math::*;
 pub use poly::*;
 
 pub trait Value: Copy + ir::TypeOf {
-    type Expr: ExprProxy<Value = Self>;
-    type Var: VarProxy<Value = Self>;
+    type Expr: ExprProxy<Value=Self>;
+    type Var: VarProxy<Value=Self>;
     fn fields() -> Vec<String>;
 }
 
@@ -67,7 +67,7 @@ pub trait Aggregate: Sized {
         ret
     }
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>);
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self;
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self;
 }
 
 pub trait FromNode {
@@ -205,7 +205,7 @@ impl<T> Aggregate for PrimExpr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
             _phantom: std::marker::PhantomData,
@@ -217,7 +217,7 @@ impl<T> Aggregate for PrimVar<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
             _phantom: std::marker::PhantomData,
@@ -346,6 +346,12 @@ macro_rules! lc_dbg {
     }};
 }
 #[macro_export]
+macro_rules! lc_unreachable {
+    () => {
+        __unreachable(file!(), line!(), column!())
+    };
+}
+#[macro_export]
 macro_rules! lc_assert {
     ($arg:expr) => {
         __assert($arg, stringify!($arg), file!(), line!(), column!())
@@ -355,8 +361,8 @@ macro_rules! lc_assert {
     };
 }
 pub fn __cpu_dbg<T: ExprProxy>(arg: T, file: &'static str, line: u32)
-where
-    T::Value: Debug,
+    where
+        T::Value: Debug,
 {
     if !is_cpu_backend() {
         return;
@@ -402,7 +408,7 @@ impl<T: Value> CpuFn<T> {
             _marker: std::marker::PhantomData,
         }
     }
-    pub fn call(&self, arg: impl ExprProxy<Value = T>) -> Expr<T> {
+    pub fn call(&self, arg: impl ExprProxy<Value=T>) -> Expr<T> {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(r.lock);
@@ -682,7 +688,7 @@ pub fn bitcast<From: Value, To: Value>(expr: Expr<From>) -> Expr<To> {
     }))
 }
 
-impl<T: Value, const N: usize> Value for [T; N] {
+impl<T: Value + TypeOf, const N: usize> Value for [T; N] {
     type Expr = ArrayExpr<T, N>;
     type Var = ArrayVar<T, N>;
     fn fields() -> Vec<String> {
@@ -712,7 +718,7 @@ impl<T: Value> Aggregate for VLArrayExpr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -739,7 +745,7 @@ impl<T: Value> Aggregate for VLArrayVar<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -864,7 +870,7 @@ impl<T: Value, const N: usize> Aggregate for ArrayExpr<T, N> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -885,7 +891,7 @@ impl<T: Value, const N: usize> Aggregate for ArrayVar<T, N> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -947,7 +953,7 @@ impl<T: Value, const N: usize> ArrayExpr<T, N> {
 
 // Not recommended to use this directly
 pub struct KernelBuilder {
-    device: crate::runtime::Device,
+    device: Option<crate::runtime::Device>,
     args: Vec<NodeRef>,
 }
 
@@ -1033,9 +1039,9 @@ pub trait KernelParameter {
 }
 
 impl<T: Value, U> KernelParameter for U
-where
-    U: ExprProxy<Value = T>,
-    T: Value<Expr = U>,
+    where
+        U: ExprProxy<Value=T>,
+        T: Value<Expr=U>,
 {
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.uniform::<T>()
@@ -1090,7 +1096,7 @@ macro_rules! impl_kernel_param_for_tuple {
 }
 impl_kernel_param_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 impl KernelBuilder {
-    pub fn new(device: crate::runtime::Device, is_kernel: bool) -> Self {
+    pub fn new(device: Option<crate::runtime::Device>, is_kernel: bool) -> Self {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(!r.lock, "Cannot record multiple kernels at the same time");
@@ -1099,7 +1105,7 @@ impl KernelBuilder {
                 "Cannot record multiple kernels at the same time"
             );
             r.lock = true;
-            r.device = Some(device.clone());
+            r.device = device.clone();
             r.pools = Some(CArc::new(ModulePools::new()));
             r.scopes.clear();
             r.building_kernel = is_kernel;
@@ -1216,12 +1222,12 @@ impl KernelBuilder {
             }
             let mut cpu_custom_ops: Vec<_> = r.cpu_custom_ops.values().cloned().collect();
             cpu_custom_ops.sort_by_key(|(i, _)| *i);
-            let cpu_custom_ops = cpu_custom_ops
+            let mut cpu_custom_ops: Vec<CArc<CpuCustomOp>> = cpu_custom_ops
                 .iter()
                 .enumerate()
                 .map(|(j, (i, op))| {
                     assert_eq!(j, *i);
-                    op.clone()
+                    (*op).clone()
                 })
                 .collect::<Vec<_>>();
             let callables: Vec<CallableModuleRef> = r.callables.values().cloned().collect();
@@ -1237,13 +1243,19 @@ impl KernelBuilder {
             for c in &callables {
                 callable_set.insert(CArc::as_ptr(&c.0) as u64);
                 for capture in c.0.captures.as_ref() {
-                    captured_set.insert(*capture);
+                    if !captured_set.contains(capture) {
+                        captured_set.insert(*capture);
+                        captured.push(*capture);
+                    }
                 }
                 for op in c.0.cpu_custom_ops.as_ref() {
-                    cpu_custom_ops_set.insert(CArc::as_ptr(op) as u64);
+                    let id = CArc::as_ptr(op) as u64;
+                    if !cpu_custom_ops_set.contains(&id) {
+                        cpu_custom_ops_set.insert(id);
+                        cpu_custom_ops.push(op.clone());
+                    }
                 }
             }
-
             (resource_tracker, cpu_custom_ops, captured, callables)
         })
     }
@@ -1327,19 +1339,19 @@ impl KernelBuilder {
             };
             let artifact = if options.async_compile {
                 ShaderArtifact::Async(AsyncShaderArtifact::new(
-                    self.device.clone(),
+                    self.device.clone().unwrap(),
                     module,
                     shader_options,
                     name,
                 ))
             } else {
-                ShaderArtifact::Sync(self.device.inner.create_shader(&module, &shader_options))
+                ShaderArtifact::Sync(self.device.as_ref().unwrap().inner.create_shader(&module, &shader_options))
             };
             //
             r.reset();
             RawKernel {
                 artifact,
-                device: self.device.clone(),
+                device: self.device.clone().unwrap(),
                 resource_tracker: rt,
             }
         })
@@ -1376,15 +1388,20 @@ pub trait KernelBuildFn {
         options: KernelBuildOptions,
     ) -> crate::runtime::RawKernel;
 }
+
 pub trait CallableBuildFn {
     fn build_callable(&self, builder: &mut KernelBuilder) -> RawCallable;
 }
+
+pub trait StaticCallableBuildFn: CallableBuildFn {}
+
 // @FIXME: this looks redundant
 pub unsafe trait CallableRet {
     fn _return(&self);
     fn _from_return(node: NodeRef) -> Self;
     fn _ret_type() -> CArc<Type>;
 }
+
 unsafe impl CallableRet for () {
     fn _return(&self) {}
     fn _from_return(_: NodeRef) -> Self {}
@@ -1392,6 +1409,7 @@ unsafe impl CallableRet for () {
         Type::void()
     }
 }
+
 unsafe impl<T: ExprProxy> CallableRet for T {
     fn _return(&self) {
         __current_scope(|b| {
@@ -1405,9 +1423,11 @@ unsafe impl<T: ExprProxy> CallableRet for T {
         T::Value::type_()
     }
 }
+
 pub trait CallableSignature<'a, R: CallableRet> {
     type Callable;
     type Fn: CallableBuildFn;
+    type StaticFn: StaticCallableBuildFn;
     fn wrap_raw_callable(callable: RawCallable) -> Self::Callable;
 }
 
@@ -1420,7 +1440,8 @@ pub trait KernelSignature<'a> {
 macro_rules! impl_callable_signature {
     ()=>{
         impl<'a, R: CallableRet +'static> CallableSignature<'a, R> for () {
-            type Fn = &'a dyn Fn()->R;
+            type Fn = &'a dyn Fn() ->R;
+            type StaticFn = fn() -> R;
             type Callable = Callable<(), R>;
             fn wrap_raw_callable(callable: RawCallable) -> Self::Callable{
                 Callable {
@@ -1434,6 +1455,7 @@ macro_rules! impl_callable_signature {
         impl<'a, R:CallableRet +'static, $first:CallableParameter +'static, $($rest: CallableParameter +'static),*> CallableSignature<'a, R> for ($first, $($rest,)*) {
             type Fn = &'a dyn Fn($first, $($rest),*)->R;
             type Callable = Callable<($first, $($rest,)*), R>;
+            type StaticFn = fn($first, $($rest,)*)->R;
             fn wrap_raw_callable(callable: RawCallable) -> Self::Callable{
                 Callable {
                     inner: callable,
@@ -1483,6 +1505,14 @@ macro_rules! impl_callable_build_for_fn {
                 })
             }
         }
+        impl<R:CallableRet +'static> CallableBuildFn for fn()->R {
+            fn build_callable(&self, builder: &mut KernelBuilder)->RawCallable {
+                builder.build_callable( |_| {
+                    self()
+                })
+            }
+        }
+        impl <R:CallableRet +'static> StaticCallableBuildFn  for fn()->R {}
     };
     ($first:ident  $($rest:ident)*) => {
         impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for &dyn Fn($first, $($rest,)*)->R {
@@ -1495,6 +1525,17 @@ macro_rules! impl_callable_build_for_fn {
                 })
             }
         }
+        impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for fn($first, $($rest,)*)->R {
+            #[allow(non_snake_case)]
+            fn build_callable(&self, builder: &mut KernelBuilder)->RawCallable {
+                builder.build_callable( |builder| {
+                    let $first = $first::def_param(builder);
+                    $(let $rest = $rest::def_param(builder);)*
+                    self($first, $($rest,)*)
+                })
+            }
+        }
+        impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> StaticCallableBuildFn for fn($first, $($rest,)*)->R {}
         impl_callable_build_for_fn!($($rest)*);
     };
 }
@@ -1937,6 +1978,41 @@ pub fn __env_need_backtrace() -> bool {
         Ok(s) => s == "1" || s == "ON",
         Err(_) => false,
     }
+}
+
+pub fn __unreachable(file: &str, line: u32, col: u32) {
+    let path = std::path::Path::new(file);
+    let pretty_filename: String;
+    if path.exists() {
+        pretty_filename = std::fs::canonicalize(path)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+    } else {
+        pretty_filename = file.to_string();
+    }
+    let msg = if is_cpu_backend() && __env_need_backtrace() {
+        let backtrace = get_backtrace();
+        format!(
+            "unreachable code at {}:{}:{} \nbacktrace: {}",
+            pretty_filename, line, col, backtrace
+        )
+    } else {
+        format!(
+            "unreachable code at {}:{}:{} \n",
+            pretty_filename, line, col
+        )
+    };
+    __current_scope(|b| {
+        b.call(
+            Func::Unreachable(CBoxedSlice::new(
+                CString::new(msg).unwrap().into_bytes_with_nul(),
+            )),
+            &[],
+            Type::void(),
+        );
+    });
 }
 
 #[inline]

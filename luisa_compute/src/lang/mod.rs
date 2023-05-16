@@ -458,25 +458,29 @@ impl Recorder {
         self.scopes.clear();
         self.captured_buffer.clear();
         self.cpu_custom_ops.clear();
+        self.callables.clear();
         self.lock = false;
         self.device = None;
         self.block_size = None;
         self.arena.reset();
     }
+    pub(crate) fn new() -> Self{
+        Recorder {
+            scopes: vec![],
+            lock:false,
+            captured_buffer: IndexMap::new(),
+            cpu_custom_ops: IndexMap::new(),
+            callables:IndexMap::new(),
+            device:None,
+            block_size: None,
+            pools: None,
+            arena:Bump::new(),
+            building_kernel:false,
+        }
+    }
 }
 thread_local! {
-    pub(crate) static RECORDER: RefCell<Recorder> = RefCell::new(Recorder {
-        scopes: vec![],
-        lock:false,
-        captured_buffer: IndexMap::new(),
-        cpu_custom_ops: IndexMap::new(),
-        callables:IndexMap::new(),
-        device:None,
-        block_size: None,
-        pools: None,
-        arena:Bump::new(),
-        building_kernel:false,
-    });
+    pub(crate) static RECORDER: RefCell<Recorder> = RefCell::new(Recorder::new());
 }
 
 // Don't call this function directly unless you know what you are doing

@@ -367,9 +367,17 @@ impl Device {
 pub fn create_static_callable<S: CallableSignature<'static, R>, R: CallableRet>(
     f: S::StaticFn,
 ) -> S::Callable {
+    let mut r_backup = RECORDER.with(|r|{
+        let mut r = r.borrow_mut();
+        std::mem::replace(&mut *r, Recorder::new())
+    });
     let mut builder = KernelBuilder::new(None, false);
     let raw_callable = CallableBuildFn::build_callable(&f, &mut builder);
-    S::wrap_raw_callable(raw_callable)
+    let callable = S::wrap_raw_callable(raw_callable);
+    RECORDER.with(|r|{
+        *r.borrow_mut() = r_backup;
+    });
+    callable
 }
 #[macro_export]
 macro_rules! fn_n_args {

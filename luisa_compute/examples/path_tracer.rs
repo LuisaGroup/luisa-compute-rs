@@ -481,7 +481,7 @@ fn main() {
                     });
                     img.save("cbox.png").unwrap();
                 }
-                *control_flow = ControlFlow::Exit
+                control_flow.set_exit();
             }
             WinitEvent::MainEventsCleared => {
                 window.request_redraw();

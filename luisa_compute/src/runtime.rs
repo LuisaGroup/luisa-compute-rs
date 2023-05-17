@@ -84,21 +84,17 @@ impl Device {
     ) -> Swapchain {
         let handle = window.raw_window_handle();
         let window_handle = match handle {
-            raw_window_handle::RawWindowHandle::UiKit(_) => todo!(),
-            raw_window_handle::RawWindowHandle::AppKit(_) => todo!(),
+            raw_window_handle::RawWindowHandle::UiKit(h) => h.ui_window as u64,
+            raw_window_handle::RawWindowHandle::AppKit(h) => h.ns_window as u64,
             raw_window_handle::RawWindowHandle::Orbital(_) => todo!(),
             raw_window_handle::RawWindowHandle::Xlib(h) => h.window as u64,
-            raw_window_handle::RawWindowHandle::Xcb(_h) => {
-                panic!("xcb not supported, use X11 instead")
-            }
+            raw_window_handle::RawWindowHandle::Xcb(h) => h.window as u64,
             raw_window_handle::RawWindowHandle::Wayland(_h) => {
                 panic!("Wayland not supported, use X11 instead")
             }
             raw_window_handle::RawWindowHandle::Drm(_) => todo!(),
             raw_window_handle::RawWindowHandle::Gbm(_) => todo!(),
-            raw_window_handle::RawWindowHandle::Win32(h) => {
-                h.hwnd as u64 // TODO: test this
-            }
+            raw_window_handle::RawWindowHandle::Win32(h) => h.hwnd as u64,
             raw_window_handle::RawWindowHandle::WinRt(h) => h.core_window as u64,
             raw_window_handle::RawWindowHandle::Web(_) => todo!(),
             raw_window_handle::RawWindowHandle::AndroidNdk(_) => todo!(),

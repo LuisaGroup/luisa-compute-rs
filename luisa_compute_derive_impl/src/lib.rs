@@ -154,6 +154,7 @@ impl Compiler {
                 let set_ident = syn::Ident::new(&format!("set_{}", ident), ident.span());
                 quote_spanned!(span=>
                     #[allow(dead_code, non_snake_case)]
+                    #[allow(unused_parens)]
                     #vis fn #ident (&self) -> #crate_path ::Expr<#ty> {
                         use #crate_path ::*;
                         <Expr::<#ty> as FromNode>::from_node(__extract::<#ty>(
@@ -161,7 +162,8 @@ impl Compiler {
                         ))
                     }
                     #[allow(dead_code, non_snake_case)]
-                    #vis fn #set_ident<T:Into<#crate_path ::Expr<#ty>>>(&self, value: T) -> Self {
+                    #[allow(unused_parens)]
+                    #vis fn #set_ident<__T:Into<#crate_path ::Expr<#ty>>>(&self, value: __T) -> Self {
                         use #crate_path ::*;
                         let value = value.into();
                         Self::from_node(#crate_path ::__insert::<#name #ty_generics>(self.node, #i, FromNode::node(&value)))
@@ -179,6 +181,7 @@ impl Compiler {
                 let set_ident = syn::Ident::new(&format!("set_{}", ident), ident.span());
                 quote_spanned!(span=>
                     #[allow(dead_code, non_snake_case)]
+                    #[allow(unused_parens)]
                     #vis fn #ident (&self) -> #crate_path:: Var<#ty> {
                         use #crate_path ::*;
                         <Var::<#ty> as FromNode>::from_node(__extract::<#ty>(
@@ -186,7 +189,8 @@ impl Compiler {
                         ))
                     }
                     #[allow(dead_code, non_snake_case)]
-                    #vis fn #set_ident<T:Into<#crate_path ::Expr<#ty>>>(&self, value: T) {
+                    #[allow(unused_parens)]
+                    #vis fn #set_ident<__T:Into<#crate_path ::Expr<#ty>>>(&self, value: __T) {
                         let value = value.into();
                         self.#ident().store(value);
                     }
@@ -197,6 +201,7 @@ impl Compiler {
         let var_proxy_name = syn::Ident::new(&format!("{}Var", name), name.span());
         let type_of_impl = quote_spanned!(span=>
             impl #impl_generics #crate_path ::TypeOf for #name #ty_generics #where_clause {
+                #[allow(unused_parens)]
                 fn type_() ->  #crate_path ::CArc< #crate_path ::Type> {
                     use #crate_path ::*;
                     let size = std::mem::size_of::<#name #ty_generics>();
@@ -207,43 +212,49 @@ impl Compiler {
                         alignment
                     };
                     let type_ = Type::Struct(struct_type);
+                    assert_eq!(std::mem::size_of::<#name #ty_generics>(), type_.size());
                     register_type(type_)
                 }
             }
         );
         let proxy_def = quote_spanned!(span=>
             #[derive(Clone, Copy, Debug)]
+            #[allow(unused_parens)]
             #vis struct #expr_proxy_name #generics{
                 node: #crate_path ::NodeRef,
                 _marker: std::marker::PhantomData<(#marker_args)>,
             }
             #[derive(Clone, Copy, Debug)]
+            #[allow(unused_parens)]
             #vis struct #var_proxy_name #generics{
                 node: #crate_path ::NodeRef,
                 _marker: std::marker::PhantomData<(#marker_args)>,
             }
+            #[allow(unused_parens)]
             impl #impl_generics #crate_path ::Aggregate for #expr_proxy_name #ty_generics #where_clause {
                 fn to_nodes(&self, nodes: &mut Vec<#crate_path ::NodeRef>) {
                     nodes.push(self.node);
                 }
-                fn from_nodes<I: Iterator<Item = #crate_path ::NodeRef>>(iter: &mut I) -> Self {
+                fn from_nodes<__I: Iterator<Item = #crate_path ::NodeRef>>(iter: &mut __I) -> Self {
                     Self{
                         node: iter.next().unwrap(),
                         _marker:std::marker::PhantomData
                     }
                 }
             }
+            #[allow(unused_parens)]
             impl #impl_generics #crate_path ::Aggregate for #var_proxy_name #ty_generics #where_clause {
                 fn to_nodes(&self, nodes: &mut Vec<#crate_path ::NodeRef>) {
                     nodes.push(self.node);
                 }
-                fn from_nodes<I: Iterator<Item = #crate_path ::NodeRef>>(iter: &mut I) -> Self {
+                fn from_nodes<__I: Iterator<Item = #crate_path ::NodeRef>>(iter: &mut __I) -> Self {
                     Self{
                         node: iter.next().unwrap(),
                         _marker:std::marker::PhantomData
                     }
                 }
             }
+            #[allow(unused_parens)]
             impl #impl_generics #crate_path ::FromNode  for #expr_proxy_name #ty_generics #where_clause {
                 #[allow(unused_assignments)]
                 fn from_node(node: #crate_path ::NodeRef) -> Self {
@@ -253,9 +264,11 @@ impl Compiler {
                     self.node
                 }
             }
+            #[allow(unused_parens)]
             impl #impl_generics #crate_path ::ExprProxy for #expr_proxy_name #ty_generics #where_clause {
                 type Value = #name #ty_generics;
             }
+            #[allow(unused_parens)]
             impl #impl_generics #crate_path ::FromNode for #var_proxy_name #ty_generics #where_clause {
                 #[allow(unused_assignments)]
                 fn from_node(node: #crate_path ::NodeRef) -> Self {
@@ -265,15 +278,17 @@ impl Compiler {
                     self.node
                 }
             }
+            #[allow(unused_parens)]
             impl #impl_generics #crate_path ::VarProxy for #var_proxy_name #ty_generics #where_clause {
                 type Value = #name #ty_generics;
             }
+            #[allow(unused_parens)]
             impl #impl_generics From<#var_proxy_name #ty_generics> for #expr_proxy_name #ty_generics #where_clause {
                 fn from(var: #var_proxy_name #ty_generics) -> Self {
                     var.load()
                 }
             }
-
+            #[allow(unused_parens)]
             impl #impl_generics #crate_path ::CallableParameter for #expr_proxy_name #ty_generics #where_clause {
                 fn def_param(builder: &mut #crate_path ::KernelBuilder) -> Self {
                     builder.value::<#name #ty_generics>()
@@ -282,6 +297,7 @@ impl Compiler {
                     encoder.var(*self)
                 }
             }
+            #[allow(unused_parens)]
             impl #impl_generics #crate_path ::CallableParameter for #var_proxy_name #ty_generics #where_clause  {
                 fn def_param(builder: &mut #crate_path ::KernelBuilder) -> Self {
                     builder.var::<#name #ty_generics>()
@@ -292,18 +308,6 @@ impl Compiler {
             }
 
         );
-        let test_name = syn::Ident::new(&format!("test_{}", name), name.span());
-        let test = quote! {
-            #[allow(non_snake_case)]
-            #[cfg(test)]
-            mod #test_name {
-                #[test]
-                fn test_size() {
-                    use std::mem::size_of;
-                    assert_eq!(size_of::<super:: #name #ty_generics>(), <super:: #name #ty_generics as #crate_path ::TypeOf>::type_().size());
-                }
-            }
-        };
         quote_spanned! {
             span=>
             #proxy_def
@@ -326,7 +330,6 @@ impl Compiler {
             impl #impl_generics  #var_proxy_name #ty_generics #where_clause {
                 #(#var_proxy_field_methods)*
             }
-            #test
         }
     }
     pub fn derive_aggregate_for_struct(&self, struct_: &ItemStruct) -> TokenStream {
@@ -341,7 +344,7 @@ impl Compiler {
                 fn to_nodes(&self, nodes: &mut Vec<#crate_path ::NodeRef>) {
                     #(self.#field_names.to_nodes(nodes);)*
                 }
-                fn from_nodes<I: Iterator<Item = #crate_path ::NodeRef>>(iter: &mut I) -> Self {
+                fn from_nodes<__I: Iterator<Item = #crate_path ::NodeRef>>(iter: &mut __I) -> Self {
                     #(let #field_names = <#field_types as #crate_path ::Aggregate>::from_nodes(iter);)*
                     Self{
                         #(#field_names,)*

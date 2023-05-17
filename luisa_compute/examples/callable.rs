@@ -1,7 +1,14 @@
-use std::env::current_exe;
-
+use luisa::derive::*;
 use luisa_compute as luisa;
-
+use luisa::Value;
+use luisa::prelude::*;
+use std::env::current_exe;
+#[derive(Clone, Copy, Value)]
+#[repr(C)]
+pub struct Point<T: Value> {
+    pub x: T,
+    pub y: T,
+}
 fn main() {
     use luisa::*;
     init_logger();

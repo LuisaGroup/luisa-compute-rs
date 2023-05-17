@@ -23,4 +23,5 @@ cuda = []
 strict = []
 cpu = []
 remote = []
+metal = []
 

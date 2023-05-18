@@ -1513,7 +1513,7 @@ impl KernelBuilder {
             let artifact = if options.async_compile {
                 ShaderArtifact::Async(AsyncShaderArtifact::new(
                     self.device.clone().unwrap(),
-                    module,
+                    module.clone(),
                     shader_options,
                     name,
                 ))
@@ -1532,6 +1532,7 @@ impl KernelBuilder {
                 artifact,
                 device: self.device.clone().unwrap(),
                 resource_tracker: rt,
+                module,
             }
         })
     }

@@ -804,6 +804,7 @@ pub struct RawKernel {
     pub(crate) artifact: ShaderArtifact,
     #[allow(dead_code)]
     pub(crate) resource_tracker: ResourceTracker,
+    pub(crate) module: CArc<ir::KernelModule>,
 }
 
 pub struct CallableArgEncoder {
@@ -1053,6 +1054,9 @@ impl<T: KernelArg> Kernel<T> {
         let handle = self.inner.unwrap();
         let device = &self.inner.device;
         device.inner.shader_cache_dir(handle)
+    }
+    pub fn dump(&self) -> String {
+        ir::debug::dump_ir_human_readable(&self.inner.module.module)
     }
 }
 

@@ -25,6 +25,7 @@ fn main() {
     let x = device.create_buffer::<f32>(1024);
     let y = device.create_buffer::<f32>(1024);
     let z = device.create_buffer::<f32>(1024);
+    let w = device.create_buffer::<i32>(1024);
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
     let kernel = device.create_kernel::<(Buffer<f32>,)>(&|buf_z| {
@@ -35,8 +36,11 @@ fn main() {
         let y = buf_y.read(tid);
 
         buf_z.write(tid, add.call(x.into(), y.into()).get::<f32>());
+        w.var().write(tid, add.call(x.int().into(), y.int().into()).get::<i32>());
     });
     kernel.dispatch([1024, 1, 1], &z);
     let z_data = z.view(..).copy_to_vec();
     println!("{:?}", &z_data[0..16]);
+    let w_data = w.view(..).copy_to_vec();
+    println!("{:?}", &w_data[0..16]);
 }

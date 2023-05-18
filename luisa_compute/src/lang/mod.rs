@@ -514,7 +514,9 @@ pub(crate) fn __check_node_type(a: NodeRef, b: NodeRef) -> bool {
         (Instruction::Accel, Instruction::Accel) => true,
         (Instruction::Uniform, Instruction::Uniform) => true,
         (Instruction::Local { .. }, Instruction::Local { .. }) => true,
-        _ => a.get().instruction.has_value() && b.get().instruction.has_value(),
+        (Instruction::Argument { by_value: true }, _) => b.get().instruction.has_value(),
+        (Instruction::Argument { by_value: false }, _) => b.is_lvalue(),
+        _ => false,
     }
 }
 pub(crate) fn __check_callable(callable: &CallableModuleRef, args: &[NodeRef]) -> bool {
@@ -762,8 +764,8 @@ impl CallableParameter for DynExpr {
     fn def_param(arg: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         let arg = arg.unwrap_or_else(|| panic!("DynExpr should be used in DynCallable only!"));
         let arg = arg.downcast_ref::<Self>().unwrap();
-        builder.args.push(arg.node);
-        Self { node: arg.node }
+        let node = builder.arg(arg.node.type_().clone(), true);
+        Self { node }
     }
     fn encode(&self, encoder: &mut CallableArgEncoder) {
         encoder.args.push(self.node)
@@ -824,8 +826,8 @@ impl CallableParameter for DynVar {
     fn def_param(arg: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         let arg = arg.unwrap_or_else(|| panic!("DynVar should be used in DynCallable only!"));
         let arg = arg.downcast_ref::<Self>().unwrap();
-        builder.args.push(arg.node);
-        Self { node: arg.node }
+        let node = builder.arg(arg.node.type_().clone(), false);
+        Self { node }
     }
     fn encode(&self, encoder: &mut CallableArgEncoder) {
         encoder.args.push(self.node)
@@ -1139,7 +1141,7 @@ macro_rules! impl_callable_parameter_for_tuple {
             #[allow(non_snake_case)]
             fn def_param(arg: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
                 if let Some(arg) = arg {
-                    let ($first, $($rest,)*) = arg.downcast_ref::<($first, $($rest,)*)>().unwrap().clone();
+                    let ($first, $($rest,)*) = arg.downcast_ref::<($first, $($rest,)*)>().cloned().unwrap();
                     let $first = $first::def_param(Some(std::rc::Rc::new($first)), builder);
                     let ($($rest,)*) = ($($rest::def_param(Some(std::rc::Rc::new($rest)), builder),)*);
                     ($first, $($rest,)*)
@@ -1290,26 +1292,20 @@ impl KernelBuilder {
             args: vec![],
         }
     }
-    pub fn value<T: Value>(&mut self) -> Expr<T> {
+    pub(crate) fn arg(&mut self, ty: CArc<Type>, by_value: bool) -> NodeRef {
         let node = new_node(
             __module_pools(),
-            Node::new(
-                CArc::new(Instruction::Argument { by_value: true }),
-                T::type_(),
-            ),
+            Node::new(CArc::new(Instruction::Argument { by_value }), ty),
         );
         self.args.push(node);
+        node
+    }
+    pub fn value<T: Value>(&mut self) -> Expr<T> {
+        let node = self.arg(T::type_(), true);
         FromNode::from_node(node)
     }
     pub fn var<T: Value>(&mut self) -> Var<T> {
-        let node = new_node(
-            __module_pools(),
-            Node::new(
-                CArc::new(Instruction::Argument { by_value: false }),
-                T::type_(),
-            ),
-        );
-        self.args.push(node);
+        let node = self.arg(T::type_(), false);
         FromNode::from_node(node)
     }
     pub fn uniform<T: Value>(&mut self) -> Expr<T> {
@@ -1715,9 +1711,16 @@ macro_rules! impl_callable_build_for_fn {
             #[allow(non_snake_case)]
             fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
                 builder.build_callable( |builder| {
-                    let $first = $first::def_param(args.clone(), builder);
-                    $(let $rest = $rest::def_param(args.clone(), builder);)*
-                    self($first, $($rest,)*)
+                    if let Some(args) = args {
+                        let ($first, $($rest,)*) = args.downcast_ref::<($first, $($rest,)*)>().cloned().unwrap();
+                        let $first = $first::def_param(Some(Rc::new($first)), builder);
+                        $(let $rest = $rest::def_param(Some(Rc::new($rest)), builder);)*
+                        self($first, $($rest,)*)
+                    } else {
+                        let $first = $first::def_param(None, builder);
+                        $(let $rest = $rest::def_param(None, builder);)*
+                        self($first, $($rest,)*)
+                    }
                 })
             }
         }
@@ -1725,9 +1728,16 @@ macro_rules! impl_callable_build_for_fn {
             #[allow(non_snake_case)]
             fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
                 builder.build_callable( |builder| {
-                    let $first = $first::def_param(args.clone(), builder);
-                    $(let $rest = $rest::def_param(args.clone(), builder);)*
-                    self($first, $($rest,)*)
+                    if let Some(args) = args {
+                        let ($first, $($rest,)*) = args.downcast_ref::<($first, $($rest,)*)>().cloned().unwrap();
+                        let $first = $first::def_param(Some(Rc::new($first)), builder);
+                        $(let $rest = $rest::def_param(Some(Rc::new($rest)), builder);)*
+                        self($first, $($rest,)*)
+                    } else {
+                        let $first = $first::def_param(None, builder);
+                        $(let $rest = $rest::def_param(None, builder);)*
+                        self($first, $($rest,)*)
+                    }
                 })
             }
         }

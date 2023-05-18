@@ -178,7 +178,7 @@ impl Accel {
         self.handle.native_handle
     }
 }
-
+#[derive(Clone)]
 pub struct AccelVar {
     pub(crate) node: NodeRef,
     #[allow(dead_code)]

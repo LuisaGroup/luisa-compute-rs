@@ -955,7 +955,7 @@ impl<T: IoTexel> Tex3d<T> {
         self.handle.format
     }
 }
-
+#[derive(Clone)]
 pub struct BufferVar<T: Value> {
     pub(crate) marker: std::marker::PhantomData<T>,
     #[allow(dead_code)]
@@ -966,13 +966,13 @@ pub struct BufferVar<T: Value> {
 impl<T: Value> Drop for BufferVar<T> {
     fn drop(&mut self) {}
 }
-
+#[derive(Clone)]
 pub struct BindlessArrayVar {
     pub(crate) node: NodeRef,
     #[allow(dead_code)]
     pub(crate) handle: Option<Arc<BindlessArrayHandle>>,
 }
-
+#[derive(Clone)]
 pub struct BindlessBufferVar<T> {
     array: NodeRef,
     buffer_index: Expr<u32>,
@@ -1012,7 +1012,7 @@ impl<T: Value> BindlessBufferVar<T> {
         }))
     }
 }
-
+#[derive(Clone)]
 pub struct BindlessTex2dVar {
     array: NodeRef,
     tex2d_index: Expr<u32>,
@@ -1099,7 +1099,7 @@ impl BindlessTex2dVar {
         }))
     }
 }
-
+#[derive(Clone)]
 pub struct BindlessTex3dVar {
     array: NodeRef,
     tex3d_index: Expr<u32>,
@@ -1520,6 +1520,7 @@ impl_atomic_bit!(u32);
 impl_atomic_bit!(u64);
 impl_atomic_bit!(i32);
 impl_atomic_bit!(i64);
+#[derive(Clone)]
 pub struct Tex2dVar<T: IoTexel> {
     pub(crate) node: NodeRef,
     #[allow(dead_code)]
@@ -1636,7 +1637,7 @@ impl<T: IoTexel> Tex3dVar<T> {
         })
     }
 }
-
+#[derive(Clone)]
 pub struct Tex3dVar<T: IoTexel> {
     pub(crate) node: NodeRef,
     #[allow(dead_code)]

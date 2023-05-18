@@ -332,8 +332,21 @@ impl Device {
         f: S::Fn,
     ) -> S::Callable {
         let mut builder = KernelBuilder::new(Some(self.clone()), false);
-        let raw_callable = CallableBuildFn::build_callable(&f, &mut builder);
+        let raw_callable = CallableBuildFn::build_callable(&f, None, &mut builder);
         S::wrap_raw_callable(raw_callable)
+    }
+    pub fn create_dyn_callable<'a, S: CallableSignature<'a, R>, R: CallableRet>(
+        &self,
+        f: S::DynFn,
+    ) -> S::DynCallable {
+        S::create_dyn_callable(self.clone(), false, f)
+    }
+    pub fn create_dyn_callable_once<'a, S: CallableSignature<'a, R>, R: CallableRet>(
+        &self,
+        init_once: bool,
+        f: S::DynFn,
+    ) -> S::DynCallable {
+        S::create_dyn_callable(self.clone(), true, f)
     }
     pub fn create_kernel<'a, S: KernelSignature<'a>>(&self, f: S::Fn) -> S::Kernel {
         let mut builder = KernelBuilder::new(Some(self.clone()), true);
@@ -367,14 +380,14 @@ impl Device {
 pub fn create_static_callable<S: CallableSignature<'static, R>, R: CallableRet>(
     f: S::StaticFn,
 ) -> S::Callable {
-    let mut r_backup = RECORDER.with(|r|{
+    let r_backup = RECORDER.with(|r| {
         let mut r = r.borrow_mut();
         std::mem::replace(&mut *r, Recorder::new())
     });
     let mut builder = KernelBuilder::new(None, false);
-    let raw_callable = CallableBuildFn::build_callable(&f, &mut builder);
+    let raw_callable = CallableBuildFn::build_callable(&f, None, &mut builder);
     let callable = S::wrap_raw_callable(raw_callable);
-    RECORDER.with(|r|{
+    RECORDER.with(|r| {
         *r.borrow_mut() = r_backup;
     });
     callable
@@ -1039,6 +1052,75 @@ pub struct Callable<T: CallableParameter, R: CallableRet> {
     pub(crate) inner: RawCallable,
     pub(crate) _marker: std::marker::PhantomData<(T, R)>,
 }
+pub(crate) struct DynCallableInner<T: CallableParameter, R: CallableRet> {
+    builder: Box<dyn Fn(std::rc::Rc<dyn Any>, &mut KernelBuilder) -> Callable<T, R>>,
+    callables: Vec<Callable<T, R>>,
+}
+pub struct DynCallable<T: CallableParameter, R: CallableRet> {
+    #[allow(dead_code)]
+    pub(crate) inner: RefCell<DynCallableInner<T, R>>,
+    pub(crate) device: Device,
+    pub(crate) init_once: bool,
+}
+impl<T: CallableParameter, R: CallableRet> DynCallable<T, R> {
+    pub(crate) fn new(
+        device: Device,
+        init_once: bool,
+        builder: Box<dyn Fn(std::rc::Rc<dyn Any>, &mut KernelBuilder) -> Callable<T, R>>,
+    ) -> Self {
+        Self {
+            device,
+            inner: RefCell::new(DynCallableInner {
+                builder,
+                callables: Vec::new(),
+            }),
+            init_once,
+        }
+    }
+    fn call_impl(&self, args: std::rc::Rc<dyn Any>, nodes: &[NodeRef]) -> R {
+        RECORDER.with(|r| {
+            if let Some(device) = r.borrow().device.as_ref() {
+                assert!(
+                    Arc::ptr_eq(&device.inner, &self.device.inner),
+                    "Callable created on a different device than the one it is called on"
+                );
+            }
+        });
+        let mut inner = self.inner.borrow_mut();
+
+        {
+            let callables = &mut inner.callables;
+            for c in callables {
+                if lang::__check_callable(&c.inner.module, nodes) {
+                    return CallableRet::_from_return(lang::__invoke_callable(
+                        &c.inner.module,
+                        nodes,
+                    ));
+                }
+            }
+            let callables = &inner.callables;
+            if callables.len() > 0 && self.init_once {
+                panic!("Callable has already initialized but arguments do not match any of the previous calls");
+            }
+        }
+        let r_backup = RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            std::mem::replace(&mut *r, Recorder::new())
+        });
+        let mut builder = KernelBuilder::new(None, false);
+        let new_callable = (inner.builder)(args, &mut builder);
+        RECORDER.with(|r| {
+            *r.borrow_mut() = r_backup;
+        });
+        assert!(lang::__check_callable(&new_callable.inner.module, nodes));
+        let callables = &mut inner.callables;
+        callables.push(new_callable);
+        CallableRet::_from_return(lang::__invoke_callable(
+            &callables.last().unwrap().inner.module,
+            nodes,
+        ))
+    }
+}
 unsafe impl Send for RawCallable {}
 unsafe impl Sync for RawCallable {}
 pub struct RawCallable {
@@ -1103,6 +1185,15 @@ macro_rules! impl_call_for_callable {
                     lang::__invoke_callable(&self.inner.module, &encoder.args))
             }
         }
+        impl <R:CallableRet, $first:CallableParameter, $($rest: CallableParameter),*> DynCallable<($first, $($rest,)*), R> {
+            #[allow(non_snake_case)]
+            pub fn call(&self, $first:$first, $($rest:$rest),*) -> R {
+                let mut encoder = CallableArgEncoder::new();
+                $first.encode(&mut encoder);
+                $($rest.encode(&mut encoder);)*
+                self.call_impl(std::rc::Rc::new(($first, $($rest,)*)), &encoder.args)
+            }
+        }
         impl_call_for_callable!($($rest)*);
    };
    ()=>{
@@ -1110,6 +1201,11 @@ macro_rules! impl_call_for_callable {
             pub fn call(&self)->R {
                 CallableRet::_from_return(
                     lang::__invoke_callable(&self.inner.module, &[]))
+            }
+        }
+        impl<R:CallableRet> DynCallable<(), R> {
+            pub fn call(&self)-> R{
+                self.call_impl(std::rc::Rc::new(()), &[])
             }
         }
     }

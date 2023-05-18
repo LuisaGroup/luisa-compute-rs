@@ -290,7 +290,7 @@ impl Compiler {
             }
             #[allow(unused_parens)]
             impl #impl_generics #crate_path ::CallableParameter for #expr_proxy_name #ty_generics #where_clause {
-                fn def_param(builder: &mut #crate_path ::KernelBuilder) -> Self {
+                fn def_param(_:Option<std::rc::Rc<dyn std::any::Any>>, builder: &mut #crate_path ::KernelBuilder) -> Self {
                     builder.value::<#name #ty_generics>()
                 }
                 fn encode(&self, encoder: &mut #crate_path ::CallableArgEncoder) {
@@ -299,7 +299,7 @@ impl Compiler {
             }
             #[allow(unused_parens)]
             impl #impl_generics #crate_path ::CallableParameter for #var_proxy_name #ty_generics #where_clause  {
-                fn def_param(builder: &mut #crate_path ::KernelBuilder) -> Self {
+                fn def_param(_:Option<std::rc::Rc<dyn std::any::Any>>, builder: &mut #crate_path ::KernelBuilder) -> Self {
                     builder.var::<#name #ty_generics>()
                 }
                 fn encode(&self, encoder: &mut #crate_path ::CallableArgEncoder) {

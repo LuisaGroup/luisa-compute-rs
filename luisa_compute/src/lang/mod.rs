@@ -2,7 +2,7 @@ use std::backtrace::Backtrace;
 use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::unreachable;
-use std::{any::Any, collections::HashMap, fmt::Debug, sync::Arc};
+use std::{any::Any, collections::HashMap, fmt::Debug, rc::Rc, sync::Arc};
 
 use crate::lang::traits::VarCmp;
 pub use crate::runtime::CallableArgEncoder;
@@ -48,9 +48,9 @@ pub mod traits;
 pub use math::*;
 pub use poly::*;
 
-pub trait Value: Copy + ir::TypeOf {
-    type Expr: ExprProxy<Value=Self>;
-    type Var: VarProxy<Value=Self>;
+pub trait Value: Copy + ir::TypeOf + 'static {
+    type Expr: ExprProxy<Value = Self>;
+    type Var: VarProxy<Value = Self>;
     fn fields() -> Vec<String>;
 }
 
@@ -67,7 +67,7 @@ pub trait Aggregate: Sized {
         ret
     }
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>);
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self;
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self;
 }
 
 pub trait FromNode {
@@ -205,7 +205,7 @@ impl<T> Aggregate for PrimExpr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
             _phantom: std::marker::PhantomData,
@@ -217,7 +217,7 @@ impl<T> Aggregate for PrimVar<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
             _phantom: std::marker::PhantomData,
@@ -228,7 +228,7 @@ impl<T> Aggregate for PrimVar<T> {
 macro_rules! impl_callable_param {
     ($t:ty, $e:ty, $v:ty) => {
         impl CallableParameter for $e {
-            fn def_param(builder: &mut KernelBuilder) -> Self {
+            fn def_param(_: Option<std::rc::Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
                 builder.value::<$t>()
             }
             fn encode(&self, encoder: &mut CallableArgEncoder) {
@@ -236,7 +236,7 @@ macro_rules! impl_callable_param {
             }
         }
         impl CallableParameter for $v {
-            fn def_param(builder: &mut KernelBuilder) -> Self {
+            fn def_param(_: Option<std::rc::Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
                 builder.var::<$t>()
             }
             fn encode(&self, encoder: &mut CallableArgEncoder) {
@@ -361,8 +361,8 @@ macro_rules! lc_assert {
     };
 }
 pub fn __cpu_dbg<T: ExprProxy>(arg: T, file: &'static str, line: u32)
-    where
-        T::Value: Debug,
+where
+    T::Value: Debug,
 {
     if !is_cpu_backend() {
         return;
@@ -408,7 +408,7 @@ impl<T: Value> CpuFn<T> {
             _marker: std::marker::PhantomData,
         }
     }
-    pub fn call(&self, arg: impl ExprProxy<Value=T>) -> Expr<T> {
+    pub fn call(&self, arg: impl ExprProxy<Value = T>) -> Expr<T> {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(r.lock);
@@ -464,18 +464,18 @@ impl Recorder {
         self.block_size = None;
         self.arena.reset();
     }
-    pub(crate) fn new() -> Self{
+    pub(crate) fn new() -> Self {
         Recorder {
             scopes: vec![],
-            lock:false,
+            lock: false,
             captured_buffer: IndexMap::new(),
             cpu_custom_ops: IndexMap::new(),
-            callables:IndexMap::new(),
-            device:None,
+            callables: IndexMap::new(),
+            device: None,
             block_size: None,
             pools: None,
-            arena:Bump::new(),
-            building_kernel:false,
+            arena: Bump::new(),
+            building_kernel: false,
         }
     }
 }
@@ -501,6 +501,30 @@ pub(crate) fn __invoke_callable(callable: &CallableModuleRef, args: &[NodeRef]) 
             callable.0.ret_type.clone(),
         )
     })
+}
+pub(crate) fn __check_node_type(a: NodeRef, b: NodeRef) -> bool {
+    if !ir::context::is_type_equal(a.type_(), b.type_()) {
+        return false;
+    }
+    match (a.get().instruction.as_ref(), b.get().instruction.as_ref()) {
+        (Instruction::Buffer, Instruction::Buffer) => true,
+        (Instruction::Texture2D, Instruction::Texture2D) => true,
+        (Instruction::Texture3D, Instruction::Texture3D) => true,
+        (Instruction::Bindless, Instruction::Bindless) => true,
+        (Instruction::Accel, Instruction::Accel) => true,
+        (Instruction::Uniform, Instruction::Uniform) => true,
+        (Instruction::Local { .. }, Instruction::Local { .. }) => true,
+        _ => a.get().instruction.has_value() && b.get().instruction.has_value(),
+    }
+}
+pub(crate) fn __check_callable(callable: &CallableModuleRef, args: &[NodeRef]) -> bool {
+    assert_eq!(callable.0.args.len(), args.len());
+    for i in 0..args.len() {
+        if !__check_node_type(callable.0.args[i], args[i]) {
+            return false;
+        }
+    }
+    true
 }
 
 // Don't call this function directly unless you know what you are doing
@@ -699,6 +723,144 @@ impl<T: Value + TypeOf, const N: usize> Value for [T; N] {
         todo!("why this method exists?")
     }
 }
+#[derive(Clone, Copy)]
+pub struct DynExpr {
+    node: NodeRef,
+}
+impl<T: ExprProxy> From<T> for DynExpr {
+    fn from(value: T) -> Self {
+        Self { node: value.node() }
+    }
+}
+impl<T: VarProxy> From<T> for DynVar {
+    fn from(value: T) -> Self {
+        Self { node: value.node() }
+    }
+}
+impl DynExpr {
+    pub fn downcast<T: Value>(&self) -> Option<Expr<T>> {
+        if ir::context::is_type_equal(self.node.type_(), &T::type_()) {
+            Some(Expr::<T>::from_node(self.node))
+        } else {
+            None
+        }
+    }
+    pub fn get<T: Value>(&self) -> Expr<T> {
+        self.downcast::<T>().unwrap_or_else(|| {
+            panic!(
+                "DynExpr::get: type mismatch: expected {}, got {}",
+                std::any::type_name::<T>(),
+                self.node.type_().to_string()
+            )
+        })
+    }
+    pub fn new<E: ExprProxy>(expr: E) -> Self {
+        Self { node: expr.node() }
+    }
+}
+impl CallableParameter for DynExpr {
+    fn def_param(arg: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
+        let arg = arg.unwrap_or_else(|| panic!("DynExpr should be used in DynCallable only!"));
+        let arg = arg.downcast_ref::<Self>().unwrap();
+        builder.args.push(arg.node);
+        Self { node: arg.node }
+    }
+    fn encode(&self, encoder: &mut CallableArgEncoder) {
+        encoder.args.push(self.node)
+    }
+}
+impl Aggregate for DynExpr {
+    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+        nodes.push(self.node)
+    }
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+        Self {
+            node: iter.next().unwrap(),
+        }
+    }
+}
+impl FromNode for DynExpr {
+    fn from_node(node: NodeRef) -> Self {
+        Self { node }
+    }
+    fn node(&self) -> NodeRef {
+        self.node
+    }
+}
+unsafe impl CallableRet for DynExpr {
+    fn _return(&self) -> CArc<Type> {
+        __current_scope(|b| {
+            b.return_(self.node);
+        });
+        self.node.type_().clone()
+    }
+    fn _from_return(node: NodeRef) -> Self {
+        Self::from_node(node)
+    }
+}
+impl Aggregate for DynVar {
+    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+        nodes.push(self.node)
+    }
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+        Self {
+            node: iter.next().unwrap(),
+        }
+    }
+}
+impl FromNode for DynVar {
+    fn from_node(node: NodeRef) -> Self {
+        Self { node }
+    }
+    fn node(&self) -> NodeRef {
+        self.node
+    }
+}
+#[derive(Clone, Copy)]
+pub struct DynVar {
+    node: NodeRef,
+}
+impl CallableParameter for DynVar {
+    fn def_param(arg: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
+        let arg = arg.unwrap_or_else(|| panic!("DynVar should be used in DynCallable only!"));
+        let arg = arg.downcast_ref::<Self>().unwrap();
+        builder.args.push(arg.node);
+        Self { node: arg.node }
+    }
+    fn encode(&self, encoder: &mut CallableArgEncoder) {
+        encoder.args.push(self.node)
+    }
+}
+impl DynVar {
+    pub fn downcast<T: Value>(&self) -> Option<Var<T>> {
+        if ir::context::is_type_equal(self.node.type_(), &T::type_()) {
+            Some(Var::<T>::from_node(self.node))
+        } else {
+            None
+        }
+    }
+    pub fn get<T: Value>(&self) -> Var<T> {
+        self.downcast::<T>().unwrap_or_else(|| {
+            panic!(
+                "DynVar::get: type mismatch: expected {}, got {}",
+                std::any::type_name::<T>(),
+                self.node.type_().to_string()
+            )
+        })
+    }
+    pub fn load(&self) -> DynExpr {
+        DynExpr {
+            node: __current_scope(|b| b.call(Func::Load, &[self.node], self.node.type_().clone())),
+        }
+    }
+    pub fn store(&self, value: &DynExpr) {
+        __current_scope(|b| b.update(self.node, value.node));
+    }
+    pub fn zero<T: Value>() -> Self {
+        let v = local_zeroed::<T>();
+        Self { node: v.node() }
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct VLArrayExpr<T: Value> {
@@ -722,7 +884,7 @@ impl<T: Value> Aggregate for VLArrayExpr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -749,7 +911,7 @@ impl<T: Value> Aggregate for VLArrayVar<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -874,7 +1036,7 @@ impl<T: Value, const N: usize> Aggregate for ArrayExpr<T, N> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -895,7 +1057,7 @@ impl<T: Value, const N: usize> Aggregate for ArrayVar<T, N> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -961,24 +1123,31 @@ pub struct KernelBuilder {
     args: Vec<NodeRef>,
 }
 
-pub trait CallableParameter {
-    fn def_param(builder: &mut KernelBuilder) -> Self;
+pub trait CallableParameter: Sized + Clone + 'static {
+    fn def_param(arg: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self;
     fn encode(&self, encoder: &mut CallableArgEncoder);
 }
 macro_rules! impl_callable_parameter_for_tuple {
     ()=>{
         impl CallableParameter for () {
-            fn def_param(_: &mut KernelBuilder) {}
+            fn def_param(_: Option<Rc<dyn Any>>, _: &mut KernelBuilder) {}
             fn encode(&self, _: &mut CallableArgEncoder) { }
         }
     };
     ($first:ident  $($rest:ident) *) => {
         impl<$first:CallableParameter, $($rest: CallableParameter),*> CallableParameter for ($first, $($rest,)*) {
             #[allow(non_snake_case)]
-            fn def_param(builder: &mut KernelBuilder) -> Self {
-                let $first = $first::def_param(builder);
-                let ($($rest,)*) = ($($rest::def_param(builder),)*);
-                ($first, $($rest,)*)
+            fn def_param(arg: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
+                if let Some(arg) = arg {
+                    let ($first, $($rest,)*) = arg.downcast_ref::<($first, $($rest,)*)>().unwrap().clone();
+                    let $first = $first::def_param(Some(std::rc::Rc::new($first)), builder);
+                    let ($($rest,)*) = ($($rest::def_param(Some(std::rc::Rc::new($rest)), builder),)*);
+                    ($first, $($rest,)*)
+                }else {
+                    let $first = $first::def_param(None, builder);
+                    let ($($rest,)*) = ($($rest::def_param(None, builder),)*);
+                    ($first, $($rest,)*)
+                }
             }
             #[allow(non_snake_case)]
             fn encode(&self, encoder: &mut CallableArgEncoder) {
@@ -993,8 +1162,8 @@ macro_rules! impl_callable_parameter_for_tuple {
 }
 impl_callable_parameter_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
-impl<T: Value> CallableParameter for BufferVar<T> {
-    fn def_param(builder: &mut KernelBuilder) -> Self {
+impl<T: Value + 'static> CallableParameter for BufferVar<T> {
+    fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         builder.buffer()
     }
     fn encode(&self, encoder: &mut CallableArgEncoder) {
@@ -1002,8 +1171,8 @@ impl<T: Value> CallableParameter for BufferVar<T> {
     }
 }
 
-impl<T: IoTexel> CallableParameter for Tex2dVar<T> {
-    fn def_param(builder: &mut KernelBuilder) -> Self {
+impl<T: IoTexel + 'static> CallableParameter for Tex2dVar<T> {
+    fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         builder.tex2d()
     }
     fn encode(&self, encoder: &mut CallableArgEncoder) {
@@ -1011,8 +1180,8 @@ impl<T: IoTexel> CallableParameter for Tex2dVar<T> {
     }
 }
 
-impl<T: IoTexel> CallableParameter for Tex3dVar<T> {
-    fn def_param(builder: &mut KernelBuilder) -> Self {
+impl<T: IoTexel + 'static> CallableParameter for Tex3dVar<T> {
+    fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         builder.tex3d()
     }
     fn encode(&self, encoder: &mut CallableArgEncoder) {
@@ -1021,7 +1190,7 @@ impl<T: IoTexel> CallableParameter for Tex3dVar<T> {
 }
 
 impl CallableParameter for BindlessArrayVar {
-    fn def_param(builder: &mut KernelBuilder) -> Self {
+    fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         builder.bindless_array()
     }
     fn encode(&self, encoder: &mut CallableArgEncoder) {
@@ -1030,7 +1199,7 @@ impl CallableParameter for BindlessArrayVar {
 }
 
 impl CallableParameter for rtx::AccelVar {
-    fn def_param(builder: &mut KernelBuilder) -> Self {
+    fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         builder.accel()
     }
     fn encode(&self, encoder: &mut CallableArgEncoder) {
@@ -1043,9 +1212,9 @@ pub trait KernelParameter {
 }
 
 impl<T: Value, U> KernelParameter for U
-    where
-        U: ExprProxy<Value=T>,
-        T: Value<Expr=U>,
+where
+    U: ExprProxy<Value = T>,
+    T: Value<Expr = U>,
 {
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.uniform::<T>()
@@ -1265,7 +1434,7 @@ impl KernelBuilder {
     }
     fn build_callable<R: CallableRet>(&mut self, body: impl FnOnce(&mut Self) -> R) -> RawCallable {
         let ret = body(self);
-        ret._return();
+        let ret_type = ret._return();
         let (rt, cpu_custom_ops, captures, callables) = self.collect();
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
@@ -1281,7 +1450,7 @@ impl KernelBuilder {
                     kind: ModuleKind::Kernel,
                     pools: r.pools.clone().unwrap(),
                 },
-                ret_type: R::_ret_type(),
+                ret_type,
                 cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
                 captures: CBoxedSlice::new(captures),
                 callables: CBoxedSlice::new(callables),
@@ -1349,7 +1518,13 @@ impl KernelBuilder {
                     name,
                 ))
             } else {
-                ShaderArtifact::Sync(self.device.as_ref().unwrap().inner.create_shader(&module, &shader_options))
+                ShaderArtifact::Sync(
+                    self.device
+                        .as_ref()
+                        .unwrap()
+                        .inner
+                        .create_shader(&module, &shader_options),
+                )
             };
             //
             r.reset();
@@ -1394,45 +1569,45 @@ pub trait KernelBuildFn {
 }
 
 pub trait CallableBuildFn {
-    fn build_callable(&self, builder: &mut KernelBuilder) -> RawCallable;
+    fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)
+        -> RawCallable;
 }
 
 pub trait StaticCallableBuildFn: CallableBuildFn {}
 
 // @FIXME: this looks redundant
 pub unsafe trait CallableRet {
-    fn _return(&self);
+    fn _return(&self) -> CArc<Type>;
     fn _from_return(node: NodeRef) -> Self;
-    fn _ret_type() -> CArc<Type>;
 }
 
 unsafe impl CallableRet for () {
-    fn _return(&self) {}
-    fn _from_return(_: NodeRef) -> Self {}
-    fn _ret_type() -> CArc<Type> {
+    fn _return(&self) -> CArc<Type> {
         Type::void()
     }
+    fn _from_return(_: NodeRef) -> Self {}
 }
 
 unsafe impl<T: ExprProxy> CallableRet for T {
-    fn _return(&self) {
+    fn _return(&self) -> CArc<Type> {
         __current_scope(|b| {
             b.return_(self.node());
-        })
+        });
+        T::Value::type_()
     }
     fn _from_return(node: NodeRef) -> Self {
         Self::from_node(node)
-    }
-    fn _ret_type() -> CArc<Type> {
-        T::Value::type_()
     }
 }
 
 pub trait CallableSignature<'a, R: CallableRet> {
     type Callable;
+    type DynCallable;
     type Fn: CallableBuildFn;
     type StaticFn: StaticCallableBuildFn;
+    type DynFn: CallableBuildFn + 'static;
     fn wrap_raw_callable(callable: RawCallable) -> Self::Callable;
+    fn create_dyn_callable(device: Device, init_once: bool, f: Self::DynFn) -> Self::DynCallable;
 }
 
 pub trait KernelSignature<'a> {
@@ -1445,26 +1620,42 @@ macro_rules! impl_callable_signature {
     ()=>{
         impl<'a, R: CallableRet +'static> CallableSignature<'a, R> for () {
             type Fn = &'a dyn Fn() ->R;
+            type DynFn = &'static dyn Fn() ->R;
             type StaticFn = fn() -> R;
             type Callable = Callable<(), R>;
+            type DynCallable = DynCallable<(), R>;
             fn wrap_raw_callable(callable: RawCallable) -> Self::Callable{
                 Callable {
                     inner: callable,
                     _marker:std::marker::PhantomData,
                 }
             }
+            fn create_dyn_callable(device:Device, init_once:bool, f: Self::DynFn) -> Self::DynCallable {
+                DynCallable::new(device, init_once, Box::new(move |arg, builder| {
+                    let raw_callable = CallableBuildFn::build_callable(&f, Some(arg), builder);
+                    Self::wrap_raw_callable(raw_callable)
+                }))
+            }
         }
     };
     ($first:ident  $($rest:ident)*) => {
         impl<'a, R:CallableRet +'static, $first:CallableParameter +'static, $($rest: CallableParameter +'static),*> CallableSignature<'a, R> for ($first, $($rest,)*) {
             type Fn = &'a dyn Fn($first, $($rest),*)->R;
+            type DynFn = &'static dyn Fn($first, $($rest),*)->R;
             type Callable = Callable<($first, $($rest,)*), R>;
             type StaticFn = fn($first, $($rest,)*)->R;
+            type DynCallable = DynCallable<($first, $($rest,)*), R>;
             fn wrap_raw_callable(callable: RawCallable) -> Self::Callable{
                 Callable {
                     inner: callable,
                     _marker:std::marker::PhantomData,
                 }
+            }
+            fn create_dyn_callable(device:Device, init_once:bool, f: Self::DynFn) -> Self::DynCallable {
+                DynCallable::new(device, init_once, Box::new(move |arg, builder| {
+                    let raw_callable = CallableBuildFn::build_callable(&f, Some(arg), builder);
+                    Self::wrap_raw_callable(raw_callable)
+                }))
             }
         }
         impl_callable_signature!($($rest)*);
@@ -1503,14 +1694,14 @@ impl_kernel_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 macro_rules! impl_callable_build_for_fn {
     ()=>{
         impl<R:CallableRet +'static> CallableBuildFn for &dyn Fn()->R {
-            fn build_callable(&self, builder: &mut KernelBuilder)->RawCallable {
+            fn build_callable(&self, _args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
                 builder.build_callable( |_| {
                     self()
                 })
             }
         }
         impl<R:CallableRet +'static> CallableBuildFn for fn()->R {
-            fn build_callable(&self, builder: &mut KernelBuilder)->RawCallable {
+            fn build_callable(&self, _args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
                 builder.build_callable( |_| {
                     self()
                 })
@@ -1521,20 +1712,20 @@ macro_rules! impl_callable_build_for_fn {
     ($first:ident  $($rest:ident)*) => {
         impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for &dyn Fn($first, $($rest,)*)->R {
             #[allow(non_snake_case)]
-            fn build_callable(&self, builder: &mut KernelBuilder)->RawCallable {
+            fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
                 builder.build_callable( |builder| {
-                    let $first = $first::def_param(builder);
-                    $(let $rest = $rest::def_param(builder);)*
+                    let $first = $first::def_param(args.clone(), builder);
+                    $(let $rest = $rest::def_param(args.clone(), builder);)*
                     self($first, $($rest,)*)
                 })
             }
         }
         impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for fn($first, $($rest,)*)->R {
             #[allow(non_snake_case)]
-            fn build_callable(&self, builder: &mut KernelBuilder)->RawCallable {
+            fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
                 builder.build_callable( |builder| {
-                    let $first = $first::def_param(builder);
-                    $(let $rest = $rest::def_param(builder);)*
+                    let $first = $first::def_param(args.clone(), builder);
+                    $(let $rest = $rest::def_param(args.clone(), builder);)*
                     self($first, $($rest,)*)
                 })
             }

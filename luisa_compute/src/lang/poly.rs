@@ -36,6 +36,19 @@ pub trait PolymorphicImpl<T: ?Sized + 'static>: Value {
     fn new_poly_array<K>(buffer: &Buffer<Self>, tag: i32, key: K) -> PolyArray<K, T>;
 }
 #[macro_export]
+macro_rules! impl_new_poly_array {
+    ($buffer:expr, $tag:expr, $key:expr)=>{
+        {
+            let buffer = unsafe { $buffer.shallow_clone() };
+            luisa_compute::PolyArray::new(
+                $tag,
+                $key,
+                Box::new(move |_, index| Box::new(buffer.var().read(index))),
+            )
+        }
+    }
+}
+#[macro_export]
 macro_rules! impl_polymorphic {
     ($trait_:ident, $ty:ty) => {
         impl PolymorphicImpl<dyn $trait_> for $ty {

@@ -1617,7 +1617,7 @@ macro_rules! impl_callable_signature {
     ()=>{
         impl<'a, R: CallableRet +'static> CallableSignature<'a, R> for () {
             type Fn = &'a dyn Fn() ->R;
-            type DynFn = &'static dyn Fn() ->R;
+            type DynFn = Box<dyn Fn() ->R>;
             type StaticFn = fn() -> R;
             type Callable = Callable<(), R>;
             type DynCallable = DynCallable<(), R>;
@@ -1638,7 +1638,7 @@ macro_rules! impl_callable_signature {
     ($first:ident  $($rest:ident)*) => {
         impl<'a, R:CallableRet +'static, $first:CallableParameter +'static, $($rest: CallableParameter +'static),*> CallableSignature<'a, R> for ($first, $($rest,)*) {
             type Fn = &'a dyn Fn($first, $($rest),*)->R;
-            type DynFn = &'static dyn Fn($first, $($rest),*)->R;
+            type DynFn = Box<dyn Fn($first, $($rest),*)->R>;
             type Callable = Callable<($first, $($rest,)*), R>;
             type StaticFn = fn($first, $($rest,)*)->R;
             type DynCallable = DynCallable<($first, $($rest,)*), R>;
@@ -1704,10 +1704,34 @@ macro_rules! impl_callable_build_for_fn {
                 })
             }
         }
+        impl<R:CallableRet +'static> CallableBuildFn for Box<dyn Fn()->R> {
+            fn build_callable(&self, _args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
+                builder.build_callable( |_| {
+                    self()
+                })
+            }
+        }
         impl <R:CallableRet +'static> StaticCallableBuildFn  for fn()->R {}
     };
     ($first:ident  $($rest:ident)*) => {
         impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for &dyn Fn($first, $($rest,)*)->R {
+            #[allow(non_snake_case)]
+            fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
+                builder.build_callable( |builder| {
+                    if let Some(args) = args {
+                        let ($first, $($rest,)*) = args.downcast_ref::<($first, $($rest,)*)>().cloned().unwrap();
+                        let $first = $first::def_param(Some(Rc::new($first)), builder);
+                        $(let $rest = $rest::def_param(Some(Rc::new($rest)), builder);)*
+                        self($first, $($rest,)*)
+                    } else {
+                        let $first = $first::def_param(None, builder);
+                        $(let $rest = $rest::def_param(None, builder);)*
+                        self($first, $($rest,)*)
+                    }
+                })
+            }
+        }
+        impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for Box<dyn Fn($first, $($rest,)*)->R> {
             #[allow(non_snake_case)]
             fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
                 builder.build_callable( |builder| {

@@ -438,8 +438,8 @@ pub trait FloatVarTrait:
             Self::from_node(ret)
         })
     }
-    fn log(&self, base: Self) -> Self {
-        self.ln() / base.ln()
+    fn log(&self, base: impl Into<Self>) -> Self {
+        self.ln() / base.into().ln()
     }
     fn log2(&self) -> Self {
         __current_scope(|s| {

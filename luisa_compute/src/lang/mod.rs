@@ -494,6 +494,15 @@ pub fn __current_scope<F: FnOnce(&mut IrBuilder) -> R, R>(f: F) -> R {
 }
 
 pub(crate) fn __invoke_callable(callable: &CallableModuleRef, args: &[NodeRef]) -> NodeRef {
+    RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        let id = CArc::as_ptr(&callable.0) as u64;
+        if let Some(c) = r.callables.get(&id) {
+            assert_eq!(CArc::as_ptr(&c.0), CArc::as_ptr(&callable.0));
+        } else {
+            r.callables.insert(id, callable.clone());
+        }
+    });
     __current_scope(|b| {
         b.call(
             Func::Callable(callable.clone()),
@@ -1370,7 +1379,7 @@ impl KernelBuilder {
         self.args.push(node);
         rtx::AccelVar { node, handle: None }
     }
-    fn collect(
+    fn collect_module_info(
         &self,
     ) -> (
         ResourceTracker,
@@ -1431,7 +1440,7 @@ impl KernelBuilder {
     fn build_callable<R: CallableRet>(&mut self, body: impl FnOnce(&mut Self) -> R) -> RawCallable {
         let ret = body(self);
         let ret_type = ret._return();
-        let (rt, cpu_custom_ops, captures, callables) = self.collect();
+        let (rt, cpu_custom_ops, captures, callables) = self.collect_module_info();
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(r.lock);
@@ -1466,7 +1475,7 @@ impl KernelBuilder {
         body: impl FnOnce(&mut Self),
     ) -> crate::runtime::RawKernel {
         body(self);
-        let (rt, cpu_custom_ops, captures, callables) = self.collect();
+        let (rt, cpu_custom_ops, captures, callables) = self.collect_module_info();
         RECORDER.with(|r| -> crate::runtime::RawKernel {
             let mut r = r.borrow_mut();
             assert!(r.lock);

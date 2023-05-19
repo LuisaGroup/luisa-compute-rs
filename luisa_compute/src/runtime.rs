@@ -1100,11 +1100,12 @@ impl<T: CallableParameter, R: CallableRet> DynCallable<T, R> {
                 panic!("Callable has already initialized but arguments do not match any of the previous calls");
             }
         }
-        let r_backup = RECORDER.with(|r| {
+        let (r_backup, device) = RECORDER.with(|r| {
             let mut r = r.borrow_mut();
-            std::mem::replace(&mut *r, Recorder::new())
+            let device = r.device.clone().unwrap();
+            (std::mem::replace(&mut *r, Recorder::new()), device)
         });
-        let mut builder = KernelBuilder::new(None, false);
+        let mut builder = KernelBuilder::new(Some(device), false);
         let new_callable = (inner.builder)(args, &mut builder);
         RECORDER.with(|r| {
             *r.borrow_mut() = r_backup;

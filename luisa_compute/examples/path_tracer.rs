@@ -253,10 +253,13 @@ fn main() {
                     ]);
 
                 let lcg = |state: Var<u32>| -> Expr<f32> {
-                    const LCG_A: u32 = 1664525u32;
-                    const LCG_C: u32 = 1013904223u32;
-                    state.store(LCG_A * state.load() + LCG_C);
-                    (state.load() & 0x00ffffffu32).float() * (1.0f32 / 0x01000000u32 as f32)
+                    let lcg = create_static_callable::<(Var<u32>,), Expr<f32>>(|state:Var<u32>|{
+                         const LCG_A: u32 = 1664525u32;
+                        const LCG_C: u32 = 1013904223u32;
+                        state.store(LCG_A * state.load() + LCG_C);
+                        (state.load() & 0x00ffffffu32).float() * (1.0f32 / 0x01000000u32 as f32)
+                    });
+                    lcg.call(state)
                 };
 
                 let make_ray = |o: Expr<Float3>, d: Expr<Float3>, tmin: Expr<f32>, tmax: Expr<f32>| -> Expr<Ray> {

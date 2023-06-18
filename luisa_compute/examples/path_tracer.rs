@@ -2,8 +2,8 @@ use image::Rgb;
 use rand::Rng;
 use std::env::current_exe;
 use std::time::Instant;
-use winit::event::{WindowEvent};
 use winit::event::Event as WinitEvent;
+use winit::event::WindowEvent;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 #[allow(unused_imports)]
@@ -459,7 +459,8 @@ fn main() {
         false,
         3,
     );
-    let display_img = device.create_tex2d::<Float4>(swapchain.pixel_storage(), img_w, img_h, 1);
+    let display_img =
+        device.create_tex2d::<Float4>(swapchain.pixel_storage(), img_w, img_h, 1);
     event_loop.run(move |event, _, control_flow| {
         control_flow.set_poll();
         match event {

@@ -24,13 +24,18 @@ fn main() {
             autodiff(|| {
                 requires_grad(x);
                 requires_grad(y);
-                let z = x * y.sin();
+                let z = if_!(x.cmpgt(y), {
+                    x * 4.0
+                }, else {
+                    y * 0.5
+                });
                 backward(z);
                 buf_dx.write(tid, gradient(x));
                 buf_dy.write(tid, gradient(y));
             });
         },
     );
+
     shader.dispatch([1024, 1, 1], &x.view(..), &y, &dx, &dy);
     let dx = dx.copy_to_vec();
     println!("{:?}", &dx[0..16]);

@@ -17,7 +17,7 @@ pub trait VarTrait: Copy + Clone + 'static + FromNode {
     type Ulong: VarTrait;
     type Float: VarTrait;
     // type Double: VarTrait;
-    type Bool: VarTrait + Not<Output = Self::Bool>;
+    type Bool: VarTrait + Not<Output = Self::Bool> + BitAnd<Output = Self::Bool>;
     fn type_() -> CArc<Type> {
         <Self::Value as TypeOf>::type_()
     }
@@ -411,7 +411,7 @@ pub trait FloatVarTrait:
         })
     }
     fn is_finite(&self) -> Self::Bool {
-        !self.is_infinite()
+        !self.is_infinite() & !self.is_nan()
     }
     fn is_infinite(&self) -> Self::Bool {
         __current_scope(|s| {

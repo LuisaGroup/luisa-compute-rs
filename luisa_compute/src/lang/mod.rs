@@ -562,6 +562,13 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
         let i = b.const_(Const::Int32(index as i32));
         let op = match inst.as_ref() {
             Instruction::Local { .. } => Func::GetElementPtr,
+            Instruction::Argument { by_value } => {
+                if *by_value {
+                    Func::ExtractElement
+                } else {
+                    Func::GetElementPtr
+                }
+            }
             _ => Func::ExtractElement,
         };
         let node = b.call(op, &[node, i], <T as TypeOf>::type_());

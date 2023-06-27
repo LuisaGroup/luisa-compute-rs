@@ -75,7 +75,7 @@ fn main() {
         let _hit = var!(rtx::CommitedHit, hit);
         let img = img.view(0).var();
         let color = select(
-            hit.triangle_hit() & !hit.miss(),
+            hit.triangle_hit(),
             make_float3(hit.bary().x(), hit.bary().x(), 1.0),
             make_float3(0.0, 0.0, 0.0),
         );

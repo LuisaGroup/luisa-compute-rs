@@ -349,6 +349,7 @@ fn main() {
                         let p0: Expr<Float3> = vertex_buffer.read(triangle.x()).into();
                         let p1: Expr<Float3> = vertex_buffer.read(triangle.y()).into();
                         let p2: Expr<Float3> = vertex_buffer.read(triangle.z()).into();
+
                         let p = p0 * (1.0f32 - hit.u() - hit.v()) + p1 * hit.u() + p2 * hit.v();
                         let n = (p1 - p0).cross(p2 - p0).normalize();
 

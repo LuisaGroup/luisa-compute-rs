@@ -4,16 +4,15 @@ use std::{env, fs, path::PathBuf};
 
 fn cmake_build() -> PathBuf {
     let mut config = cmake::Config::new("./LuisaCompute");
-    println!("cargo:rerun-if-changed=./LuisaCompute/include/api");
-    println!("cargo:rerun-if-changed=./LuisaCompute/include/ast");
-    println!("cargo:rerun-if-changed=./LuisaCompute/include/backends");
-    println!("cargo:rerun-if-changed=./LuisaCompute/include/core");
-    println!("cargo:rerun-if-changed=./LuisaCompute/include/gui");
-    println!("cargo:rerun-if-changed=./LuisaCompute/include/ir");
-    println!("cargo:rerun-if-changed=./LuisaCompute/include/rust");
-    println!("cargo:rerun-if-changed=./LuisaCompute/include/py");
-    println!("cargo:rerun-if-changed=./LuisaCompute/include/runtime");
-    println!("cargo:rerun-if-changed=./LuisaCompute/include/vstl");
+    // println!("cargo:rerun-if-changed=./LuisaCompute/include/api");
+    // println!("cargo:rerun-if-changed=./LuisaCompute/include/ast");
+    // println!("cargo:rerun-if-changed=./LuisaCompute/include/backends");
+    // println!("cargo:rerun-if-changed=./LuisaCompute/include/core");
+    // println!("cargo:rerun-if-changed=./LuisaCompute/include/gui");
+    // println!("cargo:rerun-if-changed=./LuisaCompute/include/ir");
+    // println!("cargo:rerun-if-changed=./LuisaCompute/include/py");
+    // println!("cargo:rerun-if-changed=./LuisaCompute/include/runtime");
+    // println!("cargo:rerun-if-changed=./LuisaCompute/include/vstl");
     println!("cargo:rerun-if-changed=./LuisaCompute/src/api");
     println!("cargo:rerun-if-changed=./LuisaCompute/src/ast");
     println!("cargo:rerun-if-changed=./LuisaCompute/src/backends");

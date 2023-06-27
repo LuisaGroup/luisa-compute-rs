@@ -72,9 +72,10 @@ fn main() {
                 on_procedural_hit: |_| {},
             },
         );
+        let _hit = var!(rtx::CommitedHit, hit);
         let img = img.view(0).var();
         let color = select(
-            hit.valid(),
+            hit.triangle_hit() & !hit.miss(),
             make_float3(hit.bary().x(), hit.bary().x(), 1.0),
             make_float3(0.0, 0.0, 0.0),
         );

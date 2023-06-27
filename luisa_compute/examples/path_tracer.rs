@@ -285,10 +285,12 @@ fn main() {
                 };
 
                 let make_onb = |normal: Expr<Float3>| -> Expr<Onb> {
-                    let binormal = select(
-                        normal.x().abs().cmpgt(normal.z().abs()),
-                        make_float3(-normal.y(), normal.x(), 0.0f32),
-                        make_float3(0.0f32, -normal.z(), normal.y()),
+                    let binormal = if_!(
+                        normal.x().abs().cmpgt(normal.z().abs()), {
+                            make_float3(-normal.y(), normal.x(), 0.0f32)
+                        }, else {
+                            make_float3(0.0f32, -normal.z(), normal.y())
+                        }
                     );
                     let tangent = binormal.cross(normal).normalize();
                     OnbExpr::new(tangent, binormal, normal)

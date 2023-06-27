@@ -203,15 +203,16 @@ pub struct Aabb {
     pub max: PackedFloat3,
 }
 
-#[repr(C, align(8))]
+#[repr(C)]
 #[derive(Clone, Copy, __Value, Debug)]
 pub struct TriangleHit {
     pub inst: u32,
     pub prim: u32,
     pub bary: Float2,
+    pub committed_ray_t: f32,
 }
 
-#[repr(C, align(8))]
+#[repr(C)]
 #[derive(Clone, Copy, __Value, Debug)]
 pub struct ProceduralHit {
     pub inst: u32,
@@ -228,11 +229,14 @@ pub struct CommitedHit {
     pub committed_ray_t: f32,
 }
 impl CommitedHitExpr {
-    pub fn valid(&self) -> Expr<bool> {
-        self.inst_id().cmpne(u32::MAX)
-    }
     pub fn miss(&self) -> Expr<bool> {
-        self.inst_id().cmpeq(u32::MAX)
+        self.hit_type().cmpeq(HitType::Miss as u32)
+    }
+    pub fn triangle_hit(&self) -> Expr<bool> {
+        self.hit_type().cmpeq(HitType::Triangle as u32)
+    }
+    pub fn procedural_hit(&self) -> Expr<bool> {
+        self.hit_type().cmpeq(HitType::Procedural as u32)
     }
 }
 #[derive(Clone, Copy)]
@@ -427,9 +431,9 @@ impl AccelVar {
                 &[self.node, ray.node(), mask.node()],
                 Type::opaque(
                     if terminate_on_first {
-                        "RayQueryAny"
+                        "LC_RayQueryAny"
                     } else {
-                        "RayQueryAll"
+                        "LC_RayQueryAll"
                     }
                     .into(),
                 ),
@@ -469,12 +473,13 @@ impl AccelVar {
         (ray_query.on_procedural_hit)(procedural_candidate);
         let on_procedural_hit = __pop_scope();
         __current_scope(|b| {
-            FromNode::from_node(b.ray_query(
+            b.ray_query(
                 query,
                 on_triangle_hit,
                 on_procedural_hit,
-                CommitedHit::type_(),
-            ))
+                Type::void(),
+            );
+            FromNode::from_node(b.call(Func::RayQueryCommittedHit, &[query], CommitedHit::type_()))
         })
     }
     pub fn new(accel: &rtx::Accel) -> Self {

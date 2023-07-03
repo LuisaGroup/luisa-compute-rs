@@ -6,7 +6,7 @@ fn main() {
     use luisa::*;
     init_logger();
     let ctx = Context::new(current_exe().unwrap());
-    let device = ctx.create_device("cpu");
+    let device = ctx.create_device("metal");
     let x = device.create_buffer::<f32>(1024);
     let y = device.create_buffer::<f32>(1024);
     let z = device.create_buffer::<f32>(1024);

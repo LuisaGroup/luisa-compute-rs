@@ -119,6 +119,8 @@ impl Accel {
 
         if opaque {
             flags |= api::AccelBuildModificationFlags::OPAQUE_ON;
+        } else {
+            flags |= api::AccelBuildModificationFlags::OPAQUE_OFF;
         }
         let mut modifications = self.modifications.write();
         modifications.insert(

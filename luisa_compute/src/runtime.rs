@@ -489,17 +489,18 @@ impl Event {
         self.handle.native_handle
     }
     #[inline]
-    pub fn synchronize(&self) {
+    pub fn synchronize(&self, ticket: u64) {
         self.handle
             .device
             .inner
-            .synchronize_event(self.handle.handle);
+            .synchronize_event(self.handle.handle, ticket);
     }
-}
-
-impl Drop for Event {
-    fn drop(&mut self) {
-        self.synchronize();
+    #[inline]
+    pub fn is_completed(&self, ticket: u64) -> bool {
+        self.handle
+            .device
+            .inner
+            .is_event_completed(self.handle.handle, ticket)
     }
 }
 
@@ -673,17 +674,17 @@ impl<'a> Scope<'a> {
         }
     }
     #[inline]
-    pub fn wait(&self, event: &Event) -> &Self {
+    pub fn wait(&self, event: &Event, ticket: u64) -> &Self {
         self.handle
             .device()
-            .wait_event(event.handle(), self.handle());
+            .wait_event(event.handle(), self.handle(), ticket);
         self
     }
     #[inline]
-    pub fn signal(&self, event: &Event) -> &Self {
+    pub fn signal(&self, event: &Event, ticket: u64) -> &Self {
         self.handle
             .device()
-            .signal_event(event.handle(), self.handle());
+            .signal_event(event.handle(), self.handle(), ticket);
         self
     }
     #[inline]

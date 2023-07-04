@@ -982,8 +982,9 @@ pub struct BindlessBufferVar<T> {
 impl<T: Value> BindlessBufferVar<T> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
-
-        lc_assert!(i.cmplt(self.len()));
+        if need_runtime_check() {
+            lc_assert!(i.cmplt(self.len()));
+        }
 
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(
@@ -1227,8 +1228,10 @@ impl BindlessArrayVar {
             });
             let _ = check_type.call(vt);
         } else if is_cpu_backend() {
-            let expected = type_hash(&T::type_());
-            lc_assert!(v.__type().cmpeq(expected));
+            if need_runtime_check() {
+                let expected = type_hash(&T::type_());
+                lc_assert!(v.__type().cmpeq(expected));
+            }
         }
         v
     }
@@ -1299,7 +1302,7 @@ impl<T: Value> BufferVar<T> {
     }
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
-        if __env_need_backtrace() {
+        if need_runtime_check() {
             lc_assert!(i.cmplt(self.len()));
         }
         __current_scope(|b| {
@@ -1313,7 +1316,7 @@ impl<T: Value> BufferVar<T> {
     pub fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, v: V) {
         let i = i.into();
         let v = v.into();
-        if __env_need_backtrace() {
+        if need_runtime_check() {
             lc_assert!(i.cmplt(self.len()));
         }
         __current_scope(|b| {
@@ -1336,7 +1339,7 @@ macro_rules! impl_atomic {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
-                if __env_need_backtrace() {
+                if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
@@ -1360,7 +1363,7 @@ macro_rules! impl_atomic {
                 let i = i.into();
                 let expected = expected.into();
                 let desired = desired.into();
-                if __env_need_backtrace() {
+                if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
@@ -1383,7 +1386,7 @@ macro_rules! impl_atomic {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
-                if __env_need_backtrace() {
+                if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
@@ -1401,7 +1404,7 @@ macro_rules! impl_atomic {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
-                if __env_need_backtrace() {
+                if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
@@ -1419,7 +1422,7 @@ macro_rules! impl_atomic {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
-                if __env_need_backtrace() {
+                if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
@@ -1437,7 +1440,7 @@ macro_rules! impl_atomic {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
-                if __env_need_backtrace() {
+                if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
@@ -1461,7 +1464,7 @@ macro_rules! impl_atomic_bit {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
-                if __env_need_backtrace() {
+                if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
@@ -1479,7 +1482,7 @@ macro_rules! impl_atomic_bit {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
-                if __env_need_backtrace() {
+                if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
@@ -1497,7 +1500,7 @@ macro_rules! impl_atomic_bit {
             ) -> Expr<$t> {
                 let i = i.into();
                 let v = v.into();
-                if __env_need_backtrace() {
+                if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {

@@ -1,8 +1,8 @@
 use std::backtrace::Backtrace;
 use std::collections::HashSet;
 use std::marker::PhantomData;
-use std::unreachable;
 use std::{any::Any, collections::HashMap, fmt::Debug, rc::Rc, sync::Arc};
+use std::{env, unreachable};
 
 use crate::lang::traits::VarCmp;
 pub use crate::runtime::CallableArgEncoder;
@@ -937,8 +937,9 @@ impl<T: Value> Aggregate for VLArrayVar<T> {
 impl<T: Value> VLArrayVar<T> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
-
-        lc_assert!(i.cmplt(self.len()), "VLArrayVar::read out of bounds");
+        if need_runtime_check() {
+            lc_assert!(i.cmplt(self.len()), "VLArrayVar::read out of bounds");
+        }
 
         Expr::<T>::from_node(__current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
@@ -961,7 +962,9 @@ impl<T: Value> VLArrayVar<T> {
         let i = i.into();
         let value = value.into();
 
-        lc_assert!(i.cmplt(self.len()), "VLArrayVar::write out of bounds");
+        if need_runtime_check() {
+            lc_assert!(i.cmplt(self.len()), "VLArrayVar::read out of bounds");
+        }
 
         __current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
@@ -1010,8 +1013,9 @@ impl<T: Value> VLArrayExpr<T> {
     }
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
-
-        lc_assert!(i.cmplt(self.len()));
+        if need_runtime_check() {
+            lc_assert!(i.cmplt(self.len()));
+        }
 
         Expr::<T>::from_node(__current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
@@ -1091,8 +1095,9 @@ impl<T: Value, const N: usize> VarProxy for ArrayVar<T, N> {
 impl<T: Value, const N: usize> ArrayVar<T, N> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
-
-        lc_assert!(i.cmplt(const_(N as u32)));
+        if need_runtime_check() {
+            lc_assert!(i.cmplt(const_(N as u32)));
+        }
 
         Expr::<T>::from_node(__current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
@@ -1106,7 +1111,9 @@ impl<T: Value, const N: usize> ArrayVar<T, N> {
         let i = i.into();
         let value = value.into();
 
-        lc_assert!(i.cmplt(const_(N as u32)));
+        if need_runtime_check() {
+            lc_assert!(i.cmplt(const_(N as u32)));
+        }
 
         __current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
@@ -2296,4 +2303,12 @@ pub fn __assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, c
             Type::void(),
         );
     });
+}
+pub(crate) fn need_runtime_check() -> bool {
+    cfg!(debug_assertions)
+        || match env::var("LUISA_DEBUG") {
+            Ok(s) => s == "full" || s == "1",
+            Err(_) => false,
+        }
+        || __env_need_backtrace()
 }

@@ -248,16 +248,22 @@ pub enum HitType {
 }
 
 pub fn offset_ray_origin(p: Expr<Float3>, n: Expr<Float3>) -> Expr<Float3> {
-    const ORIGIN: f32 = 1.0f32 / 32.0f32;
-    const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
-    const INT_SCALE: f32 = 256.0f32;
-    let of_i = (INT_SCALE * n).int();
-    let p_i = p.bitcast::<Int3>() + Int3Expr::select(p.cmplt(0.0f32), -of_i, of_i);
-    Float3Expr::select(
-        p.abs().cmplt(ORIGIN),
-        p + FLOAT_SCALE * n,
-        p_i.bitcast::<Float3>(),
-    )
+    lazy_static! {
+        static ref F: Callable<(Expr<Float3>, Expr<Float3>), Expr<Float3>> =
+            create_static_callable::<(Expr<Float3>, Expr<Float3>), Expr<Float3>>(|p, n| {
+                const ORIGIN: f32 = 1.0f32 / 32.0f32;
+                const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
+                const INT_SCALE: f32 = 256.0f32;
+                let of_i = (INT_SCALE * n).int();
+                let p_i = p.bitcast::<Int3>() + Int3Expr::select(p.cmplt(0.0f32), -of_i, of_i);
+                Float3Expr::select(
+                    p.abs().cmplt(ORIGIN),
+                    p + FLOAT_SCALE * n,
+                    p_i.bitcast::<Float3>(),
+                )
+            });
+    }
+    F.call(p, n)
 }
 pub type Index = PackedUint3;
 
@@ -473,12 +479,7 @@ impl AccelVar {
         (ray_query.on_procedural_hit)(procedural_candidate);
         let on_procedural_hit = __pop_scope();
         __current_scope(|b| {
-            b.ray_query(
-                query,
-                on_triangle_hit,
-                on_procedural_hit,
-                Type::void(),
-            );
+            b.ray_query(query, on_triangle_hit, on_procedural_hit, Type::void());
             FromNode::from_node(b.call(Func::RayQueryCommittedHit, &[query], CommitedHit::type_()))
         })
     }

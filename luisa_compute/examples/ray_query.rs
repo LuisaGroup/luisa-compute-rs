@@ -39,7 +39,7 @@ fn main() {
     let mesh = device.create_mesh(vbuffer.view(..), tbuffer.view(..), AccelOption::default());
     mesh.build(AccelBuildRequest::ForceBuild);
     let accel = device.create_accel(Default::default());
-    accel.push_mesh(&mesh, Mat4::identity(), 0xff, true);
+    accel.push_mesh(&mesh, Mat4::identity(), 0xff, false);
     accel.build(AccelBuildRequest::ForceBuild);
     let img_w = 800;
     let img_h = 800;

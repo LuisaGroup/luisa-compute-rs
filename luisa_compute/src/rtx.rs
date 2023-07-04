@@ -85,7 +85,9 @@ impl Accel {
         flags |= api::AccelBuildModificationFlags::VISIBILITY;
 
         if opaque {
-            flags |= api::AccelBuildModificationFlags::OPAQUE;
+            flags |= api::AccelBuildModificationFlags::OPAQUE_ON;
+        } else {
+            flags |= api::AccelBuildModificationFlags::OPAQUE_OFF;
         }
         let mut modifications = self.modifications.write();
         let mut mesh_handles = self.mesh_handles.write();

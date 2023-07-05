@@ -20,7 +20,9 @@ fn get_device() -> Device {
             libc::signal(libc::SIGSEGV, _signal_handler as usize);
         }
     });
-    let ctx = Context::new(current_exe().unwrap());
+    let curr_exe = current_exe().unwrap();
+    let runtime_dir = curr_exe.parent().unwrap().parent().unwrap();
+    let ctx = Context::new(runtime_dir);
     let device = match std::env::var("LUISA_TEST_DEVICE") {
         Ok(device) => device,
         Err(_) => "cpu".to_string(),

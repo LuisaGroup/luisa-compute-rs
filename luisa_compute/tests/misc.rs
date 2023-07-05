@@ -15,7 +15,9 @@ fn get_device() -> Device {
     ONCE.call_once(|| unsafe {
         libc::signal(libc::SIGSEGV, _signal_handler as usize);
     });
-    let ctx = Context::new(current_exe().unwrap());
+    let curr_exe = current_exe().unwrap();
+    let runtime_dir = curr_exe.parent().unwrap().parent().unwrap();
+    let ctx = Context::new(runtime_dir);
     let device = match std::env::var("LUISA_TEST_DEVICE") {
         Ok(device) => device,
         Err(_) => "cpu".to_string(),
@@ -45,17 +47,17 @@ fn event() {
         scope_a
             .submit([add.dispatch_async([1, 1, 1], &a, &1)])
             .submit([add.dispatch_async([1, 1, 1], &b, &4)])
-            .signal(&event);
+            .signal(&event, 1);
         scope_b
-            .wait(&event)
+            .wait(&event, 1)
             .submit([add.dispatch_async([1, 1, 1], &a, &3)])
             .submit([add.dispatch_async([1, 1, 1], &b, &5)])
-            .signal(&event);
+            .signal(&event, 2);
         scope_a
-            .wait(&event)
+            .wait(&event, 2)
             .submit([mul.dispatch_async([1, 1, 1], &a, &b)])
-            .signal(&event);
-        event.synchronize();
+            .signal(&event, 3);
+        event.synchronize(3);
     }
     let v = a.copy_to_vec();
     assert_eq!(v[0], (1 + 3) * (4 + 5));

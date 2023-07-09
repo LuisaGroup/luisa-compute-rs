@@ -241,7 +241,6 @@ fn main() {
         cmds.push(index_heap.update_async());
         cmds.push(accel.build_async(AccelBuildRequest::ForceBuild));
         s.submit(cmds);
-        println!("syncing...");
         s.synchronize();
     });
 

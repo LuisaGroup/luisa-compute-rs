@@ -1018,8 +1018,7 @@ impl<T: Value> VLArrayExpr<T> {
         }
 
         Expr::<T>::from_node(__current_scope(|b| {
-            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
-            b.call(Func::Load, &[gep], T::type_())
+            b.call(Func::ExtractElement, &[self.node, i.node()], T::type_())
         }))
     }
     pub fn len(&self) -> Expr<u32> {
@@ -1133,8 +1132,7 @@ impl<T: Value, const N: usize> ArrayExpr<T, N> {
         lc_assert!(i.cmplt(const_(N as u32)));
 
         Expr::<T>::from_node(__current_scope(|b| {
-            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
-            b.call(Func::Load, &[gep], T::type_())
+            b.call(Func::ExtractElement, &[self.node, i.node()], T::type_())
         }))
     }
     pub fn len(&self) -> Expr<u32> {

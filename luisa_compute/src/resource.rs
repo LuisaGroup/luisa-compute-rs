@@ -44,7 +44,7 @@ impl<'a, T: Value> BufferView<'a, T> {
     pub(crate) fn handle(&self) -> api::Buffer {
         self.buffer.handle()
     }
-    pub fn copy_to_async(&'a self, data: &'a mut [T]) -> Command<'a> {
+    pub fn copy_to_async<'b>(&'a self, data: &'b mut [T]) -> Command<'b> {
         assert_eq!(data.len(), self.len);
         let mut rt = ResourceTracker::new();
         rt.add(self.buffer.handle.clone());
@@ -74,7 +74,7 @@ impl<'a, T: Value> BufferView<'a, T> {
             submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_async(data)]);
         }
     }
-    pub fn copy_from_async(&'a self, data: &'a [T]) -> Command<'a> {
+    pub fn copy_from_async<'b>(&'a self, data: &'b [T]) -> Command<'b> {
         assert_eq!(data.len(), self.len);
         let mut rt = ResourceTracker::new();
         rt.add(self.buffer.handle.clone());
@@ -99,7 +99,7 @@ impl<'a, T: Value> BufferView<'a, T> {
     pub fn fill(&self, value: T) {
         self.fill_fn(|_| value);
     }
-    pub fn copy_to_buffer_async(&self, dst: BufferView<'a, T>) -> Command<'a> {
+    pub fn copy_to_buffer_async(&self, dst: BufferView<'a, T>) -> Command<'static> {
         assert_eq!(self.len, dst.len);
         let mut rt = ResourceTracker::new();
         rt.add(self.buffer.handle.clone());
@@ -754,7 +754,7 @@ macro_rules! impl_tex_view {
                 self.copy_to(&mut data);
                 data
             }
-            pub fn copy_from_async<U: StorageTexel<T>>(&'a self, data: &'a [U]) -> Command<'a> {
+            pub fn copy_from_async<'b, U: StorageTexel<T>>(&'a self, data: &'b [U]) -> Command<'b> {
                 assert_eq!(data.len(), self.texel_count() as usize);
                 assert_eq!(self.tex.handle.storage, U::pixel_storage());
                 let mut rt = ResourceTracker::new();
@@ -778,10 +778,10 @@ macro_rules! impl_tex_view {
                     [self.copy_from_async(data)],
                 );
             }
-            pub fn copy_to_buffer_async<U: StorageTexel<T> + Value>(
+            pub fn copy_to_buffer_async<'b, U: StorageTexel<T> + Value>(
                 &'a self,
-                buffer_view: &'a BufferView<U>,
-            ) -> Command<'a> {
+                buffer_view: &'b BufferView<U>,
+            ) -> Command<'static> {
                 let mut rt = ResourceTracker::new();
                 rt.add(self.tex.handle.clone());
                 rt.add(buffer_view.buffer.handle.clone());
@@ -810,10 +810,10 @@ macro_rules! impl_tex_view {
                     [self.copy_to_buffer_async(buffer_view)],
                 );
             }
-            pub fn copy_from_buffer_async<U: StorageTexel<T> + Value>(
+            pub fn copy_from_buffer_async<'b, U: StorageTexel<T> + Value>(
                 &'a self,
                 buffer_view: BufferView<U>,
-            ) -> Command<'a> {
+            ) -> Command<'static> {
                 let mut rt = ResourceTracker::new();
                 rt.add(self.tex.handle.clone());
                 rt.add(buffer_view.buffer.handle.clone());

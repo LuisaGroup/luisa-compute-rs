@@ -1,4 +1,5 @@
 use image::Rgb;
+use luisa_compute_api_types::StreamTag;
 use rand::Rng;
 use std::env::current_exe;
 use std::time::Instant;
@@ -206,32 +207,43 @@ fn main() {
     let mut vertex_buffers: Vec<Buffer<PackedFloat3>> = vec![];
     let mut index_buffers: Vec<Buffer<Index>> = vec![];
     let accel = device.create_accel(AccelOption::default());
-
-    for (index, model) in models.iter().enumerate() {
-        let vertex_buffer = device.create_buffer_from_slice(unsafe {
-            let vertex_ptr = model.mesh.positions.as_ptr();
-            std::slice::from_raw_parts(
-                vertex_ptr as *const PackedFloat3,
-                model.mesh.positions.len() / 3,
-            )
-        });
-        let index_buffer = device.create_buffer_from_slice(unsafe {
-            let index_ptr = model.mesh.indices.as_ptr();
-            std::slice::from_raw_parts(index_ptr as *const Index, model.mesh.indices.len() / 3)
-        });
-        let mesh = device.create_mesh(
-            vertex_buffer.view(..),
-            index_buffer.view(..),
-            AccelOption::default(),
-        );
-        vertex_buffers.push(vertex_buffer);
-        index_buffers.push(index_buffer);
-        vertex_heap.emplace_buffer(index, vertex_buffers.last().unwrap());
-        index_heap.emplace_buffer(index, index_buffers.last().unwrap());
-        mesh.build(AccelBuildRequest::ForceBuild);
-        accel.push_mesh(&mesh, glam::Mat4::IDENTITY.into(), u8::MAX, true);
-    }
-    accel.build(AccelBuildRequest::ForceBuild);
+    let stream = device.create_stream(StreamTag::Graphics);
+    stream.with_scope(|s| {
+        let mut cmds = vec![];
+        for (index, model) in models.iter().enumerate() {
+            let vertex_buffer = device.create_buffer(model.mesh.positions.len() / 3);
+            let index_buffer = device.create_buffer(model.mesh.indices.len() / 3);
+            let mesh = device.create_mesh(
+                vertex_buffer.view(..),
+                index_buffer.view(..),
+                AccelOption::default(),
+            );
+            cmds.push(vertex_buffer.view(..).copy_from_async(unsafe {
+                let vertex_ptr = model.mesh.positions.as_ptr();
+                std::slice::from_raw_parts(
+                    vertex_ptr as *const PackedFloat3,
+                    model.mesh.positions.len() / 3,
+                )
+            }));
+            cmds.push(index_buffer.view(..).copy_from_async(unsafe {
+                let index_ptr = model.mesh.indices.as_ptr();
+                std::slice::from_raw_parts(index_ptr as *const Index, model.mesh.indices.len() / 3)
+            }));
+           
+            vertex_buffers.push(vertex_buffer);
+            index_buffers.push(index_buffer);
+            vertex_heap.emplace_buffer_async(index, vertex_buffers.last().unwrap());
+            index_heap.emplace_buffer_async(index, index_buffers.last().unwrap());
+            cmds.push(mesh.build_async(AccelBuildRequest::ForceBuild));
+            accel.push_mesh(&mesh, glam::Mat4::IDENTITY.into(), u8::MAX, true);
+        }
+        cmds.push(vertex_heap.update_async());
+        cmds.push(index_heap.update_async());
+        cmds.push(accel.build_async(AccelBuildRequest::ForceBuild));
+        s.submit(cmds);
+        println!("syncing...");
+        s.synchronize();
+    });
 
     // use create_kernel_async to compile multiple kernels in parallel
     let path_tracer = device
@@ -465,8 +477,7 @@ fn main() {
         false,
         3,
     );
-    let display_img =
-        device.create_tex2d::<Float4>(swapchain.pixel_storage(), img_w, img_h, 1);
+    let display_img = device.create_tex2d::<Float4>(swapchain.pixel_storage(), img_w, img_h, 1);
     event_loop.run(move |event, _, control_flow| {
         control_flow.set_poll();
         match event {

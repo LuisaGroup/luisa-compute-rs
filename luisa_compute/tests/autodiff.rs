@@ -466,7 +466,7 @@ fn autodiff_matmul() {
     });
 }
 #[test]
-fn autodiff_matmul_tranpose() {
+fn autodiff_matmul_transpose() {
     autodiff_helper(-4.0..4.0, 1024 * 1024, 12, |inputs| {
         let ax = inputs[0];
         let ay = inputs[1];

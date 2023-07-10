@@ -35,7 +35,7 @@ image = "0.24.5"
 tobj = "3.2.5"
 
 [features]
-default = ["remote", "cuda", "strict", "cpu", "metal"]
+default = ["remote", "cuda", "cpu", "metal"]
 metal = ["luisa_compute_sys/metal"]
 cuda = ["luisa_compute_sys/cuda"]
 strict = ["luisa_compute_sys/strict"]

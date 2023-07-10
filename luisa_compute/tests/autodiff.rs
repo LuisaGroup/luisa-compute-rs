@@ -16,6 +16,7 @@ fn _signal_handler(signal: libc::c_int) {
 static ONCE: std::sync::Once = std::sync::Once::new();
 fn get_device() -> Device {
     ONCE.call_once(||{
+        // init_logger();
         unsafe {
             libc::signal(libc::SIGSEGV, _signal_handler as usize);
         }

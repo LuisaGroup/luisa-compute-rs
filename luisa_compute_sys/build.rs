@@ -52,9 +52,9 @@ fn cmake_build() -> PathBuf {
     config.define(
         "LUISA_COMPUTE_CHECK_BACKEND_DEPENDENCIES",
         if cfg!(feature = "strict") {
-            "ON"
-        } else {
             "OFF"
+        } else {
+            "ON"
         },
     );
     config.define("LUISA_COMPUTE_BUILD_TESTS", "OFF");

@@ -5,8 +5,19 @@ use luisa_compute as luisa;
 fn main() {
     use luisa::*;
     init_logger();
+    let args: Vec<String> = std::env::args().collect();
+    assert!(
+        args.len() <= 2,
+        "Usage: {} <backend>. <backend>: cpu, cuda, dx, metal, remote",
+        args[0]
+    );
+
     let ctx = Context::new(current_exe().unwrap());
-    let device = ctx.create_device("cpu");
+    let device = ctx.create_device(if args.len() == 2 {
+        args[1].as_str()
+    } else {
+        "cpu"
+    });
     let x = device.create_buffer::<f32>(1024);
     let y = device.create_buffer::<f32>(1024);
     let z = device.create_buffer::<f32>(1024);

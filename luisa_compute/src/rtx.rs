@@ -19,15 +19,71 @@ impl Drop for AccelHandle {
 }
 unsafe impl Send for AccelHandle {}
 unsafe impl Sync for AccelHandle {}
+#[derive(Clone)]
+pub(crate) enum InstanceHandle {
+    Mesh(Arc<MeshHandle>),
+    Procedural(Arc<ProceduralPrimitiveHandle>),
+}
+impl InstanceHandle {
+    pub(crate) fn handle(&self) -> u64 {
+        match self {
+            InstanceHandle::Mesh(h) => h.handle.0,
+            InstanceHandle::Procedural(h) => h.handle.0,
+        }
+    }
+}
 pub struct Accel {
     pub(crate) handle: Arc<AccelHandle>,
-    pub(crate) mesh_handles: RwLock<Vec<Option<Arc<MeshHandle>>>>,
+    pub(crate) instance_handles: RwLock<Vec<Option<InstanceHandle>>>,
     pub(crate) modifications: RwLock<HashMap<usize, api::AccelBuildModification>>,
+}
+pub(crate) struct ProceduralPrimitiveHandle {
+    pub(crate) device: Device,
+    pub(crate) handle: api::ProceduralPrimitive,
+    pub(crate) native_handle: *mut std::ffi::c_void,
+    pub(crate) aabb_buffer: Arc<BufferHandle>,
+}
+impl Drop for ProceduralPrimitiveHandle {
+    fn drop(&mut self) {
+        self.device.inner.destroy_procedural_primitive(self.handle);
+    }
+}
+pub struct ProceduralPrimitive {
+    pub(crate) handle: Arc<ProceduralPrimitiveHandle>,
+    pub(crate) aabb_buffer: api::Buffer,
+    pub(crate) aabb_buffer_offset: usize,
+    pub(crate) aabb_buffer_count: usize,
+}
+impl ProceduralPrimitive {
+    pub fn native_handle(&self) -> *mut std::ffi::c_void {
+        self.handle.native_handle
+    }
+    pub fn build_async<'a>(&self, request: AccelBuildRequest) -> Command<'a> {
+        let mut rt = ResourceTracker::new();
+        rt.add(self.handle.clone());
+        Command {
+            inner: api::Command::ProceduralPrimitiveBuild(api::ProceduralPrimitiveBuildCommand {
+                handle: self.handle.handle,
+                request,
+                aabb_buffer: self.aabb_buffer,
+                aabb_buffer_offset: self.aabb_buffer_offset,
+                aabb_count: self.aabb_buffer_count,
+            }),
+            marker: PhantomData,
+            resource_tracker: rt,
+            callback: None,
+        }
+    }
+    pub fn build(&self, request: AccelBuildRequest) {
+        submit_default_stream_and_sync(&self.handle.device, [self.build_async(request)]);
+    }
 }
 pub(crate) struct MeshHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::Mesh,
     pub(crate) native_handle: *mut std::ffi::c_void,
+    pub(crate) vbuffer: Arc<BufferHandle>,
+    pub(crate) ibuffer: Arc<BufferHandle>,
 }
 impl Drop for MeshHandle {
     fn drop(&mut self) {
@@ -78,7 +134,7 @@ impl Mesh {
 }
 
 impl Accel {
-    fn push_handle(&self, handle: Arc<MeshHandle>, transform: Mat4, visible: u8, opaque: bool) {
+    fn push_handle(&self, handle: InstanceHandle, transform: Mat4, visible: u8, opaque: bool) {
         let mut flags =
             api::AccelBuildModificationFlags::PRIMITIVE | AccelBuildModificationFlags::TRANSFORM;
 
@@ -90,12 +146,12 @@ impl Accel {
             flags |= api::AccelBuildModificationFlags::OPAQUE_OFF;
         }
         let mut modifications = self.modifications.write();
-        let mut mesh_handles = self.mesh_handles.write();
+        let mut instance_handles = self.instance_handles.write();
         let index = modifications.len() as u32;
         modifications.insert(
-            mesh_handles.len(),
+            instance_handles.len(),
             api::AccelBuildModification {
-                mesh: handle.handle.0,
+                mesh: handle.handle(),
                 affine: transform.into_affine3x4(),
                 flags,
                 visibility: visible,
@@ -103,12 +159,12 @@ impl Accel {
             },
         );
 
-        mesh_handles.push(Some(handle));
+        instance_handles.push(Some(handle));
     }
     fn set_handle(
         &self,
         index: usize,
-        handle: Arc<MeshHandle>,
+        handle: InstanceHandle,
         transform: Mat4,
         visible: u8,
         opaque: bool,
@@ -126,35 +182,74 @@ impl Accel {
         modifications.insert(
             index as usize,
             api::AccelBuildModification {
-                mesh: handle.handle.0,
+                mesh: handle.handle(),
                 affine: transform.into_affine3x4(),
                 flags,
                 visibility: visible,
                 index: index as u32,
             },
         );
-        let mut mesh_handles = self.mesh_handles.write();
-        mesh_handles[index] = Some(handle.clone());
+        let mut instance_handles = self.instance_handles.write();
+        instance_handles[index] = Some(handle);
     }
     pub fn push_mesh(&self, mesh: &Mesh, transform: Mat4, visible: u8, opaque: bool) {
-        self.push_handle(mesh.handle.clone(), transform, visible, opaque)
+        self.push_handle(
+            InstanceHandle::Mesh(mesh.handle.clone()),
+            transform,
+            visible,
+            opaque,
+        )
+    }
+    pub fn push_procedural_primitive(
+        &self,
+        prim: &ProceduralPrimitive,
+        transform: Mat4,
+        visible: u8,
+    ) {
+        self.push_handle(
+            InstanceHandle::Procedural(prim.handle.clone()),
+            transform,
+            visible,
+            false,
+        )
     }
     pub fn set_mesh(&self, index: usize, mesh: &Mesh, transform: Mat4, visible: u8, opaque: bool) {
-        self.set_handle(index, mesh.handle.clone(), transform, visible, opaque)
+        self.set_handle(
+            index,
+            InstanceHandle::Mesh(mesh.handle.clone()),
+            transform,
+            visible,
+            opaque,
+        )
+    }
+    pub fn set_procedural_primitive(
+        &self,
+        index: usize,
+        prim: &ProceduralPrimitive,
+        transform: Mat4,
+        visible: u8,
+    ) {
+        self.set_handle(
+            index,
+            InstanceHandle::Procedural(prim.handle.clone()),
+            transform,
+            visible,
+            false,
+        )
     }
     pub fn pop(&self) {
         let mut modifications = self.modifications.write();
-        let mut mesh_handles = self.mesh_handles.write();
-        let n = mesh_handles.len();
+        let mut instance_handles = self.instance_handles.write();
+        let n = instance_handles.len();
         modifications.remove(&n);
-        mesh_handles.pop().unwrap();
+        instance_handles.pop().unwrap();
     }
     pub fn build(&self, request: api::AccelBuildRequest) {
         submit_default_stream_and_sync(&self.handle.device, [self.build_async(request)])
     }
     pub fn build_async<'a>(&'a self, request: api::AccelBuildRequest) -> Command<'a> {
         let mut rt = ResourceTracker::new();
-        let mesh_handles = self.mesh_handles.read();
+        let instance_handles = self.instance_handles.read();
         rt.add(self.handle.clone());
         let mut modifications = self.modifications.write();
         let m = modifications.drain().map(|(_, v)| v).collect::<Vec<_>>();
@@ -165,7 +260,7 @@ impl Accel {
             inner: api::Command::AccelBuild(api::AccelBuildCommand {
                 accel: self.handle.handle,
                 request,
-                instance_count: mesh_handles.len() as u32,
+                instance_count: instance_handles.len() as u32,
                 modifications: m.as_ptr(),
                 modifications_count: m.len(),
                 update_instance_buffer_only: false,

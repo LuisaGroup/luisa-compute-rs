@@ -1,5 +1,6 @@
 use crate::backend::Backend;
 use crate::lang::KernelBuildOptions;
+use crate::rtx::ProceduralPrimitiveHandle;
 use crate::*;
 use crate::{lang::Value, resource::*};
 
@@ -287,6 +288,24 @@ impl Device {
             }),
         }
     }
+    pub fn create_procedural_primitive(
+        &self,
+        aabb_buffer: BufferView<'_, rtx::Aabb>,
+        option: AccelOption,
+    ) -> rtx::ProceduralPrimitive {
+        let primitive = self.inner.create_procedural_primitive(option);
+        rtx::ProceduralPrimitive {
+            handle: Arc::new(ProceduralPrimitiveHandle {
+                device: self.clone(),
+                handle: api::ProceduralPrimitive(primitive.handle),
+                native_handle: primitive.native_handle,
+                aabb_buffer: aabb_buffer.buffer.handle.clone(),
+            }),
+            aabb_buffer: aabb_buffer.handle(),
+            aabb_buffer_offset: aabb_buffer.offset * std::mem::size_of::<rtx::Aabb>() as usize,
+            aabb_buffer_count: aabb_buffer.len,
+        }
+    }
     pub fn create_mesh<V: Value>(
         &self,
         vbuffer: BufferView<'_, V>,
@@ -301,6 +320,8 @@ impl Device {
                 device: self.clone(),
                 handle: api::Mesh(handle),
                 native_handle,
+                vbuffer: vbuffer.buffer.handle.clone(),
+                ibuffer: tbuffer.buffer.handle.clone(),
             }),
             vertex_buffer: vbuffer.handle(),
             vertex_buffer_offset: vbuffer.offset * std::mem::size_of::<V>() as usize,
@@ -321,7 +342,7 @@ impl Device {
                 handle: api::Accel(accel.handle),
                 native_handle: accel.native_handle,
             }),
-            mesh_handles: RwLock::new(Vec::new()),
+            instance_handles: RwLock::new(Vec::new()),
             modifications: RwLock::new(HashMap::new()),
         }
     }

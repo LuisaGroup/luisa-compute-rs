@@ -3,13 +3,39 @@ use std::env::current_exe;
 use image::Rgb;
 #[allow(unused_imports)]
 use luisa::prelude::*;
-use luisa::rtx::{RayQuery, TriangleCandidate};
+use luisa::rtx::{Aabb, ProceduralCandidate, RayQuery, TriangleCandidate};
+use luisa::Float3;
+use luisa::{derive::*, PackedFloat3};
 use luisa_compute as luisa;
 use winit::event::Event as WinitEvent;
 use winit::{
     event::WindowEvent,
     event_loop::{ControlFlow, EventLoop},
 };
+
+#[derive(Copy, Clone, Debug, Value)]
+#[repr(C)]
+pub struct Sphere {
+    pub center: Float3,
+    pub radius: f32,
+}
+impl Sphere {
+    fn aabb(&self) -> Aabb {
+        Aabb {
+            min: PackedFloat3::new(
+                self.center.x - self.radius,
+                self.center.y - self.radius,
+                self.center.z - self.radius,
+            ),
+            max: PackedFloat3::new(
+                self.center.x + self.radius,
+                self.center.y + self.radius,
+                self.center.z + self.radius,
+            ),
+        }
+    }
+}
+
 fn main() {
     use luisa::*;
     init_logger();
@@ -38,8 +64,33 @@ fn main() {
         device.create_buffer_from_slice(&[PackedUint3::new(0, 1, 2)]);
     let mesh = device.create_mesh(vbuffer.view(..), tbuffer.view(..), AccelOption::default());
     mesh.build(AccelBuildRequest::ForceBuild);
+
+    let spheres = [
+        Sphere {
+            center: Float3::new(0.5, 0.5, 0.0),
+            radius: 0.3,
+        },
+        Sphere {
+            center: Float3::new(-0.7, 0.0, 0.0),
+            radius: 0.2,
+        },
+        Sphere {
+            center: Float3::new(0.5, 0.5, 2.0),
+            radius: 0.8,
+        },
+    ];
+    let aabb = device.create_buffer_from_slice::<rtx::Aabb>(&[
+        spheres[0].aabb(),
+        spheres[1].aabb(),
+        spheres[2].aabb(),
+    ]);
+    let spheres = device.create_buffer_from_slice::<Sphere>(&spheres);
+
+    let sphere_accel = device.create_procedural_primitive(aabb.view(..), AccelOption::default());
+    sphere_accel.build(AccelBuildRequest::ForceBuild);
     let accel = device.create_accel(Default::default());
     accel.push_mesh(&mesh, Mat4::identity(), 0xff, false);
+    accel.push_procedural_primitive(&sphere_accel, Mat4::identity(), 0xff);
     accel.build(AccelBuildRequest::ForceBuild);
     let img_w = 800;
     let img_h = 800;
@@ -49,7 +100,7 @@ fn main() {
         let px = dispatch_id().xy();
         let xy = px.float() / make_float2(img_w as f32, img_h as f32);
         let xy = 2.0 * xy - 1.0;
-        let o = make_float3(0.0, 0.0, -1.0);
+        let o = make_float3(0.0, 0.0, -2.0);
         let d = make_float3(xy.x(), xy.y(), 0.0) - o;
         let d = d.normalize();
         let ray = rtx::RayExpr::new(o, 1e-3, d, 1e9);
@@ -69,16 +120,43 @@ fn main() {
                         }
                     );
                 },
-                on_procedural_hit: |_| {},
+                on_procedural_hit: |candidate: ProceduralCandidate| {
+                    let prim = candidate.prim();
+                    let sphere = spheres.var().read(prim);
+                    let o = ray.orig().unpack();
+                    let d = ray.dir().unpack();
+                    let t = var!(f32);
+                    for_range(const_(0i32)..const_(100i32), |_| {
+                        let dist = (o + d * t.load() - sphere.center()).length() - sphere.radius();
+                        if_!(dist.cmplt(0.001), {
+                            candidate.commit(t.load());
+                            break_();
+                        });
+                        t.store(t.load() + dist);
+                    });
+                },
             },
         );
-        let _hit = var!(rtx::CommitedHit, hit);
         let img = img.view(0).var();
-        let color = select(
-            hit.triangle_hit(),
-            make_float3(hit.bary().x(), hit.bary().x(), 1.0),
-            make_float3(0.0, 0.0, 0.0),
-        );
+        let color = if_!(hit.triangle_hit(), {
+            let bary = hit.bary();
+            let uvw = make_float3(1.0 - bary.x() - bary.y(), bary.x(), bary.y());
+            uvw
+        }, else {
+            if_!(hit.procedural_hit(), {
+                let prim = hit.prim_id();
+                let sphere = spheres.var().read(prim);
+                let normal = (ray.orig().unpack() + ray.dir().unpack() * hit.committed_ray_t() - sphere.center()).normalize();
+                let light_dir = make_float3(1.0, 0.6, -0.2).normalize();
+                let light = make_float3(1.0, 1.0, 1.0);
+                let ambient = make_float3(0.1, 0.1, 0.1);
+                let diffuse = light * normal.dot(light_dir).max(0.0);
+                let color = ambient + diffuse;
+                color
+            }, else {
+                make_float3(0.0, 0.0, 0.0)
+            })
+        });
         img.write(px, make_float4(color.x(), color.y(), color.z(), 1.0));
     });
     let event_loop = EventLoop::new();

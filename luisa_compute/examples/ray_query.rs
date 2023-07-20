@@ -53,7 +53,7 @@ fn main() {
     let device = ctx.create_device(if args.len() == 2 {
         args[1].as_str()
     } else {
-        "cpu"
+        "cuda"
     });
     let vbuffer: Buffer<Float3> = device.create_buffer_from_slice(&[
         Float3::new(-0.5, -0.5, 0.0),

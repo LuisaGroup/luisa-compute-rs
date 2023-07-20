@@ -316,8 +316,38 @@ pub trait FloatVarTrait:
         })
     }
     fn fract(&self) -> Self {
-        self.clone() - self.clone().floor()
+        __current_scope(|s| {
+            let ret = s.call(Func::Fract, &[self.node()], Self::type_());
+            Self::from_node(ret)
+        })
     }
+
+    // x.step(edge)
+    fn step(&self, edge: Self) -> Self {
+        __current_scope(|s| {
+            let ret = s.call(Func::Step, &[edge.node(), self.node()], Self::type_());
+            Self::from_node(ret)
+        })
+    }
+
+    fn smooth_step(&self, edge0: Self, edge1: Self) -> Self {
+        __current_scope(|s| {
+            let ret = s.call(
+                Func::SmoothStep,
+                &[edge0.node(), edge1.node(), self.node()],
+                Self::type_(),
+            );
+            Self::from_node(ret)
+        })
+    }
+
+    fn saturate(&self) -> Self {
+        __current_scope(|s| {
+            let ret = s.call(Func::Saturate, &[self.node()], Self::type_());
+            Self::from_node(ret)
+        })
+    }
+
     fn sin(&self) -> Self {
         __current_scope(|s| {
             let ret = s.call(Func::Sin, &[self.node()], Self::type_());
@@ -420,13 +450,6 @@ pub trait FloatVarTrait:
         })
     }
     fn is_nan(&self) -> Self::Bool {
-        // let any = self as &dyn Any;
-        // if let Some(a) = any.downcast_ref::<Expr<f32>>() {
-        //     let u: Expr<u32> = a.bitcast::<u32>();
-        //     (u & 0x7f800000u32).cmpeq(0x7f800000u32) & (u & 0x007fffffu32).cmpne(0u32)
-        // } else {
-        //     panic!("expect Expr<f32>")
-        // }
         __current_scope(|s| {
             let ret = s.call(Func::IsNan, &[self.node()], <Self::Bool>::type_());
             FromNode::from_node(ret)

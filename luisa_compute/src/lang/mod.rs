@@ -53,6 +53,9 @@ pub trait Value: Copy + ir::TypeOf + 'static {
     type Var: VarProxy<Value = Self>;
     fn fields() -> Vec<String>;
 }
+pub trait StructInitiaizable: Value {
+    type Init: Into<Self::Expr>;
+}
 
 pub trait Aggregate: Sized {
     fn to_vec_nodes(&self) -> Vec<NodeRef> {
@@ -620,7 +623,18 @@ pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
         _ => todo!(),
     }
 }
-
+#[macro_export]
+macro_rules! struct_ {
+    ($t:ty { $($it:ident : $value:expr), * }) =>{
+        {
+            type Init = <$t as $crate::lang::StructInitiaizable>::Init;
+            let init = Init { $($it : $value), *  };
+            type Expr = <$t as $crate::lang::Value>::Expr;
+            let e:Expr = init.into();
+            e
+        }
+    }
+}
 #[macro_export]
 macro_rules! var {
     ($t:ty) => {
@@ -772,6 +786,30 @@ impl DynExpr {
             )
         })
     }
+    pub fn downcast_array<T: Value>(&self, len: usize) -> Option<VLArrayExpr<T>> {
+        let array_type = ir::context::register_type(Type::Array(ArrayType {
+            element: T::type_(),
+            length: len,
+        }));
+        if ir::context::is_type_equal(self.node.type_(), &array_type) {
+            Some(VLArrayExpr::<T>::from_node(self.node))
+        } else {
+            None
+        }
+    }
+    pub fn get_array<T: Value>(&self, len: usize) -> VLArrayExpr<T> {
+        let array_type = ir::context::register_type(Type::Array(ArrayType {
+            element: T::type_(),
+            length: len,
+        }));
+        self.downcast_array::<T>(len).unwrap_or_else(|| {
+            panic!(
+                "DynExpr::get: type mismatch: expected {}, got {}",
+                array_type,
+                self.node.type_().to_string()
+            )
+        })
+    }
     pub fn new<E: ExprProxy>(expr: E) -> Self {
         Self { node: expr.node() }
     }
@@ -862,6 +900,30 @@ impl DynVar {
             panic!(
                 "DynVar::get: type mismatch: expected {}, got {}",
                 std::any::type_name::<T>(),
+                self.node.type_().to_string()
+            )
+        })
+    }
+    pub fn downcast_array<T: Value>(&self, len: usize) -> Option<VLArrayVar<T>> {
+        let array_type = ir::context::register_type(Type::Array(ArrayType {
+            element: T::type_(),
+            length: len,
+        }));
+        if ir::context::is_type_equal(self.node.type_(), &array_type) {
+            Some(VLArrayVar::<T>::from_node(self.node))
+        } else {
+            None
+        }
+    }
+    pub fn get_array<T: Value>(&self, len: usize) -> VLArrayVar<T> {
+        let array_type = ir::context::register_type(Type::Array(ArrayType {
+            element: T::type_(),
+            length: len,
+        }));
+        self.downcast_array::<T>(len).unwrap_or_else(|| {
+            panic!(
+                "DynExpr::get: type mismatch: expected {}, got {}",
+                array_type,
                 self.node.type_().to_string()
             )
         })

@@ -144,6 +144,7 @@ impl Compiler {
         let fields: Vec<_> = struct_.fields.iter().map(|f| f).collect();
         let field_types: Vec<_> = fields.iter().map(|f| &f.ty).collect();
         let field_names: Vec<_> = fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
+
         let expr_proxy_field_methods: Vec<_> = fields
             .iter()
             .enumerate()
@@ -199,6 +200,27 @@ impl Compiler {
             .collect();
         let expr_proxy_name = syn::Ident::new(&format!("{}Expr", name), name.span());
         let var_proxy_name = syn::Ident::new(&format!("{}Var", name), name.span());
+        let ctor_proxy_name = syn::Ident::new(&format!("{}Init", name), name.span());
+        let ctor_proxy = {
+            let ctor_fields = fields
+                .iter()
+                .map(|f| {
+                    let ident = f.ident.as_ref().unwrap();
+                    let ty = &f.ty;
+                    quote_spanned!(span=> #vis #ident: #crate_path ::Expr<#ty>)
+                })
+                .collect::<Vec<_>>();
+            quote_spanned!(span=>
+                #vis struct #ctor_proxy_name #generics {
+                    #(#ctor_fields),*
+                }
+                impl #impl_generics From<#ctor_proxy_name #ty_generics> for #expr_proxy_name #ty_generics #where_clause {
+                    fn from(ctor: #ctor_proxy_name #ty_generics) -> Self {
+                        Self::new(#(ctor.#field_names,)*)
+                    }
+                }
+            )
+        };
         let type_of_impl = quote_spanned!(span=>
             impl #impl_generics #crate_path ::TypeOf for #name #ty_generics #where_clause {
                 #[allow(unused_parens)]
@@ -218,6 +240,7 @@ impl Compiler {
             }
         );
         let proxy_def = quote_spanned!(span=>
+            #ctor_proxy
             #[derive(Clone, Copy, Debug)]
             #[allow(unused_parens)]
             #vis struct #expr_proxy_name #generics{
@@ -318,6 +341,9 @@ impl Compiler {
                 fn fields() -> Vec<String> {
                     vec![#(stringify!(#field_names).into(),)*]
                 }
+            }
+            impl #impl_generics #crate_path ::StructInitiaizable for #name #ty_generics #where_clause{
+                type Init = #ctor_proxy_name;
             }
             impl #impl_generics #expr_proxy_name #ty_generics #where_clause {
                 #(#expr_proxy_field_methods)*

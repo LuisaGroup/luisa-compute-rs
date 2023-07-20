@@ -229,7 +229,7 @@ fn main() {
                 let index_ptr = model.mesh.indices.as_ptr();
                 std::slice::from_raw_parts(index_ptr as *const Index, model.mesh.indices.len() / 3)
             }));
-           
+
             vertex_buffers.push(vertex_buffer);
             index_buffers.push(index_buffer);
             vertex_heap.emplace_buffer_async(index, vertex_buffers.last().unwrap());
@@ -274,7 +274,12 @@ fn main() {
                 };
 
                 let make_ray = |o: Expr<Float3>, d: Expr<Float3>, tmin: Expr<f32>, tmax: Expr<f32>| -> Expr<Ray> {
-                    rtx::RayExpr::new(o, tmin, d, tmax)
+                    struct_!(rtx::Ray {
+                        orig: o.into(),
+                        tmin: tmin,
+                        dir:d.into(),
+                        tmax: tmax
+                    })
                 };
 
                 let generate_ray = |p: Expr<Float2>| -> Expr<Ray> {

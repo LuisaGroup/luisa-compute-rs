@@ -35,9 +35,9 @@ pub use luisa_compute_ir::{
     TypeOf,
 };
 use math::Uint3;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell, UnsafeCell};
 use std::ffi::CString;
-use std::ops::{Bound, RangeBounds};
+use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 // use self::math::Uint3;
 pub mod math;
@@ -173,6 +173,66 @@ unsafe impl _Mask for Bool {}
 pub trait ExprProxy: Copy + Aggregate + FromNode {
     type Value: Value;
 }
+pub struct VarDerefProxy<P, T: Value>
+where
+    P: VarProxy<Value = T>,
+{
+    pub(crate) var: P,
+    pub(crate) dirty: Cell<bool>,
+    pub(crate) assigned: Expr<T>,
+    pub(crate) _phantom: std::marker::PhantomData<T>,
+}
+impl<P, T: Value> Deref for VarDerefProxy<P, T>
+where
+    P: VarProxy<Value = T>,
+{
+    type Target = Expr<T>;
+    fn deref(&self) -> &Self::Target {
+        &self.assigned
+    }
+}
+impl<P, T: Value> DerefMut for VarDerefProxy<P, T>
+where
+    P: VarProxy<Value = T>,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.dirty.set(true);
+        &mut self.assigned
+    }
+}
+impl<P, T: Value> Drop for VarDerefProxy<P, T>
+where
+    P: VarProxy<Value = T>,
+{
+    fn drop(&mut self) {
+        if self.dirty.get() {
+            self.var.store(self.assigned)
+        }
+    }
+}
+macro_rules! impl_assign_ops {
+    ($ass:ident, $ass_m:ident, $o:ident, $o_m:ident) => {
+        impl<P, T: Value, Rhs> std::ops::$ass<Rhs> for VarDerefProxy<P, T>
+        where
+            P: VarProxy<Value = T>,
+            <T as lang::Value>::Expr: std::ops::$o<Rhs, Output = <T as lang::Value>::Expr>,
+        {
+            fn $ass_m(&mut self, rhs: Rhs) {
+                *self.deref_mut() = std::ops::$o::$o_m(**self, rhs);
+            }
+        }
+    };
+}
+impl_assign_ops!(AddAssign, add_assign, Add, add);
+impl_assign_ops!(SubAssign, sub_assign, Sub, sub);
+impl_assign_ops!(MulAssign, mul_assign, Mul, mul);
+impl_assign_ops!(DivAssign, div_assign, Div, div);
+impl_assign_ops!(RemAssign, rem_assign, Rem, rem);
+impl_assign_ops!(BitAndAssign, bitand_assign, BitAnd, bitand);
+impl_assign_ops!(BitOrAssign, bitor_assign, BitOr, bitor);
+impl_assign_ops!(BitXorAssign, bitxor_assign, BitXor, bitxor);
+impl_assign_ops!(ShlAssign, shl_assign, Shl, shl);
+impl_assign_ops!(ShrAssign, shr_assign, Shr, shr);
 
 pub trait VarProxy: Copy + Aggregate + FromNode {
     type Value: Value;
@@ -188,6 +248,28 @@ pub trait VarProxy: Copy + Aggregate + FromNode {
                 ret.push(b.call(Func::Load, &[node], node.type_().clone()));
             }
             Expr::<Self::Value>::from_nodes(&mut ret.into_iter())
+        })
+    }
+    fn read(&self) -> Expr<Self::Value> {
+        self.load()
+    }
+    fn write(&self) -> VarDerefProxy<Self, Self::Value> {
+        VarDerefProxy {
+            var: *self,
+            dirty: Cell::new(false),
+            assigned: self.load(),
+            _phantom: std::marker::PhantomData,
+        }
+    }
+    fn _deref<'a>(&'a self) -> &'a Expr<Self::Value> {
+        RECORDER.with(|r| {
+            let v: Expr<Self::Value> = self.read();
+            let r = r.borrow();
+            let v: &Expr<Self::Value> = r.arena.alloc(v);
+            unsafe {
+                let v: &'a Expr<Self::Value> = std::mem::transmute(v);
+                v
+            }
         })
     }
 }
@@ -272,6 +354,12 @@ macro_rules! impl_prim {
         }
         impl VarProxy for PrimVar<$t> {
             type Value = $t;
+        }
+        impl Deref for PrimVar<$t> {
+            type Target = PrimExpr<$t>;
+            fn deref(&self) -> &Self::Target {
+                self._deref()
+            }
         }
         impl Value for $t {
             type Expr = PrimExpr<$t>;

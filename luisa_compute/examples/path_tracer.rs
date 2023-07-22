@@ -2,6 +2,7 @@ use image::Rgb;
 use luisa_compute_api_types::StreamTag;
 use rand::Rng;
 use std::env::current_exe;
+use std::ops::DerefMut;
 use std::time::Instant;
 use winit::event::Event as WinitEvent;
 use winit::event::WindowEvent;
@@ -267,8 +268,8 @@ fn main() {
                     let lcg = create_static_callable::<(Var<u32>,), Expr<f32>>(|state:Var<u32>|{
                          const LCG_A: u32 = 1664525u32;
                         const LCG_C: u32 = 1013904223u32;
-                        state.store(LCG_A * state.load() + LCG_C);
-                        (state.load() & 0x00ffffffu32).float() * (1.0f32 / 0x01000000u32 as f32)
+                        *state.write() = LCG_A * *state + LCG_C;
+                        (*state & 0x00ffffffu32).float() * (1.0f32 / 0x01000000u32 as f32)
                     });
                     lcg.call(state)
                 };
@@ -384,7 +385,7 @@ fn main() {
                             }, else {
                                 let pdf_light = (p - origin).length_squared() / (light_area * cos_wi);
                                 let mis_weight = balanced_heuristic(pdf_bsdf.load(), pdf_light);
-                                radiance.store(radiance.load() + mis_weight * beta.load() * light_emission);
+                                radiance.store(radiance.load() + mis_weight * *beta* light_emission);
                             });
                             break_();
                         }, else{
@@ -407,7 +408,7 @@ fn main() {
                                 let pdf_bsdf = cos_wi_light * std::f32::consts::FRAC_1_PI;
                                 let mis_weight = balanced_heuristic(pdf_light, pdf_bsdf);
                                 let bsdf = albedo * std::f32::consts::FRAC_1_PI * cos_wi_light;
-                                radiance.store(radiance.load() + beta.load() * bsdf * mis_weight * light_emission / pdf_light.max(1e-4f32));
+                                radiance.store(*radiance+ *beta * bsdf * mis_weight * light_emission / pdf_light.max(1e-4f32));
                             });
                         });
                         // sample BSDF
@@ -415,23 +416,23 @@ fn main() {
                         let ux = lcg(state);
                         let uy = lcg(state);
                         let new_direction = onb.to_world(cosine_sample_hemisphere(make_float2(ux, uy)));
-                        ray.store(make_ray(pp, new_direction, 0.0f32.into(), std::f32::MAX.into()));
-                        beta.store(beta.load() * albedo);
+                        *ray.write() = make_ray(pp, new_direction, 0.0f32.into(), std::f32::MAX.into());
+                        *beta.write() *= albedo;
                         pdf_bsdf.store(cos_wi * std::f32::consts::FRAC_1_PI);
 
                         // russian roulette
-                        let l = make_float3(0.212671f32, 0.715160f32, 0.072169f32).dot(beta.load());
+                        let l = make_float3(0.212671f32, 0.715160f32, 0.072169f32).dot(*beta);
                         if_!(l.cmpeq(0.0f32), { break_(); });
                         let q = l.max(0.05f32);
                         let r = lcg(state);
                         if_!(r.cmpgt(q), { break_(); });
-                        beta.store(beta.load() / q);
+                        *beta.write() = *beta / q;
 
-                        depth.store(depth.load() + 1)
+                        *depth.write() += 1;
                     });
                 });
                 radiance.store(radiance.load() / SPP_PER_DISPATCH as f32);
-                seed_image.write(coord, state.load());
+                seed_image.write(coord, *state);
                 if_!(radiance.load().is_nan().any(), { radiance.store(make_float3(0.0f32, 0.0f32, 0.0f32)); });
                 let radiance = radiance.load().clamp(0.0f32, 30.0f32);
                 let old = image.read(dispatch_id().xy());

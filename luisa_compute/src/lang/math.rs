@@ -510,6 +510,12 @@ macro_rules! impl_vec_proxy {
         impl VarProxy for $var_proxy {
             type Value = $vec;
         }
+        impl std::ops::Deref for $var_proxy {
+            type Target = $expr_proxy;
+            fn deref(&self) -> &Self::Target {
+                self._deref()
+            }
+        }
         impl From<$var_proxy> for $expr_proxy {
             fn from(var: $var_proxy) -> Self {
                 var.load()
@@ -599,6 +605,12 @@ macro_rules! impl_mat_proxy {
         }
         impl VarProxy for $var_proxy {
             type Value = $mat;
+        }
+        impl std::ops::Deref for $var_proxy {
+            type Target = $expr_proxy;
+            fn deref(&self) -> &Self::Target {
+                self._deref()
+            }
         }
         impl From<$var_proxy> for $expr_proxy {
             fn from(var: $var_proxy) -> Self {

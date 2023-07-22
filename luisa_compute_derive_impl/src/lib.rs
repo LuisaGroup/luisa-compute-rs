@@ -306,6 +306,13 @@ impl Compiler {
                 type Value = #name #ty_generics;
             }
             #[allow(unused_parens)]
+            impl #impl_generics std::ops::Deref for #var_proxy_name #ty_generics #where_clause {
+                type Target = #expr_proxy_name #ty_generics;
+                fn deref(&self) -> &Self::Target {
+                    self._deref()
+                }
+            }
+            #[allow(unused_parens)]
             impl #impl_generics From<#var_proxy_name #ty_generics> for #expr_proxy_name #ty_generics #where_clause {
                 fn from(var: #var_proxy_name #ty_generics) -> Self {
                     var.load()

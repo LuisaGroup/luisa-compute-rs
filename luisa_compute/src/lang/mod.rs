@@ -1969,8 +1969,8 @@ impl_kernel_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15)
 
 pub fn if_then_else<R: Aggregate>(
     cond: impl _Mask,
-    then: impl FnOnce() -> R,
-    else_: impl FnOnce() -> R,
+    then: impl Fn() -> R,
+    else_: impl Fn() -> R,
 ) -> R {
     let cond = cond.node();
     RECORDER.with(|r| {
@@ -2024,7 +2024,7 @@ pub fn if_then_else<R: Aggregate>(
     R::from_vec_nodes(phis)
 }
 
-pub fn generic_loop(cond: impl FnOnce() -> Bool, body: impl FnOnce(), update: impl FnOnce()) {
+pub fn generic_loop(cond: impl Fn() -> Bool, body: impl Fn(), update: impl Fn()) {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
         let pools = r.pools.clone().unwrap();
@@ -2082,7 +2082,7 @@ impl<R: Aggregate> SwitchBuilder<R> {
             depth: RECORDER.with(|r| r.borrow().scopes.len()),
         }
     }
-    pub fn case(mut self, value: i32, then: impl FnOnce() -> R) -> Self {
+    pub fn case(mut self, value: i32, then: impl Fn() -> R) -> Self {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             let pools = r.pools.clone().unwrap();
@@ -2095,7 +2095,7 @@ impl<R: Aggregate> SwitchBuilder<R> {
         self.cases.push((value, block, then.to_vec_nodes()));
         self
     }
-    pub fn default(mut self, then: impl FnOnce() -> R) -> Self {
+    pub fn default(mut self, then: impl Fn() -> R) -> Self {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             let pools = r.pools.clone().unwrap();
@@ -2198,7 +2198,7 @@ macro_rules! loop_ {
     };
 }
 #[inline]
-pub fn for_range(r: impl RangeBounds<Expr<i32>>, body: impl FnOnce(Expr<i32>)) {
+pub fn for_range(r: impl RangeBounds<Expr<i32>>, body: impl Fn(Expr<i32>)) {
     let start = match r.start_bound() {
         Bound::Included(v) => *v,
         Bound::Excluded(v) => *v + 1,
@@ -2335,7 +2335,7 @@ pub fn detach<T: FromNode>(v: T) -> T {
     T::from_node(node)
 }
 
-pub fn autodiff(body: impl FnOnce()) {
+pub fn autodiff(body: impl Fn()) {
     AD_CONTEXT.with(|c| {
         let mut c = c.borrow_mut();
         assert!(!c.started, "autodiff section is already started");

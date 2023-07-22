@@ -142,7 +142,10 @@ Mat4 // float4x4 in C++
 Array types `[T;N]` are also supported and their proxy types are `ArrayExpr<T, N>` and `ArrayVar<T, N>`.
 
 ### Control Flow
+Note, you cannot modify outer scope variables inside a control flow block by declaring the variable as `mut`. To modify outer scope variables, use `Var<T>` instead and call `var.store(value)` to store the value back to the outer scope.
+
 If, while, break, continue are supported. Note that `if` and `switch` works similar to native Rust `if` and `match` in that values can be returned at the end of the block.
+
 
 ```rust
 if_!(cond, { /* then */});

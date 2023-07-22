@@ -109,7 +109,32 @@ use luisa::prelude::*;
 ```
 ### Variables and Expressions
 There are six basic types in EDSL. `bool`, `i32`, `u32`, `i64`, `u64`, `f32`. (`f64` support might be added to CPU backend).
-For each type, there are two EDSL proxy objects `Expr<T>` and `Var<T>`. `Expr<T>` is an immutable object that represents a value. `Var<T>` is a mutable object that represents a variable. `Expr<T>` can be converted to `Var<T>` by calling `Var<T>::load()`.
+For each type, there are two EDSL proxy objects `Expr<T>` and `Var<T>`. `Expr<T>` is an immutable object that represents a value. `Var<T>` is a mutable object that represents a variable. To load values from `Var<T>`, use `*var` and to obtain a mutable reference for assignment, use `v.write()`. E.g. `*v.write() = f(*u)`.
+
+*Note*: Every DSL object in host code **must** be immutable due to Rust unable to overload. For example:
+```rust
+// **no good**
+let mut v = var!(f32);
+if_!(cond, {
+    v += 1.0;
+});
+
+// **good**
+let v = var!(f32);
+if_!(cond, {
+    *v.write() += 1.0;
+});
+```
+*Note*: You should not store the referene obtained by `v.write()` for repeated use, as the assigned value is only updated when `v.write()` is dropped. For example,:
+```rust
+let v = var!(f32);
+let bad = v.write();
+*bad = 1.0;
+let u = *v;
+drop(bad);
+cpu_dbg!(u); // prints 0.0
+cpu_dbg!(*v); // prints now 1.0
+```
 All operations except load/store should be performed on `Expr<T>`. `Var<T>` can only be used to load/store values. While `Expr<T>` and `Var<T>` are sufficent in most cases, it cannot be placed in an `impl` block. To do so, the exact name of these proxies are needed.
 ```rust
 Expr<Bool> == Bool, Var<Bool> == BoolVar
@@ -142,7 +167,7 @@ Mat4 // float4x4 in C++
 Array types `[T;N]` are also supported and their proxy types are `ArrayExpr<T, N>` and `ArrayVar<T, N>`.
 
 ### Control Flow
-Note, you cannot modify outer scope variables inside a control flow block by declaring the variable as `mut`. To modify outer scope variables, use `Var<T>` instead and call `var.store(value)` to store the value back to the outer scope.
+*Note*, you cannot modify outer scope variables inside a control flow block by declaring the variable as `mut`. To modify outer scope variables, use `Var<T>` instead and call *var.write() = value` to store the value back to the outer scope.
 
 If, while, break, continue are supported. Note that `if` and `switch` works similar to native Rust `if` and `match` in that values can be returned at the end of the block.
 
@@ -172,13 +197,9 @@ pub struct MyVec2 {
     pub y: f32,
 }
 
-let v: Var<MyVec2> = local::<MyVec2>();
-let v_ld: Expr<MyVec2> = v.load();
-let v_x = v_ld.x();
-let v_ld = v_ld.set_x(v_x + 1.0); // v_ld.x += 1.0
-// or
-v.set_x(v_ld.x() + 1.0);
-
+let v = var!(MyVec2);
+let sum = *v.x() + *v.y(); 
+*v.x().write() += 1.0;
 ```
 ### Polymorphism
 We prvoide a powerful `Polymorphic<DevirtualizationKey, dyn Trait>` construct as in the C++ DSL. See examples for more detail

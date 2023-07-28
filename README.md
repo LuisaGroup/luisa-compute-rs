@@ -10,6 +10,7 @@ Rust frontend to LuisaCompute and more! (WIP) ⚠ A stable version will be relea
     + [Debuggability](#debuggability)
 * [Usage](#usage)
     + [Variables and Expressions](#variables-and-expressions)
+    + [Builtin Functions](#builtin-functions)
     + [Control Flow](#control-flow)
     + [Custom Data Types](#custom-data-types)
     + [Polymorphism](#polymorphism)
@@ -114,9 +115,15 @@ For each type, there are two EDSL proxy objects `Expr<T>` and `Var<T>`. `Expr<T>
 *Note*: Every DSL object in host code **must** be immutable due to Rust unable to overload. For example:
 ```rust
 // **no good**
-let mut v = var!(f32);
+let mut v = const_(0.0f32);
 if_!(cond, {
     v += 1.0;
+});
+
+// also **not good**
+let v = Cell::new(const_(0.0f32));
+if_!(cond, {
+    v.set(v.get() + 1.0);
 });
 
 // **good**
@@ -164,7 +171,20 @@ Mat2 // float2x2 in C++
 Mat3 // float3x3 in C++
 Mat4 // float4x4 in C++
 ```
-Array types `[T;N]` are also supported and their proxy types are `ArrayExpr<T, N>` and `ArrayVar<T, N>`.
+Array types `[T;N]` are also supported and their proxy types are `ArrayExpr<T, N>` and `ArrayVar<T, N>`. Call `arr.read(i)` and `arr.write(i, value)` on `ArrayVar<T, N>` for element access. `ArrayExpr<T,N>` can be stored to and loaded from `ArrayVar<T, N>`. The limitation is however the array length must be determined during host compile time. If runtime length is required, use `VLArrayVar<T>`. `VLArrayVar<T>::zero(length: usize` would create a zero initialized array. Similarly you can use `read` and `write` methods as well. To query the length of a `VLArrayVar<T>` in host, use ``VLArrayVar<T>::static_len()->usize`. To query the length in kernel, use ``VLArrayVar<T>::len()->Expr<u32>`
+
+Most operators are already overloaded with the only exception is comparision. We cannot overload comparision operators as `PartialOrd` cannot return a DSL type. Instead, use `cmpxx` methods such as `cmpgt, cmpeq`, etc. To cast a primitive/vector into another type, use `v.type()`. For example:
+```rust
+let iv = make_int2(1,1,1);
+let fv = iv.float(); //fv is Expr<Float2>
+let bv = fv.bool(); // bv is Expr<Bool2>
+```
+To perform a bitwise cast, use the `bitcast` function. `let fv:Expr<f32> = bitcast::<u32, f32>(const_(0u32));`
+
+### Builtin Functions
+
+We have extentded primitive types with methods similar to their host counterpart: `v.sin(), v.max(u)`, etc. Most methods accepts both a `Expr<T>` or a literal like `0.0`. However, the `select` function is slightly different as it do not accept literals. You need to use `select(cond, f_var, const_(1.0f32))`.
+
 
 ### Control Flow
 *Note*, you cannot modify outer scope variables inside a control flow block by declaring the variable as `mut`. To modify outer scope variables, use `Var<T>` instead and call *var.write() = value` to store the value back to the outer scope.

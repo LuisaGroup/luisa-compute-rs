@@ -532,7 +532,11 @@ impl AccelVar {
         let mask = mask.into();
         let query = __current_scope(|b| {
             b.call(
-                Func::RayTracingQueryAll,
+                if terminate_on_first {
+                    Func::RayTracingQueryAny
+                } else {
+                    Func::RayTracingQueryAll
+                },
                 &[self.node, ray.node(), mask.node()],
                 Type::opaque(
                     if terminate_on_first {

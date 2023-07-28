@@ -44,6 +44,7 @@ pub mod math;
 pub mod poly;
 pub mod swizzle;
 pub mod traits;
+pub mod printer;
 
 pub use math::*;
 pub use poly::*;

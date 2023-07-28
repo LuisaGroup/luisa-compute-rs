@@ -7,7 +7,7 @@ pub fn derive_value(item: TokenStream) -> TokenStream {
     compiler.derive_value(&item).into()
 }
 
-#[proc_macro_derive(KernelArg, attributes(luisa))]
+#[proc_macro_derive(BindGroup, attributes(luisa))]
 pub fn derive_kernel_arg(item: TokenStream) -> TokenStream {
     let item: syn::ItemStruct = syn::parse(item).unwrap();
     let compiler = luisa_compute_derive_impl::Compiler::new(false);

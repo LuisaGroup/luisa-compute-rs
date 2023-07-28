@@ -2,7 +2,7 @@ use std::env::current_exe;
 
 use luisa::*;
 use luisa_compute as luisa;
-#[derive(KernelArg)]
+#[derive(BindGroup)]
 struct MyArgStruct<T: Value> {
     x: Buffer<T>,
     y: Buffer<T>,

@@ -995,10 +995,11 @@ impl<T: Value> BindlessBufferVar<T> {
         }))
     }
     pub fn len(&self) -> Expr<u32> {
+        let stride = const_(T::type_().size() as u32);
         Expr::<u32>::from_node(__current_scope(|b| {
             b.call(
-                Func::BindlessBufferSize(T::type_()),
-                &[self.array, self.buffer_index.node()],
+                Func::BindlessBufferSize,
+                &[self.array, self.buffer_index.node(), stride.node()],
                 u32::type_(),
             )
         }))

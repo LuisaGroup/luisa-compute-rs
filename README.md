@@ -291,7 +291,7 @@ let kernel = device.create_kernel::<(BufferVar<f32>, )>(arg| {
 ```
 User can pass a maximum of 16 arguments to kernel and unlimited number of captured variables. If more than 16 arguments are needed, user can pack them into a struct and pass the struct as a single argument.
 ```rust
-#[derive(KernelArg)]
+#[derive(BindGroup)]
 pub struct BufferPair {
     a:Buffer<f32>,
     b:Buffer<f32>

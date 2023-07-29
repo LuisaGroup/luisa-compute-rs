@@ -184,7 +184,6 @@ impl<'a> Scope<'a> {
             let items = data.items.read();
             let mut i = 2;
             let item_count = host_data[0] as usize;
-            dbg!(item_count);
             for _ in 0..item_count {
                 if i >= host_data.len() {
                     break;

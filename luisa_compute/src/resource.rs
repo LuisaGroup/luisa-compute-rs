@@ -1230,7 +1230,7 @@ impl BindlessArrayVar {
             buffer_index: buffer_index.into(),
             _marker: std::marker::PhantomData,
         };
-        if __env_need_backtrace() {
+        if __env_need_backtrace() && is_cpu_backend() {
             let vt = v.__type();
             let expected = type_hash(&T::type_());
             let backtrace = get_backtrace();

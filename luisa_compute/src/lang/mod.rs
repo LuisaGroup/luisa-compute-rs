@@ -46,9 +46,9 @@ pub mod printer;
 pub mod swizzle;
 pub mod traits;
 
-pub use printer::*;
 pub use math::*;
 pub use poly::*;
+pub use printer::*;
 
 pub trait Value: Copy + ir::TypeOf + 'static {
     type Expr: ExprProxy<Value = Self>;
@@ -2234,8 +2234,19 @@ impl<R: Aggregate> SwitchBuilder<R> {
 }
 
 #[macro_export]
+/**
+ * If you want rustfmt to format your code, use if_!(cond, { .. }, { .. }) or if_!(cond, { .. }, else, {...})
+ * instead of if_!(cond, { .. }, else {...}).
+ * 
+ */
 macro_rules! if_ {
     ($cond:expr, $then:block, else $else_:block) => {
+        if_then_else($cond, || $then, || $else_)
+    };
+    ($cond:expr, $then:block, else, $else_:block) => {
+        if_then_else($cond, || $then, || $else_)
+    };
+    ($cond:expr, $then:block, $else_:block) => {
         if_then_else($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block) => {

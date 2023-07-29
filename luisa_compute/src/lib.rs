@@ -18,8 +18,8 @@ pub mod prelude {
     pub use crate::lang::traits::VarTrait;
     pub use crate::lang::traits::{CommonVarOp, FloatVarTrait, IntVarTrait, VarCmp, VarCmpEq};
     pub use crate::lang::{
-        Aggregate, ExprProxy, FromNode, KernelBuildFn, KernelParameter, KernelSignature, Value,
-        VarProxy, _Mask,IndexRead, IndexWrite
+        Aggregate, ExprProxy, FromNode, IndexRead, IndexWrite, KernelBuildFn, KernelParameter,
+        KernelSignature, Value, VarProxy, _Mask,
     };
     pub use crate::lang::{
         __compose, __cpu_dbg, __current_scope, __env_need_backtrace, __extract, __insert,
@@ -48,7 +48,11 @@ pub use resource::*;
 pub use runtime::*;
 
 pub mod macros {
-    pub use crate::{cpu_dbg, if_, impl_polymorphic,impl_new_poly_array, lc_assert, lc_unreachable, lc_dbg, var, while_, loop_, struct_};
+    pub use crate::{
+        cpu_dbg, if_, impl_new_poly_array, impl_polymorphic, lc_assert, lc_dbg, lc_unreachable,
+        loop_, struct_, var, while_,
+    };
+    pub use crate::{debug, error, info, log, warn};
 }
 
 use lazy_static::lazy_static;

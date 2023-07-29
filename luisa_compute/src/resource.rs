@@ -74,7 +74,8 @@ impl<'a, T: Value> BufferView<'a, T> {
             submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_async(data)]);
         }
     }
-    pub fn copy_from_async<'b>(&'a self, data: &'b [T]) -> Command<'b> {
+
+    pub fn copy_from_async<'b>(&'a self, data: &'b [T]) -> Command<'static> {
         assert_eq!(data.len(), self.len);
         let mut rt = ResourceTracker::new();
         rt.add(self.buffer.handle.clone());
@@ -144,8 +145,16 @@ impl<T: Value> Buffer<T> {
         self.view(..).copy_from(data);
     }
     #[inline]
+    pub fn copy_from_async<'a>(&self, data: &[T]) -> Command<'_> {
+        self.view(..).copy_from_async(data)
+    }
+    #[inline]
     pub fn copy_to(&self, data: &mut [T]) {
         self.view(..).copy_to(data);
+    }
+    #[inline]
+    pub fn copy_to_async<'a>(&self, data: &'a mut [T]) -> Command<'a> {
+        self.view(..).copy_to_async(data)
     }
     #[inline]
     pub fn copy_to_vec(&self) -> Vec<T> {
@@ -842,7 +851,7 @@ macro_rules! impl_tex_view {
                     [self.copy_from_buffer_async(buffer_view)],
                 );
             }
-            pub fn copy_to_texture_async(&'a self, other: $name<T>) -> Command<'a> {
+            pub fn copy_to_texture_async(&'a self, other: $name<T>) -> Command<'static> {
                 let mut rt = ResourceTracker::new();
                 rt.add(self.tex.handle.clone());
                 rt.add(other.tex.handle.clone());
@@ -1385,12 +1394,7 @@ macro_rules! impl_atomic {
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicCompareExchange,
-                        &[
-                            self.node,
-                            ToNode::node(&i),
-                            expected.node(),
-                            desired.node(),
-                        ],
+                        &[self.node, ToNode::node(&i), expected.node(), desired.node()],
                         <$t>::type_(),
                     )
                 }))

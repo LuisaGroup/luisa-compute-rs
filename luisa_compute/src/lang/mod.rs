@@ -46,6 +46,7 @@ pub mod printer;
 pub mod swizzle;
 pub mod traits;
 
+pub use printer::*;
 pub use math::*;
 pub use poly::*;
 

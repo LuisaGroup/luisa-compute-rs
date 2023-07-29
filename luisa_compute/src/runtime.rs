@@ -839,6 +839,7 @@ pub fn submit_default_stream_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
 pub struct Command<'a> {
     #[allow(dead_code)]
     pub(crate) inner: api::Command,
+    // is this really necessary?
     pub(crate) marker: std::marker::PhantomData<&'a ()>,
     pub(crate) callback: Option<Box<dyn FnOnce() + Send + 'static>>,
     #[allow(dead_code)]
@@ -1201,7 +1202,8 @@ pub struct Kernel<T: KernelArg> {
     pub(crate) inner: RawKernel,
     pub(crate) _marker: std::marker::PhantomData<T>,
 }
-
+unsafe impl<T: KernelArg> Send for Kernel<T> {}
+unsafe impl<T: KernelArg> Sync for Kernel<T> {}
 impl<T: KernelArg> Kernel<T> {
     pub fn cache_dir(&self) -> Option<PathBuf> {
         let handle = self.inner.unwrap();

@@ -42,9 +42,9 @@ use std::ops::{Bound, Deref, DerefMut, RangeBounds};
 // use self::math::Uint3;
 pub mod math;
 pub mod poly;
+pub mod printer;
 pub mod swizzle;
 pub mod traits;
-pub mod printer;
 
 pub use math::*;
 pub use poly::*;
@@ -73,10 +73,11 @@ pub trait Aggregate: Sized {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>);
     fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self;
 }
-
-pub trait FromNode {
-    fn from_node(node: NodeRef) -> Self;
+pub trait ToNode {
     fn node(&self) -> NodeRef;
+}
+pub trait FromNode: ToNode {
+    fn from_node(node: NodeRef) -> Self;
 }
 
 fn _store<T1: Aggregate, T2: Aggregate>(var: &T1, value: &T2) {
@@ -123,8 +124,14 @@ macro_rules! impl_aggregate_for_tuple {
 }
 impl_aggregate_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
-pub unsafe trait _Mask: FromNode {}
-
+pub unsafe trait _Mask: ToNode {}
+pub trait IndexRead: ToNode {
+    type Element: Value;
+    fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<Self::Element>;
+}
+pub trait IndexWrite: IndexRead {
+    fn write<I: Into<Expr<u32>>, V: Into<Expr<Self::Element>>>(&self, i: I, value: V);
+}
 pub fn select<A: Aggregate>(mask: impl _Mask, a: A, b: A) -> A {
     let a_nodes = a.to_vec_nodes();
     let b_nodes = b.to_vec_nodes();
@@ -158,10 +165,7 @@ pub fn select<A: Aggregate>(mask: impl _Mask, a: A, b: A) -> A {
     A::from_vec_nodes(ret)
 }
 
-impl FromNode for bool {
-    fn from_node(_: NodeRef) -> Self {
-        panic!("don't call this")
-    }
+impl ToNode for bool {
     fn node(&self) -> NodeRef {
         const_(*self).node()
     }
@@ -251,10 +255,7 @@ pub trait VarProxy: Copy + Aggregate + FromNode {
             Expr::<Self::Value>::from_nodes(&mut ret.into_iter())
         })
     }
-    fn read(&self) -> Expr<Self::Value> {
-        self.load()
-    }
-    fn write(&self) -> VarDerefProxy<Self, Self::Value> {
+    fn get_mut(&self) -> VarDerefProxy<Self, Self::Value> {
         VarDerefProxy {
             var: *self,
             dirty: Cell::new(false),
@@ -264,7 +265,7 @@ pub trait VarProxy: Copy + Aggregate + FromNode {
     }
     fn _deref<'a>(&'a self) -> &'a Expr<Self::Value> {
         RECORDER.with(|r| {
-            let v: Expr<Self::Value> = self.read();
+            let v: Expr<Self::Value> = self.load();
             let r = r.borrow();
             let v: &Expr<Self::Value> = r.arena.alloc(v);
             unsafe {
@@ -346,6 +347,8 @@ macro_rules! impl_prim {
                     _phantom: std::marker::PhantomData,
                 }
             }
+        }
+        impl ToNode for PrimVar<$t> {
             fn node(&self) -> NodeRef {
                 self.node
             }
@@ -837,6 +840,39 @@ pub fn bitcast<From: Value, To: Value>(expr: Expr<From>) -> Expr<To> {
     }))
 }
 
+pub const fn packed_size<T: Value>() -> usize {
+    (std::mem::size_of::<T>() + 3) / 4
+}
+pub fn pack_to<E, B>(expr: E, buffer: &B, index: impl Into<Expr<u32>>)
+where
+    E: ExprProxy,
+    B: IndexWrite<Element = u32>,
+{
+    let index = index.into();
+    __current_scope(|b| {
+        b.call(
+            Func::Pack,
+            &[expr.node(), buffer.node(), index.node()],
+            Type::void(),
+        );
+    });
+}
+pub fn unpack_from<T>(
+    buffer: &impl IndexWrite<Element = u32>,
+    index: impl Into<Expr<u32>>,
+) -> Expr<T>
+where
+    T: Value,
+{
+    let index = index.into();
+    Expr::<T>::from_node(__current_scope(|b| {
+        b.call(
+            Func::Unpack,
+            &[buffer.node(), index.node()],
+            <T as TypeOf>::type_(),
+        )
+    }))
+}
 impl<T: Value + TypeOf, const N: usize> Value for [T; N] {
     type Expr = ArrayExpr<T, N>;
     type Var = ArrayVar<T, N>;
@@ -928,6 +964,8 @@ impl FromNode for DynExpr {
     fn from_node(node: NodeRef) -> Self {
         Self { node }
     }
+}
+impl ToNode for DynExpr {
     fn node(&self) -> NodeRef {
         self.node
     }
@@ -957,6 +995,8 @@ impl FromNode for DynVar {
     fn from_node(node: NodeRef) -> Self {
         Self { node }
     }
+}
+impl ToNode for DynVar {
     fn node(&self) -> NodeRef {
         self.node
     }
@@ -1044,6 +1084,8 @@ impl<T: Value> FromNode for VLArrayExpr<T> {
             node,
         }
     }
+}
+impl<T: Value> ToNode for VLArrayExpr<T> {
     fn node(&self) -> NodeRef {
         self.node
     }
@@ -1071,6 +1113,8 @@ impl<T: Value> FromNode for VLArrayVar<T> {
             node,
         }
     }
+}
+impl<T: Value> ToNode for VLArrayVar<T> {
     fn node(&self) -> NodeRef {
         self.node
     }
@@ -1179,7 +1223,47 @@ impl<T: Value> VLArrayExpr<T> {
         }
     }
 }
+impl<T: Value, const N: usize> IndexRead for ArrayExpr<T, N> {
+    type Element = T;
+    fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
+        let i = i.into();
 
+        lc_assert!(i.cmplt(const_(N as u32)));
+
+        Expr::<T>::from_node(__current_scope(|b| {
+            b.call(Func::ExtractElement, &[self.node, i.node()], T::type_())
+        }))
+    }
+}
+impl<T: Value, const N: usize> IndexRead for ArrayVar<T, N> {
+    type Element = T;
+    fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
+        let i = i.into();
+        if need_runtime_check() {
+            lc_assert!(i.cmplt(const_(N as u32)));
+        }
+
+        Expr::<T>::from_node(__current_scope(|b| {
+            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
+            b.call(Func::Load, &[gep], T::type_())
+        }))
+    }
+}
+impl<T: Value, const N: usize> IndexWrite for ArrayVar<T, N> {
+    fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, value: V) {
+        let i = i.into();
+        let value = value.into();
+
+        if need_runtime_check() {
+            lc_assert!(i.cmplt(const_(N as u32)));
+        }
+
+        __current_scope(|b| {
+            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
+            b.update(gep, value.node());
+        });
+    }
+}
 #[derive(Clone, Copy, Debug)]
 pub struct ArrayExpr<T: Value, const N: usize> {
     marker: std::marker::PhantomData<T>,
@@ -1199,6 +1283,8 @@ impl<T: Value, const N: usize> FromNode for ArrayExpr<T, N> {
             node,
         }
     }
+}
+impl<T: Value, const N: usize> ToNode for ArrayExpr<T, N> {
     fn node(&self) -> NodeRef {
         self.node
     }
@@ -1220,6 +1306,8 @@ impl<T: Value, const N: usize> FromNode for ArrayVar<T, N> {
             node,
         }
     }
+}
+impl<T: Value, const N: usize> ToNode for ArrayVar<T, N> {
     fn node(&self) -> NodeRef {
         self.node
     }
@@ -1243,32 +1331,8 @@ impl<T: Value, const N: usize> VarProxy for ArrayVar<T, N> {
 }
 
 impl<T: Value, const N: usize> ArrayVar<T, N> {
-    pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
-        let i = i.into();
-        if need_runtime_check() {
-            lc_assert!(i.cmplt(const_(N as u32)));
-        }
-
-        Expr::<T>::from_node(__current_scope(|b| {
-            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
-            b.call(Func::Load, &[gep], T::type_())
-        }))
-    }
     pub fn len(&self) -> Expr<u32> {
         const_(N as u32)
-    }
-    pub fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, value: V) {
-        let i = i.into();
-        let value = value.into();
-
-        if need_runtime_check() {
-            lc_assert!(i.cmplt(const_(N as u32)));
-        }
-
-        __current_scope(|b| {
-            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
-            b.update(gep, value.node());
-        });
     }
 }
 
@@ -1276,15 +1340,6 @@ impl<T: Value, const N: usize> ArrayExpr<T, N> {
     pub fn zero() -> Self {
         let node = __current_scope(|b| b.call(Func::ZeroInitializer, &[], <[T; N]>::type_()));
         Self::from_node(node)
-    }
-    pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
-        let i = i.into();
-
-        lc_assert!(i.cmplt(const_(N as u32)));
-
-        Expr::<T>::from_node(__current_scope(|b| {
-            b.call(Func::ExtractElement, &[self.node, i.node()], T::type_())
-        }))
     }
     pub fn len(&self) -> Expr<u32> {
         const_(N as u32)

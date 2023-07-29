@@ -167,7 +167,7 @@ impl Compiler {
                     #vis fn #set_ident<__T:Into<#crate_path ::Expr<#ty>>>(&self, value: __T) -> Self {
                         use #crate_path ::*;
                         let value = value.into();
-                        Self::from_node(#crate_path ::__insert::<#name #ty_generics>(self.node, #i, FromNode::node(&value)))
+                        Self::from_node(#crate_path ::__insert::<#name #ty_generics>(self.node, #i, ToNode::node(&value)))
                     }
                 )
             })
@@ -283,6 +283,9 @@ impl Compiler {
                 fn from_node(node: #crate_path ::NodeRef) -> Self {
                     Self { node, _marker:std::marker::PhantomData }
                 }
+            }
+            #[allow(unused_parens)]
+            impl #impl_generics #crate_path ::ToNode  for #expr_proxy_name #ty_generics #where_clause {
                 fn node(&self) -> #crate_path ::NodeRef {
                     self.node
                 }
@@ -297,6 +300,8 @@ impl Compiler {
                 fn from_node(node: #crate_path ::NodeRef) -> Self {
                     Self { node, _marker:std::marker::PhantomData }
                 }
+            }
+            impl #impl_generics #crate_path ::ToNode for #var_proxy_name #ty_generics #where_clause {
                 fn node(&self) -> #crate_path ::NodeRef {
                     self.node
                 }
@@ -356,7 +361,7 @@ impl Compiler {
                 #(#expr_proxy_field_methods)*
                 #vis fn new(#(#field_names: impl Into<#crate_path ::Expr<#field_types>>),*) -> Self {
                     use #crate_path ::*;
-                    let node = #crate_path ::__compose::<#name #ty_generics>(&[ #( FromNode::node(&#field_names.into()) ),* ]);
+                    let node = #crate_path ::__compose::<#name #ty_generics>(&[ #( ToNode::node(&#field_names.into()) ),* ]);
                     Self { node, _marker:std::marker::PhantomData }
                 }
             }

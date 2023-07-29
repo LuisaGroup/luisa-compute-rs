@@ -55,6 +55,8 @@ impl<T: Copy + 'static + Value> FromNode for PrimExpr<T> {
             _phantom: std::marker::PhantomData,
         }
     }
+}
+impl<T: Copy + 'static + Value> ToNode for PrimExpr<T> {
     fn node(&self) -> NodeRef {
         self.node
     }
@@ -531,8 +533,8 @@ macro_rules! impl_binop {
             type Output = Expr<$t>;
             fn $method(self, rhs: Expr<$t>) -> Self::Output {
                 __current_scope(|s| {
-                    let lhs = FromNode::node(&self);
-                    let rhs = FromNode::node(&rhs);
+                    let lhs = ToNode::node(&self);
+                    let rhs = ToNode::node(&rhs);
                     let ret = s.call(Func::$tr, &[lhs, rhs], Self::Output::type_());
                     Expr::<$t>::from_node(ret)
                 })
@@ -580,7 +582,7 @@ macro_rules! impl_not {
                 __current_scope(|s| {
                     let ret = s.call(
                         Func::BitNot,
-                        &[FromNode::node(&self)],
+                        &[ToNode::node(&self)],
                         Self::Output::type_(),
                     );
                     Expr::<$t>::from_node(ret)
@@ -595,7 +597,7 @@ macro_rules! impl_neg {
             type Output = Expr<$t>;
             fn neg(self) -> Self::Output {
                 __current_scope(|s| {
-                    let ret = s.call(Func::Neg, &[FromNode::node(&self)], Self::Output::type_());
+                    let ret = s.call(Func::Neg, &[ToNode::node(&self)], Self::Output::type_());
                     Expr::<$t>::from_node(ret)
                 })
             }
@@ -608,7 +610,7 @@ macro_rules! impl_fneg {
             type Output = Expr<$t>;
             fn neg(self) -> Self::Output {
                 __current_scope(|s| {
-                    let ret = s.call(Func::Neg, &[FromNode::node(&self)], Self::Output::type_());
+                    let ret = s.call(Func::Neg, &[ToNode::node(&self)], Self::Output::type_());
                     Expr::<$t>::from_node(ret)
                 })
             }
@@ -621,7 +623,7 @@ impl Not for PrimExpr<bool> {
         __current_scope(|s| {
             let ret = s.call(
                 Func::BitNot,
-                &[FromNode::node(&self)],
+                &[ToNode::node(&self)],
                 Self::Output::type_(),
             );
             FromNode::from_node(ret)

@@ -499,6 +499,14 @@ impl Swapchain {
 pub struct Event {
     pub(crate) handle: Arc<EventHandle>,
 }
+pub struct EventWait<'a> {
+    event: &'a Event,
+    ticket: u64,
+}
+pub struct EventSignal<'a> {
+    event: &'a Event,
+    ticket: u64,
+}
 
 impl Event {
     #[inline]
@@ -522,6 +530,20 @@ impl Event {
             .device
             .inner
             .is_event_completed(self.handle.handle, ticket)
+    }
+    #[inline]
+    pub fn wait(&self, ticket: u64) -> EventWait {
+        EventWait {
+            event: self,
+            ticket,
+        }
+    }
+    #[inline]
+    pub fn signal(&self, ticket: u64) -> EventSignal {
+        EventSignal {
+            event: self,
+            ticket,
+        }
     }
 }
 
@@ -723,7 +745,31 @@ impl<'a> Scope<'a> {
         self
     }
 }
-
+impl<'a> std::ops::Shl<Command<'a>> for &'a Scope<'a> {
+    type Output = Self;
+    #[inline]
+    #[allow(unused_must_use)]
+    fn shl(self, rhs: Command<'a>) -> Self::Output {
+        self.submit(std::iter::once(rhs));
+        self
+    }
+}
+impl<'a> std::ops::Shl<EventSignal<'a>> for &'a Scope<'a> {
+    type Output = Self;
+    #[inline]
+    #[allow(unused_must_use)]
+    fn shl(self, rhs: EventSignal<'a>) -> Self::Output {
+        self.signal(rhs.event, rhs.ticket)
+    }
+}
+impl<'a> std::ops::Shl<EventWait<'a>> for &'a Scope<'a> {
+    type Output = Self;
+    #[inline]
+    #[allow(unused_must_use)]
+    fn shl(self, rhs: EventWait<'a>) -> Self::Output {
+        self.wait(rhs.event, rhs.ticket)
+    }
+}
 impl<'a> Drop for Scope<'a> {
     fn drop(&mut self) {
         if !self.synchronized.get() {

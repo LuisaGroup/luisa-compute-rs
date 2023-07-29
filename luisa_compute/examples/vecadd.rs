@@ -31,7 +31,7 @@ fn main() {
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
         let vx = var!(f32, 2.0); // create a local mutable variable
-        *vx.write() += *vx + x;
+        *vx.get_mut() += *vx + x;
         buf_z.write(tid, vx.load() + y);
     });
     kernel.dispatch([1024, 1, 1], &z);

@@ -367,7 +367,7 @@ macro_rules! impl_proxy_fields {
             }
             #[inline]
             pub fn set_x(&self, value: Expr<$scalar>) -> Self {
-                Self::from_node(__insert::<$vec>(self.node, 0, FromNode::node(&value)))
+                Self::from_node(__insert::<$vec>(self.node, 0, ToNode::node(&value)))
             }
         }
     };
@@ -379,7 +379,7 @@ macro_rules! impl_proxy_fields {
             }
             #[inline]
             pub fn set_y(&self, value: Expr<$scalar>) -> Self {
-                Self::from_node(__insert::<$vec>(self.node, 1, FromNode::node(&value)))
+                Self::from_node(__insert::<$vec>(self.node, 1, ToNode::node(&value)))
             }
         }
     };
@@ -391,7 +391,7 @@ macro_rules! impl_proxy_fields {
             }
             #[inline]
             pub fn set_z(&self, value: Expr<$scalar>) -> Self {
-                Self::from_node(__insert::<$vec>(self.node, 2, FromNode::node(&value)))
+                Self::from_node(__insert::<$vec>(self.node, 2, ToNode::node(&value)))
             }
         }
     };
@@ -403,7 +403,7 @@ macro_rules! impl_proxy_fields {
             }
             #[inline]
             pub fn set_w(&self, value: Expr<$scalar>) -> Self {
-                Self::from_node(__insert::<$vec>(self.node, 3, FromNode::node(&value)))
+                Self::from_node(__insert::<$vec>(self.node, 3, ToNode::node(&value)))
             }
         }
     };
@@ -492,6 +492,8 @@ macro_rules! impl_vec_proxy {
             fn from_node(node: NodeRef) -> Self {
                 Self { node }
             }
+        }
+        impl ToNode for $expr_proxy {
             fn node(&self) -> NodeRef {
                 self.node
             }
@@ -500,6 +502,8 @@ macro_rules! impl_vec_proxy {
             fn from_node(node: NodeRef) -> Self {
                 Self { node }
             }
+        }
+        impl ToNode for $var_proxy {
             fn node(&self) -> NodeRef {
                 self.node
             }
@@ -528,7 +532,7 @@ macro_rules! impl_vec_proxy {
             #[inline]
             pub fn new($($comp: Expr<$scalar>), *) -> Self {
                 Self {
-                    node: __compose::<$vec>(&[$(FromNode::node(&$comp)), *]),
+                    node: __compose::<$vec>(&[$(ToNode::node(&$comp)), *]),
                 }
             }
             pub fn at(&self, index: usize) -> Expr<$scalar> {
@@ -588,6 +592,8 @@ macro_rules! impl_mat_proxy {
             fn from_node(node: NodeRef) -> Self {
                 Self { node }
             }
+        }
+        impl ToNode for $expr_proxy {
             fn node(&self) -> NodeRef {
                 self.node
             }
@@ -599,6 +605,8 @@ macro_rules! impl_mat_proxy {
             fn from_node(node: NodeRef) -> Self {
                 Self { node }
             }
+        }
+        impl ToNode for $var_proxy {
             fn node(&self) -> NodeRef {
                 self.node
             }
@@ -622,7 +630,7 @@ macro_rules! impl_mat_proxy {
             #[inline]
             pub fn new($($comp: Expr<$vec>), *) -> Self {
                 Self {
-                    node: __compose::<$mat>(&[$(FromNode::node(&$comp)), *]),
+                    node: __compose::<$mat>(&[$(ToNode::node(&$comp)), *]),
                 }
             }
             pub fn col(&self, index: usize) -> Expr<$vec> {
@@ -1009,7 +1017,7 @@ macro_rules! impl_int_binop {
                 __current_scope(|s| {
                     let ret = s.call(
                         Func::BitNot,
-                        &[FromNode::node(&self)],
+                        &[ToNode::node(&self)],
                         Self::Output::type_(),
                     );
                     Expr::<$t>::from_node(ret)
@@ -1303,7 +1311,7 @@ macro_rules! impl_permute {
                 Expr::<$v2>::from_node(__current_scope(|s| {
                     s.call(
                         Func::Permute,
-                        &[self.node, FromNode::node(&x), FromNode::node(&y)],
+                        &[self.node, ToNode::node(&x), ToNode::node(&y)],
                         <$v2 as TypeOf>::type_(),
                     )
                 }))
@@ -1320,9 +1328,9 @@ macro_rules! impl_permute {
                         Func::Permute,
                         &[
                             self.node,
-                            FromNode::node(&x),
-                            FromNode::node(&y),
-                            FromNode::node(&z),
+                            ToNode::node(&x),
+                            ToNode::node(&y),
+                            ToNode::node(&z),
                         ],
                         <$v3 as TypeOf>::type_(),
                     )
@@ -1342,10 +1350,10 @@ macro_rules! impl_permute {
                         Func::Permute,
                         &[
                             self.node,
-                            FromNode::node(&x),
-                            FromNode::node(&y),
-                            FromNode::node(&z),
-                            FromNode::node(&w),
+                            ToNode::node(&x),
+                            ToNode::node(&y),
+                            ToNode::node(&z),
+                            ToNode::node(&w),
                         ],
                         <$v4 as TypeOf>::type_(),
                     )

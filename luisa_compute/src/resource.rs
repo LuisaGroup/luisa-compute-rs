@@ -962,7 +962,11 @@ pub struct BufferVar<T: Value> {
     pub(crate) handle: Option<Arc<BufferHandle>>,
     pub(crate) node: NodeRef,
 }
-
+impl<T: Value> ToNode for BufferVar<T> {
+    fn node(&self) -> NodeRef {
+        self.node
+    }
+}
 impl<T: Value> Drop for BufferVar<T> {
     fn drop(&mut self) {}
 }
@@ -978,9 +982,14 @@ pub struct BindlessBufferVar<T> {
     buffer_index: Expr<u32>,
     _marker: std::marker::PhantomData<T>,
 }
-
-impl<T: Value> BindlessBufferVar<T> {
-    pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
+impl<T: Value> ToNode for BindlessBufferVar<T> {
+    fn node(&self) -> NodeRef {
+        self.array
+    }
+}
+impl<T: Value> IndexRead for BindlessBufferVar<T> {
+    type Element = T;
+    fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
         if need_runtime_check() {
             lc_assert!(i.cmplt(self.len()));
@@ -989,11 +998,13 @@ impl<T: Value> BindlessBufferVar<T> {
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessBufferRead,
-                &[self.array, self.buffer_index.node(), FromNode::node(&i)],
+                &[self.array, self.buffer_index.node(), ToNode::node(&i)],
                 T::type_(),
             )
         }))
     }
+}
+impl<T: Value> BindlessBufferVar<T> {
     pub fn len(&self) -> Expr<u32> {
         let stride = const_(T::type_().size() as u32);
         Expr::<u32>::from_node(__current_scope(|b| {
@@ -1266,7 +1277,38 @@ impl BindlessArrayVar {
         }
     }
 }
-
+impl<T: Value> IndexRead for BufferVar<T> {
+    type Element = T;
+    fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
+        let i = i.into();
+        if need_runtime_check() {
+            lc_assert!(i.cmplt(self.len()));
+        }
+        __current_scope(|b| {
+            FromNode::from_node(b.call(
+                Func::BufferRead,
+                &[self.node, ToNode::node(&i)],
+                T::type_(),
+            ))
+        })
+    }
+}
+impl<T: Value> IndexWrite for BufferVar<T> {
+    fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, v: V) {
+        let i = i.into();
+        let v = v.into();
+        if need_runtime_check() {
+            lc_assert!(i.cmplt(self.len()));
+        }
+        __current_scope(|b| {
+            b.call(
+                Func::BufferWrite,
+                &[self.node, ToNode::node(&i), v.node()],
+                Type::void(),
+            )
+        });
+    }
+}
 impl<T: Value> BufferVar<T> {
     pub fn new(buffer: &BufferView<'_, T>) -> Self {
         let node = RECORDER.with(|r| {
@@ -1301,33 +1343,6 @@ impl<T: Value> BufferVar<T> {
             __current_scope(|b| b.call(Func::BufferSize, &[self.node], u32::type_())).into(),
         )
     }
-    pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
-        let i = i.into();
-        if need_runtime_check() {
-            lc_assert!(i.cmplt(self.len()));
-        }
-        __current_scope(|b| {
-            FromNode::from_node(b.call(
-                Func::BufferRead,
-                &[self.node, FromNode::node(&i)],
-                T::type_(),
-            ))
-        })
-    }
-    pub fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, v: V) {
-        let i = i.into();
-        let v = v.into();
-        if need_runtime_check() {
-            lc_assert!(i.cmplt(self.len()));
-        }
-        __current_scope(|b| {
-            b.call(
-                Func::BufferWrite,
-                &[self.node, FromNode::node(&i), v.node()],
-                Type::void(),
-            )
-        });
-    }
 }
 
 macro_rules! impl_atomic {
@@ -1346,7 +1361,7 @@ macro_rules! impl_atomic {
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicExchange,
-                        &[self.node, FromNode::node(&i), v.node()],
+                        &[self.node, ToNode::node(&i), v.node()],
                         <$t>::type_(),
                     )
                 }))
@@ -1372,7 +1387,7 @@ macro_rules! impl_atomic {
                         Func::AtomicCompareExchange,
                         &[
                             self.node,
-                            FromNode::node(&i),
+                            ToNode::node(&i),
                             expected.node(),
                             desired.node(),
                         ],
@@ -1393,7 +1408,7 @@ macro_rules! impl_atomic {
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicFetchAdd,
-                        &[self.node, FromNode::node(&i), v.node()],
+                        &[self.node, ToNode::node(&i), v.node()],
                         <$t>::type_(),
                     )
                 }))
@@ -1411,7 +1426,7 @@ macro_rules! impl_atomic {
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicFetchSub,
-                        &[self.node, FromNode::node(&i), v.node()],
+                        &[self.node, ToNode::node(&i), v.node()],
                         <$t>::type_(),
                     )
                 }))
@@ -1429,7 +1444,7 @@ macro_rules! impl_atomic {
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicFetchMin,
-                        &[self.node, FromNode::node(&i), v.node()],
+                        &[self.node, ToNode::node(&i), v.node()],
                         <$t>::type_(),
                     )
                 }))
@@ -1447,7 +1462,7 @@ macro_rules! impl_atomic {
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicFetchMax,
-                        &[self.node, FromNode::node(&i), v.node()],
+                        &[self.node, ToNode::node(&i), v.node()],
                         <$t>::type_(),
                     )
                 }))
@@ -1471,7 +1486,7 @@ macro_rules! impl_atomic_bit {
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicFetchAnd,
-                        &[self.node, FromNode::node(&i), v.node()],
+                        &[self.node, ToNode::node(&i), v.node()],
                         <$t>::type_(),
                     )
                 }))
@@ -1489,7 +1504,7 @@ macro_rules! impl_atomic_bit {
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicFetchOr,
-                        &[self.node, FromNode::node(&i), v.node()],
+                        &[self.node, ToNode::node(&i), v.node()],
                         <$t>::type_(),
                     )
                 }))
@@ -1507,7 +1522,7 @@ macro_rules! impl_atomic_bit {
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
                         Func::AtomicFetchXor,
-                        &[self.node, FromNode::node(&i), v.node()],
+                        &[self.node, ToNode::node(&i), v.node()],
                         <$t>::type_(),
                     )
                 }))

@@ -1,5 +1,6 @@
 use std::env::current_exe;
 
+use luisa::prelude::*;
 use luisa::*;
 use luisa_compute as luisa;
 use luisa_compute_api_types::StreamTag;
@@ -44,20 +45,32 @@ fn event() {
         let scope_a = stream_a.scope();
         let scope_b = stream_b.scope();
         let event = device.create_event();
-        scope_a
-            .submit([add.dispatch_async([1, 1, 1], &a, &1)])
-            .submit([add.dispatch_async([1, 1, 1], &b, &4)])
-            .signal(&event, 1);
-        scope_b
-            .wait(&event, 1)
-            .submit([add.dispatch_async([1, 1, 1], &a, &3)])
-            .submit([add.dispatch_async([1, 1, 1], &b, &5)])
-            .signal(&event, 2);
-        scope_a
-            .wait(&event, 2)
-            .submit([mul.dispatch_async([1, 1, 1], &a, &b)])
-            .signal(&event, 3);
+        let _ = &scope_a
+            << add.dispatch_async([1, 1, 1], &a, &1)
+            << add.dispatch_async([1, 1, 1], &b, &4)
+            << event.signal(1);
+        let _ = &scope_b
+            << event.wait(1)
+            << add.dispatch_async([1, 1, 1], &a, &3)
+            << add.dispatch_async([1, 1, 1], &b, &5)
+            << event.signal(2);
+        let _ =
+            &scope_a << event.wait(2) << mul.dispatch_async([1, 1, 1], &a, &b) << event.signal(3);
         event.synchronize(3);
+        // scope_a
+        //     .submit([add.dispatch_async([1, 1, 1], &a, &1)])
+        //     .submit([add.dispatch_async([1, 1, 1], &b, &4)])
+        //     .signal(&event, 1);
+        // scope_b
+        //     .wait(&event, 1)
+        //     .submit([add.dispatch_async([1, 1, 1], &a, &3)])
+        //     .submit([add.dispatch_async([1, 1, 1], &b, &5)])
+        //     .signal(&event, 2);
+        // scope_a
+        //     .wait(&event, 2)
+        //     .submit([mul.dispatch_async([1, 1, 1], &a, &b)])
+        //     .signal(&event, 3);
+        // event.synchronize(3);
     }
     let v = a.copy_to_vec();
     assert_eq!(v[0], (1 + 3) * (4 + 5));

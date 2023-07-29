@@ -268,7 +268,7 @@ fn main() {
                     let lcg = create_static_callable::<(Var<u32>,), Expr<f32>>(|state:Var<u32>|{
                          const LCG_A: u32 = 1664525u32;
                         const LCG_C: u32 = 1013904223u32;
-                        *state.write() = LCG_A * *state + LCG_C;
+                        *state.get_mut() = LCG_A * *state + LCG_C;
                         (*state & 0x00ffffffu32).float() * (1.0f32 / 0x01000000u32 as f32)
                     });
                     lcg.call(state)
@@ -416,8 +416,8 @@ fn main() {
                         let ux = lcg(state);
                         let uy = lcg(state);
                         let new_direction = onb.to_world(cosine_sample_hemisphere(make_float2(ux, uy)));
-                        *ray.write() = make_ray(pp, new_direction, 0.0f32.into(), std::f32::MAX.into());
-                        *beta.write() *= albedo;
+                        *ray.get_mut() = make_ray(pp, new_direction, 0.0f32.into(), std::f32::MAX.into());
+                        *beta.get_mut() *= albedo;
                         pdf_bsdf.store(cos_wi * std::f32::consts::FRAC_1_PI);
 
                         // russian roulette
@@ -426,9 +426,9 @@ fn main() {
                         let q = l.max(0.05f32);
                         let r = lcg(state);
                         if_!(r.cmpgt(q), { break_(); });
-                        *beta.write() = *beta / q;
+                        *beta.get_mut() = *beta / q;
 
-                        *depth.write() += 1;
+                        *depth.get_mut() += 1;
                     });
                 });
                 radiance.store(radiance.load() / SPP_PER_DISPATCH as f32);

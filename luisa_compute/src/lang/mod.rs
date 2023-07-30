@@ -1667,13 +1667,18 @@ impl KernelBuilder {
             assert_eq!(r.scopes.len(), 1);
             let scope = r.scopes.pop().unwrap();
             let entry = scope.finish();
-
+            let ir_module = Module {
+                entry,
+                kind: ModuleKind::Kernel,
+                pools: r.pools.clone().unwrap(),
+            };
+            let ir_module = {
+                // perform IR passes
+                let ad_transform = transform::autodiff::Autodiff;
+                ad_transform.transform(ir_module)
+            };
             let module = CallableModule {
-                module: Module {
-                    entry,
-                    kind: ModuleKind::Kernel,
-                    pools: r.pools.clone().unwrap(),
-                },
+                module: ir_module,
                 ret_type,
                 cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
                 captures: CBoxedSlice::new(captures),
@@ -2237,7 +2242,7 @@ impl<R: Aggregate> SwitchBuilder<R> {
 /**
  * If you want rustfmt to format your code, use if_!(cond, { .. }, { .. }) or if_!(cond, { .. }, else, {...})
  * instead of if_!(cond, { .. }, else {...}).
- * 
+ *
  */
 macro_rules! if_ {
     ($cond:expr, $then:block, else $else_:block) => {

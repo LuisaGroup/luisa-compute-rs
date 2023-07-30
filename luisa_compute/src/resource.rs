@@ -487,6 +487,15 @@ impl BindlessArray {
             })),
         }
     }
+    pub fn tex2d(&self, tex2d_index: impl Into<Expr<u32>>) -> BindlessTex2dVar {
+        self.var().tex2d(tex2d_index)
+    }
+    pub fn tex3d(&self, tex3d_index: impl Into<Expr<u32>>) -> BindlessTex3dVar {
+        self.var().tex3d(tex3d_index)
+    }
+    pub fn buffer<T: Value>(&self, buffer_index: impl Into<Expr<u32>>) -> BindlessBufferVar<T> {
+        self.var().buffer::<T>(buffer_index)
+    }
 }
 pub use api::{PixelFormat, PixelStorage, Sampler, SamplerAddress, SamplerFilter};
 use luisa_compute_ir::context::type_hash;
@@ -996,6 +1005,7 @@ impl<T: Value> ToNode for BindlessBufferVar<T> {
         self.array
     }
 }
+
 impl<T: Value> IndexRead for BindlessBufferVar<T> {
     type Element = T;
     fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
@@ -1284,6 +1294,22 @@ impl BindlessArrayVar {
             node,
             handle: Some(array.handle.clone()),
         }
+    }
+}
+impl<T: Value> ToNode for Buffer<T> {
+    fn node(&self) -> NodeRef {
+        self.var().node()
+    }
+}
+impl<T: Value> IndexRead for Buffer<T> {
+    type Element = T;
+    fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
+        self.var().read(i)
+    }
+}
+impl<T: Value> IndexWrite for Buffer<T> {
+    fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, v: V) {
+        self.var().write(i, v)
     }
 }
 impl<T: Value> IndexRead for BufferVar<T> {

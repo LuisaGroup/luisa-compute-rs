@@ -331,8 +331,7 @@ fn main() {
 
                 let radiance = var!(Float3);
                 radiance.store(make_float3(0.0f32, 0.0f32, 0.0f32));
-
-                for_range(const_(0i32)..const_(SPP_PER_DISPATCH as i32), |_| {
+                for_range(0..SPP_PER_DISPATCH as u32, |_| {
                     let init_ray = generate_ray(pixel * make_float2(1.0f32, -1.0f32));
                     let ray = var!(Ray);
                     ray.store(init_ray);

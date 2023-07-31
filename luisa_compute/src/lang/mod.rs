@@ -2270,23 +2270,109 @@ macro_rules! loop_ {
         while_!(const_(true), $body)
     };
 }
+pub trait ForLoopRange {
+    type Element: Value;
+    fn start(&self) -> NodeRef;
+    fn end(&self) -> NodeRef;
+    fn end_inclusive(&self) -> bool;
+}
+macro_rules! impl_range {
+    ($t:ty) => {
+        impl ForLoopRange for std::ops::RangeInclusive<$t> {
+            type Element = $t;
+            fn start(&self) -> NodeRef {
+                assert!(!self.is_empty());
+                const_(*self.start()).node()
+            }
+            fn end(&self) -> NodeRef {
+                assert!(!self.is_empty());
+                const_(*self.end()).node()
+            }
+            fn end_inclusive(&self) -> bool {
+                true
+            }
+        }
+        impl ForLoopRange for std::ops::RangeInclusive<Expr<$t>> {
+            type Element = $t;
+            fn start(&self) -> NodeRef {
+                self.start().node()
+            }
+            fn end(&self) -> NodeRef {
+                self.end().node()
+            }
+            fn end_inclusive(&self) -> bool {
+                true
+            }
+        }
+        impl ForLoopRange for std::ops::Range<$t> {
+            type Element = $t;
+            fn start(&self) -> NodeRef {
+                assert!(!self.is_empty());
+                const_(self.start).node()
+            }
+            fn end(&self) -> NodeRef {
+                assert!(!self.is_empty());
+                const_(self.end).node()
+            }
+            fn end_inclusive(&self) -> bool {
+                false
+            }
+        }
+        impl ForLoopRange for std::ops::Range<Expr<$t>> {
+            type Element = $t;
+            fn start(&self) -> NodeRef {
+                self.start.node()
+            }
+            fn end(&self) -> NodeRef {
+                self.end.node()
+            }
+            fn end_inclusive(&self) -> bool {
+                false
+            }
+        }
+    };
+}
+impl_range!(i32);
+impl_range!(i64);
+impl_range!(u32);
+impl_range!(u64);
+
 #[inline]
-pub fn for_range(r: impl RangeBounds<Expr<i32>>, body: impl Fn(Expr<i32>)) {
-    let start = match r.start_bound() {
-        Bound::Included(v) => *v,
-        Bound::Excluded(v) => *v + 1,
-        Bound::Unbounded => 0i32.into(),
+pub fn for_range<R: ForLoopRange>(r: R, body: impl Fn(Expr<R::Element>)) {
+    let start = r.start();
+    let end = r.end();
+    let inc = |v: NodeRef| {
+        __current_scope(|b| {
+            let one = b.const_(Const::One(v.type_().clone()));
+            b.call(Func::Add, &[v, one], v.type_().clone())
+        })
     };
-    let end = match r.end_bound() {
-        Bound::Included(v) => *v + 1,
-        Bound::Excluded(v) => *v,
-        Bound::Unbounded => i32::MAX.into(),
-    };
-    let i = var!(i32, start);
-    while_!(i.load().cmplt(end), {
-        body(i.load());
-        i.store(i.load() + 1);
-    });
+    let i = __current_scope(|b| b.local(start));
+    generic_loop(
+        || {
+            __current_scope(|b| {
+                let i = b.call(Func::Load, &[i], i.type_().clone());
+                Bool::from_node(b.call(
+                    if r.end_inclusive() {
+                        Func::Le
+                    } else {
+                        Func::Lt
+                    },
+                    &[i, end],
+                    <bool as TypeOf>::type_(),
+                ))
+            })
+        },
+        move || {
+            let i = __current_scope(|b| b.call(Func::Load, &[i], i.type_().clone()));
+            body(Expr::<R::Element>::from_node(i));
+        },
+        || {
+            let i_old = __current_scope(|b| b.call(Func::Load, &[i], i.type_().clone()));
+            let i_new = inc(i_old);
+            __current_scope(|b| b.update(i, i_new));
+        },
+    )
 }
 
 #[inline]

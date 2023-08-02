@@ -456,6 +456,57 @@ fn array_read_write() {
     }
 }
 #[test]
+fn array_read_write3() {
+    let device = get_device();
+    let x: Buffer<[i32; 4]> = device.create_buffer(1024);
+    let kernel = device.create_kernel::<()>(&|| {
+        let buf_x = x.var();
+        let tid = dispatch_id().x();
+        let arr = local_zeroed::<[i32; 4]>();
+        for_range(0..4u32, |i| {
+            arr.write(i, tid.int() + i.int());
+        });
+        buf_x.write(tid, arr.load());
+    });
+    kernel.dispatch([1024, 1, 1]);
+    let x_data = x.view(..).copy_to_vec();
+    for i in 0..1024 {
+        assert_eq!(
+            x_data[i],
+            [i as i32, i as i32 + 1, i as i32 + 2, i as i32 + 3]
+        );
+    }
+}
+#[test]
+fn array_read_write4() {
+    let device = get_device();
+    let x: Buffer<[i32; 4]> = device.create_buffer(1024);
+    let kernel = device.create_kernel::<()>(&|| {
+        let buf_x = x.var();
+        let tid = dispatch_id().x();
+        let arr = local_zeroed::<[i32; 4]>();
+        for_range(0..6u32, |_| {
+            for_range(0..4u32, |i| {
+                arr.write(i, arr.read(i) + tid.int() + i.int());
+            });
+        });
+        buf_x.write(tid, arr.load());
+    });
+    kernel.dispatch([1024, 1, 1]);
+    let x_data = x.view(..).copy_to_vec();
+    for i in 0..1024 {
+        assert_eq!(
+            x_data[i],
+            [
+                6 * i as i32,
+                6 * i as i32 + 1 * 6,
+                6 * i as i32 + 2 * 6,
+                6 * i as i32 + 3 * 6
+            ]
+        );
+    }
+}
+#[test]
 fn array_read_write2() {
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);

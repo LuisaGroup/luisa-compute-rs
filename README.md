@@ -197,6 +197,13 @@ if_!(cond, { /* then */});
 if_!(cond, { /* then */}, { /* else */});
 if_!(cond, { value_a }, { value_b })
 while_!(cond, { /* body */});
+for_range(start..end, |i| { /* body */});
+/* For loops in C-style are mapped to generic loops
+for(init; cond; update) { body } is mapped to:
+init;
+generic_loop(cond, body, update)
+*/
+generic_loop(|| -> Expr<bool>{ /*cond*/ }, || { /* body */}, || { /* update after each iteration */})
 break_();
 continue_();
 let (x,y) = switch::<(Expr<i32>, Expr<f32>)>(value)

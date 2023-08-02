@@ -2281,11 +2281,9 @@ macro_rules! impl_range {
         impl ForLoopRange for std::ops::RangeInclusive<$t> {
             type Element = $t;
             fn start(&self) -> NodeRef {
-                assert!(!self.is_empty());
                 const_(*self.start()).node()
             }
             fn end(&self) -> NodeRef {
-                assert!(!self.is_empty());
                 const_(*self.end()).node()
             }
             fn end_inclusive(&self) -> bool {
@@ -2307,11 +2305,9 @@ macro_rules! impl_range {
         impl ForLoopRange for std::ops::Range<$t> {
             type Element = $t;
             fn start(&self) -> NodeRef {
-                assert!(!self.is_empty());
                 const_(self.start).node()
             }
             fn end(&self) -> NodeRef {
-                assert!(!self.is_empty());
                 const_(self.end).node()
             }
             fn end_inclusive(&self) -> bool {

@@ -73,6 +73,11 @@ pub fn init_logger() {
         .format_timestamp_secs()
         .init();
 }
+pub fn init_logger_verbose() {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug"))
+        .format_timestamp_secs()
+        .init();
+}
 lazy_static! {
     static ref CTX_CACHE: Mutex<HashMap<String, Weak<backend::Context>>> =
         Mutex::new(HashMap::new());

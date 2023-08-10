@@ -644,6 +644,10 @@ impl_vec_proxy!(Bool2, Bool2Expr, Bool2Var, bool, Bool, 2, x, y);
 impl_vec_proxy!(Bool3, Bool3Expr, Bool3Var, bool, Bool, 3, x, y, z);
 impl_vec_proxy!(Bool4, Bool4Expr, Bool4Var, bool, Bool, 4, x, y, z, w);
 
+impl_vec_proxy!(Half2, Half2Expr, Half2Var, f16, Float16, 2, x, y);
+impl_vec_proxy!(Half3, Half3Expr, Half3Var, f16, Float16, 3, x, y, z);
+impl_vec_proxy!(Half4, Half4Expr, Half4Var, f16, Float16, 4, x, y, z, w);
+
 impl_vec_proxy!(Float2, Float2Expr, Float2Var, f32, Float32, 2, x, y);
 impl_vec_proxy!(Float3, Float3Expr, Float3Var, f32, Float32, 3, x, y, z);
 impl_vec_proxy!(Float4, Float4Expr, Float4Var, f32, Float32, 4, x, y, z, w);
@@ -1193,6 +1197,50 @@ macro_rules! impl_vec_op {
         }
     };
 }
+
+// a little shit
+macro_rules! impl_arith_binop_f16 {
+    ($t:ty, $scalar:ty, $proxy:ty) => {
+        impl_common_op_f16!($t, $scalar, $proxy);
+        impl_binop!($t, $scalar, $proxy, Add, add, AddAssign, add_assign);
+        impl_binop!($t, $scalar, $proxy, Sub, sub, SubAssign, sub_assign);
+        impl_binop!($t, $scalar, $proxy, Mul, mul, MulAssign, mul_assign);
+        impl_binop!($t, $scalar, $proxy, Div, div, DivAssign, div_assign);
+        impl_binop!($t, $scalar, $proxy, Rem, rem, RemAssign, rem_assign);
+        impl_reduce!($t, $scalar, $proxy);
+        impl std::ops::Neg for $proxy {
+            type Output = $proxy;
+            fn neg(self) -> Self::Output {
+                <$proxy>::from_node(__current_scope(|s| {
+                    s.call(Func::Neg, &[self.node], <$t as TypeOf>::type_())
+                }))
+            }
+        }
+    };
+}
+macro_rules! impl_common_op_f16 {
+    ($t:ty, $scalar:ty, $proxy:ty) => {
+        impl $proxy {
+            pub fn splat<V: Into<PrimExpr<$scalar>>>(value: V) -> Self {
+                let value = value.into();
+                <$proxy>::from_node(__current_scope(|s| {
+                    s.call(Func::Vec, &[value.node], <$t as TypeOf>::type_())
+                }))
+            }
+            pub fn zero() -> Self {
+                Self::splat(f16::from_f32(0.0f32))
+            }
+            pub fn one() -> Self {
+                Self::splat(f16::from_f32(1.0f32))
+            }
+        }
+    };
+}
+
+impl_arith_binop_f16!(Half2, f16, Half2Expr);
+impl_arith_binop_f16!(Half3, f16, Half3Expr);
+impl_arith_binop_f16!(Half4, f16, Half4Expr);
+
 impl_arith_binop!(Float2, f32, Float2Expr);
 impl_arith_binop!(Float3, f32, Float3Expr);
 impl_arith_binop!(Float4, f32, Float4Expr);
@@ -1268,6 +1316,10 @@ macro_rules! impl_select {
 impl_select!(Bool2, Bool2, Bool2Expr);
 impl_select!(Bool3, Bool3, Bool3Expr);
 impl_select!(Bool4, Bool4, Bool4Expr);
+
+impl_select!(Bool2, Half2, Half2Expr);
+impl_select!(Bool3, Half3, Half3Expr);
+impl_select!(Bool4, Half4, Half4Expr);
 
 impl_select!(Bool2, Float2, Float2Expr);
 impl_select!(Bool3, Float3, Float3Expr);
@@ -1362,6 +1414,11 @@ macro_rules! impl_permute {
         }
     };
 }
+
+impl_permute!(Vec2Swizzle, Half2Expr, 2, Half2, Half3, Half4);
+impl_permute!(Vec3Swizzle, Half3Expr, 3, Half2, Half3, Half4);
+impl_permute!(Vec4Swizzle, Half4Expr, 4, Half2, Half3, Half4);
+
 impl_permute!(Vec2Swizzle, Float2Expr, 2, Float2, Float3, Float4);
 impl_permute!(Vec3Swizzle, Float3Expr, 3, Float2, Float3, Float4);
 impl_permute!(Vec4Swizzle, Float4Expr, 4, Float2, Float3, Float4);
@@ -1415,6 +1472,7 @@ macro_rules! impl_var_trait2 {
             type Int = Int2Expr;
             type Uint = Uint2Expr;
             type Float = Float2Expr;
+            type Half = Half2Expr;
             type Bool = Bool2Expr;
             // type Double = Double2Expr;
             type Long = Long2Expr;
@@ -1439,6 +1497,7 @@ macro_rules! impl_var_trait3 {
             type Int = Int3Expr;
             type Uint = Uint3Expr;
             type Float = Float3Expr;
+            type Half = Half3Expr;
             type Bool = Bool3Expr;
             type Long = Long3Expr;
             type Ulong = Ulong3Expr;
@@ -1459,12 +1518,13 @@ macro_rules! impl_var_trait4 {
             type Value = $v;
             type Short = Short4Expr;
             type Ushort = Ushort4Expr;
-            type Int = Int2Expr;
-            type Uint = Uint2Expr;
-            type Float = Float2Expr;
-            type Bool = Bool2Expr;
-            type Long = Long2Expr;
-            type Ulong = Ulong2Expr;
+            type Int = Int4Expr;
+            type Uint = Uint4Expr;
+            type Float = Float4Expr;
+            type Half = Half4Expr;
+            type Bool = Bool4Expr;
+            type Long = Long4Expr;
+            type Ulong = Ulong4Expr;
         }
         impl CommonVarOp for $t {}
         impl VarCmp for $t {}
@@ -1476,6 +1536,8 @@ macro_rules! impl_var_trait4 {
         }
     };
 }
+
+impl_var_trait2!(Half2Expr, Half2);
 impl_var_trait2!(Float2Expr, Float2);
 impl_var_trait2!(Short2Expr, Short2);
 impl_var_trait2!(Ushort2Expr, Ushort2);
@@ -1485,6 +1547,7 @@ impl_var_trait2!(Bool2Expr, Bool2);
 impl_var_trait2!(Long2Expr, Long2);
 impl_var_trait2!(Ulong2Expr, Ulong2);
 
+impl_var_trait3!(Half3Expr, Half3);
 impl_var_trait3!(Float3Expr, Float3);
 impl_var_trait3!(Short3Expr, Short3);
 impl_var_trait3!(Ushort3Expr, Ushort3);
@@ -1494,6 +1557,7 @@ impl_var_trait3!(Bool3Expr, Bool3);
 impl_var_trait3!(Long3Expr, Long3);
 impl_var_trait3!(Ulong3Expr, Ulong3);
 
+impl_var_trait4!(Half4Expr, Half4);
 impl_var_trait4!(Float4Expr, Float4);
 impl_var_trait4!(Short4Expr, Short4);
 impl_var_trait4!(Ushort4Expr, Ushort4);
@@ -1513,9 +1577,14 @@ macro_rules! impl_float_trait {
         impl FloatVarTrait for $t {}
     };
 }
+
+impl_float_trait!(Half2Expr);
+impl_float_trait!(Half3Expr);
+impl_float_trait!(Half4Expr);
 impl_float_trait!(Float2Expr);
 impl_float_trait!(Float3Expr);
 impl_float_trait!(Float4Expr);
+
 macro_rules! impl_int_trait {
     ($t:ty) => {
         impl From<i64> for $t {
@@ -1529,15 +1598,26 @@ macro_rules! impl_int_trait {
 impl_int_trait!(Int2Expr);
 impl_int_trait!(Int3Expr);
 impl_int_trait!(Int4Expr);
+
 impl_int_trait!(Long2Expr);
 impl_int_trait!(Long3Expr);
 impl_int_trait!(Long4Expr);
+
 impl_int_trait!(Uint2Expr);
 impl_int_trait!(Uint3Expr);
 impl_int_trait!(Uint4Expr);
+
 impl_int_trait!(Ulong2Expr);
 impl_int_trait!(Ulong3Expr);
 impl_int_trait!(Ulong4Expr);
+
+impl_int_trait!(Short2Expr);
+impl_int_trait!(Short3Expr);
+impl_int_trait!(Short4Expr);
+
+impl_int_trait!(Ushort2Expr);
+impl_int_trait!(Ushort3Expr);
+impl_int_trait!(Ushort4Expr);
 
 impl Mul<Float2Expr> for Mat2Expr {
     type Output = Float2Expr;
@@ -1668,6 +1748,34 @@ impl Mat4Expr {
     }
 }
 impl_arith_binop_for_mat!(Mat4, f32, Mat4Expr);
+
+#[inline]
+pub fn make_half2<X: Into<PrimExpr<f16>>, Y: Into<PrimExpr<f16>>>(x: X, y: Y) -> Expr<Half2> {
+    Expr::<Half2>::new(x.into(), y.into())
+}
+#[inline]
+pub fn make_half3<X: Into<PrimExpr<f16>>, Y: Into<PrimExpr<f16>>, Z: Into<PrimExpr<f16>>>(
+    x: X,
+    y: Y,
+    z: Z,
+) -> Expr<Half3> {
+    Expr::<Half3>::new(x.into(), y.into(), z.into())
+}
+#[inline]
+pub fn make_half4<
+    X: Into<PrimExpr<f16>>,
+    Y: Into<PrimExpr<f16>>,
+    Z: Into<PrimExpr<f16>>,
+    W: Into<PrimExpr<f16>>,
+>(
+    x: X,
+    y: Y,
+    z: Z,
+    w: W,
+) -> Expr<Half4> {
+    Expr::<Half4>::new(x.into(), y.into(), z.into(), w.into())
+}
+
 #[inline]
 pub fn make_float2<X: Into<PrimExpr<f32>>, Y: Into<PrimExpr<f32>>>(x: X, y: Y) -> Expr<Float2> {
     Expr::<Float2>::new(x.into(), y.into())
@@ -1772,6 +1880,60 @@ pub fn make_uint4<
     w: W,
 ) -> Expr<Uint4> {
     Expr::<Uint4>::new(x.into(), y.into(), z.into(), w.into())
+}
+
+#[inline]
+pub fn make_short2<X: Into<PrimExpr<i16>>, Y: Into<PrimExpr<i16>>>(x: X, y: Y) -> Expr<Short2> {
+    Expr::<Short2>::new(x.into(), y.into())
+}
+#[inline]
+pub fn make_short3<X: Into<PrimExpr<i16>>, Y: Into<PrimExpr<i16>>, Z: Into<PrimExpr<i16>>>(
+    x: X,
+    y: Y,
+    z: Z,
+) -> Expr<Short3> {
+    Expr::<Short3>::new(x.into(), y.into(), z.into())
+}
+#[inline]
+pub fn make_short4<
+    X: Into<PrimExpr<i16>>,
+    Y: Into<PrimExpr<i16>>,
+    Z: Into<PrimExpr<i16>>,
+    W: Into<PrimExpr<i16>>,
+>(
+    x: X,
+    y: Y,
+    z: Z,
+    w: W,
+) -> Expr<Short4> {
+    Expr::<Short4>::new(x.into(), y.into(), z.into(), w.into())
+}
+
+#[inline]
+pub fn make_ushort2<X: Into<PrimExpr<u16>>, Y: Into<PrimExpr<u16>>>(x: X, y: Y) -> Expr<Ushort2> {
+    Expr::<Ushort2>::new(x.into(), y.into())
+}
+#[inline]
+pub fn make_ushort3<X: Into<PrimExpr<u16>>, Y: Into<PrimExpr<u16>>, Z: Into<PrimExpr<u16>>>(
+    x: X,
+    y: Y,
+    z: Z,
+) -> Expr<Ushort3> {
+    Expr::<Ushort3>::new(x.into(), y.into(), z.into())
+}
+#[inline]
+pub fn make_ushort4<
+    X: Into<PrimExpr<u16>>,
+    Y: Into<PrimExpr<u16>>,
+    Z: Into<PrimExpr<u16>>,
+    W: Into<PrimExpr<u16>>,
+>(
+    x: X,
+    y: Y,
+    z: Z,
+    w: W,
+) -> Expr<Ushort4> {
+    Expr::<Ushort4>::new(x.into(), y.into(), z.into(), w.into())
 }
 
 #[cfg(test)]

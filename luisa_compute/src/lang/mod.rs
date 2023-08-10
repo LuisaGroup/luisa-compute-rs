@@ -384,10 +384,12 @@ impl_prim!(i32);
 impl_prim!(i64);
 impl_prim!(i16);
 impl_prim!(u16);
+impl_prim!(f16);
 impl_prim!(f32);
 impl_prim!(f64);
 
 pub type Bool = PrimExpr<bool>;
+pub type F16 = PrimExpr<f16>;
 pub type F32 = PrimExpr<f32>;
 pub type F64 = PrimExpr<f64>;
 pub type I16 = PrimExpr<i16>;
@@ -397,6 +399,7 @@ pub type U16 = PrimExpr<u16>;
 pub type U32 = PrimExpr<u32>;
 pub type U64 = PrimExpr<u64>;
 
+pub type F16Var = PrimVar<f16>;
 pub type F32Var = PrimVar<f32>;
 pub type F64Var = PrimVar<f64>;
 pub type I16Var = PrimVar<i16>;
@@ -406,6 +409,7 @@ pub type U16Var = PrimVar<u16>;
 pub type U32Var = PrimVar<u32>;
 pub type U64Var = PrimVar<u64>;
 
+pub type Half = PrimExpr<f16>;
 pub type Float = PrimExpr<f32>;
 pub type Double = PrimExpr<f64>;
 pub type Int = PrimExpr<i32>;
@@ -416,6 +420,7 @@ pub type Short = PrimExpr<i16>;
 pub type Ushort = PrimExpr<u16>;
 
 pub type BoolVar = PrimVar<bool>;
+pub type HalfVar = PrimVar<f16>;
 pub type FloatVar = PrimVar<f32>;
 pub type DoubleVar = PrimVar<f64>;
 pub type IntVar = PrimVar<i32>;

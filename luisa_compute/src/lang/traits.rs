@@ -15,6 +15,7 @@ pub trait VarTrait: Copy + Clone + 'static + FromNode {
     type Uint: VarTrait;
     type Long: VarTrait;
     type Ulong: VarTrait;
+    type Half: VarTrait;
     type Float: VarTrait;
     // type Double: VarTrait;
     type Bool: VarTrait + Not<Output = Self::Bool> + BitAnd<Output = Self::Bool>;
@@ -32,12 +33,14 @@ macro_rules! impl_var_trait {
             type Uint = Expr<u32>;
             type Long = Expr<i64>;
             type Ulong = Expr<u64>;
+            type Half = Expr<f16>;
             type Float = Expr<f32>;
             // type Double = Expr<f64>;
             type Bool = Expr<bool>;
         }
     };
 }
+impl_var_trait!(f16);
 impl_var_trait!(f32);
 impl_var_trait!(f64);
 impl_var_trait!(i16);
@@ -126,8 +129,11 @@ pub trait CommonVarOp: VarTrait {
     fn ushort(&self) -> Self::Ushort {
         _cast(*self)
     }
+    fn half(&self) -> Self::Half {
+        _cast(*self)
+    }
     // fn double(&self) -> Self::Double {
-    //       _cast(*self)
+    //     _cast(*self)
     // }
     fn bool_(&self) -> Self::Bool {
         _cast(*self)
@@ -630,10 +636,13 @@ impl Not for PrimExpr<bool> {
         })
     }
 }
+impl_common_binop!(f16, PrimExpr<f16>);
 impl_common_binop!(f32, PrimExpr<f32>);
 impl_common_binop!(f64, PrimExpr<f64>);
+impl_common_binop!(i16, PrimExpr<i16>);
 impl_common_binop!(i32, PrimExpr<i32>);
 impl_common_binop!(i64, PrimExpr<i64>);
+impl_common_binop!(u16, PrimExpr<u16>);
 impl_common_binop!(u32, PrimExpr<u32>);
 impl_common_binop!(u64, PrimExpr<u64>);
 
@@ -661,43 +670,63 @@ impl_binop!(
     BitXor,
     bitxor
 );
+impl_int_binop!(i16, PrimExpr<i16>);
 impl_int_binop!(i32, PrimExpr<i32>);
 impl_int_binop!(i64, PrimExpr<i64>);
+impl_int_binop!(u16, PrimExpr<u16>);
 impl_int_binop!(u32, PrimExpr<u32>);
 impl_int_binop!(u64, PrimExpr<u64>);
 
+impl_not!(i16, PrimExpr<i16>);
 impl_not!(i32, PrimExpr<i32>);
 impl_not!(i64, PrimExpr<i64>);
+impl_not!(u16, PrimExpr<u16>);
 impl_not!(u32, PrimExpr<u32>);
 impl_not!(u64, PrimExpr<u64>);
 
+impl_neg!(i16, PrimExpr<i16>);
 impl_neg!(i32, PrimExpr<i32>);
 impl_neg!(i64, PrimExpr<i64>);
+impl_neg!(u16, PrimExpr<u16>);
 impl_neg!(u32, PrimExpr<u32>);
 impl_neg!(u64, PrimExpr<u64>);
 
+impl_fneg!(f16, PrimExpr<f16>);
 impl_fneg!(f32, PrimExpr<f32>);
+impl_fneg!(f64, PrimExpr<f64>);
+
+impl VarCmpEq for PrimExpr<f16> {}
 impl VarCmpEq for PrimExpr<f32> {}
-// impl VarCmp for PrimExpr<f64> {}
+impl VarCmpEq for PrimExpr<f64> {}
+impl VarCmpEq for PrimExpr<i16> {}
 impl VarCmpEq for PrimExpr<i32> {}
 impl VarCmpEq for PrimExpr<i64> {}
+impl VarCmpEq for PrimExpr<u16> {}
 impl VarCmpEq for PrimExpr<u32> {}
 impl VarCmpEq for PrimExpr<u64> {}
 
-// impl_fneg!(f64, PrimExpr<f64>);
+impl VarCmpEq for PrimExpr<bool> {}
+
+impl VarCmp for PrimExpr<f16> {}
 impl VarCmp for PrimExpr<f32> {}
-// impl VarCmp for PrimExpr<f64> {}
+impl VarCmp for PrimExpr<f64> {}
+impl VarCmp for PrimExpr<i16> {}
 impl VarCmp for PrimExpr<i32> {}
 impl VarCmp for PrimExpr<i64> {}
+impl VarCmp for PrimExpr<u16> {}
 impl VarCmp for PrimExpr<u32> {}
 impl VarCmp for PrimExpr<u64> {}
-impl VarCmpEq for PrimExpr<bool> {}
+
+impl CommonVarOp for PrimExpr<f16> {}
 impl CommonVarOp for PrimExpr<f32> {}
-// impl CommonVarOp for PrimExpr<f64> {}
+impl CommonVarOp for PrimExpr<f64> {}
+impl CommonVarOp for PrimExpr<i16> {}
 impl CommonVarOp for PrimExpr<i32> {}
 impl CommonVarOp for PrimExpr<i64> {}
+impl CommonVarOp for PrimExpr<u16> {}
 impl CommonVarOp for PrimExpr<u32> {}
 impl CommonVarOp for PrimExpr<u64> {}
+
 impl CommonVarOp for PrimExpr<bool> {}
 
 impl From<f64> for Float {
@@ -705,10 +734,30 @@ impl From<f64> for Float {
         (x as f32).into()
     }
 }
+impl From<f32> for Double {
+    fn from(x: f32) -> Self {
+        (x as f64).into()
+    }
+}
+impl From<f64> for Half {
+    fn from(x: f64) -> Self {
+        f16::from_f64(x).into()
+    }
+}
+impl From<f32> for Half {
+    fn from(x: f32) -> Self {
+        f16::from_f32(x).into()
+    }
+}
 
+impl FloatVarTrait for PrimExpr<f16> {}
 impl FloatVarTrait for PrimExpr<f32> {}
+impl FloatVarTrait for PrimExpr<f64> {}
+
+impl IntVarTrait for PrimExpr<i16> {}
 impl IntVarTrait for PrimExpr<i32> {}
 impl IntVarTrait for PrimExpr<i64> {}
+impl IntVarTrait for PrimExpr<u16> {}
 impl IntVarTrait for PrimExpr<u32> {}
 impl IntVarTrait for PrimExpr<u64> {}
 
@@ -721,18 +770,39 @@ macro_rules! impl_from {
         }
     };
 }
+
+impl_from!(i16, u16);
+impl_from!(i16, i32);
+impl_from!(i16, u32);
+impl_from!(i16, i64);
+impl_from!(i16, u64);
+
+impl_from!(u16, i16);
+impl_from!(u16, i32);
+impl_from!(u16, u32);
+impl_from!(u16, i64);
+impl_from!(u16, u64);
+
+impl_from!(i32, u16);
+impl_from!(i32, i16);
 impl_from!(i32, u32);
 impl_from!(i32, i64);
 impl_from!(i32, u64);
 
+impl_from!(i64, u16);
+impl_from!(i64, i16);
 impl_from!(i64, u64);
 impl_from!(i64, i32);
 impl_from!(i64, u32);
 
+impl_from!(u32, u16);
+impl_from!(u32, i16);
 impl_from!(u32, i32);
 impl_from!(u32, i64);
 impl_from!(u32, u64);
 
+impl_from!(u64, u16);
+impl_from!(u64, i16);
 impl_from!(u64, i64);
 impl_from!(u64, i32);
 impl_from!(u64, u32);

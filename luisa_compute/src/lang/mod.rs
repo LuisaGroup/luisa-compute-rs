@@ -51,10 +51,11 @@ pub use poly::*;
 pub use printer::*;
 
 pub trait Value: Copy + ir::TypeOf + 'static {
-    type Expr: ExprProxy<Value = Self>;
-    type Var: VarProxy<Value = Self>;
+    type Expr: ExprProxy<Value=Self>;
+    type Var: VarProxy<Value=Self>;
     fn fields() -> Vec<String>;
 }
+
 pub trait StructInitiaizable: Value {
     type Init: Into<Self::Expr>;
 }
@@ -72,11 +73,13 @@ pub trait Aggregate: Sized {
         ret
     }
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>);
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self;
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self;
 }
+
 pub trait ToNode {
     fn node(&self) -> NodeRef;
 }
+
 pub trait FromNode: ToNode {
     fn from_node(node: NodeRef) -> Self;
 }
@@ -126,13 +129,16 @@ macro_rules! impl_aggregate_for_tuple {
 impl_aggregate_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
 pub unsafe trait _Mask: ToNode {}
+
 pub trait IndexRead: ToNode {
     type Element: Value;
     fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<Self::Element>;
 }
+
 pub trait IndexWrite: IndexRead {
     fn write<I: Into<Expr<u32>>, V: Into<Expr<Self::Element>>>(&self, i: I, value: V);
 }
+
 pub fn select<A: Aggregate>(mask: impl _Mask, a: A, b: A) -> A {
     let a_nodes = a.to_vec_nodes();
     let b_nodes = b.to_vec_nodes();
@@ -179,36 +185,40 @@ unsafe impl _Mask for Bool {}
 pub trait ExprProxy: Copy + Aggregate + FromNode {
     type Value: Value;
 }
+
 pub struct VarDerefProxy<P, T: Value>
-where
-    P: VarProxy<Value = T>,
+    where
+        P: VarProxy<Value=T>,
 {
     pub(crate) var: P,
     pub(crate) dirty: Cell<bool>,
     pub(crate) assigned: Expr<T>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
 }
+
 impl<P, T: Value> Deref for VarDerefProxy<P, T>
-where
-    P: VarProxy<Value = T>,
+    where
+        P: VarProxy<Value=T>,
 {
     type Target = Expr<T>;
     fn deref(&self) -> &Self::Target {
         &self.assigned
     }
 }
+
 impl<P, T: Value> DerefMut for VarDerefProxy<P, T>
-where
-    P: VarProxy<Value = T>,
+    where
+        P: VarProxy<Value=T>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.dirty.set(true);
         &mut self.assigned
     }
 }
+
 impl<P, T: Value> Drop for VarDerefProxy<P, T>
-where
-    P: VarProxy<Value = T>,
+    where
+        P: VarProxy<Value=T>,
 {
     fn drop(&mut self) {
         if self.dirty.get() {
@@ -293,7 +303,7 @@ impl<T> Aggregate for PrimExpr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
             _phantom: std::marker::PhantomData,
@@ -305,7 +315,7 @@ impl<T> Aggregate for PrimVar<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
             _phantom: std::marker::PhantomData,
@@ -462,8 +472,8 @@ macro_rules! lc_assert {
     };
 }
 pub fn __cpu_dbg<T: ExprProxy>(arg: T, file: &'static str, line: u32)
-where
-    T::Value: Debug,
+    where
+        T::Value: Debug,
 {
     if !is_cpu_backend() {
         return;
@@ -509,7 +519,7 @@ impl<T: Value> CpuFn<T> {
             _marker: std::marker::PhantomData,
         }
     }
-    pub fn call(&self, arg: impl ExprProxy<Value = T>) -> Expr<T> {
+    pub fn call(&self, arg: impl ExprProxy<Value=T>) -> Expr<T> {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(r.lock);
@@ -612,6 +622,7 @@ pub(crate) fn __invoke_callable(callable: &CallableModuleRef, args: &[NodeRef]) 
         )
     })
 }
+
 pub(crate) fn __check_node_type(a: NodeRef, b: NodeRef) -> bool {
     if !ir::context::is_type_equal(a.type_(), b.type_()) {
         return false;
@@ -629,6 +640,7 @@ pub(crate) fn __check_node_type(a: NodeRef, b: NodeRef) -> bool {
         _ => false,
     }
 }
+
 pub(crate) fn __check_callable(callable: &CallableModuleRef, args: &[NodeRef]) -> bool {
     assert_eq!(callable.0.args.len(), args.len());
     for i in 0..args.len() {
@@ -849,10 +861,11 @@ pub fn bitcast<From: Value, To: Value>(expr: Expr<From>) -> Expr<To> {
 pub const fn packed_size<T: Value>() -> usize {
     (std::mem::size_of::<T>() + 3) / 4
 }
+
 pub fn pack_to<E, B>(expr: E, buffer: &B, index: impl Into<Expr<u32>>)
-where
-    E: ExprProxy,
-    B: IndexWrite<Element = u32>,
+    where
+        E: ExprProxy,
+        B: IndexWrite<Element=u32>,
 {
     let index = index.into();
     __current_scope(|b| {
@@ -863,12 +876,13 @@ where
         );
     });
 }
+
 pub fn unpack_from<T>(
-    buffer: &impl IndexWrite<Element = u32>,
+    buffer: &impl IndexWrite<Element=u32>,
     index: impl Into<Expr<u32>>,
 ) -> Expr<T>
-where
-    T: Value,
+    where
+        T: Value,
 {
     let index = index.into();
     Expr::<T>::from_node(__current_scope(|b| {
@@ -879,6 +893,7 @@ where
         )
     }))
 }
+
 impl<T: Value + TypeOf, const N: usize> Value for [T; N] {
     type Expr = ArrayExpr<T, N>;
     type Var = ArrayVar<T, N>;
@@ -886,20 +901,24 @@ impl<T: Value + TypeOf, const N: usize> Value for [T; N] {
         todo!("why this method exists?")
     }
 }
+
 #[derive(Clone, Copy)]
 pub struct DynExpr {
     node: NodeRef,
 }
+
 impl<T: ExprProxy> From<T> for DynExpr {
     fn from(value: T) -> Self {
         Self { node: value.node() }
     }
 }
+
 impl<T: VarProxy> From<T> for DynVar {
     fn from(value: T) -> Self {
         Self { node: value.node() }
     }
 }
+
 impl DynExpr {
     pub fn downcast<T: Value>(&self) -> Option<Expr<T>> {
         if ir::context::is_type_equal(self.node.type_(), &T::type_()) {
@@ -945,6 +964,7 @@ impl DynExpr {
         Self { node: expr.node() }
     }
 }
+
 impl CallableParameter for DynExpr {
     fn def_param(arg: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         let arg = arg.unwrap_or_else(|| panic!("DynExpr should be used in DynCallable only!"));
@@ -956,26 +976,30 @@ impl CallableParameter for DynExpr {
         encoder.args.push(self.node)
     }
 }
+
 impl Aggregate for DynExpr {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node)
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
         }
     }
 }
+
 impl FromNode for DynExpr {
     fn from_node(node: NodeRef) -> Self {
         Self { node }
     }
 }
+
 impl ToNode for DynExpr {
     fn node(&self) -> NodeRef {
         self.node
     }
 }
+
 unsafe impl CallableRet for DynExpr {
     fn _return(&self) -> CArc<Type> {
         __current_scope(|b| {
@@ -987,30 +1011,35 @@ unsafe impl CallableRet for DynExpr {
         Self::from_node(node)
     }
 }
+
 impl Aggregate for DynVar {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node)
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
         }
     }
 }
+
 impl FromNode for DynVar {
     fn from_node(node: NodeRef) -> Self {
         Self { node }
     }
 }
+
 impl ToNode for DynVar {
     fn node(&self) -> NodeRef {
         self.node
     }
 }
+
 #[derive(Clone, Copy)]
 pub struct DynVar {
     node: NodeRef,
 }
+
 impl CallableParameter for DynVar {
     fn def_param(arg: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         let arg = arg.unwrap_or_else(|| panic!("DynVar should be used in DynCallable only!"));
@@ -1022,6 +1051,7 @@ impl CallableParameter for DynVar {
         encoder.args.push(self.node)
     }
 }
+
 impl DynVar {
     pub fn downcast<T: Value>(&self) -> Option<Var<T>> {
         if ir::context::is_type_equal(self.node.type_(), &T::type_()) {
@@ -1091,6 +1121,7 @@ impl<T: Value> FromNode for VLArrayExpr<T> {
         }
     }
 }
+
 impl<T: Value> ToNode for VLArrayExpr<T> {
     fn node(&self) -> NodeRef {
         self.node
@@ -1101,7 +1132,7 @@ impl<T: Value> Aggregate for VLArrayExpr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -1120,6 +1151,7 @@ impl<T: Value> FromNode for VLArrayVar<T> {
         }
     }
 }
+
 impl<T: Value> ToNode for VLArrayVar<T> {
     fn node(&self) -> NodeRef {
         self.node
@@ -1130,7 +1162,7 @@ impl<T: Value> Aggregate for VLArrayVar<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -1229,6 +1261,7 @@ impl<T: Value> VLArrayExpr<T> {
         }
     }
 }
+
 impl<T: Value, const N: usize> IndexRead for ArrayExpr<T, N> {
     type Element = T;
     fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
@@ -1241,6 +1274,7 @@ impl<T: Value, const N: usize> IndexRead for ArrayExpr<T, N> {
         }))
     }
 }
+
 impl<T: Value, const N: usize> IndexRead for ArrayVar<T, N> {
     type Element = T;
     fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
@@ -1255,6 +1289,7 @@ impl<T: Value, const N: usize> IndexRead for ArrayVar<T, N> {
         }))
     }
 }
+
 impl<T: Value, const N: usize> IndexWrite for ArrayVar<T, N> {
     fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, value: V) {
         let i = i.into();
@@ -1270,6 +1305,7 @@ impl<T: Value, const N: usize> IndexWrite for ArrayVar<T, N> {
         });
     }
 }
+
 #[derive(Clone, Copy, Debug)]
 pub struct ArrayExpr<T: Value, const N: usize> {
     marker: std::marker::PhantomData<T>,
@@ -1290,6 +1326,7 @@ impl<T: Value, const N: usize> FromNode for ArrayExpr<T, N> {
         }
     }
 }
+
 impl<T: Value, const N: usize> ToNode for ArrayExpr<T, N> {
     fn node(&self) -> NodeRef {
         self.node
@@ -1300,7 +1337,7 @@ impl<T: Value, const N: usize> Aggregate for ArrayExpr<T, N> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -1313,6 +1350,7 @@ impl<T: Value, const N: usize> FromNode for ArrayVar<T, N> {
         }
     }
 }
+
 impl<T: Value, const N: usize> ToNode for ArrayVar<T, N> {
     fn node(&self) -> NodeRef {
         self.node
@@ -1323,7 +1361,7 @@ impl<T: Value, const N: usize> Aggregate for ArrayVar<T, N> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -1447,9 +1485,9 @@ pub trait KernelParameter {
 }
 
 impl<T: Value, U> KernelParameter for U
-where
-    U: ExprProxy<Value = T>,
-    T: Value<Expr = U>,
+    where
+        U: ExprProxy<Value=T>,
+        T: Value<Expr=U>,
 {
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.uniform::<T>()
@@ -1608,8 +1646,7 @@ impl KernelBuilder {
     ) -> (
         ResourceTracker,
         Vec<CArc<CpuCustomOp>>,
-        Vec<Capture>,
-        Vec<CallableModuleRef>,
+        Vec<Capture>
     ) {
         RECORDER.with(|r| {
             let mut resource_tracker = ResourceTracker::new();
@@ -1658,13 +1695,13 @@ impl KernelBuilder {
                     }
                 }
             }
-            (resource_tracker, cpu_custom_ops, captured, callables)
+            (resource_tracker, cpu_custom_ops, captured)
         })
     }
     fn build_callable<R: CallableRet>(&mut self, body: impl FnOnce(&mut Self) -> R) -> RawCallable {
         let ret = body(self);
         let ret_type = ret._return();
-        let (rt, cpu_custom_ops, captures, callables) = self.collect_module_info();
+        let (rt, cpu_custom_ops, captures) = self.collect_module_info();
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(r.lock);
@@ -1687,7 +1724,6 @@ impl KernelBuilder {
                 ret_type,
                 cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
                 captures: CBoxedSlice::new(captures),
-                callables: CBoxedSlice::new(callables),
                 args: CBoxedSlice::new(self.args.clone()),
                 pools: r.pools.clone().unwrap(),
             };
@@ -1704,7 +1740,7 @@ impl KernelBuilder {
         body: impl FnOnce(&mut Self),
     ) -> crate::runtime::RawKernel {
         body(self);
-        let (rt, cpu_custom_ops, captures, callables) = self.collect_module_info();
+        let (rt, cpu_custom_ops, captures) = self.collect_module_info();
         RECORDER.with(|r| -> crate::runtime::RawKernel {
             let mut r = r.borrow_mut();
             assert!(r.lock);
@@ -1728,7 +1764,6 @@ impl KernelBuilder {
                 cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
                 captures: CBoxedSlice::new(captures),
                 shared: CBoxedSlice::new(vec![]),
-                callables: CBoxedSlice::new(callables),
                 args: CBoxedSlice::new(self.args.clone()),
                 block_size: r.block_size.unwrap_or([64, 1, 1]),
                 pools: r.pools.clone().unwrap(),
@@ -1805,7 +1840,7 @@ pub trait KernelBuildFn {
 
 pub trait CallableBuildFn {
     fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)
-        -> RawCallable;
+                      -> RawCallable;
 }
 
 pub trait StaticCallableBuildFn: CallableBuildFn {}
@@ -2612,11 +2647,12 @@ pub fn __assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, c
         );
     });
 }
+
 pub(crate) fn need_runtime_check() -> bool {
     cfg!(debug_assertions)
         || match env::var("LUISA_DEBUG") {
-            Ok(s) => s == "full" || s == "1",
-            Err(_) => false,
-        }
+        Ok(s) => s == "full" || s == "1",
+        Err(_) => false,
+    }
         || __env_need_backtrace()
 }

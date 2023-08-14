@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
-use std::{env::current_exe, time::Instant};
 use std::mem::swap;
+use std::{env::current_exe, time::Instant};
 
 use luisa::init_logger;
 #[allow(unused_imports)]
@@ -107,13 +107,14 @@ fn main() {
         let ty = y - ly.float();
 
         let s0 = lookup_vel(&f, lx, ly).lerp(lookup_vel(&f, lx + 1, ly), make_float2(tx, tx));
-        let s1 = lookup_vel(&f, lx, ly + 1).lerp(lookup_vel(&f, lx + 1, ly + 1), make_float2(tx, tx));
+        let s1 =
+            lookup_vel(&f, lx, ly + 1).lerp(lookup_vel(&f, lx + 1, ly + 1), make_float2(tx, tx));
 
         return s0.lerp(s1, make_float2(ty, ty));
     };
 
-    let advect =
-        device.create_kernel_async::<(Buffer<Float2>, Buffer<Float2>, Buffer<f32>, Buffer<f32>)>(
+    let advect = device
+        .create_kernel_async::<(Buffer<Float2>, Buffer<Float2>, Buffer<f32>, Buffer<f32>)>(
             &|u0, u1, rho0, rho1| {
                 let coord = dispatch_id().xy();
                 let u = u0.read(index(coord));
@@ -125,89 +126,89 @@ fn main() {
                 // advect
                 u1.write(index(coord), sample_vel(u0, p.x(), p.y()));
                 rho1.write(index(coord), sample_float(rho0, p.x(), p.y()));
-            });
+            },
+        );
 
-    let divergence =
-        device.create_kernel_async::<(Buffer<Float2>, Buffer<f32>)>(
-            &|u, div| {
-                let coord = dispatch_id().xy();
-                if_!(
-            coord.x().cmplt(N_GRID - 1) & coord.y().cmplt(N_GRID - 1),
-            {
-                let dx = (u.read(index(make_uint2(coord.x() + 1, coord.y()))).x() - u.read(index(coord)).x()) * 0.5;
-                let dy = (u.read(index(make_uint2(coord.x(), coord.y() + 1))).y() - u.read(index(coord)).y()) * 0.5;
-                div.write(index(coord), dx + dy);
-            });
-            });
+    let divergence = device.create_kernel_async::<(Buffer<Float2>, Buffer<f32>)>(&|u, div| {
+        let coord = dispatch_id().xy();
+        if_!(coord.x().cmplt(N_GRID - 1) & coord.y().cmplt(N_GRID - 1), {
+            let dx = (u.read(index(make_uint2(coord.x() + 1, coord.y()))).x()
+                - u.read(index(coord)).x())
+                * 0.5;
+            let dy = (u.read(index(make_uint2(coord.x(), coord.y() + 1))).y()
+                - u.read(index(coord)).y())
+                * 0.5;
+            div.write(index(coord), dx + dy);
+        });
+    });
 
     let pressure_solve =
-        device.create_kernel_async::<(Buffer<f32>, Buffer<f32>, Buffer<f32>)>(
-            &|p0, p1, div| {
-                let coord = dispatch_id().xy();
-                let i = coord.x().int();
-                let j = coord.y().int();
-                let ij = index(coord);
+        device.create_kernel_async::<(Buffer<f32>, Buffer<f32>, Buffer<f32>)>(&|p0, p1, div| {
+            let coord = dispatch_id().xy();
+            let i = coord.x().int();
+            let j = coord.y().int();
+            let ij = index(coord);
 
-                let s1 = lookup_float(&p0, i - 1, j);
-                let s2 = lookup_float(&p0, i + 1, j);
-                let s3 = lookup_float(&p0, i, j - 1);
-                let s4 = lookup_float(&p0, i, j + 1);
+            let s1 = lookup_float(&p0, i - 1, j);
+            let s2 = lookup_float(&p0, i + 1, j);
+            let s3 = lookup_float(&p0, i, j - 1);
+            let s4 = lookup_float(&p0, i, j + 1);
 
-                // Jacobi update
-                let err = s1 + s2 + s3 + s4 - div.read(ij);
-                p1.write(ij, err * 0.25f32);
-            });
+            // Jacobi update
+            let err = s1 + s2 + s3 + s4 - div.read(ij);
+            p1.write(ij, err * 0.25f32);
+        });
 
-    let pressure_apply =
-        device.create_kernel_async::<(Buffer<f32>, Buffer<Float2>)>(
-            &|p, u| {
-                let coord = dispatch_id().xy();
-                let i = coord.x().int();
-                let j = coord.y().int();
-                let ij = index(coord);
+    let pressure_apply = device.create_kernel_async::<(Buffer<f32>, Buffer<Float2>)>(&|p, u| {
+        let coord = dispatch_id().xy();
+        let i = coord.x().int();
+        let j = coord.y().int();
+        let ij = index(coord);
 
-                if_!(i.cmpgt(0) & i.cmplt(N_GRID - 1) & j.cmpgt(0) & j.cmplt(N_GRID - 1),{
-                    // pressure gradient
-                    let f_p = make_float2(p.read(index(make_uint2(i.uint() + 1, j.uint())))
+        if_!(
+            i.cmpgt(0) & i.cmplt(N_GRID - 1) & j.cmpgt(0) & j.cmplt(N_GRID - 1),
+            {
+                // pressure gradient
+                let f_p = make_float2(
+                    p.read(index(make_uint2(i.uint() + 1, j.uint())))
                         - p.read(index(make_uint2(i.uint() - 1, j.uint()))),
-                              p.read(index(make_uint2(i.uint(), j.uint() + 1)))
-                        - p.read(index(make_uint2(i.uint(), j.uint() - 1)))) * 0.5f32;
+                    p.read(index(make_uint2(i.uint(), j.uint() + 1)))
+                        - p.read(index(make_uint2(i.uint(), j.uint() - 1))),
+                ) * 0.5f32;
 
-                    u.write(ij, u.read(ij) - f_p);
-                });
-            });
+                u.write(ij, u.read(ij) - f_p);
+            }
+        );
+    });
 
-    let integrate =
-        device.create_kernel_async::<(Buffer<Float2>, Buffer<f32>)>(
-            &|u, rho| {
-                let coord = dispatch_id().xy();
-                let ij = index(coord);
+    let integrate = device.create_kernel_async::<(Buffer<Float2>, Buffer<f32>)>(&|u, rho| {
+        let coord = dispatch_id().xy();
+        let ij = index(coord);
 
-                // gravity
-                let f_g = make_float2(-90.8f32, 0.0f32) * rho.read(ij);
+        // gravity
+        let f_g = make_float2(-90.8f32, 0.0f32) * rho.read(ij);
 
-                // integrate
-                u.write(ij, u.read(ij) + dt * f_g);
+        // integrate
+        u.write(ij, u.read(ij) + dt * f_g);
 
-                // fade
-                rho.write(ij, rho.read(ij) * (1.0f32 - 0.1f32 * dt));
-            });
+        // fade
+        rho.write(ij, rho.read(ij) * (1.0f32 - 0.1f32 * dt));
+    });
 
     let init =
-        device.create_kernel_async::<(Buffer<f32>, Buffer<Float2>, Float2)>(
-            &|rho, u, dir| {
-                let coord = dispatch_id().xy();
-                let i = coord.x().int();
-                let j = coord.y().int();
-                let ij = index(coord);
-                let d = make_float2((i - N_GRID / 2).float(), (j - N_GRID / 2).float()).length();
+        device.create_kernel_async::<(Buffer<f32>, Buffer<Float2>, Float2)>(&|rho, u, dir| {
+            let coord = dispatch_id().xy();
+            let i = coord.x().int();
+            let j = coord.y().int();
+            let ij = index(coord);
+            let d = make_float2((i - N_GRID / 2).float(), (j - N_GRID / 2).float()).length();
 
-                let radius = 5.0f32;
-                if_!(d.cmplt(radius), {
-                    rho.write(ij, 1.0f32);
-                    u.write(ij, dir);
-                });
+            let radius = 5.0f32;
+            if_!(d.cmplt(radius), {
+                rho.write(ij, 1.0f32);
+                u.write(ij, dir);
             });
+        });
 
     let init_grid = device.create_kernel_async::<()>(&|| {
         let idx = index(dispatch_id().xy());
@@ -232,8 +233,10 @@ fn main() {
         let coord = dispatch_id().xy();
         let ij = index(coord);
         let value = rho0.var().read(ij);
-        display.var().write(make_uint2(coord.x(), (N_GRID - 1) as u32 - coord.y()),
-                            make_float4(value, 0.0f32, 0.0f32, 1.0f32));
+        display.var().write(
+            make_uint2(coord.x(), (N_GRID - 1) as u32 - coord.y()),
+            make_float4(value, 0.0f32, 0.0f32, 1.0f32),
+        );
     });
 
     event_loop.run(move |event, _, control_flow| {
@@ -259,26 +262,52 @@ fn main() {
                         let vel = Float2::new(angle.cos() * speed, angle.sin() * speed);
 
                         // update emitters
-                        commands.push(init.dispatch_async([N_GRID as u32, N_GRID as u32, 1],
-                                                          &rho0, &u0, &vel));
+                        commands.push(init.dispatch_async(
+                            [N_GRID as u32, N_GRID as u32, 1],
+                            &rho0,
+                            &u0,
+                            &vel,
+                        ));
                         // force integrate
-                        commands.push(integrate.dispatch_async([N_GRID as u32, N_GRID as u32, 1],
-                                                               &u0, &rho0));
-                        commands.push(divergence.dispatch_async([N_GRID as u32, N_GRID as u32, 1],
-                                                                &u0, &div));
+                        commands.push(integrate.dispatch_async(
+                            [N_GRID as u32, N_GRID as u32, 1],
+                            &u0,
+                            &rho0,
+                        ));
+                        commands.push(divergence.dispatch_async(
+                            [N_GRID as u32, N_GRID as u32, 1],
+                            &u0,
+                            &div,
+                        ));
 
                         // pressure solve
-                        commands.push(clear_pressure.dispatch_async([N_GRID as u32, N_GRID as u32, 1]));
+                        commands.push(clear_pressure.dispatch_async([
+                            N_GRID as u32,
+                            N_GRID as u32,
+                            1,
+                        ]));
                         for _ in 0..iterations {
-                            commands.push(pressure_solve.dispatch_async([N_GRID as u32, N_GRID as u32, 1],
-                                                                        &p0, &p1, &div));
+                            commands.push(pressure_solve.dispatch_async(
+                                [N_GRID as u32, N_GRID as u32, 1],
+                                &p0,
+                                &p1,
+                                &div,
+                            ));
                             swap(&mut p0, &mut p1);
                         }
 
-                        commands.push(pressure_apply.dispatch_async([N_GRID as u32, N_GRID as u32, 1],
-                                                                    &p0, &u0));
-                        commands.push(advect.dispatch_async([N_GRID as u32, N_GRID as u32, 1],
-                                                            &u0, &u1, &rho0, &rho1));
+                        commands.push(pressure_apply.dispatch_async(
+                            [N_GRID as u32, N_GRID as u32, 1],
+                            &p0,
+                            &u0,
+                        ));
+                        commands.push(advect.dispatch_async(
+                            [N_GRID as u32, N_GRID as u32, 1],
+                            &u0,
+                            &u1,
+                            &rho0,
+                            &rho1,
+                        ));
 
                         swap(&mut u0, &mut u1);
                         swap(&mut rho0, &mut rho1);

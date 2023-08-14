@@ -51,8 +51,8 @@ pub use poly::*;
 pub use printer::*;
 
 pub trait Value: Copy + ir::TypeOf + 'static {
-    type Expr: ExprProxy<Value=Self>;
-    type Var: VarProxy<Value=Self>;
+    type Expr: ExprProxy<Value = Self>;
+    type Var: VarProxy<Value = Self>;
     fn fields() -> Vec<String>;
 }
 
@@ -73,7 +73,7 @@ pub trait Aggregate: Sized {
         ret
     }
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>);
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self;
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self;
 }
 
 pub trait ToNode {
@@ -187,8 +187,8 @@ pub trait ExprProxy: Copy + Aggregate + FromNode {
 }
 
 pub struct VarDerefProxy<P, T: Value>
-    where
-        P: VarProxy<Value=T>,
+where
+    P: VarProxy<Value = T>,
 {
     pub(crate) var: P,
     pub(crate) dirty: Cell<bool>,
@@ -197,8 +197,8 @@ pub struct VarDerefProxy<P, T: Value>
 }
 
 impl<P, T: Value> Deref for VarDerefProxy<P, T>
-    where
-        P: VarProxy<Value=T>,
+where
+    P: VarProxy<Value = T>,
 {
     type Target = Expr<T>;
     fn deref(&self) -> &Self::Target {
@@ -207,8 +207,8 @@ impl<P, T: Value> Deref for VarDerefProxy<P, T>
 }
 
 impl<P, T: Value> DerefMut for VarDerefProxy<P, T>
-    where
-        P: VarProxy<Value=T>,
+where
+    P: VarProxy<Value = T>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.dirty.set(true);
@@ -217,8 +217,8 @@ impl<P, T: Value> DerefMut for VarDerefProxy<P, T>
 }
 
 impl<P, T: Value> Drop for VarDerefProxy<P, T>
-    where
-        P: VarProxy<Value=T>,
+where
+    P: VarProxy<Value = T>,
 {
     fn drop(&mut self) {
         if self.dirty.get() {
@@ -303,7 +303,7 @@ impl<T> Aggregate for PrimExpr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
             _phantom: std::marker::PhantomData,
@@ -315,7 +315,7 @@ impl<T> Aggregate for PrimVar<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
             _phantom: std::marker::PhantomData,
@@ -472,8 +472,8 @@ macro_rules! lc_assert {
     };
 }
 pub fn __cpu_dbg<T: ExprProxy>(arg: T, file: &'static str, line: u32)
-    where
-        T::Value: Debug,
+where
+    T::Value: Debug,
 {
     if !is_cpu_backend() {
         return;
@@ -519,7 +519,7 @@ impl<T: Value> CpuFn<T> {
             _marker: std::marker::PhantomData,
         }
     }
-    pub fn call(&self, arg: impl ExprProxy<Value=T>) -> Expr<T> {
+    pub fn call(&self, arg: impl ExprProxy<Value = T>) -> Expr<T> {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(r.lock);
@@ -557,6 +557,7 @@ pub(crate) struct Recorder {
     pub(crate) captured_buffer: IndexMap<Binding, (usize, NodeRef, Binding, Arc<dyn Any>)>,
     pub(crate) cpu_custom_ops: IndexMap<u64, (usize, CArc<CpuCustomOp>)>,
     pub(crate) callables: IndexMap<u64, CallableModuleRef>,
+    pub(crate) shared: Vec<NodeRef>,
     pub(crate) device: Option<Device>,
     pub(crate) block_size: Option<[u32; 3]>,
     pub(crate) building_kernel: bool,
@@ -574,6 +575,7 @@ impl Recorder {
         self.device = None;
         self.block_size = None;
         self.arena.reset();
+        self.shared.clear();
     }
     pub(crate) fn new() -> Self {
         Recorder {
@@ -582,6 +584,7 @@ impl Recorder {
             captured_buffer: IndexMap::new(),
             cpu_custom_ops: IndexMap::new(),
             callables: IndexMap::new(),
+            shared: vec![],
             device: None,
             block_size: None,
             pools: None,
@@ -790,7 +793,11 @@ pub fn dispatch_size() -> Expr<Uint3> {
         b.call(Func::DispatchSize, &[], Uint3::type_())
     }))
 }
-
+pub fn synchronize_block() {
+    __current_scope(|b| {
+        b.call(Func::SynchronizeBlock, &[], Type::void());
+    })
+}
 pub fn set_block_size(size: [u32; 3]) {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
@@ -863,9 +870,9 @@ pub const fn packed_size<T: Value>() -> usize {
 }
 
 pub fn pack_to<E, B>(expr: E, buffer: &B, index: impl Into<Expr<u32>>)
-    where
-        E: ExprProxy,
-        B: IndexWrite<Element=u32>,
+where
+    E: ExprProxy,
+    B: IndexWrite<Element = u32>,
 {
     let index = index.into();
     __current_scope(|b| {
@@ -878,11 +885,11 @@ pub fn pack_to<E, B>(expr: E, buffer: &B, index: impl Into<Expr<u32>>)
 }
 
 pub fn unpack_from<T>(
-    buffer: &impl IndexWrite<Element=u32>,
+    buffer: &impl IndexWrite<Element = u32>,
     index: impl Into<Expr<u32>>,
 ) -> Expr<T>
-    where
-        T: Value,
+where
+    T: Value,
 {
     let index = index.into();
     Expr::<T>::from_node(__current_scope(|b| {
@@ -981,7 +988,7 @@ impl Aggregate for DynExpr {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node)
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
         }
@@ -1016,7 +1023,7 @@ impl Aggregate for DynVar {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node)
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self {
             node: iter.next().unwrap(),
         }
@@ -1106,7 +1113,69 @@ impl DynVar {
         Self { node: v.node() }
     }
 }
+pub struct Shared<T: Value> {
+    marker: std::marker::PhantomData<T>,
+    node: NodeRef,
+}
+impl<T: Value> Shared<T> {
+    pub fn new(length: usize) -> Self {
+        Self {
+            marker: std::marker::PhantomData,
+            node: __current_scope(|b| {
+                let shared = new_node(
+                    b.pools(),
+                    Node::new(
+                        CArc::new(Instruction::Shared),
+                        ir::context::register_type(Type::Array(ArrayType {
+                            element: T::type_(),
+                            length,
+                        })),
+                    ),
+                );
+                RECORDER.with(|r| {
+                    let mut r = r.borrow_mut();
+                    r.shared.push(shared);
+                });
+                shared
+            }),
+        }
+    }
+    pub fn len(&self) -> Expr<u32> {
+        match self.node.type_().as_ref() {
+            Type::Array(ArrayType { element: _, length }) => const_(*length as u32),
+            _ => unreachable!(),
+        }
+    }
+    pub fn static_len(&self) -> usize {
+        match self.node.type_().as_ref() {
+            Type::Array(ArrayType { element: _, length }) => *length,
+            _ => unreachable!(),
+        }
+    }
+    pub fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, value: V) {
+        let i = i.into();
+        let value = value.into();
 
+        if need_runtime_check() {
+            lc_assert!(i.cmplt(self.len()), "VLArrayVar::read out of bounds");
+        }
+
+        __current_scope(|b| {
+            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
+            b.update(gep, value.node());
+        });
+    }
+    pub fn load(&self) -> VLArrayExpr<T> {
+        VLArrayExpr::from_node(__current_scope(|b| {
+            b.call(Func::Load, &[self.node], self.node.type_().clone())
+        }))
+    }
+    pub fn store(&self, value: VLArrayExpr<T>) {
+        __current_scope(|b| {
+            b.update(self.node, value.node);
+        });
+    }
+}
 #[derive(Clone, Copy, Debug)]
 pub struct VLArrayExpr<T: Value> {
     marker: std::marker::PhantomData<T>,
@@ -1132,7 +1201,7 @@ impl<T: Value> Aggregate for VLArrayExpr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -1162,7 +1231,7 @@ impl<T: Value> Aggregate for VLArrayVar<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -1337,7 +1406,7 @@ impl<T: Value, const N: usize> Aggregate for ArrayExpr<T, N> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -1361,7 +1430,7 @@ impl<T: Value, const N: usize> Aggregate for ArrayVar<T, N> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item=NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
         Self::from_node(iter.next().unwrap())
     }
 }
@@ -1485,9 +1554,9 @@ pub trait KernelParameter {
 }
 
 impl<T: Value, U> KernelParameter for U
-    where
-        U: ExprProxy<Value=T>,
-        T: Value<Expr=U>,
+where
+    U: ExprProxy<Value = T>,
+    T: Value<Expr = U>,
 {
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.uniform::<T>()
@@ -1641,13 +1710,7 @@ impl KernelBuilder {
         self.args.push(node);
         rtx::AccelVar { node, handle: None }
     }
-    fn collect_module_info(
-        &self,
-    ) -> (
-        ResourceTracker,
-        Vec<CArc<CpuCustomOp>>,
-        Vec<Capture>
-    ) {
+    fn collect_module_info(&self) -> (ResourceTracker, Vec<CArc<CpuCustomOp>>, Vec<Capture>) {
         RECORDER.with(|r| {
             let mut resource_tracker = ResourceTracker::new();
             let r = r.borrow_mut();
@@ -1763,7 +1826,7 @@ impl KernelBuilder {
                 module: ir_module,
                 cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
                 captures: CBoxedSlice::new(captures),
-                shared: CBoxedSlice::new(vec![]),
+                shared: CBoxedSlice::new(r.shared.clone()),
                 args: CBoxedSlice::new(self.args.clone()),
                 block_size: r.block_size.unwrap_or([64, 1, 1]),
                 pools: r.pools.clone().unwrap(),
@@ -1840,7 +1903,7 @@ pub trait KernelBuildFn {
 
 pub trait CallableBuildFn {
     fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)
-                      -> RawCallable;
+        -> RawCallable;
 }
 
 pub trait StaticCallableBuildFn: CallableBuildFn {}
@@ -2651,8 +2714,8 @@ pub fn __assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, c
 pub(crate) fn need_runtime_check() -> bool {
     cfg!(debug_assertions)
         || match env::var("LUISA_DEBUG") {
-        Ok(s) => s == "full" || s == "1",
-        Err(_) => false,
-    }
+            Ok(s) => s == "full" || s == "1",
+            Err(_) => false,
+        }
         || __env_need_backtrace()
 }

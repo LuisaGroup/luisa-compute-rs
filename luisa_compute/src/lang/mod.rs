@@ -1791,6 +1791,7 @@ impl KernelBuilder {
                 pools: r.pools.clone().unwrap(),
             };
             let module = CallableModuleRef(CArc::new(module));
+            r.reset();
             RawCallable {
                 module,
                 resource_tracker: rt,

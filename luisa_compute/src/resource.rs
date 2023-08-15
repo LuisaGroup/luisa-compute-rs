@@ -12,6 +12,12 @@ use std::ops::RangeBounds;
 use std::process::abort;
 
 use std::sync::Arc;
+pub struct ByteBuffer {
+    inner:Buffer<u32>,
+}
+pub struct ByteBufferVar {
+    inner:BufferVar<u32>,
+}
 pub struct Buffer<T: Value> {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BufferHandle>,

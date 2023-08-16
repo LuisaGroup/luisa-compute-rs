@@ -2623,6 +2623,9 @@ pub fn autodiff(body: impl Fn()) {
 pub fn is_cpu_backend() -> bool {
     RECORDER.with(|r| {
         let r = r.borrow();
+        if r.device.is_none() {
+            return false;
+        }
         r.device
             .as_ref()
             .unwrap()

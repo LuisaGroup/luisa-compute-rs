@@ -1,4 +1,5 @@
 use proc_macro::TokenStream;
+use syn::{parse::{Parse, ParseStream}, __private::quote::{quote_spanned, quote}, spanned::Spanned};
 
 #[proc_macro_derive(Value)]
 pub fn derive_value(item: TokenStream) -> TokenStream {
@@ -32,4 +33,70 @@ pub fn _derive_aggregate(item: TokenStream) -> TokenStream {
     let item: syn::Item = syn::parse(item).unwrap();
     let compiler = luisa_compute_derive_impl::Compiler::new(true);
     compiler.derive_aggregate(&item).into()
+}
+struct LogInput {
+    printer: syn::Expr,
+    level: syn::Expr,
+    fmt: syn::LitStr,
+    args: Vec<syn::Expr>,
+}
+impl Parse for LogInput {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let printer = input.parse()?;
+        input.parse::<syn::Token![,]>()?;
+        let level = input.parse()?;
+        input.parse::<syn::Token![,]>()?;
+        let fmt = input.parse()?;
+        let mut args = vec![];
+        while !input.is_empty() {
+            input.parse::<syn::Token![,]>()?;
+            args.push(input.parse()?);
+        }
+        Ok(Self {
+            printer,
+            level,
+            fmt,
+            args,
+        })
+    }
+}
+
+#[proc_macro]
+pub fn _log(item: TokenStream) -> TokenStream {
+    // _log($printer:expr, $level:expr, $fmt:literal, $($arg:expr), *)
+    let input = syn::parse_macro_input!(item as LogInput);
+    let printer = &input.printer;
+    let level = &input.level;
+    let fmt = &input.fmt;
+    let args = &input.args;
+    let arg_idents = input
+        .args
+        .iter()
+        .enumerate()
+        .map(|(i, a)| syn::Ident::new(&format!("__log_priv_arg{}", i), a.span()))
+        .collect::<Vec<_>>();
+    quote!{
+        {
+            
+            #(
+                let #arg_idents = #args;
+            )*;
+            let mut __log_priv_i = 0;
+            let log_fn = Box::new(move |args: &[*const u32]| -> () {
+                let mut i = 0;
+                luisa_compute::log::log!(#level, #fmt , #(
+                    {
+                        let ret = luisa_compute::lang::printer::_unpack_from_expr(args[i], #arg_idents);
+                        i += 1;
+                        ret
+                    }
+                ), *);
+            });
+            let mut printer_args = luisa_compute::lang::PrinterArgs::new();
+            #(
+                printer_args.append(#arg_idents);
+            )*
+            #printer._log(#level, printer_args, log_fn);
+        }
+    }.into()
 }

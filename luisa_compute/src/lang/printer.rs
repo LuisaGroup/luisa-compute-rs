@@ -47,47 +47,55 @@ impl PrinterArgs {
     }
 }
 #[macro_export]
-macro_rules! log {
-    ($printer:expr, $level:expr, $fmt:literal, $($arg:tt)*) => {
-        {
-            let log_fn = Box::new(move |args: &[*const u32]| -> () {
-                let mut i = 0;
-                $(
-                    let $arg = $crate::lang::printer::_unpack_from_expr(args[i], $arg);
-                    i += 1;
-                )*
-                log::log!($level, $fmt, $($arg)*);
-            });
-            let mut printer_args = $crate::lang::PrinterArgs::new();
-            $(
-                printer_args.append($arg);
-            )*
-            $printer._log($level, printer_args, log_fn);
-        }
+macro_rules! lc_log {
+    ($printer:expr, $level:expr, $fmt:literal, $($arg:tt) *) => {
+        // {
+        //     let log_fn = Box::new(move |args: &[*const u32]| -> () {
+        //         let mut i = 0;
+        //         log::log!($level, $fmt , $(
+        //             {
+        //                 let ret = $crate::lang::printer::_unpack_from_expr(args[i], $arg);
+        //                 i += 1;
+        //                 ret
+        //             }
+        //         ), *);
+        //     });
+        //     let mut printer_args = $crate::lang::PrinterArgs::new();
+        //     $(
+        //         printer_args.append($arg);
+        //     )*
+        //     $printer._log($level, printer_args, log_fn);
+        // }
+        luisa_compute::derive::_log!(
+            $printer,
+            $level,
+            $fmt,
+            $($arg)*
+        )
     };
 }
 #[macro_export]
-macro_rules! info {
-    ($printer:expr, $fmt:literal, $($arg:tt)*) => {
-        $crate::log!($printer, log::Level::Info, $fmt, $($arg)*);
+macro_rules! lc_info {
+    ($printer:expr, $fmt:literal,$($arg:tt) *) => {
+        $crate::lc_log!($printer, log::Level::Info, $fmt, $($arg) *);
     };
 }
 #[macro_export]
-macro_rules! debug {
+macro_rules! lc_debug {
     ($printer:expr, $fmt:literal, $($arg:tt)*) => {
-        $crate::log!($printer, log::Level::Debug, $fmt, $($arg)*);
+        $crate::lc_log!($printer, log::Level::Debug, $fmt, $($arg)*);
     };
 }
 #[macro_export]
-macro_rules! warn {
+macro_rules! lc_warn {
     ($printer:expr, $fmt:literal, $($arg:tt)*) => {
-        $crate::log!($printer, log::Level::Warn, $fmt, $($arg)*);
+        $crate::lc_log!($printer, log::Level::Warn, $fmt, $($arg)*);
     };
 }
 #[macro_export]
-macro_rules! error {
+macro_rules! lc_error {
     ($printer:expr, $fmt:literal, $($arg:tt)*) => {
-        $crate::log!($printer, log::Level::Error, $fmt, $($arg)*);
+        $crate::lc_log!($printer, log::Level::Error, $fmt, $($arg)*);
     };
 }
 pub fn _unpack_from_expr<E: ExprProxy>(data: *const u32, _: E) -> E::Value {

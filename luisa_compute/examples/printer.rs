@@ -21,9 +21,9 @@ fn main() {
     let kernel = device.create_kernel::<()>(&|| {
         let id = dispatch_id().xy();
         if_!(id.x().cmpeq(id.y()), {
-            luisa::info!(printer, "id = {:?}", id);
+            lc_info!(printer, "id = {:?}", id);
         }, else {
-            luisa::info!(printer, "not equal!, id = {:?}", id);
+            lc_info!(printer, "not equal!, id = [{} {}]", id.x(), id.y());
         });
     });
     device.default_stream().with_scope(|s| {

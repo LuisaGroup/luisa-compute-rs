@@ -34,6 +34,7 @@ pub use api::{
     AccelBuildModificationFlags, AccelBuildRequest, AccelOption, AccelUsageHint, MeshType,
     PixelFormat, PixelStorage,
 };
+pub use log;
 pub use glam;
 pub use lang::math;
 pub use lang::math::*;
@@ -52,7 +53,7 @@ pub mod macros {
         cpu_dbg, if_, impl_new_poly_array, impl_polymorphic, lc_assert, lc_dbg, lc_unreachable,
         loop_, struct_, var, while_,
     };
-    pub use crate::{debug, error, info, log, warn};
+    pub use crate::{lc_debug, lc_error, lc_info, lc_log, lc_warn};
 }
 
 use lazy_static::lazy_static;

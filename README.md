@@ -16,6 +16,7 @@ Rust frontend to LuisaCompute and more! (WIP) ⚠ A stable version will be relea
     + [Polymorphism](#polymorphism)
     + [Autodiff](#autodiff)
     + [Custom Operators](#custom-operators)
+    + [Callable](#callable)
     + [Kernel](#kernel)
 * [Advanced Usage](#advanced-usage)
 * [Safety](#safety)
@@ -38,7 +39,7 @@ fn main() {
         args[0]
     );
 
-    let ctx = Context::new(current_exe().unwrap());
+    let ctx = Context::new(current_exe());
     let device = ctx.create_device(if args.len() == 2 {
         args[1].as_str()
     } else {
@@ -246,7 +247,7 @@ impl Area for CircleExpr {
 }
 impl_polymorphic!(Area, Circle);
 
-let circles = device.create_buffer(..).unwrap();
+let circles = device.create_buffer(..);
 let mut poly_area: Polymorphic<(), dyn Area> = Polymorphic::new();
 poly_area.register((), &circles);
 let area = poly_area.dispatch(tag, index, |obj|{
@@ -296,6 +297,54 @@ let args = MyAddArgsExpr::new(x, y, Float32::zero());
 let result = my_add.call(args);
 
 ```
+### Callable
+Users can define device-only functions using Callables. Callables have similar type signature to kernels: `Callable<ArgsTuple, Ret>`. 
+The difference is that Callables are not dispatchable and can only be called from other Callables or Kernels. Callables can be created using `Device::create_callable`. To invoke a Callable, use `Callable::call(args...)`. Callables accepts arguments such as resources (`BufferVar<T>`, .etc), expressions and references (pass a `Var<T>` to the callable). For example:
+```rust
+let add = device.create_callable::<(Expr<f32>, Expr<f32>), Expr<f32>>(&|a, b| {
+    a + b
+});
+let z = add.call(x, y);
+let pass_by_ref = device.create_callable::<(Var<f32>,), ()>(&|a| {
+    *a.get_mut() += 1.0;
+});
+let a = var!(f32, 1.0);
+pass_by_ref.call(a);
+cpu_dbg!(*a); // prints 2.0
+```
+***Note***: You cannot record a callable when recording another kernel or callables. This is because a callable can capture outer variables such as buffers. However, capturing local variables define in another callable is undefined behavior. To avoid this, we disallow recording a callable when recording another callable or kernel. 
+```rust
+let add = device.create_callable::<(Expr<f32>, Expr<f32>), Expr<f32>>(&|a, b| {
+    // runtime error!
+    let another_add = device.create_callable::<(Expr<f32>, Expr<f32>), Expr<f32>>(&|a, b| {
+        a + b
+    });
+    a + b
+});
+```
+
+***However, we acknowledge that recording a callable inside another callable/kernel is a useful feature***. Thus we provide two ways to workaround this limitation:
+1. Use static callables. A static callable does not capture any resources and thus can be safely recorded inside any callable/kernel. To create a static callable, use `create_static_callable(fn)`. For example,
+```rust
+lazy_static! {
+    static ref ADD:Callable<(Expr<f32>, Expr<f32>), Expr<f32>> = create_static_callable::<(Expr<f32>, Expr<f32>), Expr<f32>>(|a, b| {
+    a + b
+});
+}
+ADD.call(x, y);
+```
+
+2. Use `DynCallable`. These are callables that defer recording until being called. As a result, it requires you to pass a `'static` closure, avoiding the capture issue. To create a `DynCallable`, use `Device::create_dyn_callable(Box::new(fn))`. The syntax is the same as `create_callable`. Furthermore, `DynCallable` supports `DynExpr` and `DynVar`, which provides some capablitiy of implementing template/overloading inside EDSL.
+
+```rust
+let add = device.create_callable::<(Expr<f32>, Expr<f32>), Expr<f32>>(&|a, b| {
+    // no error!
+    let another_add = device.create_dyn_callable::<(Expr<f32>, Expr<f32>), Expr<f32>>(Box::new(|a, b| {
+        a + b
+    }));
+    a + b
+});
+```
 
 ### Kernel
 A kernel can be written in a closure or a function. The closure/function should have a `Fn(/*args*/)->()` signature, where the args are taking the `Var` type of resources, such as `BufferVar<T>`, `Tex2D<T>`, etc.
@@ -305,16 +354,16 @@ Note: `Device::create_kernel` takes a tuple of types as its generic parameter. I
 ```rust
 let kernel = device.create_kernel::<(Arg0, Arg1, ...)>(&|/*args*/| {
     /*body*/
-}).unwrap();
-kernel.dispatch([/*dispatch size*/], &arg0, &arg1, ...).unwrap();
+});
+kernel.dispatch([/*dispatch size*/], &arg0, &arg1, ...);
 ```
 There are two ways to pass arguments to a kernel: by arguments or by capture.
 ```rust
-let captured:Buffer<f32> = device.create_buffer(...).unwrap();
+let captured:Buffer<f32> = device.create_buffer(...);
 let kernel = device.create_kernel::<(BufferVar<f32>, )>(arg| {
     let v = arg.read(..);
     let u = captured.var().read(..);
-})).unwrap();
+}));
 ```
 User can pass a maximum of 16 arguments to kernel and unlimited number of captured variables. If more than 16 arguments are needed, user can pack them into a struct and pass the struct as a single argument.
 ```rust
@@ -325,11 +374,11 @@ pub struct BufferPair {
 }
 let kernel = device.create_kernel::<(BufferPair, )>(&|| {
     // ...
-}).unwrap();
-let a = device.create_buffer(...).unwrap();
-let b = device.create_buffer(...).unwrap();
+});
+let a = device.create_buffer(...);
+let b = device.create_buffer(...);
 let pair = BufferPair{a,b};
-kernel.dispatch([...], &packed).unwrap();
+kernel.dispatch([...], &packed);
 let BufferPair{a, b} = packed; // unpack if you need to use them later
 ```
 ## Advanced Usage

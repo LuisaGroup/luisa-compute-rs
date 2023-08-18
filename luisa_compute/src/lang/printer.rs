@@ -32,9 +32,8 @@ impl PrinterArgs {
     {
         let n = packed_size::<E::Value>();
         self.count_per_arg.push(n);
-        let count = self.count;
         self.pack_fn.push(Box::new(move |offset, data| {
-            pack_to(v, data, offset + count as u32);
+            pack_to(v, data, offset);
         }));
         self.count += n;
     }
@@ -177,10 +176,13 @@ impl<'a> Scope<'a> {
         self.submit([printer.inner.data.view(0..2).copy_from_async(&[0, 2])])
     }
     pub fn print(&self, printer: &Printer) -> &Self {
-        assert!(!printer
-            .inner
-            .dirty
-            .load(std::sync::atomic::Ordering::Relaxed), "must reset printer before printing again!");
+        assert!(
+            !printer
+                .inner
+                .dirty
+                .load(std::sync::atomic::Ordering::Relaxed),
+            "must reset printer before printing again!"
+        );
         let data = printer.inner.clone();
         let host_data = data.host_data.as_ptr() as *mut u32;
         let host_data = unsafe { std::slice::from_raw_parts_mut(host_data, data.host_data.len()) };
@@ -192,7 +194,7 @@ impl<'a> Scope<'a> {
             let items = data.items.read();
             let mut i = 2;
             let item_count = host_data[0] as usize;
-            for _ in 0..item_count {
+            for j in 0..item_count {
                 if i >= host_data.len() {
                     break;
                 }

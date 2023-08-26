@@ -738,7 +738,7 @@ pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
 }
 #[macro_export]
 macro_rules! struct_ {
-    ($t:ty { $($it:ident : $value:expr), * }) =>{
+    ($t:ty { $($it:ident : $value:expr), *  $(,)?}) =>{
         {
             type Init = <$t as $crate::lang::StructInitiaizable>::Init;
             let init = Init { $($it : $value), *  };
@@ -793,11 +793,18 @@ pub fn dispatch_size() -> Expr<Uint3> {
         b.call(Func::DispatchSize, &[], Uint3::type_())
     }))
 }
-pub fn synchronize_block() {
+pub fn sync_block() {
     __current_scope(|b| {
         b.call(Func::SynchronizeBlock, &[], Type::void());
     })
 }
+
+pub fn warp_is_first_active_lane() -> Expr<bool> {
+    Expr::<bool>::from_node(__current_scope(|b| {
+        b.call(Func::WarpIsFirstActiveLane, &[], Bool::type_())
+    }))
+}
+
 pub fn set_block_size(size: [u32; 3]) {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();

@@ -38,6 +38,12 @@ macro_rules! impl_var_trait {
             // type Double = Expr<f64>;
             type Bool = Expr<bool>;
         }
+        impl ScalarVarTrait for PrimExpr<$t> {}
+        impl ScalarOrVector for PrimExpr<$t> {
+            type Element = PrimExpr<$t>;
+            type ElementHost = $t;
+        }
+        impl BuiltinVarTrait for PrimExpr<$t> {}
     };
 }
 impl_var_trait!(f16);
@@ -586,11 +592,7 @@ macro_rules! impl_not {
             type Output = Expr<$t>;
             fn not(self) -> Self::Output {
                 __current_scope(|s| {
-                    let ret = s.call(
-                        Func::BitNot,
-                        &[ToNode::node(&self)],
-                        Self::Output::type_(),
-                    );
+                    let ret = s.call(Func::BitNot, &[ToNode::node(&self)], Self::Output::type_());
                     Expr::<$t>::from_node(ret)
                 })
             }
@@ -627,11 +629,7 @@ impl Not for PrimExpr<bool> {
     type Output = Expr<bool>;
     fn not(self) -> Self::Output {
         __current_scope(|s| {
-            let ret = s.call(
-                Func::BitNot,
-                &[ToNode::node(&self)],
-                Self::Output::type_(),
-            );
+            let ret = s.call(Func::BitNot, &[ToNode::node(&self)], Self::Output::type_());
             FromNode::from_node(ret)
         })
     }
@@ -870,3 +868,14 @@ impl<T: Aggregate> Aggregate for Option<T> {
         }
     }
 }
+pub trait ScalarVarTrait: ToNode + FromNode {}
+pub trait VectorVarTrait: ToNode + FromNode {}
+pub trait MatrixVarTrait: ToNode + FromNode {}
+pub trait ScalarOrVector: ToNode + FromNode {
+    type Element: ScalarVarTrait;
+    type ElementHost: Value;
+}
+pub trait BuiltinVarTrait: ToNode + FromNode {}
+pub trait Int32 {}
+impl Int32 for i32 {}
+impl Int32 for u32 {}

@@ -478,6 +478,12 @@ macro_rules! impl_vec_proxy {
                 }
             }
         }
+        impl VectorVarTrait for $expr_proxy { }
+        impl ScalarOrVector for $expr_proxy { 
+            type Element = Expr<$scalar>;
+            type ElementHost = $scalar;
+        }
+        impl BuiltinVarTrait for $expr_proxy { }
         impl Aggregate for $var_proxy {
             fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
                 nodes.push(self.node);
@@ -578,6 +584,8 @@ macro_rules! impl_mat_proxy {
                 }
             }
         }
+        impl MatrixVarTrait for $expr_proxy { }
+        impl BuiltinVarTrait for $expr_proxy { }
         impl Aggregate for $var_proxy {
             fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
                 nodes.push(self.node);
@@ -843,7 +851,7 @@ macro_rules! impl_binop_for_mat {
                 }))
             }
         }
-    }
+    };
 }
 macro_rules! impl_arith_binop {
     ($t:ty, $scalar:ty, $proxy:ty) => {
@@ -895,7 +903,11 @@ macro_rules! impl_arith_binop_for_mat {
             fn mul(self, rhs: $scalar) -> Self::Output {
                 let rhs = Self::fill(rhs);
                 <$proxy>::from_node(__current_scope(|s| {
-                    s.call(Func::MatCompMul, &[self.node, rhs.node], <$t as TypeOf>::type_())
+                    s.call(
+                        Func::MatCompMul,
+                        &[self.node, rhs.node],
+                        <$t as TypeOf>::type_(),
+                    )
                 }))
             }
         }
@@ -904,7 +916,11 @@ macro_rules! impl_arith_binop_for_mat {
             fn mul(self, rhs: $proxy) -> Self::Output {
                 let lhs = <$proxy>::fill(self);
                 <$proxy>::from_node(__current_scope(|s| {
-                    s.call(Func::MatCompMul, &[lhs.node, rhs.node], <$t as TypeOf>::type_())
+                    s.call(
+                        Func::MatCompMul,
+                        &[lhs.node, rhs.node],
+                        <$t as TypeOf>::type_(),
+                    )
                 }))
             }
         }
@@ -913,7 +929,11 @@ macro_rules! impl_arith_binop_for_mat {
             fn mul(self, rhs: PrimExpr<$scalar>) -> Self::Output {
                 let rhs = Self::fill(rhs);
                 <$proxy>::from_node(__current_scope(|s| {
-                    s.call(Func::MatCompMul, &[self.node, rhs.node], <$t as TypeOf>::type_())
+                    s.call(
+                        Func::MatCompMul,
+                        &[self.node, rhs.node],
+                        <$t as TypeOf>::type_(),
+                    )
                 }))
             }
         }
@@ -922,7 +942,11 @@ macro_rules! impl_arith_binop_for_mat {
             fn mul(self, rhs: $proxy) -> Self::Output {
                 let lhs = <$proxy>::fill(self);
                 <$proxy>::from_node(__current_scope(|s| {
-                    s.call(Func::MatCompMul, &[lhs.node, rhs.node], <$t as TypeOf>::type_())
+                    s.call(
+                        Func::MatCompMul,
+                        &[lhs.node, rhs.node],
+                        <$t as TypeOf>::type_(),
+                    )
                 }))
             }
         }
@@ -936,7 +960,7 @@ macro_rules! impl_arith_binop_for_mat {
         impl std::ops::Rem<$scalar> for $proxy {
             type Output = $proxy;
             fn rem(self, rhs: $scalar) -> Self::Output {
-                let rhs: PrimExpr::<$scalar> = rhs.into();
+                let rhs: PrimExpr<$scalar> = rhs.into();
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Rem, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
@@ -960,7 +984,7 @@ macro_rules! impl_arith_binop_for_mat {
         impl std::ops::Div<$scalar> for $proxy {
             type Output = $proxy;
             fn div(self, rhs: $scalar) -> Self::Output {
-                let rhs: PrimExpr::<$scalar> = rhs.into();
+                let rhs: PrimExpr<$scalar> = rhs.into();
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Div, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
@@ -984,13 +1008,17 @@ macro_rules! impl_arith_binop_for_mat {
             }
         }
         impl $proxy {
-            pub fn comp_mul(&self, other:Self)->Self {
+            pub fn comp_mul(&self, other: Self) -> Self {
                 <$proxy>::from_node(__current_scope(|s| {
-                    s.call(Func::MatCompMul, &[self.node, other.node], <$t as TypeOf>::type_())
+                    s.call(
+                        Func::MatCompMul,
+                        &[self.node, other.node],
+                        <$t as TypeOf>::type_(),
+                    )
                 }))
             }
         }
-    }
+    };
 }
 macro_rules! impl_int_binop {
     ($t:ty, $scalar:ty, $proxy:ty) => {
@@ -1019,11 +1047,7 @@ macro_rules! impl_int_binop {
             type Output = Expr<$t>;
             fn not(self) -> Self::Output {
                 __current_scope(|s| {
-                    let ret = s.call(
-                        Func::BitNot,
-                        &[ToNode::node(&self)],
-                        Self::Output::type_(),
-                    );
+                    let ret = s.call(Func::BitNot, &[ToNode::node(&self)], Self::Output::type_());
                     Expr::<$t>::from_node(ret)
                 })
             }

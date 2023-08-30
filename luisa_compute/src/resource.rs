@@ -293,6 +293,12 @@ impl<T: Value> BufferHeap<T> {
         self.inner.buffer(index)
     }
 }
+impl<T: Value> BufferHeapVar<T> {
+    #[inline]
+    pub fn buffer(&self, index: impl Into<Expr<u32>>) -> BindlessBufferVar<T> {
+        self.inner.buffer(index)
+    }
+}
 pub struct BindlessArray {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BindlessArrayHandle>,

@@ -174,6 +174,13 @@ impl Device {
         buffer.view(..).fill_fn(f);
         buffer
     }
+    pub fn create_buffer_heap<T: Value>(&self, slots: usize) -> BufferHeap<T> {
+        let array = self.create_bindless_array(slots);
+        BufferHeap {
+            inner: array,
+            _marker: std::marker::PhantomData {},
+        }
+    }
     pub fn create_bindless_array(&self, slots: usize) -> BindlessArray {
         let array = self.inner.create_bindless_array(slots);
         BindlessArray {

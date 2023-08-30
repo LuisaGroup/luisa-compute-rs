@@ -13,10 +13,10 @@ use std::process::abort;
 
 use std::sync::Arc;
 pub struct ByteBuffer {
-    inner:Buffer<u32>,
+    inner: Buffer<u32>,
 }
 pub struct ByteBufferVar {
-    inner:BufferVar<u32>,
+    inner: BufferVar<u32>,
 }
 pub struct Buffer<T: Value> {
     pub(crate) device: Device,
@@ -238,6 +238,60 @@ pub(crate) struct BindlessArraySlot {
     pub(crate) buffer: Option<Arc<BufferHandle>>,
     pub(crate) tex2d: Option<Arc<TextureHandle>>,
     pub(crate) tex3d: Option<Arc<TextureHandle>>,
+}
+pub struct BufferHeap<T: Value> {
+    pub(crate) inner: BindlessArray,
+    pub(crate) _marker: std::marker::PhantomData<T>,
+}
+pub struct BufferHeapVar<T: Value> {
+    inner: BindlessArrayVar,
+    _marker: std::marker::PhantomData<T>,
+}
+impl<T: Value> BufferHeap<T> {
+    #[inline]
+    pub fn var(&self) -> BufferHeapVar<T> {
+        BufferHeapVar {
+            inner: self.inner.var(),
+            _marker: std::marker::PhantomData,
+        }
+    }
+    #[inline]
+    pub fn handle(&self) -> api::BindlessArray {
+        self.inner.handle()
+    }
+    #[inline]
+    pub fn native_handle(&self) -> *mut std::ffi::c_void {
+        self.inner.native_handle()
+    }
+    pub fn emplace_buffer_async(&self, index: usize, buffer: &Buffer<T>) {
+        self.inner.emplace_buffer_async(index, buffer);
+    }
+    pub fn emplace_buffer_view_async<'a>(&self, index: usize, bufferview: &BufferView<'a, T>) {
+        self.inner.emplace_bufferview_async(index, bufferview);
+    }
+    pub fn remove_buffer_async(&self, index: usize) {
+        self.inner.remove_buffer_async(index);
+    }
+    #[inline]
+    pub fn emplace_buffer(&self, index: usize, buffer: &Buffer<T>) {
+        self.inner.emplace_buffer(index, buffer);
+    }
+    #[inline]
+    pub fn emplace_buffer_view<'a>(&self, index: usize, bufferview: &BufferView<'a, T>) {
+        self.inner.emplace_bufferview_async(index, bufferview);
+    }
+    #[inline]
+    pub fn remove_buffer(&self, index: usize) {
+        self.inner.remove_buffer(index);
+    }
+    #[inline]
+    pub fn update(&self) {
+        self.inner.update();
+    }
+    #[inline]
+    pub fn buffer(&self, index: impl Into<Expr<u32>>) -> BindlessBufferVar<T> {
+        self.inner.buffer(index)
+    }
 }
 pub struct BindlessArray {
     pub(crate) device: Device,

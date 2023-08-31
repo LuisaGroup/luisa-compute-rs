@@ -1,6 +1,7 @@
 pub use super::swizzle::*;
 use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*, Float};
 use crate::*;
+use serde::{Serialize, Deserialize};
 use half::f16;
 use luisa_compute_ir::{
     context::register_type,
@@ -12,7 +13,7 @@ use std::ops::Mul;
 macro_rules! def_vec {
     ($name:ident, $glam_type:ident, $scalar:ty, $align:literal, $($comp:ident), *) => {
         #[repr(C, align($align))]
-        #[derive(Copy, Clone, Debug, Default)]
+        #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
         pub struct $name {
             $(pub $comp: $scalar), *
         }
@@ -43,7 +44,7 @@ macro_rules! def_vec {
 macro_rules! def_packed_vec {
     ($name:ident, $vec_type:ident, $glam_type:ident, $scalar:ty, $($comp:ident), *) => {
         #[repr(C)]
-        #[derive(Copy, Clone, Debug, Default, __Value)]
+        #[derive(Copy, Clone, Debug, Default, __Value, Serialize, Deserialize)]
         pub struct $name {
             $(pub $comp: $scalar), *
         }
@@ -225,17 +226,17 @@ def_vec_no_glam!(Byte4, u8, 4, x, y, z, w);
 // def_packed_vec_no_glam!(PackedByte3, u8, x, y, z);
 // pub type PackByte4 = Byte4;
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 #[repr(C, align(8))]
 pub struct Mat2 {
     pub cols: [Float2; 2],
 }
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 #[repr(C, align(16))]
 pub struct Mat3 {
     pub cols: [Float3; 3],
 }
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 #[repr(C, align(16))]
 pub struct Mat4 {
     pub cols: [Float4; 4],

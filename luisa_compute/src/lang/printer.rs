@@ -123,7 +123,7 @@ impl Printer {
         let item_id = items.len() as u32;
 
         if_!(
-            offset.cmplt(data.len()) & (offset + 1 + args.count as u32).cmple(data.len()),
+            offset.cmplt(data.len().uint()) & (offset + 1 + args.count as u32).cmple(data.len().uint()),
             {
                 data.atomic_fetch_add(0, 1);
                 data.write(offset, item_id);

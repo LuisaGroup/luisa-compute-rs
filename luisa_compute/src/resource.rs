@@ -13,10 +13,230 @@ use std::process::abort;
 
 use std::sync::Arc;
 pub struct ByteBuffer {
-    inner: Buffer<u32>,
+    pub(crate) device: Device,
+    pub(crate) handle: Arc<BufferHandle>,
+    pub(crate) len: usize,
 }
+impl ByteBuffer {
+    pub fn len(&self) -> usize {
+        self.len
+    }
+    #[inline]
+    pub fn handle(&self) -> api::Buffer {
+        self.handle.handle
+    }
+    #[inline]
+    pub fn native_handle(&self) -> *mut c_void {
+        self.handle.native_handle
+    }
+    #[inline]
+    pub fn copy_from(&self, data: &[u8]) {
+        self.view(..).copy_from(data);
+    }
+    #[inline]
+    pub fn copy_from_async<'a>(&self, data: &[u8]) -> Command<'_> {
+        self.view(..).copy_from_async(data)
+    }
+    #[inline]
+    pub fn copy_to(&self, data: &mut [u8]) {
+        self.view(..).copy_to(data);
+    }
+    #[inline]
+    pub fn copy_to_async<'a>(&self, data: &'a mut [u8]) -> Command<'a> {
+        self.view(..).copy_to_async(data)
+    }
+    #[inline]
+    pub fn copy_to_vec(&self) -> Vec<u8> {
+        self.view(..).copy_to_vec()
+    }
+    #[inline]
+    pub fn copy_to_buffer(&self, dst: &ByteBuffer) {
+        self.view(..).copy_to_buffer(dst.view(..));
+    }
+    #[inline]
+    pub fn copy_to_buffer_async<'a>(&'a self, dst: &'a ByteBuffer) -> Command<'a> {
+        self.view(..).copy_to_buffer_async(dst.view(..))
+    }
+    #[inline]
+    pub fn fill_fn<F: FnMut(usize) -> u8>(&self, f: F) {
+        self.view(..).fill_fn(f);
+    }
+    #[inline]
+    pub fn fill(&self, value: u8) {
+        self.view(..).fill(value);
+    }
+    pub fn view<S: RangeBounds<usize>>(&self, range: S) -> ByteBufferView<'_> {
+        let lower = range.start_bound();
+        let upper = range.end_bound();
+        let lower = match lower {
+            std::ops::Bound::Included(&x) => x,
+            std::ops::Bound::Excluded(&x) => x + 1,
+            std::ops::Bound::Unbounded => 0,
+        };
+        let upper = match upper {
+            std::ops::Bound::Included(&x) => x + 1,
+            std::ops::Bound::Excluded(&x) => x,
+            std::ops::Bound::Unbounded => self.len,
+        };
+        assert!(lower <= upper);
+        assert!(upper <= self.len);
+        ByteBufferView {
+            buffer: self,
+            offset: lower,
+            len: upper - lower,
+        }
+    }
+    pub fn var(&self) -> ByteBufferVar {
+        ByteBufferVar::new(&self.view(..))
+    }
+}
+pub struct ByteBufferView<'a> {
+    pub(crate) buffer: &'a ByteBuffer,
+    pub(crate) offset: usize,
+    pub(crate) len: usize,
+}
+impl<'a> ByteBufferView<'a> {
+    pub fn handle(&self) -> api::Buffer {
+        self.buffer.handle()
+    }
+    pub fn copy_to_async<'b>(&'a self, data: &'b mut [u8]) -> Command<'b> {
+        assert_eq!(data.len(), self.len);
+        let mut rt = ResourceTracker::new();
+        rt.add(self.buffer.handle.clone());
+        Command {
+            inner: api::Command::BufferDownload(BufferDownloadCommand {
+                buffer: self.handle(),
+                offset: self.offset,
+                size: data.len(),
+                data: data.as_mut_ptr() as *mut u8,
+            }),
+            marker: std::marker::PhantomData,
+            resource_tracker: rt,
+            callback: None,
+        }
+    }
+    pub fn copy_to_vec(&self) -> Vec<u8> {
+        let mut data = Vec::with_capacity(self.len);
+        unsafe {
+            let slice = std::slice::from_raw_parts_mut(data.as_mut_ptr(), self.len);
+            self.copy_to(slice);
+            data.set_len(self.len);
+        }
+        data
+    }
+    pub fn copy_to(&self, data: &mut [u8]) {
+        unsafe {
+            submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_async(data)]);
+        }
+    }
+
+    pub fn copy_from_async<'b>(&'a self, data: &'b [u8]) -> Command<'static> {
+        assert_eq!(data.len(), self.len);
+        let mut rt = ResourceTracker::new();
+        rt.add(self.buffer.handle.clone());
+        Command {
+            inner: api::Command::BufferUpload(BufferUploadCommand {
+                buffer: self.handle(),
+                offset: self.offset,
+                size: data.len(),
+                data: data.as_ptr() as *const u8,
+            }),
+            marker: std::marker::PhantomData,
+            resource_tracker: rt,
+            callback: None,
+        }
+    }
+    pub fn copy_from(&self, data: &[u8]) {
+        submit_default_stream_and_sync(&self.buffer.device, [self.copy_from_async(data)]);
+    }
+    pub fn fill_fn<F: FnMut(usize) -> u8>(&self, f: F) {
+        self.copy_from(&(0..self.len).map(f).collect::<Vec<_>>());
+    }
+    pub fn fill(&self, value: u8) {
+        self.fill_fn(|_| value);
+    }
+    pub fn copy_to_buffer_async(&self, dst: ByteBufferView<'a>) -> Command<'static> {
+        assert_eq!(self.len, dst.len);
+        let mut rt = ResourceTracker::new();
+        rt.add(self.buffer.handle.clone());
+        rt.add(dst.buffer.handle.clone());
+        Command {
+            inner: api::Command::BufferCopy(api::BufferCopyCommand {
+                src: self.handle(),
+                src_offset: self.offset,
+                dst: dst.handle(),
+                dst_offset: dst.offset,
+                size: self.len,
+            }),
+            marker: std::marker::PhantomData,
+            resource_tracker: rt,
+            callback: None,
+        }
+    }
+    pub fn copy_to_buffer(&self, dst: ByteBufferView<'a>) {
+        submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_buffer_async(dst)]);
+    }
+}
+#[derive(Clone)]
 pub struct ByteBufferVar {
-    inner: BufferVar<u32>,
+    #[allow(dead_code)]
+    pub(crate) handle: Option<Arc<BufferHandle>>,
+    pub(crate) node: NodeRef,
+}
+impl ByteBufferVar {
+    pub fn new(buffer: &ByteBufferView<'_>) -> Self {
+        let node = RECORDER.with(|r| {
+            let mut r = r.borrow_mut();
+            assert!(r.lock, "BufferVar must be created from within a kernel");
+            let binding = Binding::Buffer(BufferBinding {
+                handle: buffer.handle().0,
+                size: buffer.len,
+                offset: buffer.offset as u64,
+            });
+            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
+                *node
+            } else {
+                let node = new_node(
+                    r.pools.as_ref().unwrap(),
+                    Node::new(CArc::new(Instruction::Buffer), Type::void()),
+                );
+                let i = r.captured_buffer.len();
+                r.captured_buffer
+                    .insert(binding, (i, node, binding, buffer.buffer.handle.clone()));
+                node
+            }
+        });
+        Self {
+            node,
+            handle: Some(buffer.buffer.handle.clone()),
+        }
+    }
+    pub fn read<T: Value>(&self, index_bytes: impl IntoIndex) -> Expr<T> {
+        let i = index_bytes.to_u64();
+        Expr::<T>::from_node(__current_scope(|b| {
+            b.call(
+                Func::ByteBufferRead,
+                &[self.node, i.node],
+                <T as TypeOf>::type_(),
+            )
+        }))
+    }
+    pub fn len(&self) -> Expr<u64> {
+        Expr::<u64>::from_node(__current_scope(|b| {
+            b.call(Func::ByteBufferSize, &[self.node], <u64 as TypeOf>::type_())
+        }))
+    }
+    pub fn write<T: Value>(&self, index_bytes: impl IntoIndex, value: impl Into<Expr<T>>) {
+        let i = index_bytes.to_u64();
+        let value: Expr<T> = value.into();
+        __current_scope(|b| {
+            b.call(
+                Func::ByteBufferWrite,
+                &[self.node, i.node, value.node()],
+                Type::void(),
+            )
+        });
+    }
 }
 pub struct Buffer<T: Value> {
     pub(crate) device: Device,
@@ -47,7 +267,7 @@ impl<'a, T: Value> BufferView<'a, T> {
     pub fn var(&self) -> BufferVar<T> {
         BufferVar::new(self)
     }
-    pub(crate) fn handle(&self) -> api::Buffer {
+    pub fn handle(&self) -> api::Buffer {
         self.buffer.handle()
     }
     pub fn copy_to_async<'b>(&'a self, data: &'b mut [T]) -> Command<'b> {
@@ -130,7 +350,7 @@ impl<'a, T: Value> BufferView<'a, T> {
 }
 impl<T: Value> Buffer<T> {
     #[inline]
-    pub(crate) fn handle(&self) -> api::Buffer {
+    pub fn handle(&self) -> api::Buffer {
         self.handle.handle
     }
     #[inline]
@@ -182,17 +402,17 @@ impl<T: Value> Buffer<T> {
     pub fn fill(&self, value: T) {
         self.view(..).fill(value);
     }
-    pub fn view<S: RangeBounds<u64>>(&self, range: S) -> BufferView<T> {
+    pub fn view<S: RangeBounds<usize>>(&self, range: S) -> BufferView<T> {
         let lower = range.start_bound();
         let upper = range.end_bound();
         let lower = match lower {
-            std::ops::Bound::Included(&x) => x as usize,
-            std::ops::Bound::Excluded(&x) => x as usize + 1,
+            std::ops::Bound::Included(&x) => x,
+            std::ops::Bound::Excluded(&x) => x + 1,
             std::ops::Bound::Unbounded => 0,
         };
         let upper = match upper {
-            std::ops::Bound::Included(&x) => x as usize + 1,
-            std::ops::Bound::Excluded(&x) => x as usize,
+            std::ops::Bound::Included(&x) => x + 1,
+            std::ops::Bound::Excluded(&x) => x,
             std::ops::Bound::Unbounded => self.len,
         };
         assert!(lower <= upper);
@@ -200,7 +420,7 @@ impl<T: Value> Buffer<T> {
         BufferView {
             buffer: self,
             offset: lower,
-            len: (upper - lower) as usize,
+            len: upper - lower,
         }
     }
     #[inline]
@@ -267,7 +487,7 @@ impl<T: Value> BufferHeap<T> {
         self.inner.emplace_buffer_async(index, buffer);
     }
     pub fn emplace_buffer_view_async<'a>(&self, index: usize, bufferview: &BufferView<'a, T>) {
-        self.inner.emplace_bufferview_async(index, bufferview);
+        self.inner.emplace_buffer_view_async(index, bufferview);
     }
     pub fn remove_buffer_async(&self, index: usize) {
         self.inner.remove_buffer_async(index);
@@ -278,7 +498,7 @@ impl<T: Value> BufferHeap<T> {
     }
     #[inline]
     pub fn emplace_buffer_view<'a>(&self, index: usize, bufferview: &BufferView<'a, T>) {
-        self.inner.emplace_bufferview_async(index, bufferview);
+        self.inner.emplace_buffer_view_async(index, bufferview);
     }
     #[inline]
     pub fn remove_buffer(&self, index: usize) {
@@ -343,8 +563,14 @@ impl BindlessArray {
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         self.handle.native_handle
     }
-
-    pub fn emplace_buffer_async<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
+    pub fn emplace_byte_buffer_async(&self, index: usize, buffer: &ByteBuffer) {
+        self.emplace_byte_buffer_view_async(index, &buffer.view(..))
+    }
+    pub fn emplace_byte_buffer_view_async<'a>(
+        &self,
+        index: usize,
+        bufferview: &ByteBufferView<'a>,
+    ) {
         self.lock();
         self.modifications
             .borrow_mut()
@@ -352,18 +578,21 @@ impl BindlessArray {
                 slot: index,
                 buffer: api::BindlessArrayUpdateBuffer {
                     op: api::BindlessArrayUpdateOperation::Emplace,
-                    handle: buffer.handle.handle,
-                    offset: 0,
+                    handle: bufferview.handle(),
+                    offset: bufferview.offset,
                 },
                 tex2d: api::BindlessArrayUpdateTexture::default(),
                 tex3d: api::BindlessArrayUpdateTexture::default(),
             });
         self.make_pending_slots();
         let mut pending = self.pending_slots.borrow_mut();
-        pending[index].buffer = Some(buffer.handle.clone());
+        pending[index].buffer = Some(bufferview.buffer.handle.clone());
         self.unlock();
     }
-    pub fn emplace_bufferview_async<'a, T: Value>(
+    pub fn emplace_buffer_async<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
+        self.emplace_buffer_view_async(index, &buffer.view(..))
+    }
+    pub fn emplace_buffer_view_async<'a, T: Value>(
         &self,
         index: usize,
         bufferview: &BufferView<'a, T>,
@@ -492,13 +721,23 @@ impl BindlessArray {
         self.unlock();
     }
     #[inline]
+    pub fn emplace_byte_buffer(&self, index: usize, buffer: &ByteBuffer) {
+        self.emplace_byte_buffer_async(index, buffer);
+        self.update();
+    }
+    #[inline]
+    pub fn emplace_byte_buffer_view(&self, index: usize, buffer: &ByteBufferView<'_>) {
+        self.emplace_byte_buffer_view_async(index, buffer);
+        self.update();
+    }
+    #[inline]
     pub fn emplace_buffer<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
         self.emplace_buffer_async(index, buffer);
         self.update();
     }
     #[inline]
     pub fn emplace_buffer_view<T: Value>(&self, index: usize, buffer: &BufferView<T>) {
-        self.emplace_bufferview_async(index, buffer);
+        self.emplace_buffer_view_async(index, buffer);
         self.update();
     }
     #[inline]
@@ -789,7 +1028,7 @@ pub struct Tex3dView<'a, T: IoTexel> {
     pub(crate) level: u32,
 }
 impl<T: IoTexel> Tex2d<T> {
-    pub(crate) fn handle(&self) -> api::Texture {
+    pub fn handle(&self) -> api::Texture {
         self.handle.handle
     }
     pub fn var(&self) -> Tex2dVar<T> {
@@ -797,7 +1036,7 @@ impl<T: IoTexel> Tex2d<T> {
     }
 }
 impl<T: IoTexel> Tex3d<T> {
-    pub(crate) fn handle(&self) -> api::Texture {
+    pub fn handle(&self) -> api::Texture {
         self.handle.handle
     }
     pub fn var(&self) -> Tex3dVar<T> {
@@ -957,7 +1196,7 @@ macro_rules! impl_tex_view {
     };
 }
 impl<'a, T: IoTexel> Tex2dView<'a, T> {
-    pub(crate) fn handle(&self) -> api::Texture {
+    pub fn handle(&self) -> api::Texture {
         self.tex.handle.handle
     }
     pub fn texel_count(&self) -> u32 {
@@ -977,7 +1216,7 @@ impl<'a, T: IoTexel> Tex2dView<'a, T> {
 }
 impl_tex_view!(Tex2dView);
 impl<'a, T: IoTexel> Tex3dView<'a, T> {
-    pub(crate) fn handle(&self) -> api::Texture {
+    pub fn handle(&self) -> api::Texture {
         self.tex.handle.handle
     }
     pub fn texel_count(&self) -> u32 {
@@ -1074,8 +1313,8 @@ impl<T: Value> ToNode for BindlessBufferVar<T> {
 
 impl<T: Value> IndexRead for BindlessBufferVar<T> {
     type Element = T;
-    fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
-        let i = i.into();
+    fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
+        let i = i.to_u64();
         if need_runtime_check() {
             lc_assert!(i.cmplt(self.len()));
         }
@@ -1090,9 +1329,9 @@ impl<T: Value> IndexRead for BindlessBufferVar<T> {
     }
 }
 impl<T: Value> BindlessBufferVar<T> {
-    pub fn len(&self) -> Expr<u32> {
-        let stride = const_(T::type_().size() as u32);
-        Expr::<u32>::from_node(__current_scope(|b| {
+    pub fn len(&self) -> Expr<u64> {
+        let stride = const_(T::type_().size() as u64);
+        Expr::<u64>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessBufferSize,
                 &[self.array, self.buffer_index.node(), stride.node()],
@@ -1106,6 +1345,38 @@ impl<T: Value> BindlessBufferVar<T> {
                 Func::BindlessBufferType,
                 &[self.array, self.buffer_index.node()],
                 u64::type_(),
+            )
+        }))
+    }
+}
+#[derive(Clone)]
+pub struct BindlessByteBufferVar {
+    array: NodeRef,
+    buffer_index: Expr<u32>,
+}
+impl ToNode for BindlessByteBufferVar {
+    fn node(&self) -> NodeRef {
+        self.array
+    }
+}
+impl BindlessByteBufferVar {
+    pub fn read<T: Value>(&self, index_bytes: impl IntoIndex) -> Expr<T> {
+        let i = index_bytes.to_u64();
+        Expr::<T>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessByteAdressBufferRead,
+                &[self.array, self.buffer_index.node(), i.node],
+                <T as TypeOf>::type_(),
+            )
+        }))
+    }
+    pub fn len(&self) -> Expr<u64> {
+        let s = const_(1u64);
+        Expr::<u64>::from_node(__current_scope(|b| {
+            b.call(
+                Func::BindlessBufferSize,
+                &[self.array, self.buffer_index.node(), s.node()],
+                <u64 as TypeOf>::type_(),
             )
         }))
     }
@@ -1300,6 +1571,16 @@ impl BindlessArrayVar {
         };
         v
     }
+    pub fn byte_address_buffer(
+        &self,
+        buffer_index: impl Into<Expr<u32>>,
+    ) -> BindlessByteBufferVar {
+        let v = BindlessByteBufferVar {
+            array: self.node,
+            buffer_index: buffer_index.into(),
+        };
+        v
+    }
     pub fn buffer<T: Value>(&self, buffer_index: impl Into<Expr<u32>>) -> BindlessBufferVar<T> {
         let v = BindlessBufferVar {
             array: self.node,
@@ -1369,19 +1650,19 @@ impl<T: Value> ToNode for Buffer<T> {
 }
 impl<T: Value> IndexRead for Buffer<T> {
     type Element = T;
-    fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
+    fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
         self.var().read(i)
     }
 }
 impl<T: Value> IndexWrite for Buffer<T> {
-    fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, v: V) {
+    fn write<I: IntoIndex, V: Into<Expr<T>>>(&self, i: I, v: V) {
         self.var().write(i, v)
     }
 }
 impl<T: Value> IndexRead for BufferVar<T> {
     type Element = T;
-    fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
-        let i = i.into();
+    fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
+        let i = i.to_u64();
         if need_runtime_check() {
             lc_assert!(i.cmplt(self.len()));
         }
@@ -1395,8 +1676,8 @@ impl<T: Value> IndexRead for BufferVar<T> {
     }
 }
 impl<T: Value> IndexWrite for BufferVar<T> {
-    fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, v: V) {
-        let i = i.into();
+    fn write<I: IntoIndex, V: Into<Expr<T>>>(&self, i: I, v: V) {
+        let i = i.to_u64();
         let v = v.into();
         if need_runtime_check() {
             lc_assert!(i.cmplt(self.len()));
@@ -1439,9 +1720,9 @@ impl<T: Value> BufferVar<T> {
             handle: Some(buffer.buffer.handle.clone()),
         }
     }
-    pub fn len(&self) -> Expr<u32> {
+    pub fn len(&self) -> Expr<u64> {
         FromNode::from_node(
-            __current_scope(|b| b.call(Func::BufferSize, &[self.node], u32::type_())).into(),
+            __current_scope(|b| b.call(Func::BufferSize, &[self.node], u64::type_())).into(),
         )
     }
 }
@@ -1449,12 +1730,8 @@ impl<T: Value> BufferVar<T> {
 macro_rules! impl_atomic {
     ($t:ty) => {
         impl BufferVar<$t> {
-            pub fn atomic_exchange<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
-                &self,
-                i: I,
-                v: V,
-            ) -> Expr<$t> {
-                let i = i.into();
+            pub fn atomic_exchange<I: IntoIndex, V: Into<Expr<$t>>>(&self, i: I, v: V) -> Expr<$t> {
+                let i = i.to_u64();
                 let v = v.into();
                 if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
@@ -1467,17 +1744,13 @@ macro_rules! impl_atomic {
                     )
                 }))
             }
-            pub fn atomic_compare_exchange<
-                I: Into<Expr<u32>>,
-                V0: Into<Expr<$t>>,
-                V1: Into<Expr<$t>>,
-            >(
+            pub fn atomic_compare_exchange<I: IntoIndex, V0: Into<Expr<$t>>, V1: Into<Expr<$t>>>(
                 &self,
                 i: I,
                 expected: V0,
                 desired: V1,
             ) -> Expr<$t> {
-                let i = i.into();
+                let i = i.to_u64();
                 let expected = expected.into();
                 let desired = desired.into();
                 if need_runtime_check() {
@@ -1491,12 +1764,12 @@ macro_rules! impl_atomic {
                     )
                 }))
             }
-            pub fn atomic_fetch_add<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+            pub fn atomic_fetch_add<I: IntoIndex, V: Into<Expr<$t>>>(
                 &self,
                 i: I,
                 v: V,
             ) -> Expr<$t> {
-                let i = i.into();
+                let i = i.to_u64();
                 let v = v.into();
                 if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
@@ -1509,12 +1782,12 @@ macro_rules! impl_atomic {
                     )
                 }))
             }
-            pub fn atomic_fetch_sub<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+            pub fn atomic_fetch_sub<I: IntoIndex, V: Into<Expr<$t>>>(
                 &self,
                 i: I,
                 v: V,
             ) -> Expr<$t> {
-                let i = i.into();
+                let i = i.to_u64();
                 let v = v.into();
                 if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
@@ -1527,12 +1800,12 @@ macro_rules! impl_atomic {
                     )
                 }))
             }
-            pub fn atomic_fetch_min<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+            pub fn atomic_fetch_min<I: IntoIndex, V: Into<Expr<$t>>>(
                 &self,
                 i: I,
                 v: V,
             ) -> Expr<$t> {
-                let i = i.into();
+                let i = i.to_u64();
                 let v = v.into();
                 if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
@@ -1545,12 +1818,12 @@ macro_rules! impl_atomic {
                     )
                 }))
             }
-            pub fn atomic_fetch_max<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+            pub fn atomic_fetch_max<I: IntoIndex, V: Into<Expr<$t>>>(
                 &self,
                 i: I,
                 v: V,
             ) -> Expr<$t> {
-                let i = i.into();
+                let i = i.to_u64();
                 let v = v.into();
                 if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
@@ -1569,12 +1842,12 @@ macro_rules! impl_atomic {
 macro_rules! impl_atomic_bit {
     ($t:ty) => {
         impl BufferVar<$t> {
-            pub fn atomic_fetch_and<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+            pub fn atomic_fetch_and<I: IntoIndex, V: Into<Expr<$t>>>(
                 &self,
                 i: I,
                 v: V,
             ) -> Expr<$t> {
-                let i = i.into();
+                let i = i.to_u64();
                 let v = v.into();
                 if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
@@ -1587,12 +1860,8 @@ macro_rules! impl_atomic_bit {
                     )
                 }))
             }
-            pub fn atomic_fetch_or<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
-                &self,
-                i: I,
-                v: V,
-            ) -> Expr<$t> {
-                let i = i.into();
+            pub fn atomic_fetch_or<I: IntoIndex, V: Into<Expr<$t>>>(&self, i: I, v: V) -> Expr<$t> {
+                let i = i.to_u64();
                 let v = v.into();
                 if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));
@@ -1605,12 +1874,12 @@ macro_rules! impl_atomic_bit {
                     )
                 }))
             }
-            pub fn atomic_fetch_xor<I: Into<Expr<u32>>, V: Into<Expr<$t>>>(
+            pub fn atomic_fetch_xor<I: IntoIndex, V: Into<Expr<$t>>>(
                 &self,
                 i: I,
                 v: V,
             ) -> Expr<$t> {
-                let i = i.into();
+                let i = i.to_u64();
                 let v = v.into();
                 if need_runtime_check() {
                     lc_assert!(i.cmplt(self.len()));

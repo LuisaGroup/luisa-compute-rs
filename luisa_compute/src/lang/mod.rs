@@ -38,7 +38,7 @@ use math::Uint3;
 use std::cell::{Cell, RefCell, UnsafeCell};
 use std::ffi::CString;
 use std::ops::{Bound, Deref, DerefMut, RangeBounds};
-
+use std::sync::atomic::AtomicUsize;
 // use self::math::Uint3;
 pub mod math;
 pub mod poly;
@@ -50,6 +50,14 @@ pub use math::*;
 pub use poly::*;
 pub use printer::*;
 
+pub(crate) static KERNEL_ID: AtomicUsize = AtomicUsize::new(0);
+// prevent node being shared across kernels
+// TODO: replace NodeRef with SafeNodeRef
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SafeNodeRef {
+    pub(crate) node: NodeRef,
+    pub(crate) kernel_id: usize,
+}
 pub trait Value: Copy + ir::TypeOf + 'static {
     type Expr: ExprProxy<Value = Self>;
     type Var: VarProxy<Value = Self>;
@@ -128,18 +136,51 @@ macro_rules! impl_aggregate_for_tuple {
 }
 impl_aggregate_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
-pub unsafe trait _Mask: ToNode {}
+pub unsafe trait Mask: ToNode {}
+pub trait IntoIndex {
+    fn to_u64(&self) -> Expr<u64>;
+}
+impl IntoIndex for i32 {
+    fn to_u64(&self) -> Expr<u64> {
+        const_(*self as u64)
+    }
+}
+impl IntoIndex for i64 {
+    fn to_u64(&self) -> Expr<u64> {
+        const_(*self as u64)
+    }
+}
+impl IntoIndex for u32 {
+    fn to_u64(&self) -> Expr<u64> {
+        const_(*self as u64)
+    }
+}
+impl IntoIndex for u64 {
+    fn to_u64(&self) -> Expr<u64> {
+        const_(*self)
+    }
+}
+impl IntoIndex for PrimExpr<u32> {
+    fn to_u64(&self) -> Expr<u64> {
+        self.ulong()
+    }
+}
+impl IntoIndex for PrimExpr<u64> {
+    fn to_u64(&self) -> Expr<u64> {
+        *self
+    }
+}
 
 pub trait IndexRead: ToNode {
     type Element: Value;
-    fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<Self::Element>;
+    fn read<I: IntoIndex>(&self, i: I) -> Expr<Self::Element>;
 }
 
 pub trait IndexWrite: IndexRead {
-    fn write<I: Into<Expr<u32>>, V: Into<Expr<Self::Element>>>(&self, i: I, value: V);
+    fn write<I: IntoIndex, V: Into<Expr<Self::Element>>>(&self, i: I, value: V);
 }
 
-pub fn select<A: Aggregate>(mask: impl _Mask, a: A, b: A) -> A {
+pub fn select<A: Aggregate>(mask: impl Mask, a: A, b: A) -> A {
     let a_nodes = a.to_vec_nodes();
     let b_nodes = b.to_vec_nodes();
     assert_eq!(a_nodes.len(), b_nodes.len());
@@ -178,9 +219,9 @@ impl ToNode for bool {
     }
 }
 
-unsafe impl _Mask for bool {}
+unsafe impl Mask for bool {}
 
-unsafe impl _Mask for Bool {}
+unsafe impl Mask for Bool {}
 
 pub trait ExprProxy: Copy + Aggregate + FromNode {
     type Value: Value;
@@ -553,6 +594,7 @@ impl<T: Value> CpuFn<T> {
 
 pub(crate) struct Recorder {
     pub(crate) scopes: Vec<IrBuilder>,
+    pub(crate) kernel_id: Option<usize>,
     pub(crate) lock: bool,
     pub(crate) captured_buffer: IndexMap<Binding, (usize, NodeRef, Binding, Arc<dyn Any>)>,
     pub(crate) cpu_custom_ops: IndexMap<u64, (usize, CArc<CpuCustomOp>)>,
@@ -576,6 +618,7 @@ impl Recorder {
         self.block_size = None;
         self.arena.reset();
         self.shared.clear();
+        self.kernel_id = None;
     }
     pub(crate) fn new() -> Self {
         Recorder {
@@ -590,6 +633,7 @@ impl Recorder {
             pools: None,
             arena: Bump::new(),
             building_kernel: false,
+            kernel_id: None,
         }
     }
 }
@@ -671,6 +715,15 @@ pub fn __module_pools() -> &'static CArc<ModulePools> {
         unsafe { std::mem::transmute(pool) }
     })
 }
+// pub fn __load<T: Value>(node: NodeRef) -> Expr<T> {
+//     __current_scope(|b| {
+//         let node = b.load(node);
+//         Expr::<T>::from_node(node)
+//     })
+// }
+// pub fn __store(var:NodeRef, value:NodeRef) {
+//     let inst = &var.get().instruction;
+// }
 
 pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
     let inst = &node.get().instruction;
@@ -685,6 +738,14 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
                     Func::GetElementPtr
                 }
             }
+            Instruction::Call(f, args) => match f {
+                Func::AtomicRef => {
+                    let mut indices = args.to_vec();
+                    indices.push(i);
+                    return b.call(Func::AtomicRef, &indices, <T as TypeOf>::type_());
+                }
+                _ => Func::ExtractElement,
+            },
             _ => Func::ExtractElement,
         };
         let node = b.call(op, &[node, i], <T as TypeOf>::type_());
@@ -759,6 +820,12 @@ macro_rules! var {
     ($t:ty, $init:expr) => {
         local::<$t>($init.into())
     };
+    ($e:expr) => {
+        def($e)
+    };
+}
+pub fn def<E: ExprProxy<Value = T>, T: Value>(init: E) -> Var<T> {
+    Var::<T>::from_node(__current_scope(|b| b.local(init.node())))
 }
 pub fn local<T: Value>(init: Expr<T>) -> Var<T> {
     Var::<T>::from_node(__current_scope(|b| b.local(init.node())))
@@ -1294,9 +1361,9 @@ impl<T: Value> Shared<T> {
             }),
         }
     }
-    pub fn len(&self) -> Expr<u32> {
+    pub fn len(&self) -> Expr<u64> {
         match self.node.type_().as_ref() {
-            Type::Array(ArrayType { element: _, length }) => const_(*length as u32),
+            Type::Array(ArrayType { element: _, length }) => const_(*length as u64),
             _ => unreachable!(),
         }
     }
@@ -1306,8 +1373,8 @@ impl<T: Value> Shared<T> {
             _ => unreachable!(),
         }
     }
-    pub fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, value: V) {
-        let i = i.into();
+    pub fn write<I: IntoIndex, V: Into<Expr<T>>>(&self, i: I, value: V) {
+        let i = i.to_u64();
         let value = value.into();
 
         if need_runtime_check() {
@@ -1467,8 +1534,8 @@ impl<T: Value> VLArrayExpr<T> {
             _ => unreachable!(),
         }
     }
-    pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
-        let i = i.into();
+    pub fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
+        let i = i.to_u64();
         if need_runtime_check() {
             lc_assert!(i.cmplt(self.len()));
         }
@@ -1477,9 +1544,9 @@ impl<T: Value> VLArrayExpr<T> {
             b.call(Func::ExtractElement, &[self.node, i.node()], T::type_())
         }))
     }
-    pub fn len(&self) -> Expr<u32> {
+    pub fn len(&self) -> Expr<u64> {
         match self.node.type_().as_ref() {
-            Type::Array(ArrayType { element: _, length }) => const_(*length as u32),
+            Type::Array(ArrayType { element: _, length }) => const_(*length as u64),
             _ => unreachable!(),
         }
     }
@@ -1487,10 +1554,10 @@ impl<T: Value> VLArrayExpr<T> {
 
 impl<T: Value, const N: usize> IndexRead for ArrayExpr<T, N> {
     type Element = T;
-    fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
-        let i = i.into();
+    fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
+        let i = i.to_u64();
 
-        lc_assert!(i.cmplt(const_(N as u32)));
+        lc_assert!(i.cmplt(const_(N as u64)));
 
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(Func::ExtractElement, &[self.node, i.node()], T::type_())
@@ -1500,10 +1567,10 @@ impl<T: Value, const N: usize> IndexRead for ArrayExpr<T, N> {
 
 impl<T: Value, const N: usize> IndexRead for ArrayVar<T, N> {
     type Element = T;
-    fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
-        let i = i.into();
+    fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
+        let i = i.to_u64();
         if need_runtime_check() {
-            lc_assert!(i.cmplt(const_(N as u32)));
+            lc_assert!(i.cmplt(const_(N as u64)));
         }
 
         Expr::<T>::from_node(__current_scope(|b| {
@@ -1514,12 +1581,12 @@ impl<T: Value, const N: usize> IndexRead for ArrayVar<T, N> {
 }
 
 impl<T: Value, const N: usize> IndexWrite for ArrayVar<T, N> {
-    fn write<I: Into<Expr<u32>>, V: Into<Expr<T>>>(&self, i: I, value: V) {
-        let i = i.into();
+    fn write<I: IntoIndex, V: Into<Expr<T>>>(&self, i: I, value: V) {
+        let i = i.to_u64();
         let value = value.into();
 
         if need_runtime_check() {
-            lc_assert!(i.cmplt(const_(N as u32)));
+            lc_assert!(i.cmplt(const_(N as u64)));
         }
 
         __current_scope(|b| {
@@ -1666,7 +1733,14 @@ impl<T: Value + 'static> CallableParameter for BufferVar<T> {
         encoder.buffer(self)
     }
 }
-
+impl CallableParameter for ByteBufferVar {
+    fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
+        builder.byte_buffer()
+    }
+    fn encode(&self, encoder: &mut CallableArgEncoder) {
+        encoder.byte_buffer(self)
+    }
+}
 impl<T: IoTexel + 'static> CallableParameter for Tex2dVar<T> {
     fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         builder.tex2d()
@@ -1716,7 +1790,11 @@ where
         builder.uniform::<T>()
     }
 }
-
+impl KernelParameter for ByteBufferVar {
+    fn def_param(builder: &mut KernelBuilder) -> Self {
+        builder.byte_buffer()
+    }
+}
 impl<T: Value> KernelParameter for BufferVar<T> {
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.buffer()
@@ -1809,6 +1887,17 @@ impl KernelBuilder {
         );
         self.args.push(node);
         FromNode::from_node(node)
+    }
+    pub fn byte_buffer(&mut self) -> ByteBufferVar {
+        let node = new_node(
+            __module_pools(),
+            Node::new(CArc::new(Instruction::Buffer), Type::void()),
+        );
+        self.args.push(node);
+        ByteBufferVar {
+            node,
+            handle: None,
+        }
     }
     pub fn buffer<T: Value>(&mut self) -> BufferVar<T> {
         let node = new_node(
@@ -2288,7 +2377,7 @@ macro_rules! impl_kernel_build_for_fn {
 impl_kernel_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
 pub fn if_then_else<R: Aggregate>(
-    cond: impl _Mask,
+    cond: impl Mask,
     then: impl Fn() -> R,
     else_: impl Fn() -> R,
 ) -> R {

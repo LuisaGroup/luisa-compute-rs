@@ -19,7 +19,7 @@ pub mod prelude {
     pub use crate::lang::traits::{CommonVarOp, FloatVarTrait, IntVarTrait, VarCmp, VarCmpEq};
     pub use crate::lang::{
         Aggregate, ExprProxy, FromNode, IndexRead, IndexWrite, KernelBuildFn, KernelParameter,
-        KernelSignature, Value, VarProxy, _Mask,
+        KernelSignature, Value, VarProxy, Mask,
     };
     pub use crate::lang::{
         __compose, __cpu_dbg, __current_scope, __env_need_backtrace, __extract, __insert,

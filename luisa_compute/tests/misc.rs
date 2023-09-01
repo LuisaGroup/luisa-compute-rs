@@ -13,7 +13,14 @@ fn _signal_handler(signal: libc::c_int) {
 }
 static ONCE: std::sync::Once = std::sync::Once::new();
 fn get_device() -> Device {
+    let show_log = match std::env::var("LUISA_TEST_LOG") {
+        Ok(log) => log == "1",
+        Err(_) => false,
+    };
     ONCE.call_once(|| unsafe {
+        if show_log {
+            init_logger_verbose();
+        }
         libc::signal(libc::SIGSEGV, _signal_handler as usize);
     });
     let curr_exe = current_exe().unwrap();
@@ -650,4 +657,148 @@ fn uniform() {
     let actual = sum_data[0];
     let expected = (x.len() as f32 - 1.0) * x.len() as f32 * 0.5 * 6.0;
     assert!((actual - expected).abs() < 1e-4);
+}
+#[derive(Clone, Copy, Debug, __Value)]
+#[repr(C)]
+struct Big {
+    a: [f32; 32],
+}
+#[test]
+fn byte_buffer() {
+    let device = get_device();
+    let buf = device.create_byte_buffer(1024);
+    let mut big = Big { a: [1.0; 32] };
+    for i in 0..32 {
+        big.a[i] = i as f32;
+    }
+    let mut cnt = 0usize;
+    macro_rules! push {
+        ($t:ty, $v:expr) => {{
+            let old = cnt;
+            let s = std::mem::size_of::<$t>();
+            let view = buf.view(cnt..cnt + s);
+            let bytes = unsafe { std::slice::from_raw_parts(&$v as *const $t as *const u8, s) };
+            view.copy_from(bytes);
+            cnt += s;
+            old
+        }};
+    }
+    let i0 = push!(Float3, Float3::new(0.0, 0.0, 0.0));
+    let i1 = push!(Big, big);
+    let i2 = push!(i32, 0i32);
+    let i3 = push!(f32, 1f32);
+    device
+        .create_kernel::<()>(&|| {
+            let buf = buf.var();
+            let i0 = i0 as u64;
+            let i1 = i1 as u64;
+            let i2 = i2 as u64;
+            let i3 = i3 as u64;
+            let v0 = def(buf.read::<Float3>(i0));
+            let v1 = def(buf.read::<Big>(i1));
+            let v2 = def(buf.read::<i32>(i2));
+            let v3 = def(buf.read::<f32>(i3));
+            *v0.get_mut() = make_float3(1.0, 2.0, 3.0);
+            for_range(0u32..32u32, |i| {
+                v1.a().write(i, i.float() * 2.0);
+            });
+            *v2.get_mut() = 1i32.into();
+            *v3.get_mut() = 2.0.into();
+            buf.write::<Float3>(i0, v0.load());
+            buf.write::<Big>(i1, v1.load());
+            buf.write::<i32>(i2, v2.load());
+            buf.write::<f32>(i3, v3.load());
+        })
+        .dispatch([1, 1, 1]);
+    let data = buf.copy_to_vec();
+    macro_rules! pop {
+        ($t:ty, $offset:expr) => {{
+            let s = std::mem::size_of::<$t>();
+            let bytes = &data[$offset..$offset + s];
+            let v = unsafe { std::mem::transmute_copy::<[u8; {std::mem::size_of::<$t>()}], $t>(bytes.try_into().unwrap()) };
+            v
+        }};
+    }
+    let v0 = pop!(Float3, i0);
+    let v1 = pop!(Big, i1);
+    let v2 = pop!(i32, i2);
+    let v3 = pop!(f32, i3);
+    assert_eq!(v0, Float3::new(1.0,2.0,3.0));
+    assert_eq!(v2, 1);
+    assert_eq!(v3, 2.0);
+    for i in 0..32 {
+        assert!(v1.a[i] == i as f32 * 2.0);
+    }
+}
+
+#[test]
+fn bindless_byte_buffer() {
+    let device = get_device();
+    let buf = device.create_byte_buffer(1024);
+    let out = device.create_byte_buffer(1024);
+    let mut big = Big { a: [1.0; 32] };
+    for i in 0..32 {
+        big.a[i] = i as f32;
+    }
+    let heap = device.create_bindless_array(64);
+    heap.emplace_byte_buffer(0, &buf);
+    let mut cnt = 0usize;
+    macro_rules! push {
+        ($t:ty, $v:expr) => {{
+            let old = cnt;
+            let s = std::mem::size_of::<$t>();
+            let view = buf.view(cnt..cnt + s);
+            let bytes = unsafe { std::slice::from_raw_parts(&$v as *const $t as *const u8, s) };
+            view.copy_from(bytes);
+            cnt += s;
+            old
+        }};
+    }
+    let i0 = push!(Float3, Float3::new(0.0, 0.0, 0.0));
+    let i1 = push!(Big, big);
+    let i2 = push!(i32, 0i32);
+    let i3 = push!(f32, 1f32);
+    device
+        .create_kernel::<(ByteBuffer,)>(&|out:ByteBufferVar| {
+            let heap = heap.var();
+            let buf = heap.byte_address_buffer(0);
+            let i0 = i0 as u64;
+            let i1 = i1 as u64;
+            let i2 = i2 as u64;
+            let i3 = i3 as u64;
+            let v0 = def(buf.read::<Float3>(i0));
+            let v1 = def(buf.read::<Big>(i1));
+            let v2 = def(buf.read::<i32>(i2));
+            let v3 = def(buf.read::<f32>(i3));
+            *v0.get_mut() = make_float3(1.0, 2.0, 3.0);
+            for_range(0u32..32u32, |i| {
+                v1.a().write(i, i.float() * 2.0);
+            });
+            *v2.get_mut() = 1i32.into();
+            *v3.get_mut() = 2.0.into();
+            out.write::<Float3>(i0, v0.load());
+            out.write::<Big>(i1, v1.load());
+            out.write::<i32>(i2, v2.load());
+            out.write::<f32>(i3, v3.load());
+        })
+        .dispatch([1, 1, 1], &out);
+    let data = out.copy_to_vec();
+    macro_rules! pop {
+        ($t:ty, $offset:expr) => {{
+            let s = std::mem::size_of::<$t>();
+            let bytes = &data[$offset..$offset + s];
+            let v = unsafe { std::mem::transmute_copy::<[u8; {std::mem::size_of::<$t>()}], $t>(bytes.try_into().unwrap()) };
+            v
+        }};
+    }
+    let v0 = pop!(Float3, i0);
+    let v1 = pop!(Big, i1);
+    let v2 = pop!(i32, i2);
+    let v3 = pop!(f32, i3);
+    assert_eq!(v0, Float3::new(1.0,2.0,3.0));
+    assert_eq!(v2, 1);
+    assert_eq!(v3, 2.0);
+    for i in 0..32 {
+        assert!(v1.a[i] == i as f32 * 2.0);
+    }
 }

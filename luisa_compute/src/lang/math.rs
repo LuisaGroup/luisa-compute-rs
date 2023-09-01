@@ -1,19 +1,19 @@
 pub use super::swizzle::*;
 use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*, Float};
 use crate::*;
-use serde::{Serialize, Deserialize};
 use half::f16;
 use luisa_compute_ir::{
     context::register_type,
     ir::{Func, MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType},
     TypeOf,
 };
+use serde::{Deserialize, Serialize};
 use std::ops::Mul;
 
 macro_rules! def_vec {
     ($name:ident, $glam_type:ident, $scalar:ty, $align:literal, $($comp:ident), *) => {
         #[repr(C, align($align))]
-        #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
+        #[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
         pub struct $name {
             $(pub $comp: $scalar), *
         }
@@ -44,7 +44,7 @@ macro_rules! def_vec {
 macro_rules! def_packed_vec {
     ($name:ident, $vec_type:ident, $glam_type:ident, $scalar:ty, $($comp:ident), *) => {
         #[repr(C)]
-        #[derive(Copy, Clone, Debug, Default, __Value, Serialize, Deserialize)]
+        #[derive(Copy, Clone, Debug, Default, __Value,PartialEq, Serialize, Deserialize)]
         pub struct $name {
             $(pub $comp: $scalar), *
         }
@@ -480,7 +480,7 @@ macro_rules! impl_vec_proxy {
             }
         }
         impl VectorVarTrait for $expr_proxy { }
-        impl ScalarOrVector for $expr_proxy { 
+        impl ScalarOrVector for $expr_proxy {
             type Element = Expr<$scalar>;
             type ElementHost = $scalar;
         }

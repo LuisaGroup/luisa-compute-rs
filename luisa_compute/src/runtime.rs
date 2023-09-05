@@ -195,6 +195,7 @@ impl Device {
         }
     }
     pub fn create_bindless_array(&self, slots: usize) -> BindlessArray {
+        assert!(slots > 0, "slots must be greater than 0");
         let array = self.inner.create_bindless_array(slots);
         BindlessArray {
             device: self.clone(),

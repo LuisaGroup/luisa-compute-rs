@@ -416,6 +416,15 @@ impl TriangleCandidate {
     pub fn terminate(&self) {
         __current_scope(|b| b.call(Func::RayQueryTerminate, &[self.query], Type::void()));
     }
+    pub fn ray(&self) -> Expr<Ray> {
+        Expr::<Ray>::from_node(__current_scope(|b| {
+            b.call(
+                Func::RayQueryWorldSpaceRay,
+                &[self.query],
+                rtx::Ray::type_(),
+            )
+        }))
+    }
 }
 impl Deref for TriangleCandidate {
     type Target = TriangleHitExpr;
@@ -435,6 +444,15 @@ impl ProceduralCandidate {
     }
     pub fn terminate(&self) {
         __current_scope(|b| b.call(Func::RayQueryTerminate, &[self.query], Type::void()));
+    }
+    pub fn ray(&self) -> Expr<Ray> {
+        Expr::<Ray>::from_node(__current_scope(|b| {
+            b.call(
+                Func::RayQueryWorldSpaceRay,
+                &[self.query],
+                rtx::Ray::type_(),
+            )
+        }))
     }
 }
 impl Deref for ProceduralCandidate {

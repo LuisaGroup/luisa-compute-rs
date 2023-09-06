@@ -107,7 +107,7 @@ fn main() {
     let img_w = 800;
     let img_h = 800;
     let img = device.create_tex2d::<Float4>(PixelStorage::Byte4, img_w, img_h, 1);
-    let debug_hit_t = device.create_buffer::<f32>(1);
+    let debug_hit_t = device.create_buffer::<f32>(4);
     let rt_kernel = device.create_kernel::<()>(&|| {
         let accel = accel.var();
         let px = dispatch_id().xy();
@@ -127,6 +127,7 @@ fn main() {
                     let t = candidate.committed_ray_t();
                     if_!(px.cmpeq(make_uint2(400, 400)).all(), {
                         debug_hit_t.write(0, t);
+                        debug_hit_t.write(1, candidate.ray().tmax());
                     });
                     if_!(
                         uvw.xy().length().cmplt(0.8)
@@ -138,17 +139,25 @@ fn main() {
                     );
                 },
                 on_procedural_hit: |candidate: ProceduralCandidate| {
+                    let ray = candidate.ray();
                     let prim = candidate.prim();
                     let sphere = spheres.var().read(prim);
                     let o = ray.orig().unpack();
                     let d = ray.dir().unpack();
                     let t = var!(f32);
+
                     for_range(const_(0i32)..const_(100i32), |_| {
                         let dist = (o + d * t.load() - (sphere.center() + const_(translate)))
                             .length()
                             - sphere.radius();
                         if_!(dist.cmplt(0.001), {
-                            candidate.commit(t.load());
+                            if_!(px.cmpeq(make_uint2(400, 400)).all(), {
+                                debug_hit_t.write(2, *t);
+                                debug_hit_t.write(3, candidate.ray().tmax());
+                            });
+                            if_!(t.cmplt(ray.tmax()), {
+                                candidate.commit(t.load());
+                            });
                             break_();
                         });
                         t.store(t.load() + dist);

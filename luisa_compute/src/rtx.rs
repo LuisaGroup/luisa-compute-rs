@@ -320,14 +320,14 @@ pub struct ProceduralHit {
 
 #[repr(C)]
 #[derive(Clone, Copy, __Value, Debug)]
-pub struct CommitedHit {
+pub struct CommittedHit {
     pub inst_id: u32,
     pub prim_id: u32,
     pub bary: Float2,
     pub hit_type: u32,
     pub committed_ray_t: f32,
 }
-impl CommitedHitExpr {
+impl CommittedHitExpr {
     pub fn miss(&self) -> Expr<bool> {
         self.hit_type().cmpeq(HitType::Miss as u32)
     }
@@ -468,6 +468,17 @@ pub struct RayQuery<T, P> {
 }
 impl AccelVar {
     #[inline]
+    pub fn instance_transform(&self, index: Expr<u32>) -> Expr<Mat4> {
+        FromNode::from_node(__current_scope(|b| {
+            b.call(
+                Func::RayTracingInstanceTransform,
+                &[self.node, index.node()],
+                Mat4::type_(),
+            )
+        }))
+    }
+
+    #[inline]
     pub fn trace_closest_masked(
         &self,
         ray: impl Into<Expr<Ray>>,
@@ -514,7 +525,7 @@ impl AccelVar {
         ray: impl Into<Expr<Ray>>,
         mask: impl Into<Expr<u32>>,
         ray_query: RayQuery<T, P>,
-    ) -> Expr<CommitedHit>
+    ) -> Expr<CommittedHit>
     where
         T: FnOnce(TriangleCandidate),
         P: FnOnce(ProceduralCandidate),
@@ -527,7 +538,7 @@ impl AccelVar {
         ray: impl Into<Expr<Ray>>,
         mask: impl Into<Expr<u32>>,
         ray_query: RayQuery<T, P>,
-    ) -> Expr<CommitedHit>
+    ) -> Expr<CommittedHit>
     where
         T: FnOnce(TriangleCandidate),
         P: FnOnce(ProceduralCandidate),
@@ -541,7 +552,7 @@ impl AccelVar {
         ray: impl Into<Expr<Ray>>,
         mask: impl Into<Expr<u32>>,
         ray_query: RayQuery<T, P>,
-    ) -> Expr<CommitedHit>
+    ) -> Expr<CommittedHit>
     where
         T: FnOnce(TriangleCandidate),
         P: FnOnce(ProceduralCandidate),
@@ -601,7 +612,7 @@ impl AccelVar {
         let on_procedural_hit = __pop_scope();
         __current_scope(|b| {
             b.ray_query(query, on_triangle_hit, on_procedural_hit, Type::void());
-            FromNode::from_node(b.call(Func::RayQueryCommittedHit, &[query], CommitedHit::type_()))
+            FromNode::from_node(b.call(Func::RayQueryCommittedHit, &[query], CommittedHit::type_()))
         })
     }
     pub fn new(accel: &rtx::Accel) -> Self {

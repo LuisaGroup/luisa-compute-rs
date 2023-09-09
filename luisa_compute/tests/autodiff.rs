@@ -984,7 +984,7 @@ fn autodiff_if_phi4() {
         autodiff(|| {
             requires_grad(x);
             requires_grad(y);
-            consts.store(make_float3(2.0,3.0,4.0));
+            consts.store(make_float3(2.0, 3.0, 4.0));
             let const_two = consts.x();
             let const_three = consts.y();
             let const_four = consts.z();
@@ -1057,6 +1057,74 @@ fn autodiff_switch() {
             buf_dx.write(tid, gradient(x));
             buf_dy.write(tid, gradient(y));
         });
+    });
+    kernel.dispatch([1024, 1, 1]);
+    let dx = dx.view(..).copy_to_vec();
+    let dy = dy.view(..).copy_to_vec();
+    let t = t.view(..).copy_to_vec();
+    let cache_dir = kernel.cache_dir();
+    for i in 0..1024 {
+        match t[i] {
+            0 => {
+                assert_eq!(dx[i], 4.0, "{} cache_dir: {:?}", dx[i], cache_dir);
+                assert_eq!(dy[i], 0.0, "{} cache_dir: {:?}", dy[i], cache_dir);
+            }
+            1 => {
+                assert_eq!(dx[i], 2.0, "{} cache_dir: {:?}", dx[i], cache_dir);
+                assert_eq!(dy[i], 0.0, "{} cache_dir: {:?}", dy[i], cache_dir);
+            }
+            2 => {
+                assert_eq!(dx[i], 0.0, "{} cache_dir: {:?}", dx[i], cache_dir);
+                assert_eq!(dy[i], 0.5, "{} cache_dir: {:?}", dy[i], cache_dir);
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[test]
+fn autodiff_callable() {
+    let device = get_device();
+    let t: Buffer<i32> = device.create_buffer(1024);
+    let x: Buffer<f32> = device.create_buffer(1024);
+    let y: Buffer<f32> = device.create_buffer(1024);
+    let dx: Buffer<f32> = device.create_buffer(1024);
+    let dy: Buffer<f32> = device.create_buffer(1024);
+    let mut rng = rand::thread_rng();
+    t.view(..).fill_fn(|_| rng.gen_range(0..3));
+    x.view(..).fill_fn(|_| rng.gen());
+    y.view(..).fill_fn(|_| rng.gen());
+    let callable = device.create_callable::<(Var<f32>, Var<f32>, Expr<i32>), ()>(&|vx, vy, t| {
+        let x = *vx;
+        let y = *vy;
+        autodiff(|| {
+            requires_grad(x);
+            requires_grad(y);
+            let z = switch::<Expr<f32>>(t)
+                .case(0, || x * 4.0)
+                .case(1, || x * 2.0)
+                .case(2, || y * 0.5)
+                .finish();
+            backward(z);
+            *vx.get_mut() = gradient(x);
+            *vy.get_mut() = gradient(y);
+        });
+    });
+    let kernel = device.create_kernel::<()>(&|| {
+        let buf_t = t.var();
+        let buf_x = x.var();
+        let buf_y = y.var();
+        let buf_dx = dx.var();
+        let buf_dy = dy.var();
+        let tid = dispatch_id().x();
+        let x = buf_x.read(tid);
+        let y = buf_y.read(tid);
+        let t = buf_t.read(tid);
+        let dx = def(x);
+        let dy = def(y);
+        callable.call(dx, dy, t);
+        buf_dx.write(tid, *dx);
+        buf_dy.write(tid, *dy);
     });
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();

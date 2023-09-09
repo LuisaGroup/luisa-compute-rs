@@ -383,7 +383,6 @@ impl Device {
     }
     pub fn create_dyn_callable_once<'a, S: CallableSignature<'a, R>, R: CallableRet>(
         &self,
-        init_once: bool,
         f: S::DynFn,
     ) -> S::DynCallable {
         S::create_dyn_callable(self.clone(), true, f)

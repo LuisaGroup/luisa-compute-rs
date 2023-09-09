@@ -13,8 +13,8 @@ use bumpalo::Bump;
 use indexmap::IndexMap;
 pub use ir::ir::NodeRef;
 use ir::ir::{
-    ArrayType, CallableModule, CallableModuleRef, ModulePools, SwitchCase, UserNodeData,
-    INVALID_REF,
+    ArrayType, CallableModule, CallableModuleRef, ModuleFlags, ModulePools, SwitchCase,
+    UserNodeData, INVALID_REF,
 };
 pub use ir::CArc;
 use ir::Pooled;
@@ -2016,11 +2016,7 @@ impl KernelBuilder {
                 entry,
                 kind: ModuleKind::Kernel,
                 pools: r.pools.clone().unwrap(),
-            };
-            let ir_module = {
-                // perform IR passes
-                let ad_transform = transform::autodiff::Autodiff;
-                ad_transform.transform(ir_module)
+                flags: ModuleFlags::REQUIRES_AD_TRANSFORM,
             };
             let module = CallableModule {
                 module: ir_module,
@@ -2057,12 +2053,9 @@ impl KernelBuilder {
                 entry,
                 kind: ModuleKind::Kernel,
                 pools: r.pools.clone().unwrap(),
+                flags: ModuleFlags::REQUIRES_AD_TRANSFORM,
             };
-            let ir_module = {
-                // perform IR passes
-                let ad_transform = transform::autodiff::Autodiff;
-                ad_transform.transform(ir_module)
-            };
+            let ir_module = luisa_compute_ir::transform::luisa_compute_ir_transform_auto(ir_module);
             let module = KernelModule {
                 module: ir_module,
                 cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),

@@ -1230,7 +1230,10 @@ impl<T: CallableParameter, R: CallableRet> DynCallable<T, R> {
         RECORDER.with(|r| {
             *r.borrow_mut() = r_backup;
         });
-        assert!(lang::__check_callable(&new_callable.inner.module, nodes));
+        assert!(
+            lang::__check_callable(&new_callable.inner.module, nodes),
+            "Callable builder returned a callable that does not match the arguments"
+        );
         let callables = &mut inner.callables;
         callables.push(new_callable);
         CallableRet::_from_return(lang::__invoke_callable(

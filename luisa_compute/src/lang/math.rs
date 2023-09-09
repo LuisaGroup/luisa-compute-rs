@@ -661,6 +661,10 @@ impl_vec_proxy!(Float2, Float2Expr, Float2Var, f32, Float32, 2, x, y);
 impl_vec_proxy!(Float3, Float3Expr, Float3Var, f32, Float32, 3, x, y, z);
 impl_vec_proxy!(Float4, Float4Expr, Float4Var, f32, Float32, 4, x, y, z, w);
 
+impl_vec_proxy!(Double2, Double2Expr, Double2Var, f64, Float64, 2, x, y);
+impl_vec_proxy!(Double3, Double3Expr, Double3Var, f64, Float64, 3, x, y, z);
+impl_vec_proxy!(Double4, Double4Expr, Double4Var, f64, Float64, 4, x, y, z, w);
+
 impl_vec_proxy!(Ushort2, Ushort2Expr, Ushort2Var, u16, Uint16, 2, x, y);
 impl_vec_proxy!(Ushort3, Ushort3Expr, Ushort3Var, u16, Uint16, 3, x, y, z);
 impl_vec_proxy!(Ushort4, Ushort4Expr, Ushort4Var, u16, Uint16, 4, x, y, z, w);
@@ -1499,7 +1503,7 @@ macro_rules! impl_var_trait2 {
             type Float = Float2Expr;
             type Half = Half2Expr;
             type Bool = Bool2Expr;
-            // type Double = Double2Expr;
+            type Double = Double2Expr;
             type Long = Long2Expr;
             type Ulong = Ulong2Expr;
         }
@@ -1524,6 +1528,7 @@ macro_rules! impl_var_trait3 {
             type Float = Float3Expr;
             type Half = Half3Expr;
             type Bool = Bool3Expr;
+            type Double = Double3Expr;
             type Long = Long3Expr;
             type Ulong = Ulong3Expr;
         }
@@ -1546,6 +1551,7 @@ macro_rules! impl_var_trait4 {
             type Int = Int4Expr;
             type Uint = Uint4Expr;
             type Float = Float4Expr;
+            type Double = Double4Expr;
             type Half = Half4Expr;
             type Bool = Bool4Expr;
             type Long = Long4Expr;
@@ -1564,6 +1570,7 @@ macro_rules! impl_var_trait4 {
 
 impl_var_trait2!(Half2Expr, Half2);
 impl_var_trait2!(Float2Expr, Float2);
+impl_var_trait2!(Double2Expr, Double2);
 impl_var_trait2!(Short2Expr, Short2);
 impl_var_trait2!(Ushort2Expr, Ushort2);
 impl_var_trait2!(Int2Expr, Int2);
@@ -1574,6 +1581,7 @@ impl_var_trait2!(Ulong2Expr, Ulong2);
 
 impl_var_trait3!(Half3Expr, Half3);
 impl_var_trait3!(Float3Expr, Float3);
+impl_var_trait3!(Double3Expr, Double3);
 impl_var_trait3!(Short3Expr, Short3);
 impl_var_trait3!(Ushort3Expr, Ushort3);
 impl_var_trait3!(Int3Expr, Int3);
@@ -1584,6 +1592,7 @@ impl_var_trait3!(Ulong3Expr, Ulong3);
 
 impl_var_trait4!(Half4Expr, Half4);
 impl_var_trait4!(Float4Expr, Float4);
+impl_var_trait4!(Double4Expr, Double4);
 impl_var_trait4!(Short4Expr, Short4);
 impl_var_trait4!(Ushort4Expr, Ushort4);
 impl_var_trait4!(Int4Expr, Int4);

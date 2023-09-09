@@ -802,6 +802,8 @@ impl BindlessArray {
         self.var().buffer::<T>(buffer_index)
     }
 }
+unsafe impl Send for BindlessArray {}
+unsafe impl Sync for BindlessArray {}
 pub use api::{PixelFormat, PixelStorage, Sampler, SamplerAddress, SamplerFilter};
 use luisa_compute_ir::context::type_hash;
 use luisa_compute_ir::ir::{
@@ -1364,7 +1366,7 @@ impl BindlessByteBufferVar {
         let i = index_bytes.to_u64();
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(
-                Func::BindlessByteAdressBufferRead,
+                Func::BindlessByteBufferRead,
                 &[self.array, self.buffer_index.node(), i.node],
                 <T as TypeOf>::type_(),
             )

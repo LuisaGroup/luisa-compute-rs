@@ -17,7 +17,7 @@ pub trait VarTrait: Copy + Clone + 'static + FromNode {
     type Ulong: VarTrait;
     type Half: VarTrait;
     type Float: VarTrait;
-    // type Double: VarTrait;
+    type Double: VarTrait;
     type Bool: VarTrait + Not<Output = Self::Bool> + BitAnd<Output = Self::Bool>;
     fn type_() -> CArc<Type> {
         <Self::Value as TypeOf>::type_()
@@ -35,7 +35,7 @@ macro_rules! impl_var_trait {
             type Ulong = Expr<u64>;
             type Half = Expr<f16>;
             type Float = Expr<f32>;
-            // type Double = Expr<f64>;
+            type Double = Expr<f64>;
             type Bool = Expr<bool>;
         }
         impl ScalarVarTrait for PrimExpr<$t> {}
@@ -138,9 +138,9 @@ pub trait CommonVarOp: VarTrait {
     fn half(&self) -> Self::Half {
         _cast(*self)
     }
-    // fn double(&self) -> Self::Double {
-    //     _cast(*self)
-    // }
+    fn double(&self) -> Self::Double {
+        _cast(*self)
+    }
     fn bool_(&self) -> Self::Bool {
         _cast(*self)
     }

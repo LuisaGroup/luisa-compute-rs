@@ -355,7 +355,7 @@ impl Compiler {
                 }
             }
             impl #impl_generics #crate_path ::StructInitiaizable for #name #ty_generics #where_clause{
-                type Init = #ctor_proxy_name;
+                type Init = #ctor_proxy_name #ty_generics;
             }
             impl #impl_generics #expr_proxy_name #ty_generics #where_clause {
                 #(#expr_proxy_field_methods)*

@@ -98,7 +98,7 @@ fn _store<T1: Aggregate, T2: Aggregate>(var: &T1, value: &T2) {
     assert_eq!(value_nodes.len(), self_nodes.len());
     __current_scope(|b| {
         for (value_node, self_node) in value_nodes.into_iter().zip(self_nodes.into_iter()) {
-            b.store(self_node, value_node);
+            b.update(self_node, value_node);
         }
     })
 }
@@ -1894,10 +1894,7 @@ impl KernelBuilder {
             Node::new(CArc::new(Instruction::Buffer), Type::void()),
         );
         self.args.push(node);
-        ByteBufferVar {
-            node,
-            handle: None,
-        }
+        ByteBufferVar { node, handle: None }
     }
     pub fn buffer<T: Value>(&mut self) -> BufferVar<T> {
         let node = new_node(
@@ -2126,8 +2123,12 @@ pub struct KernelBuildOptions {
 
 impl Default for KernelBuildOptions {
     fn default() -> Self {
+        let enable_debug_info = match env::var("LUISA_DEBUG") {
+            Ok(s) => s == "1",
+            Err(_) => false,
+        };
         Self {
-            enable_debug_info: false,
+            enable_debug_info,
             enable_optimization: true,
             async_compile: false,
             enable_cache: true,

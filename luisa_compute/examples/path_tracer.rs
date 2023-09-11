@@ -236,7 +236,7 @@ fn main() {
             vertex_heap.emplace_buffer_async(index, vertex_buffers.last().unwrap());
             index_heap.emplace_buffer_async(index, index_buffers.last().unwrap());
             cmds.push(mesh.build_async(AccelBuildRequest::ForceBuild));
-            accel.push_mesh(&mesh, glam::Mat4::IDENTITY.into(), u8::MAX, true);
+            accel.push_mesh(&mesh, glam::Mat4::IDENTITY.into(), u32::MAX, true);
         }
         cmds.push(vertex_heap.update_async());
         cmds.push(index_heap.update_async());

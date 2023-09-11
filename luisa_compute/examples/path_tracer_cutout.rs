@@ -242,7 +242,7 @@ fn main() {
             } else {
                 glam::Mat4::IDENTITY
             };
-            accel.push_mesh(&mesh, m.into(), u8::MAX, false);
+            accel.push_mesh(&mesh, m.into(), u32::MAX, false);
         }
         cmds.push(vertex_heap.update_async());
         cmds.push(index_heap.update_async());

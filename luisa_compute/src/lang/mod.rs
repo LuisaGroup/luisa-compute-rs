@@ -2171,30 +2171,32 @@ unsafe impl<T: ExprProxy> CallableRet for T {
     }
 }
 
-pub trait CallableSignature<'a, R: CallableRet> {
+pub trait CallableSignature {
     type Callable;
     type DynCallable;
-    type Fn: CallableBuildFn;
+    type Fn: CallableBuildFn + ?Sized;
     type StaticFn: StaticCallableBuildFn;
     type DynFn: CallableBuildFn + 'static;
+    type Ret: CallableRet;
     fn wrap_raw_callable(callable: RawCallable) -> Self::Callable;
     fn create_dyn_callable(device: Device, init_once: bool, f: Self::DynFn) -> Self::DynCallable;
 }
 
-pub trait KernelSignature<'a> {
-    type Fn: KernelBuildFn;
+pub trait KernelSignature {
+    type Fn: KernelBuildFn + ?Sized;
     type Kernel;
 
     fn wrap_raw_kernel(kernel: crate::runtime::RawKernel) -> Self::Kernel;
 }
 macro_rules! impl_callable_signature {
     ()=>{
-        impl<'a, R: CallableRet +'static> CallableSignature<'a, R> for () {
-            type Fn = &'a dyn Fn() ->R;
+        impl<R: CallableRet +'static> CallableSignature for fn()->R {
+            type Fn = dyn Fn() ->R;
             type DynFn = Box<dyn Fn() ->R>;
             type StaticFn = fn() -> R;
-            type Callable = Callable<(), R>;
-            type DynCallable = DynCallable<(), R>;
+            type Callable = Callable<fn()->R>;
+            type DynCallable = DynCallable<fn()->R>;
+            type Ret = R;
             fn wrap_raw_callable(callable: RawCallable) -> Self::Callable{
                 Callable {
                     inner: callable,
@@ -2210,12 +2212,13 @@ macro_rules! impl_callable_signature {
         }
     };
     ($first:ident  $($rest:ident)*) => {
-        impl<'a, R:CallableRet +'static, $first:CallableParameter +'static, $($rest: CallableParameter +'static),*> CallableSignature<'a, R> for ($first, $($rest,)*) {
-            type Fn = &'a dyn Fn($first, $($rest),*)->R;
+        impl<R:CallableRet +'static, $first:CallableParameter +'static, $($rest: CallableParameter +'static),*> CallableSignature for fn($first, $($rest,)*)->R {
+            type Fn = dyn Fn($first, $($rest),*)->R;
             type DynFn = Box<dyn Fn($first, $($rest),*)->R>;
-            type Callable = Callable<($first, $($rest,)*), R>;
+            type Callable = Callable<fn($first, $($rest,)*)->R>;
             type StaticFn = fn($first, $($rest,)*)->R;
-            type DynCallable = DynCallable<($first, $($rest,)*), R>;
+            type DynCallable = DynCallable<fn($first, $($rest,)*)->R>;
+            type Ret = R;
             fn wrap_raw_callable(callable: RawCallable) -> Self::Callable{
                 Callable {
                     inner: callable,
@@ -2235,9 +2238,9 @@ macro_rules! impl_callable_signature {
 impl_callable_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 macro_rules! impl_kernel_signature {
     ()=>{
-        impl<'a> KernelSignature<'a> for () {
-            type Fn = &'a dyn Fn();
-            type Kernel = Kernel<()>;
+        impl KernelSignature for fn() {
+            type Fn = dyn Fn();
+            type Kernel = Kernel<fn()>;
             fn wrap_raw_kernel(kernel: crate::runtime::RawKernel) -> Self::Kernel {
                 Self::Kernel{
                     inner:kernel,
@@ -2247,9 +2250,9 @@ macro_rules! impl_kernel_signature {
         }
     };
     ($first:ident  $($rest:ident)*) => {
-        impl<'a, $first:KernelArg +'static, $($rest: KernelArg +'static),*> KernelSignature<'a> for ($first, $($rest,)*) {
-            type Fn = &'a dyn Fn($first::Parameter, $($rest::Parameter),*);
-            type Kernel = Kernel<($first, $($rest,)*)>;
+        impl<'a, $first:KernelArg +'static, $($rest: KernelArg +'static),*> KernelSignature for fn($first, $($rest,)*) {
+            type Fn = dyn Fn($first::Parameter, $($rest::Parameter),*);
+            type Kernel = Kernel<fn($first, $($rest,)*)>;
             fn wrap_raw_kernel(kernel: crate::runtime::RawKernel) -> Self::Kernel {
                 Self::Kernel{
                     inner:kernel,
@@ -2264,7 +2267,7 @@ impl_kernel_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
 macro_rules! impl_callable_build_for_fn {
     ()=>{
-        impl<R:CallableRet +'static> CallableBuildFn for &dyn Fn()->R {
+        impl<R:CallableRet +'static> CallableBuildFn for dyn Fn()->R {
             fn build_callable(&self, _args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
                 builder.build_callable( |_| {
                     self()
@@ -2288,7 +2291,7 @@ macro_rules! impl_callable_build_for_fn {
         impl <R:CallableRet +'static> StaticCallableBuildFn  for fn()->R {}
     };
     ($first:ident  $($rest:ident)*) => {
-        impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for &dyn Fn($first, $($rest,)*)->R {
+        impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for dyn Fn($first, $($rest,)*)->R {
             #[allow(non_snake_case)]
             fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
                 builder.build_callable( |builder| {
@@ -2346,7 +2349,7 @@ macro_rules! impl_callable_build_for_fn {
 impl_callable_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 macro_rules! impl_kernel_build_for_fn {
     ()=>{
-        impl KernelBuildFn for &dyn Fn() {
+        impl KernelBuildFn for dyn Fn() {
             fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> crate::runtime::RawKernel {
                 builder.build_kernel(options, |_| {
                     self()
@@ -2355,7 +2358,7 @@ macro_rules! impl_kernel_build_for_fn {
         }
     };
     ($first:ident  $($rest:ident)*) => {
-        impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelBuildFn for &dyn Fn($first, $($rest,)*) {
+        impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelBuildFn for dyn Fn($first, $($rest,)*) {
             #[allow(non_snake_case)]
             fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> crate::runtime::RawKernel {
                 builder.build_kernel(options, |builder| {

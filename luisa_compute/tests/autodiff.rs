@@ -618,7 +618,7 @@ fn autodiff_select() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
@@ -662,7 +662,7 @@ fn autodiff_detach() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
@@ -712,7 +712,7 @@ fn autodiff_select_nan() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen::<f32>() + 10.0);
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();

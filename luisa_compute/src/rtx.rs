@@ -134,7 +134,14 @@ impl Mesh {
 }
 
 impl Accel {
-    fn push_handle(&self, handle: InstanceHandle, transform: Mat4, visible: u8, opaque: bool) {
+    fn push_handle(
+        &self,
+        handle: InstanceHandle,
+        transform: Mat4,
+        ray_mask: u32,
+        opaque: bool,
+        user_id: u32,
+    ) {
         let mut flags =
             api::AccelBuildModificationFlags::PRIMITIVE | AccelBuildModificationFlags::TRANSFORM;
 
@@ -154,8 +161,9 @@ impl Accel {
                 mesh: handle.handle(),
                 affine: transform.into_affine3x4(),
                 flags,
-                visibility: visible,
+                visibility: ray_mask,
                 index,
+                user_id,
             },
         );
 
@@ -166,8 +174,9 @@ impl Accel {
         index: usize,
         handle: InstanceHandle,
         transform: Mat4,
-        visible: u8,
+        ray_mask: u32,
         opaque: bool,
+        user_id: u32,
     ) {
         let mut flags = api::AccelBuildModificationFlags::PRIMITIVE;
         dbg!(flags);
@@ -185,41 +194,52 @@ impl Accel {
                 mesh: handle.handle(),
                 affine: transform.into_affine3x4(),
                 flags,
-                visibility: visible,
+                visibility: ray_mask,
                 index: index as u32,
+                user_id,
             },
         );
         let mut instance_handles = self.instance_handles.write();
         instance_handles[index] = Some(handle);
     }
-    pub fn push_mesh(&self, mesh: &Mesh, transform: Mat4, visible: u8, opaque: bool) {
+    pub fn push_mesh(&self, mesh: &Mesh, transform: Mat4, ray_mask: u32, opaque: bool) {
         self.push_handle(
             InstanceHandle::Mesh(mesh.handle.clone()),
             transform,
-            visible,
+            ray_mask,
             opaque,
+            0,
         )
     }
     pub fn push_procedural_primitive(
         &self,
         prim: &ProceduralPrimitive,
         transform: Mat4,
-        visible: u8,
+        ray_mask: u32,
     ) {
         self.push_handle(
             InstanceHandle::Procedural(prim.handle.clone()),
             transform,
-            visible,
+            ray_mask,
             false,
+            0,
         )
     }
-    pub fn set_mesh(&self, index: usize, mesh: &Mesh, transform: Mat4, visible: u8, opaque: bool) {
+    pub fn set_mesh(
+        &self,
+        index: usize,
+        mesh: &Mesh,
+        transform: Mat4,
+        ray_mask: u32,
+        opaque: bool,
+    ) {
         self.set_handle(
             index,
             InstanceHandle::Mesh(mesh.handle.clone()),
             transform,
-            visible,
+            ray_mask,
             opaque,
+            0,
         )
     }
     pub fn set_procedural_primitive(
@@ -227,14 +247,15 @@ impl Accel {
         index: usize,
         prim: &ProceduralPrimitive,
         transform: Mat4,
-        visible: u8,
+        ray_mask: u32,
     ) {
         self.set_handle(
             index,
             InstanceHandle::Procedural(prim.handle.clone()),
             transform,
-            visible,
+            ray_mask,
             false,
+            0,
         )
     }
     pub fn pop(&self) {
@@ -348,8 +369,8 @@ pub enum HitType {
 
 pub fn offset_ray_origin(p: Expr<Float3>, n: Expr<Float3>) -> Expr<Float3> {
     lazy_static! {
-        static ref F: Callable<(Expr<Float3>, Expr<Float3>), Expr<Float3>> =
-            create_static_callable::<(Expr<Float3>, Expr<Float3>), Expr<Float3>>(|p, n| {
+        static ref F: Callable<fn(Expr<Float3>, Expr<Float3>)-> Expr<Float3>> =
+            create_static_callable::<fn(Expr<Float3>, Expr<Float3>)->Expr<Float3>>(|p, n| {
                 const ORIGIN: f32 = 1.0f32 / 32.0f32;
                 const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
                 const INT_SCALE: f32 = 256.0f32;

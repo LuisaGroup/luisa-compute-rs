@@ -2016,7 +2016,7 @@ impl KernelBuilder {
                 entry,
                 kind: ModuleKind::Kernel,
                 pools: r.pools.clone().unwrap(),
-                flags: ModuleFlags::REQUIRES_AD_TRANSFORM,
+                flags: ModuleFlags::REQUIRES_REV_AD_TRANSFORM,
             };
             let module = CallableModule {
                 module: ir_module,
@@ -2053,7 +2053,7 @@ impl KernelBuilder {
                 entry,
                 kind: ModuleKind::Kernel,
                 pools: r.pools.clone().unwrap(),
-                flags: ModuleFlags::REQUIRES_AD_TRANSFORM,
+                flags: ModuleFlags::REQUIRES_REV_AD_TRANSFORM,
             };
             let ir_module = luisa_compute_ir::transform::luisa_compute_ir_transform_auto(ir_module);
             let module = KernelModule {
@@ -2171,10 +2171,10 @@ unsafe impl<T: ExprProxy> CallableRet for T {
     }
 }
 
-pub trait CallableSignature {
+pub trait CallableSignature<'a> {
     type Callable;
     type DynCallable;
-    type Fn: CallableBuildFn + ?Sized;
+    type Fn: CallableBuildFn;
     type StaticFn: StaticCallableBuildFn;
     type DynFn: CallableBuildFn + 'static;
     type Ret: CallableRet;
@@ -2182,16 +2182,16 @@ pub trait CallableSignature {
     fn create_dyn_callable(device: Device, init_once: bool, f: Self::DynFn) -> Self::DynCallable;
 }
 
-pub trait KernelSignature {
-    type Fn: KernelBuildFn + ?Sized;
+pub trait KernelSignature<'a> {
+    type Fn: KernelBuildFn;
     type Kernel;
 
     fn wrap_raw_kernel(kernel: crate::runtime::RawKernel) -> Self::Kernel;
 }
 macro_rules! impl_callable_signature {
     ()=>{
-        impl<R: CallableRet +'static> CallableSignature for fn()->R {
-            type Fn = dyn Fn() ->R;
+        impl<'a, R: CallableRet +'static> CallableSignature<'a> for fn()->R {
+            type Fn = &'a dyn Fn() ->R;
             type DynFn = Box<dyn Fn() ->R>;
             type StaticFn = fn() -> R;
             type Callable = Callable<fn()->R>;
@@ -2212,8 +2212,8 @@ macro_rules! impl_callable_signature {
         }
     };
     ($first:ident  $($rest:ident)*) => {
-        impl<R:CallableRet +'static, $first:CallableParameter +'static, $($rest: CallableParameter +'static),*> CallableSignature for fn($first, $($rest,)*)->R {
-            type Fn = dyn Fn($first, $($rest),*)->R;
+        impl<'a, R:CallableRet +'static, $first:CallableParameter +'static, $($rest: CallableParameter +'static),*> CallableSignature<'a> for fn($first, $($rest,)*)->R {
+            type Fn = &'a dyn Fn($first, $($rest),*)->R;
             type DynFn = Box<dyn Fn($first, $($rest),*)->R>;
             type Callable = Callable<fn($first, $($rest,)*)->R>;
             type StaticFn = fn($first, $($rest,)*)->R;
@@ -2238,8 +2238,8 @@ macro_rules! impl_callable_signature {
 impl_callable_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 macro_rules! impl_kernel_signature {
     ()=>{
-        impl KernelSignature for fn() {
-            type Fn = dyn Fn();
+        impl<'a> KernelSignature<'a> for fn() {
+            type Fn = &'a dyn Fn();
             type Kernel = Kernel<fn()>;
             fn wrap_raw_kernel(kernel: crate::runtime::RawKernel) -> Self::Kernel {
                 Self::Kernel{
@@ -2250,8 +2250,8 @@ macro_rules! impl_kernel_signature {
         }
     };
     ($first:ident  $($rest:ident)*) => {
-        impl<'a, $first:KernelArg +'static, $($rest: KernelArg +'static),*> KernelSignature for fn($first, $($rest,)*) {
-            type Fn = dyn Fn($first::Parameter, $($rest::Parameter),*);
+        impl<'a, $first:KernelArg +'static, $($rest: KernelArg +'static),*> KernelSignature<'a> for fn($first, $($rest,)*) {
+            type Fn = &'a dyn Fn($first::Parameter, $($rest::Parameter),*);
             type Kernel = Kernel<fn($first, $($rest,)*)>;
             fn wrap_raw_kernel(kernel: crate::runtime::RawKernel) -> Self::Kernel {
                 Self::Kernel{
@@ -2267,7 +2267,7 @@ impl_kernel_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
 macro_rules! impl_callable_build_for_fn {
     ()=>{
-        impl<R:CallableRet +'static> CallableBuildFn for dyn Fn()->R {
+        impl<R:CallableRet +'static> CallableBuildFn for &dyn Fn()->R {
             fn build_callable(&self, _args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
                 builder.build_callable( |_| {
                     self()
@@ -2291,7 +2291,7 @@ macro_rules! impl_callable_build_for_fn {
         impl <R:CallableRet +'static> StaticCallableBuildFn  for fn()->R {}
     };
     ($first:ident  $($rest:ident)*) => {
-        impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for dyn Fn($first, $($rest,)*)->R {
+        impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for &dyn Fn($first, $($rest,)*)->R {
             #[allow(non_snake_case)]
             fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
                 builder.build_callable( |builder| {
@@ -2349,7 +2349,7 @@ macro_rules! impl_callable_build_for_fn {
 impl_callable_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 macro_rules! impl_kernel_build_for_fn {
     ()=>{
-        impl KernelBuildFn for dyn Fn() {
+        impl KernelBuildFn for &dyn Fn() {
             fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> crate::runtime::RawKernel {
                 builder.build_kernel(options, |_| {
                     self()
@@ -2358,7 +2358,7 @@ macro_rules! impl_kernel_build_for_fn {
         }
     };
     ($first:ident  $($rest:ident)*) => {
-        impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelBuildFn for dyn Fn($first, $($rest,)*) {
+        impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelBuildFn for &dyn Fn($first, $($rest,)*) {
             #[allow(non_snake_case)]
             fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> crate::runtime::RawKernel {
                 builder.build_kernel(options, |builder| {
@@ -2743,25 +2743,45 @@ pub fn return_() {
 struct AdContext {
     started: bool,
     backward_called: bool,
+    is_forward_mode: bool,
+    n_forward_grads: usize,
     // forward: Option<Pooled<BasicBlock>>,
 }
 
 impl AdContext {
-    fn new() -> Self {
+    fn new_rev() -> Self {
         Self {
             started: false,
             backward_called: false,
-            // forward: None,
+            is_forward_mode: false,
+            n_forward_grads: 0,
+        }
+    }
+    fn new_fwd(n: usize) -> Self {
+        Self {
+            started: false,
+            backward_called: false,
+            is_forward_mode: true,
+            n_forward_grads: n,
         }
     }
     fn reset(&mut self) {
-        *self = Self::new();
+        self.started = false;
     }
 }
 thread_local! {
-    static AD_CONTEXT:RefCell<AdContext> = RefCell::new(AdContext::new());
+    static AD_CONTEXT:RefCell<AdContext> = RefCell::new(AdContext::new_rev());
 }
 pub fn requires_grad(var: impl ExprProxy) {
+    AD_CONTEXT.with(|c| {
+        let c = c.borrow();
+        assert!(c.started, "autodiff section is not started");
+        assert!(
+            !c.is_forward_mode,
+            "requires_grad() is called in forward mode"
+        );
+        assert!(!c.backward_called, "backward is already called");
+    });
     __current_scope(|b| {
         b.call(Func::RequiresGradient, &[var.node()], Type::void());
     });
@@ -2788,6 +2808,7 @@ pub fn backward_with_grad<T: ExprProxy>(out: T, grad: T) {
     AD_CONTEXT.with(|c| {
         let mut c = c.borrow_mut();
         assert!(c.started, "autodiff section is not started");
+        assert!(!c.is_forward_mode, "backward() is called in forward mode");
         assert!(!c.backward_called, "backward is already called");
         c.backward_called = true;
     });
@@ -2799,12 +2820,19 @@ pub fn backward_with_grad<T: ExprProxy>(out: T, grad: T) {
     });
 }
 
+/// Gradient of a value in *Reverse mode* AD
 pub fn gradient<T: ExprProxy>(var: T) -> T {
+    AD_CONTEXT.with(|c| {
+        let c = c.borrow();
+        assert!(c.started, "autodiff section is not started");
+        assert!(!c.is_forward_mode, "gradient() is called in forward mode");
+        assert!(c.backward_called, "backward is not called");
+    });
     T::from_node(__current_scope(|b| {
         b.call(Func::Gradient, &[var.node()], var.node().type_().clone())
     }))
 }
-
+/// Gradient of a value in *Reverse mode* AD
 pub fn grad<T: ExprProxy>(var: T) -> T {
     gradient(var)
 }
@@ -2834,6 +2862,73 @@ pub fn detach<T: FromNode>(v: T) -> T {
     T::from_node(node)
 }
 
+/// Start a *Forward mode* AD section that propagates N gradients w.r.t to input variable
+pub fn forward_autodiff(n_grads: usize, body: impl Fn()) {
+    AD_CONTEXT.with(|c| {
+        let mut c = c.borrow_mut();
+        assert!(!c.started, "autodiff section already started");
+        *c = AdContext::new_fwd(n_grads);
+        c.started = true;
+    });
+    RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        let pools = r.pools.clone().unwrap();
+        let s = &mut r.scopes;
+        s.push(IrBuilder::new(pools));
+    });
+    body();
+    AD_CONTEXT.with(|c| {
+        let mut c = c.borrow_mut();
+        c.reset();
+    });
+    let body = __pop_scope();
+    __current_scope(|b| {
+        b.ad_scope(body, true);
+    });
+}
+
+/// Propagate N gradients w.r.t to input variable using *Forward mode* AD
+pub fn propagate_gradient<T: ExprProxy>(v: T, grads: &[T]) {
+    AD_CONTEXT.with(|c| {
+        let c = c.borrow();
+        assert_eq!(grads.len(), c.n_forward_grads);
+        assert!(c.started, "autodiff section is not started");
+        assert!(
+            c.is_forward_mode,
+            "propagate_gradient() is called in backward mode"
+        );
+    });
+    __current_scope(|b| {
+        let mut nodes = vec![v.node()];
+        nodes.extend(grads.iter().map(|g| g.node()));
+        b.call(Func::PropagateGrad, &nodes, Type::void());
+    });
+}
+
+pub fn output_gradients<T: ExprProxy>(v: T) -> Vec<T> {
+    let n = AD_CONTEXT.with(|c| {
+        let c = c.borrow();
+        assert!(c.started, "autodiff section is not started");
+        assert!(
+            c.is_forward_mode,
+            "output_gradients() is called in backward mode"
+        );
+        c.n_forward_grads
+    });
+    __current_scope(|b| {
+        let mut grads = vec![];
+        for i in 0..n {
+            let idx = b.const_(Const::Int32(i as i32));
+            grads.push(T::from_node(b.call(
+                Func::OutputGrad,
+                &[v.node(), idx],
+                Type::void(),
+            )));
+        }
+        grads
+    })
+}
+
 pub fn autodiff(body: impl Fn()) {
     AD_CONTEXT.with(|c| {
         let mut c = c.borrow_mut();
@@ -2855,8 +2950,7 @@ pub fn autodiff(body: impl Fn()) {
     });
     let body = __pop_scope();
     __current_scope(|b| {
-        let node = Node::new(CArc::new(Instruction::AdScope { body }), Type::void());
-        b.append(new_node(b.pools(), node))
+        b.ad_scope(body, false);
     });
 }
 

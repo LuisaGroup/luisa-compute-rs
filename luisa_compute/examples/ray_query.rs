@@ -108,7 +108,7 @@ fn main() {
     let img_h = 800;
     let img = device.create_tex2d::<Float4>(PixelStorage::Byte4, img_w, img_h, 1);
     let debug_hit_t = device.create_buffer::<f32>(4);
-    let rt_kernel = device.create_kernel::<()>(&|| {
+    let rt_kernel = device.create_kernel::<fn()>(&|| {
         let accel = accel.var();
         let px = dispatch_id().xy();
         let xy = px.float() / make_float2(img_w as f32, img_h as f32);

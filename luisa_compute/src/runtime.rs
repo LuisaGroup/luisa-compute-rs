@@ -367,27 +367,30 @@ impl Device {
             modifications: RwLock::new(HashMap::new()),
         }
     }
-    pub fn create_callable<S: CallableSignature>(&self, f: &S::Fn) -> S::Callable {
+    pub fn create_callable<'a, S: CallableSignature<'a>>(&self, f:S::Fn) -> S::Callable {
         let mut builder = KernelBuilder::new(Some(self.clone()), false);
-        let raw_callable = CallableBuildFn::build_callable(f, None, &mut builder);
+        let raw_callable = CallableBuildFn::build_callable(&f, None, &mut builder);
         S::wrap_raw_callable(raw_callable)
     }
-    pub fn create_dyn_callable<S: CallableSignature>(&self, f: S::DynFn) -> S::DynCallable {
+    pub fn create_dyn_callable<'a, S: CallableSignature<'a>>(&self, f: S::DynFn) -> S::DynCallable {
         S::create_dyn_callable(self.clone(), false, f)
     }
-    pub fn create_dyn_callable_once<S: CallableSignature>(&self, f: S::DynFn) -> S::DynCallable {
+    pub fn create_dyn_callable_once<'a, S: CallableSignature<'a>>(
+        &self,
+        f: S::DynFn,
+    ) -> S::DynCallable {
         S::create_dyn_callable(self.clone(), true, f)
     }
-    pub fn create_kernel<S: KernelSignature>(&self, f: &S::Fn) -> S::Kernel {
+    pub fn create_kernel<'a, S: KernelSignature<'a>>(&self, f: S::Fn) -> S::Kernel {
         let mut builder = KernelBuilder::new(Some(self.clone()), true);
         let raw_kernel =
-            KernelBuildFn::build_kernel(f, &mut builder, KernelBuildOptions::default());
+            KernelBuildFn::build_kernel(&f, &mut builder, KernelBuildOptions::default());
         S::wrap_raw_kernel(raw_kernel)
     }
-    pub fn create_kernel_async<S: KernelSignature>(&self, f: &S::Fn) -> S::Kernel {
+    pub fn create_kernel_async<'a, S: KernelSignature<'a>>(&self, f: S::Fn) -> S::Kernel {
         let mut builder = KernelBuilder::new(Some(self.clone()), true);
         let raw_kernel = KernelBuildFn::build_kernel(
-            f,
+            &f,
             &mut builder,
             KernelBuildOptions {
                 async_compile: true,
@@ -396,18 +399,18 @@ impl Device {
         );
         S::wrap_raw_kernel(raw_kernel)
     }
-    pub fn create_kernel_with_options<S: KernelSignature>(
+    pub fn create_kernel_with_options<'a, S: KernelSignature<'a>>(
         &self,
-        f: &S::Fn,
+        f: S::Fn,
         options: KernelBuildOptions,
     ) -> S::Kernel {
         let mut builder = KernelBuilder::new(Some(self.clone()), true);
-        let raw_kernel = KernelBuildFn::build_kernel(f, &mut builder, options);
+        let raw_kernel = KernelBuildFn::build_kernel(&f, &mut builder, options);
         S::wrap_raw_kernel(raw_kernel)
     }
 }
 
-pub fn create_static_callable<S: CallableSignature>(f: S::StaticFn) -> S::Callable {
+pub fn create_static_callable<'a, S: CallableSignature<'a>>(f: S::StaticFn) -> S::Callable {
     let r_backup = RECORDER.with(|r| {
         let mut r = r.borrow_mut();
         std::mem::replace(&mut *r, Recorder::new())
@@ -1152,22 +1155,22 @@ impl RawKernel {
     }
 }
 
-pub struct Callable<S: CallableSignature> {
+pub struct Callable<S: CallableSignature<'static>> {
     #[allow(dead_code)]
     pub(crate) inner: RawCallable,
     pub(crate) _marker: std::marker::PhantomData<S>,
 }
-pub(crate) struct DynCallableInner<S: CallableSignature> {
+pub(crate) struct DynCallableInner<S: CallableSignature<'static>> {
     builder: Box<dyn Fn(std::rc::Rc<dyn Any>, &mut KernelBuilder) -> Callable<S>>,
     callables: Vec<Callable<S>>,
 }
-pub struct DynCallable<S: CallableSignature> {
+pub struct DynCallable<S: CallableSignature<'static>> {
     #[allow(dead_code)]
     pub(crate) inner: RefCell<DynCallableInner<S>>,
     pub(crate) device: Device,
     pub(crate) init_once: bool,
 }
-impl<S: CallableSignature> DynCallable<S> {
+impl<S: CallableSignature<'static>> DynCallable<S> {
     pub(crate) fn new(
         device: Device,
         init_once: bool,
@@ -1238,13 +1241,13 @@ pub struct RawCallable {
     pub(crate) resource_tracker: ResourceTracker,
 }
 
-pub struct Kernel<T> {
+pub struct Kernel<T: KernelSignature<'static>> {
     pub(crate) inner: RawKernel,
     pub(crate) _marker: std::marker::PhantomData<T>,
 }
-unsafe impl<T> Send for Kernel<T> {}
-unsafe impl<T> Sync for Kernel<T> {}
-impl<T> Kernel<T> {
+unsafe impl<T: KernelSignature<'static>> Send for Kernel<T> {}
+unsafe impl<T: KernelSignature<'static>> Sync for Kernel<T> {}
+impl<T: KernelSignature<'static>> Kernel<T> {
     pub fn cache_dir(&self) -> Option<PathBuf> {
         let handle = self.inner.unwrap();
         let device = &self.inner.device;
@@ -1335,7 +1338,7 @@ impl_call_for_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 macro_rules! impl_dispatch_for_kernel {
 
    ($first:ident  $($rest:ident)*) => {
-        impl <$first:KernelArg, $($rest: KernelArg),*> Kernel<fn($first, $($rest,)*)> {
+        impl <$first:KernelArg+'static, $($rest: KernelArg+'static),*> Kernel<fn($first, $($rest,)*)> {
             #[allow(non_snake_case)]
             pub fn dispatch(&self, dispatch_size: [u32; 3], $first:&impl AsKernelArg<$first>, $($rest:&impl AsKernelArg<$rest>),*)  {
                 let mut encoder = KernelArgEncoder::new();

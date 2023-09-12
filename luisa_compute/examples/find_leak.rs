@@ -25,7 +25,7 @@ fn main() {
             let z = device.create_buffer::<f32>(count);
             x.view(..).fill_fn(|i| i as f32);
             y.view(..).fill_fn(|i| 1000.0 * i as f32);
-            let kernel = device.create_kernel::<(Buffer<f32>, Buffer<f32>, Buffer<f32>)>(
+            let kernel = device.create_kernel::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>(
                 &|buf_x, buf_y, buf_z| {
                     let tid = dispatch_id().x();
                     let x = buf_x.read(tid);
@@ -47,7 +47,7 @@ fn main() {
             let z = device.create_buffer::<f32>(count);
             x.view(..).fill_fn(|i| i as f32);
             y.view(..).fill_fn(|i| 1000.0 * i as f32);
-            let kernel = device.create_kernel::<(Buffer<f32>,)>(&|buf_z| {
+            let kernel = device.create_kernel::<fn(Buffer<f32>)>(&|buf_z| {
                 let buf_x = x.var();
                 let buf_y = y.var();
                 let tid = dispatch_id().x();

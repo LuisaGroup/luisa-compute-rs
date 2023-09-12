@@ -91,7 +91,7 @@ fn autodiff_helper<F: Fn(&[Float]) -> Float>(
     //     inputs[i].view(..).copy_from(&tmp);
     // }
     println!("init time: {:?}", tic.elapsed());
-    let kernel = device.create_kernel_async::<()>(&|| {
+    let kernel = device.create_kernel_async::<fn()>(&|| {
         let input_vars = inputs.iter().map(|input| input.var()).collect::<Vec<_>>();
         let grad_fd_vars = grad_fd.iter().map(|grad| grad.var()).collect::<Vec<_>>();
         let grad_ad_vars = grad_ad.iter().map(|grad| grad.var()).collect::<Vec<_>>();
@@ -753,7 +753,7 @@ fn autodiff_if_nan() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen::<f32>() + 10.0);
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
@@ -804,7 +804,7 @@ fn autodiff_if_phi() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
@@ -854,7 +854,7 @@ fn autodiff_if_phi2() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
@@ -910,7 +910,7 @@ fn autodiff_if_phi3() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
@@ -971,7 +971,7 @@ fn autodiff_if_phi4() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
@@ -1035,7 +1035,7 @@ fn autodiff_switch() {
     t.view(..).fill_fn(|_| rng.gen_range(0..3));
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_t = t.var();
         let buf_x = x.var();
         let buf_y = y.var();
@@ -1094,7 +1094,7 @@ fn autodiff_callable() {
     t.view(..).fill_fn(|_| rng.gen_range(0..3));
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let callable = device.create_callable::<(Var<f32>, Var<f32>, Expr<i32>), ()>(&|vx, vy, t| {
+    let callable = device.create_callable::<fn(Var<f32>, Var<f32>, Expr<i32>)>(&|vx, vy, t| {
         let x = *vx;
         let y = *vy;
         autodiff(|| {
@@ -1110,7 +1110,7 @@ fn autodiff_callable() {
             *vy.get_mut() = gradient(y);
         });
     });
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_t = t.var();
         let buf_x = x.var();
         let buf_y = y.var();

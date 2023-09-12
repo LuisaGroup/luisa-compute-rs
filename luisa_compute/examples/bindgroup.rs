@@ -22,6 +22,6 @@ fn main() {
         y,
         exclude: 42.0,
     };
-    let shader = device.create_kernel::<(MyArgStruct<f32>,)>(&|_args| {});
+    let shader = device.create_kernel::<fn(MyArgStruct<f32>)>(&|_args| {});
     shader.dispatch([1024, 1, 1], &my_args);
 }

@@ -132,7 +132,7 @@ fn main() {
     );
     let poly_shader = builder.build();
     let result = device.create_buffer::<f32>(100);
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let i = dispatch_id().x();
         let x = i.float() / 100.0 * PI;
         let ctx = ShaderEvalContext {

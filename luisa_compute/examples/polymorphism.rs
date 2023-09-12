@@ -50,7 +50,7 @@ fn main() {
     poly_area.register((), &circles);
     poly_area.register((), &squares);
     let areas = device.create_buffer::<f32>(4);
-    let shader = device.create_kernel::<()>(&|| {
+    let shader = device.create_kernel::<fn()>(&|| {
         let tid = dispatch_id().x();
         let tag = tid / 2;
         let index = tid % 2;

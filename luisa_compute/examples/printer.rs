@@ -18,7 +18,7 @@ fn main() {
         "cpu"
     });
     let printer = Printer::new(&device, 65536);
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let id = dispatch_id().xy();
         if_!(id.x().cmpeq(id.y()), {
             lc_info!(printer, "id = {:?}", id);

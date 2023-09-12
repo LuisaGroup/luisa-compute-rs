@@ -114,7 +114,7 @@ fn main() {
     };
 
     let advect = device
-        .create_kernel_async::<(Buffer<Float2>, Buffer<Float2>, Buffer<f32>, Buffer<f32>)>(
+        .create_kernel_async::<fn(Buffer<Float2>, Buffer<Float2>, Buffer<f32>, Buffer<f32>)>(
             &|u0, u1, rho0, rho1| {
                 let coord = dispatch_id().xy();
                 let u = u0.read(index(coord));
@@ -129,7 +129,7 @@ fn main() {
             },
         );
 
-    let divergence = device.create_kernel_async::<(Buffer<Float2>, Buffer<f32>)>(&|u, div| {
+    let divergence = device.create_kernel_async::<fn(Buffer<Float2>, Buffer<f32>)>(&|u, div| {
         let coord = dispatch_id().xy();
         if_!(coord.x().cmplt(N_GRID - 1) & coord.y().cmplt(N_GRID - 1), {
             let dx = (u.read(index(make_uint2(coord.x() + 1, coord.y()))).x()
@@ -143,7 +143,7 @@ fn main() {
     });
 
     let pressure_solve =
-        device.create_kernel_async::<(Buffer<f32>, Buffer<f32>, Buffer<f32>)>(&|p0, p1, div| {
+        device.create_kernel_async::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>(&|p0, p1, div| {
             let coord = dispatch_id().xy();
             let i = coord.x().int();
             let j = coord.y().int();
@@ -159,7 +159,7 @@ fn main() {
             p1.write(ij, err * 0.25f32);
         });
 
-    let pressure_apply = device.create_kernel_async::<(Buffer<f32>, Buffer<Float2>)>(&|p, u| {
+    let pressure_apply = device.create_kernel_async::<fn(Buffer<f32>, Buffer<Float2>)>(&|p, u| {
         let coord = dispatch_id().xy();
         let i = coord.x().int();
         let j = coord.y().int();
@@ -181,7 +181,7 @@ fn main() {
         );
     });
 
-    let integrate = device.create_kernel_async::<(Buffer<Float2>, Buffer<f32>)>(&|u, rho| {
+    let integrate = device.create_kernel_async::<fn(Buffer<Float2>, Buffer<f32>)>(&|u, rho| {
         let coord = dispatch_id().xy();
         let ij = index(coord);
 
@@ -196,7 +196,7 @@ fn main() {
     });
 
     let init =
-        device.create_kernel_async::<(Buffer<f32>, Buffer<Float2>, Float2)>(&|rho, u, dir| {
+        device.create_kernel_async::<fn(Buffer<f32>, Buffer<Float2>, Float2)>(&|rho, u, dir| {
             let coord = dispatch_id().xy();
             let i = coord.x().int();
             let j = coord.y().int();
@@ -210,7 +210,7 @@ fn main() {
             });
         });
 
-    let init_grid = device.create_kernel_async::<()>(&|| {
+    let init_grid = device.create_kernel_async::<fn()>(&|| {
         let idx = index(dispatch_id().xy());
         u0.var().write(idx, make_float2(0.0f32, 0.0f32));
         u1.var().write(idx, make_float2(0.0f32, 0.0f32));
@@ -223,13 +223,13 @@ fn main() {
         div.var().write(idx, 0.0f32);
     });
 
-    let clear_pressure = device.create_kernel_async::<()>(&|| {
+    let clear_pressure = device.create_kernel_async::<fn()>(&|| {
         let idx = index(dispatch_id().xy());
         p0.var().write(idx, 0.0f32);
         p1.var().write(idx, 0.0f32);
     });
 
-    let draw_rho = device.create_kernel_async::<()>(&|| {
+    let draw_rho = device.create_kernel_async::<fn()>(&|| {
         let coord = dispatch_id().xy();
         let ij = index(coord);
         let value = rho0.var().read(ij);

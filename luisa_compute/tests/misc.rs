@@ -38,10 +38,10 @@ fn event() {
     let a: Buffer<i32> = device.create_buffer_from_slice(&[0]);
     let b: Buffer<i32> = device.create_buffer_from_slice(&[0]);
     // compute (1 + 3) * (4 + 5)
-    let add = device.create_kernel::<(Buffer<i32>, i32)>(&|buf: BufferVar<i32>, v: Expr<i32>| {
+    let add = device.create_kernel::<fn(Buffer<i32>, i32)>(&|buf: BufferVar<i32>, v: Expr<i32>| {
         buf.write(0, buf.read(0) + v);
     });
-    let mul = device.create_kernel::<(Buffer<i32>, Buffer<i32>)>(
+    let mul = device.create_kernel::<fn(Buffer<i32>, Buffer<i32>)>(
         &|a: BufferVar<i32>, b: BufferVar<i32>| {
             a.write(0, a.read(0) * b.read(0));
         },
@@ -85,20 +85,20 @@ fn event() {
 #[test]
 fn callable() {
     let device = get_device();
-    let write = device.create_callable::<(BufferVar<u32>, Expr<u32>, Var<u32>), ()>(
+    let write = device.create_callable::<fn(BufferVar<u32>, Expr<u32>, Var<u32>)>(
         &|buf: BufferVar<u32>, i: Expr<u32>, v: Var<u32>| {
             buf.write(i, v.load());
             v.store(v.load() + 1);
         },
     );
-    let add = device.create_callable::<(Expr<u32>, Expr<u32>), Expr<u32>>(&|a, b| a + b);
+    let add = device.create_callable::<fn(Expr<u32>, Expr<u32>)->Expr<u32>>(&|a, b| a + b);
     let x = device.create_buffer::<u32>(1024);
     let y = device.create_buffer::<u32>(1024);
     let z = device.create_buffer::<u32>(1024);
     let w = device.create_buffer::<u32>(1024);
     x.view(..).fill_fn(|i| i as u32);
     y.view(..).fill_fn(|i| 1000 * i as u32);
-    let kernel = device.create_kernel::<(Buffer<u32>,)>(&|buf_z| {
+    let kernel = device.create_kernel::<fn(Buffer<u32>)>(&|buf_z| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_w = w.var();
@@ -124,7 +124,7 @@ fn vec_cast() {
     let i: Buffer<Int2> = device.create_buffer(1024);
     f.view(..)
         .fill_fn(|i| Float2::new(i as f32 + 0.5, i as f32 + 1.5));
-    let kernel = device.create_kernel_with_options::<()>(
+    let kernel = device.create_kernel_with_options::<fn()>(
         &|| {
             let f = f.var();
             let i = i.var();
@@ -157,7 +157,7 @@ fn bool_op() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let tid = dispatch_id().x();
         let x = x.var().read(tid);
         let y = y.var().read(tid);
@@ -198,7 +198,7 @@ fn bvec_op() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| Bool2::new(rng.gen(), rng.gen()));
     y.view(..).fill_fn(|_| Bool2::new(rng.gen(), rng.gen()));
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let tid = dispatch_id().x();
         let x = x.var().read(tid);
         let y = y.var().read(tid);
@@ -248,7 +248,7 @@ fn vec_bit_minmax() {
     x.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
     y.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
     z.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let tid = dispatch_id().x();
         let x = x.var().read(tid);
         let y = y.var().read(tid);
@@ -307,7 +307,7 @@ fn vec_permute() {
     let v3: Buffer<Int3> = device.create_buffer(1024);
     v2.view(..)
         .fill_fn(|i| Int2::new(i as i32 + 0, i as i32 + 1));
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let v2 = v2.var();
         let v3 = v3.var();
         let tid = dispatch_id().x();
@@ -330,7 +330,7 @@ fn if_phi() {
     let x: Buffer<i32> = device.create_buffer(1024);
     let even: Buffer<bool> = device.create_buffer(1024);
     x.view(..).fill_fn(|i| i as i32);
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let x = x.var();
         let even = even.var();
         let tid = dispatch_id().x();
@@ -353,7 +353,7 @@ fn switch_phi() {
     let y: Buffer<i32> = device.create_buffer(1024);
     let z: Buffer<f32> = device.create_buffer(1024);
     x.view(..).fill_fn(|i| i as i32);
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_z = z.var();
@@ -400,7 +400,7 @@ fn switch_unreachable() {
     let y: Buffer<i32> = device.create_buffer(1024);
     let z: Buffer<f32> = device.create_buffer(1024);
     x.view(..).fill_fn(|i| i as i32 % 3);
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_z = z.var();
@@ -442,7 +442,7 @@ fn switch_unreachable() {
 fn array_read_write() {
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let tid = dispatch_id().x();
         let arr = local_zeroed::<[i32; 4]>();
@@ -466,7 +466,7 @@ fn array_read_write() {
 fn array_read_write3() {
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let tid = dispatch_id().x();
         let arr = local_zeroed::<[i32; 4]>();
@@ -488,7 +488,7 @@ fn array_read_write3() {
 fn array_read_write4() {
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let tid = dispatch_id().x();
         let arr = local_zeroed::<[i32; 4]>();
@@ -518,7 +518,7 @@ fn array_read_write2() {
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
     let y: Buffer<i32> = device.create_buffer(1024);
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let tid = dispatch_id().x();
@@ -548,7 +548,7 @@ fn array_read_write_vla() {
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
     let y: Buffer<i32> = device.create_buffer(1024);
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let tid = dispatch_id().x();
@@ -583,7 +583,7 @@ fn array_read_write_vla() {
 fn array_read_write_async_compile() {
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
-    let kernel = device.create_kernel::<()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let tid = dispatch_id().x();
         let arr = local_zeroed::<[i32; 4]>();
@@ -610,7 +610,7 @@ fn capture_same_buffer_multiple_view() {
     let sum = device.create_buffer::<f32>(1);
     x.view(..).fill_fn(|i| i as f32);
     sum.view(..).fill(0.0);
-    let shader = device.create_kernel::<()>(&|| {
+    let shader = device.create_kernel::<fn()>(&|| {
         let tid = luisa::dispatch_id().x();
         let buf_x_lo = x.view(0..64).var();
         let buf_x_hi = x.view(64..).var();
@@ -638,7 +638,7 @@ fn uniform() {
     let sum = device.create_buffer::<f32>(1);
     x.view(..).fill_fn(|i| i as f32);
     sum.view(..).fill(0.0);
-    let shader = device.create_kernel::<(Float3,)>(&|v: Expr<Float3>| {
+    let shader = device.create_kernel::<fn(Float3)>(&|v: Expr<Float3>| {
         let tid = luisa::dispatch_id().x();
         let buf_x_lo = x.view(0..64).var();
         let buf_x_hi = x.view(64..).var();
@@ -688,7 +688,7 @@ fn byte_buffer() {
     let i2 = push!(i32, 0i32);
     let i3 = push!(f32, 1f32);
     device
-        .create_kernel::<()>(&|| {
+        .create_kernel::<fn()>(&|| {
             let buf = buf.var();
             let i0 = i0 as u64;
             let i1 = i1 as u64;
@@ -759,7 +759,7 @@ fn bindless_byte_buffer() {
     let i2 = push!(i32, 0i32);
     let i3 = push!(f32, 1f32);
     device
-        .create_kernel::<(ByteBuffer,)>(&|out:ByteBufferVar| {
+        .create_kernel::<fn(ByteBuffer)>(&|out:ByteBufferVar| {
             let heap = heap.var();
             let buf = heap.byte_address_buffer(0);
             let i0 = i0 as u64;

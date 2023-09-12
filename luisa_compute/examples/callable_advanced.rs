@@ -6,7 +6,7 @@ fn main() {
     init_logger();
     let ctx = Context::new(current_exe().unwrap());
     let device = ctx.create_device("cpu");
-    let add = device.create_dyn_callable::<(DynExpr, DynExpr), DynExpr>(Box::new(
+    let add = device.create_dyn_callable::<fn(DynExpr, DynExpr) -> DynExpr>(Box::new(
         |a: DynExpr, b: DynExpr| -> DynExpr {
             if let Some(a) = a.downcast::<f32>() {
                 let b = b.downcast::<f32>().unwrap();
@@ -25,7 +25,7 @@ fn main() {
     let w = device.create_buffer::<i32>(1024);
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
-    let kernel = device.create_kernel::<(Buffer<f32>,)>(&|buf_z| {
+    let kernel = device.create_kernel::<fn(Buffer<f32>)>(&|buf_z| {
         let buf_x = x.var();
         let buf_y = y.var();
         let tid = dispatch_id().x();

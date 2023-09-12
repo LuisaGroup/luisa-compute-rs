@@ -21,15 +21,16 @@ fn main() {
         "cpu"
     });
 
-    let palette = device.create_callable::<(Expr<f32>,), Expr<Float3>>(&|d| {
+    let palette = device.create_callable::<fn(Expr<f32>) -> Expr<Float3>>(&|d| {
         make_float3(0.2, 0.7, 0.9).lerp(make_float3(1.0, 0.0, 1.0), Float3Expr::splat(d))
     });
-    let rotate = device.create_callable::<(Expr<Float2>, Expr<f32>), Expr<Float2>>(&|mut p, a| {
-        let c = a.cos();
-        let s = a.sin();
-        make_float2(p.dot(make_float2(c, s)), p.dot(make_float2(-s, c)))
-    });
-    let map = device.create_callable::<(Expr<Float3>, Expr<f32>), Expr<f32>>(&|mut p, time| {
+    let rotate =
+        device.create_callable::<fn(Expr<Float2>, Expr<f32>) -> Expr<Float2>>(&|mut p, a| {
+            let c = a.cos();
+            let s = a.sin();
+            make_float2(p.dot(make_float2(c, s)), p.dot(make_float2(-s, c)))
+        });
+    let map = device.create_callable::<fn(Expr<Float3>, Expr<f32>) -> Expr<f32>>(&|mut p, time| {
         for i in 0..8 {
             let t = time * 0.2;
             let r = rotate.call(p.xz(), t);
@@ -40,7 +41,7 @@ fn main() {
         }
         Float3Expr::splat(1.0).copysign(p).dot(p) * 0.2
     });
-    let rm = device.create_callable::<(Expr<Float3>, Expr<Float3>, Expr<f32>), Expr<Float4>>(
+    let rm = device.create_callable::<fn(Expr<Float3>, Expr<Float3>, Expr<f32>)-> Expr<Float4>>(
         &|ro, rd, time| {
             let t = var!(f32, 0.0);
             let col = var!(Float3);
@@ -56,11 +57,11 @@ fn main() {
             make_float4(col.x(), col.y(), col.z(), 1.0 / (100.0 * *d))
         },
     );
-    let clear_kernel = device.create_kernel::<(Tex2d<Float4>,)>(&|img| {
+    let clear_kernel = device.create_kernel::<fn(Tex2d<Float4>,)>(&|img| {
         let coord = dispatch_id().xy();
         img.write(coord, make_float4(0.3, 0.4, 0.5, 1.0));
     });
-    let main_kernel = device.create_kernel::<(Tex2d<Float4>, f32)>(&|img, time| {
+    let main_kernel = device.create_kernel::<fn(Tex2d<Float4>, f32)>(&|img, time| {
         let xy = dispatch_id().xy();
         let resolution = dispatch_size().xy();
         let uv = (xy.float() - resolution.float() * 0.5) / resolution.x().float();

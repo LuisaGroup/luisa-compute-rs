@@ -93,14 +93,14 @@ fn main() {
         p.x() + p.y() * N_GRID as u32
     };
 
-    let clear_grid = device.create_kernel_async::<()>(&|| {
+    let clear_grid = device.create_kernel_async::<fn()>(&|| {
         let idx = index(dispatch_id().xy());
         grid_v.var().write(idx * 2, 0.0f32);
         grid_v.var().write(idx * 2 + 1, 0.0f32);
         grid_m.var().write(idx, 0.0f32);
     });
 
-    let point_to_grid = device.create_kernel_async::<()>(&|| {
+    let point_to_grid = device.create_kernel_async::<fn()>(&|| {
         let p = dispatch_id().x();
         let xp = x.var().read(p) / DX;
         let base = (xp - 0.5f32).int();
@@ -128,7 +128,7 @@ fn main() {
         }
     });
 
-    let simulate_grid = device.create_kernel_async::<()>(&|| {
+    let simulate_grid = device.create_kernel_async::<fn()>(&|| {
         let coord = dispatch_id().xy();
         let i = index(coord);
         let v = var!(Float2);
@@ -157,7 +157,7 @@ fn main() {
         grid_v.var().write(i * 2 + 1, vy);
     });
 
-    let grid_to_point = device.create_kernel_async::<()>(&|| {
+    let grid_to_point = device.create_kernel_async::<fn()>(&|| {
         let p = dispatch_id().x();
         let xp = x.var().read(p) / DX;
         let base = (xp - 0.5f32).int();
@@ -192,13 +192,13 @@ fn main() {
         C.var().write(p, new_C);
     });
 
-    let clear_display = device.create_kernel_async::<()>(&|| {
+    let clear_display = device.create_kernel_async::<fn()>(&|| {
         display.var().write(
             dispatch_id().xy(),
             make_float4(0.1f32, 0.2f32, 0.3f32, 1.0f32),
         );
     });
-    let draw_particles = device.create_kernel_async::<()>(&|| {
+    let draw_particles = device.create_kernel_async::<fn()>(&|| {
         let p = dispatch_id().x();
         for i in -1..=1 {
             for j in -1..=1 {

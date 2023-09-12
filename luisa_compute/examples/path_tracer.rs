@@ -247,7 +247,7 @@ fn main() {
 
     // use create_kernel_async to compile multiple kernels in parallel
     let path_tracer = device
-        .create_kernel_async::<(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>(
+        .create_kernel_async::<fn(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>(
             &|image: Tex2dVar<Float4>,
               seed_image: Tex2dVar<u32>,
               accel: AccelVar,
@@ -265,7 +265,7 @@ fn main() {
                     ]);
 
                 let lcg = |state: Var<u32>| -> Expr<f32> {
-                    let lcg = create_static_callable::<(Var<u32>,), Expr<f32>>(|state:Var<u32>|{
+                    let lcg = create_static_callable::<fn(Var<u32>)-> Expr<f32>>(|state:Var<u32>|{
                          const LCG_A: u32 = 1664525u32;
                         const LCG_C: u32 = 1013904223u32;
                         *state.get_mut() = LCG_A * *state + LCG_C;
@@ -441,7 +441,7 @@ fn main() {
             },
         )
         ;
-    let display = device.create_kernel_async::<(Tex2d<Float4>, Tex2d<Float4>)>(&|acc, display| {
+    let display = device.create_kernel_async::<fn(Tex2d<Float4>, Tex2d<Float4>)>(&|acc, display| {
         set_block_size([16, 16, 1]);
         let coord = dispatch_id().xy();
         let radiance = acc.read(coord);

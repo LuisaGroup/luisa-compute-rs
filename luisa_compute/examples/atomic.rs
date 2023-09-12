@@ -11,7 +11,7 @@ fn main() {
     let sum = device.create_buffer::<f32>(1);
     x.view(..).fill_fn(|i| i as f32);
     sum.view(..).fill(0.0);
-    let shader = device.create_kernel::<()>(&|| {
+    let shader = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let buf_sum = sum.var();
         let tid = luisa::dispatch_id().x();

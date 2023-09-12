@@ -145,7 +145,7 @@ impl Accel {
         let mut flags =
             api::AccelBuildModificationFlags::PRIMITIVE | AccelBuildModificationFlags::TRANSFORM;
 
-        flags |= api::AccelBuildModificationFlags::VISIBILITY;
+        flags |= api::AccelBuildModificationFlags::VISIBILITY | api::AccelBuildModificationFlags::USER_ID;
 
         if opaque {
             flags |= api::AccelBuildModificationFlags::OPAQUE_ON;
@@ -180,7 +180,7 @@ impl Accel {
     ) {
         let mut flags = api::AccelBuildModificationFlags::PRIMITIVE;
         dbg!(flags);
-        flags |= api::AccelBuildModificationFlags::VISIBILITY;
+        flags |= api::AccelBuildModificationFlags::VISIBILITY | api::AccelBuildModificationFlags::USER_ID;
 
         if opaque {
             flags |= api::AccelBuildModificationFlags::OPAQUE_ON;

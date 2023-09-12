@@ -176,7 +176,7 @@ const SPP_PER_DISPATCH: u32 = 32u32;
 
 fn main() {
     use luisa::*;
-    init_logger();
+    init_logger_verbose();
 
     std::env::set_var("WINIT_UNIX_BACKEND", "x11");
     let args: Vec<String> = std::env::args().collect();
@@ -236,7 +236,7 @@ fn main() {
             vertex_heap.emplace_buffer_async(index, vertex_buffers.last().unwrap());
             index_heap.emplace_buffer_async(index, index_buffers.last().unwrap());
             cmds.push(mesh.build_async(AccelBuildRequest::ForceBuild));
-            accel.push_mesh(&mesh, glam::Mat4::IDENTITY.into(), u32::MAX, true);
+            accel.push_mesh(&mesh, glam::Mat4::IDENTITY.into(), 255, true);
         }
         cmds.push(vertex_heap.update_async());
         cmds.push(index_heap.update_async());

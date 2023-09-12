@@ -66,6 +66,9 @@ fn autodiff_helper<F: Fn(&[Float]) -> Float>(
     let grad_ad = (0..n_inputs)
         .map(|_| device.create_buffer::<f32>(repeats))
         .collect::<Vec<_>>();
+    // let grad_fwd_ad = (0..n_inputs)
+    //     .map(|_| device.create_buffer::<f32>(repeats))
+    //     .collect::<Vec<_>>();
     let tic = std::time::Instant::now();
     let tmp: Vec<Vec<f32>> = (0..n_inputs)
         .into_par_iter()
@@ -110,6 +113,9 @@ fn autodiff_helper<F: Fn(&[Float]) -> Float>(
                 grad_ad_vars[i].write(tid, gradient(inputs[i]));
             }
         });
+        // forward_autodiff(n_inputs, ||{
+
+        // });
         let fd = finite_difference(&inputs, &f);
         for i in 0..n_inputs {
             grad_fd_vars[i].write(tid, fd[i]);

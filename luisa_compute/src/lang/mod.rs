@@ -2019,6 +2019,7 @@ impl KernelBuilder {
                 flags: ModuleFlags::REQUIRES_REV_AD_TRANSFORM
                     | ModuleFlags::REQUIRES_FWD_AD_TRANSFORM,
             };
+            let ir_module = luisa_compute_ir::transform::luisa_compute_ir_transform_auto(ir_module);
             let module = CallableModule {
                 module: ir_module,
                 ret_type,
@@ -2937,6 +2938,7 @@ pub fn autodiff(body: impl Fn()) {
     AD_CONTEXT.with(|c| {
         let mut c = c.borrow_mut();
         assert!(!c.started, "autodiff section is already started");
+        *c = AdContext::new_rev();
         c.started = true;
     });
     RECORDER.with(|r| {

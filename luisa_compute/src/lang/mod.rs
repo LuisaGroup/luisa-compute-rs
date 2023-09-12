@@ -2016,7 +2016,8 @@ impl KernelBuilder {
                 entry,
                 kind: ModuleKind::Kernel,
                 pools: r.pools.clone().unwrap(),
-                flags: ModuleFlags::REQUIRES_REV_AD_TRANSFORM,
+                flags: ModuleFlags::REQUIRES_REV_AD_TRANSFORM
+                    | ModuleFlags::REQUIRES_FWD_AD_TRANSFORM,
             };
             let module = CallableModule {
                 module: ir_module,
@@ -2053,7 +2054,8 @@ impl KernelBuilder {
                 entry,
                 kind: ModuleKind::Kernel,
                 pools: r.pools.clone().unwrap(),
-                flags: ModuleFlags::REQUIRES_REV_AD_TRANSFORM,
+                flags: ModuleFlags::REQUIRES_REV_AD_TRANSFORM
+                    | ModuleFlags::REQUIRES_FWD_AD_TRANSFORM,
             };
             let ir_module = luisa_compute_ir::transform::luisa_compute_ir_transform_auto(ir_module);
             let module = KernelModule {
@@ -2877,13 +2879,15 @@ pub fn forward_autodiff(n_grads: usize, body: impl Fn()) {
         s.push(IrBuilder::new(pools));
     });
     body();
-    AD_CONTEXT.with(|c| {
+    let n_grads = AD_CONTEXT.with(|c| {
         let mut c = c.borrow_mut();
+        let n_grads = c.n_forward_grads;
         c.reset();
+        n_grads
     });
     let body = __pop_scope();
     __current_scope(|b| {
-        b.ad_scope(body, true);
+        b.fwd_ad_scope(body, n_grads);
     });
 }
 
@@ -2922,7 +2926,7 @@ pub fn output_gradients<T: ExprProxy>(v: T) -> Vec<T> {
             grads.push(T::from_node(b.call(
                 Func::OutputGrad,
                 &[v.node(), idx],
-                Type::void(),
+                v.node().type_().clone(),
             )));
         }
         grads
@@ -2950,7 +2954,7 @@ pub fn autodiff(body: impl Fn()) {
     });
     let body = __pop_scope();
     __current_scope(|b| {
-        b.ad_scope(body, false);
+        b.ad_scope(body);
     });
 }
 

@@ -48,12 +48,15 @@ impl Drop for ProceduralPrimitiveHandle {
         self.device.inner.destroy_procedural_primitive(self.handle);
     }
 }
+unsafe impl Send for ProceduralPrimitiveHandle {}
+unsafe impl Sync for ProceduralPrimitiveHandle {}
 pub struct ProceduralPrimitive {
     pub(crate) handle: Arc<ProceduralPrimitiveHandle>,
     pub(crate) aabb_buffer: api::Buffer,
     pub(crate) aabb_buffer_offset: usize,
     pub(crate) aabb_buffer_count: usize,
 }
+
 impl ProceduralPrimitive {
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         self.handle.native_handle

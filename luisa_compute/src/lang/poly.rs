@@ -37,16 +37,14 @@ pub trait PolymorphicImpl<T: ?Sized + 'static>: Value {
 }
 #[macro_export]
 macro_rules! impl_new_poly_array {
-    ($buffer:expr, $tag:expr, $key:expr)=>{
-        {
-            let buffer = unsafe { $buffer.shallow_clone() };
-            luisa_compute::PolyArray::new(
-                $tag,
-                $key,
-                Box::new(move |_, index| Box::new(buffer.var().read(index))),
-            )
-        }
-    }
+    ($buffer:expr, $tag:expr, $key:expr) => {{
+        let buffer = unsafe { $buffer.shallow_clone() };
+        luisa_compute::PolyArray::new(
+            $tag,
+            $key,
+            Box::new(move |_, index| Box::new(buffer.var().read(index))),
+        )
+    }};
 }
 #[macro_export]
 macro_rules! impl_polymorphic {
@@ -163,17 +161,11 @@ impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBui
                     let r = &mut array[index];
                     r as &mut dyn Any
                 }),
-                build: Box::new(
-                    move |array: &dyn Any, device: Device| -> PolyArray<K, T> {
-                        let array = array.downcast_ref::<Vec<U>>().unwrap();
-                        let buffer = device.create_buffer_from_slice(&array);
-                        PolymorphicImpl::<T>::new_poly_array(
-                            &buffer,
-                            tag as i32,
-                            key.clone(),
-                        )
-                    },
-                ),
+                build: Box::new(move |array: &dyn Any, device: Device| -> PolyArray<K, T> {
+                    let array = array.downcast_ref::<Vec<U>>().unwrap();
+                    let buffer = device.create_buffer_from_slice(&array);
+                    PolymorphicImpl::<T>::new_poly_array(&buffer, tag as i32, key.clone())
+                }),
                 array: Box::new(Vec::<U>::new()),
             });
             tag
@@ -222,7 +214,14 @@ pub struct Polymorphic<DevirtualizationKey, Trait: ?Sized + 'static> {
     key_typeid_to_tag: HashMap<(DevirtualizationKey, TypeId), u32>,
     key_to_tag: HashMap<DevirtualizationKey, Option<u32>>,
 }
-
+unsafe impl<DevirtualizationKey: Send, Trait: ?Sized + 'static> Send
+    for Polymorphic<DevirtualizationKey, Trait>
+{
+}
+unsafe impl<DevirtualizationKey: Sync, Trait: ?Sized + 'static> Sync
+    for Polymorphic<DevirtualizationKey, Trait>
+{
+}
 pub struct PolymorphicRef<'a, DevirtualizationKey, Trait: ?Sized + 'static> {
     parent: &'a Polymorphic<DevirtualizationKey, Trait>,
     pub tag_index: Expr<TagIndex>,

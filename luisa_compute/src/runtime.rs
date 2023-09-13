@@ -577,6 +577,9 @@ pub struct Stream {
     pub(crate) handle: Arc<StreamHandle>,
 }
 
+unsafe impl Send for Stream {}
+unsafe impl Sync for Stream {}
+
 impl StreamHandle {
     #[inline]
     pub(crate) fn device(&self) -> Arc<DeviceHandle> {

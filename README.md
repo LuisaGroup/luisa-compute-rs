@@ -10,6 +10,7 @@ To see the use of `luisa-compute-rs` in a high performance offline rendering sys
     + [IR Module for EDSL](#ir-module)
     + [Debuggability](#debuggability)
 * [Usage](#usage)
+    + [Building](#building)
     + [Variables and Expressions](#variables-and-expressions)
     + [Builtin Functions](#builtin-functions)
     + [Control Flow](#control-flow)
@@ -101,12 +102,15 @@ The EDSL and code generation are built atop of an SSA-based IR module. The IR mo
 The CPU backend is designed to be debuggable. If needed, it will perform runtime checks to detect errors such as out-of-bound access, bindless array type mismatch, etc. It will display error message containing the **host** stacktrace for pinpointing the error location.
 
 ## Usage
+### Building
 To get started, add the following to your `Cargo.toml`:
 ```toml
 [dependencies]
 luisa_compute = { git= "https://github.com/LuisaGroup/luisa-compute-rs.git"}
 ```
-Then added the following to your files:
+You need to install `CMake` and `Ninja` to build the backends. More details about prerequistes can be found in [here](https://github.com/LuisaGroup/LuisaCompute#building).
+
+In your project, the following to your files:
 ```rust
 use luisa_compute as luisa;
 use luisa::prelude::*;

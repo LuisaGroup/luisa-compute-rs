@@ -1,6 +1,5 @@
 # luisa-compute-rs
-Rust frontend to LuisaCompute and more! (WIP) ⚠ A stable version will be released with the next version of LuisaCompute ⚠. See [next](https://github.com/LuisaGroup/luisa-compute-rs/tree/next) branch for ongoing development.
-
+Rust frontend to LuisaCompute and more!
 ## Table of Contents
 * [Overview](#overview)
     + [Embedded Domain-Specific Language](#embedded-domain-specific-language)

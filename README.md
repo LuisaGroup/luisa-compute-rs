@@ -1,5 +1,7 @@
 # luisa-compute-rs
-Rust frontend to LuisaCompute and more!
+Rust frontend to LuisaCompute and more! Unified API and embedded DSL for high performance computing on stream architectures. 
+
+To see the use of `luisa-compute-rs` in a high performance offline rendering system, checkout [our research renderer](https://github.com/shiinamiyuki/akari_render)
 ## Table of Contents
 * [Overview](#overview)
     + [Embedded Domain-Specific Language](#embedded-domain-specific-language)

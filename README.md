@@ -80,6 +80,7 @@ Other examples in [examples](luisa_compute/examples)
 | [Polymporphism](luisa_compute/examples/polymorphism.rs) | Simple usage of Polymorphic<K, T> |
 | [Advanced Polymporphism](luisa_compute/examples/polymorphism_advanced.rs) | Use Polymorphic<K, T> to implement recursive polymorphic call|
 | [Ray Tracing](luisa_compute/examples/raytracing.rs) | A simple raytracing kernel with GUI|
+| [Path Tracer](luisa_compute/examples/path_tracer.rs) | A path tracer with GUI|
 
 ## Overview
 ### Embedded Domain-Specific Language

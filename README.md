@@ -25,7 +25,8 @@ To see the use of `luisa-compute-rs` in a high performance offline rendering sys
 * [Citation](#citation)
 
 ## Example
-Try `cargo run --release --example path_tracer`!
+Try `cargo run --release --example path_tracer -- [cpu|cuda|dx|metal]`!
+
 ### Vecadd
 ```rust
 use luisa::prelude::*;
@@ -103,7 +104,9 @@ The CPU backend is designed to be debuggable. If needed, it will perform runtime
 
 ## Usage
 ### Building
-To get started, add the following to your `Cargo.toml`:
+To try out the examples, clone the repo using `git clone --recursive https://github.com/LuisaGroup/luisa-compute-rs.git`.
+
+To use it in your project, add the following to your `Cargo.toml`:
 ```toml
 [dependencies]
 luisa_compute = { git= "https://github.com/LuisaGroup/luisa-compute-rs.git"}

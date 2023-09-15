@@ -122,7 +122,7 @@ use luisa::prelude::*;
 There are six basic types in EDSL. `bool`, `i32`, `u32`, `i64`, `u64`, `f32`. (`f64` support might be added to CPU backend).
 For each type, there are two EDSL proxy objects `Expr<T>` and `Var<T>`. `Expr<T>` is an immutable object that represents a value. `Var<T>` is a mutable object that represents a variable. To load values from `Var<T>`, use `*var` and to obtain a mutable reference for assignment, use `v.get_mut()`. E.g. `*v.get_mut() = f(*u)`.
 
-*Note*: Every DSL object in host code **must** be immutable due to Rust unable to overload. For example:
+*Note*: Every DSL object in host code **must** be immutable due to Rust unable to overload `operator =`. For example:
 ```rust
 // **no good**
 let mut v = const_(0.0f32);

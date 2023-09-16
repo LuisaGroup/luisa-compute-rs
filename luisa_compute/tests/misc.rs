@@ -91,7 +91,7 @@ fn callable() {
             v.store(v.load() + 1);
         },
     );
-    let add = device.create_callable::<fn(Expr<u32>, Expr<u32>)->Expr<u32>>(&|a, b| a + b);
+    let add = device.create_callable::<fn(Expr<u32>, Expr<u32>) -> Expr<u32>>(&|a, b| a + b);
     let x = device.create_buffer::<u32>(1024);
     let y = device.create_buffer::<u32>(1024);
     let z = device.create_buffer::<u32>(1024);
@@ -698,7 +698,7 @@ fn byte_buffer() {
             let v1 = def(buf.read::<Big>(i1));
             let v2 = def(buf.read::<i32>(i2));
             let v3 = def(buf.read::<f32>(i3));
-            *v0.get_mut() = make_float3(1.0, 2.0, 3.0);
+            *v0.get_mut() = Float3::expr(1.0, 2.0, 3.0);
             for_range(0u32..32u32, |i| {
                 v1.a().write(i, i.float() * 2.0);
             });
@@ -715,7 +715,11 @@ fn byte_buffer() {
         ($t:ty, $offset:expr) => {{
             let s = std::mem::size_of::<$t>();
             let bytes = &data[$offset..$offset + s];
-            let v = unsafe { std::mem::transmute_copy::<[u8; {std::mem::size_of::<$t>()}], $t>(bytes.try_into().unwrap()) };
+            let v = unsafe {
+                std::mem::transmute_copy::<[u8; { std::mem::size_of::<$t>() }], $t>(
+                    bytes.try_into().unwrap(),
+                )
+            };
             v
         }};
     }
@@ -723,7 +727,7 @@ fn byte_buffer() {
     let v1 = pop!(Big, i1);
     let v2 = pop!(i32, i2);
     let v3 = pop!(f32, i3);
-    assert_eq!(v0, Float3::new(1.0,2.0,3.0));
+    assert_eq!(v0, Float3::new(1.0, 2.0, 3.0));
     assert_eq!(v2, 1);
     assert_eq!(v3, 2.0);
     for i in 0..32 {
@@ -759,7 +763,7 @@ fn bindless_byte_buffer() {
     let i2 = push!(i32, 0i32);
     let i3 = push!(f32, 1f32);
     device
-        .create_kernel::<fn(ByteBuffer)>(&|out:ByteBufferVar| {
+        .create_kernel::<fn(ByteBuffer)>(&|out: ByteBufferVar| {
             let heap = heap.var();
             let buf = heap.byte_address_buffer(0);
             let i0 = i0 as u64;
@@ -770,7 +774,7 @@ fn bindless_byte_buffer() {
             let v1 = def(buf.read::<Big>(i1));
             let v2 = def(buf.read::<i32>(i2));
             let v3 = def(buf.read::<f32>(i3));
-            *v0.get_mut() = make_float3(1.0, 2.0, 3.0);
+            *v0.get_mut() = Float3::expr(1.0, 2.0, 3.0);
             for_range(0u32..32u32, |i| {
                 v1.a().write(i, i.float() * 2.0);
             });
@@ -787,7 +791,11 @@ fn bindless_byte_buffer() {
         ($t:ty, $offset:expr) => {{
             let s = std::mem::size_of::<$t>();
             let bytes = &data[$offset..$offset + s];
-            let v = unsafe { std::mem::transmute_copy::<[u8; {std::mem::size_of::<$t>()}], $t>(bytes.try_into().unwrap()) };
+            let v = unsafe {
+                std::mem::transmute_copy::<[u8; { std::mem::size_of::<$t>() }], $t>(
+                    bytes.try_into().unwrap(),
+                )
+            };
             v
         }};
     }
@@ -795,7 +803,7 @@ fn bindless_byte_buffer() {
     let v1 = pop!(Big, i1);
     let v2 = pop!(i32, i2);
     let v3 = pop!(f32, i3);
-    assert_eq!(v0, Float3::new(1.0,2.0,3.0));
+    assert_eq!(v0, Float3::new(1.0, 2.0, 3.0));
     assert_eq!(v2, 1);
     assert_eq!(v3, 2.0);
     for i in 0..32 {

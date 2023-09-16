@@ -21,12 +21,16 @@ pub mod prelude {
         Aggregate, ExprProxy, FromNode, IndexRead, IndexWrite, KernelBuildFn, KernelParameter,
         KernelSignature, Mask, Value, VarProxy,
     };
-    pub use crate::lang::{
-        __compose, __cpu_dbg, __current_scope, __env_need_backtrace, __extract, __insert,
-        __module_pools, __new_user_node, __pop_scope,
-    };
+    // pub use crate::lang::{
+    //     __compose, __cpu_dbg, __current_scope, __env_need_backtrace, __extract, __insert,
+    //     __module_pools, __new_user_node, __pop_scope,
+    // };
+    pub use crate::lang::math::*;
+    pub use crate::lang::swizzle::*;
+    pub use crate::lang::{dispatch_id, dispatch_size};
     pub use crate::resource::{IoTexel, StorageTexel};
     pub use crate::runtime::KernelArg;
+    pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, while_};
     pub use luisa_compute_ir::TypeOf;
 }
 

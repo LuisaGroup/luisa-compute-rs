@@ -168,9 +168,9 @@ As in the C++ EDSL, we additionally supports the following vector/matrix types. 
 Bool2 // bool2 in C++
 Bool3 // bool3 in C++
 Bool4 // bool4 in C++
-Vec2 // float2 in C++
-Vec3 // float3 in C++
-Vec4 // float4 in C++
+Float2 // float2 in C++
+Float3 // float3 in C++
+Float4 // float4 in C++
 Int2 // int2 in C++
 Int3 // int3 in C++
 Int4 // int4 in C++
@@ -185,7 +185,7 @@ Array types `[T;N]` are also supported and their proxy types are `ArrayExpr<T, N
 
 Most operators are already overloaded with the only exception is comparision. We cannot overload comparision operators as `PartialOrd` cannot return a DSL type. Instead, use `cmpxx` methods such as `cmpgt, cmpeq`, etc. To cast a primitive/vector into another type, use `v.type()`. For example:
 ```rust
-let iv = make_int2(1,1,1);
+let iv = Int2::expr(1, 1, 1);
 let fv = iv.float(); //fv is Expr<Float2>
 let bv = fv.bool(); // bv is Expr<Bool2>
 ```

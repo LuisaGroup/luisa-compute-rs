@@ -488,19 +488,19 @@ pub struct CpuFn<T: Value> {
 #[macro_export]
 macro_rules! cpu_dbg {
     ($arg:expr) => {{
-        __cpu_dbg($arg, file!(), line!())
+        $crate::lang::__cpu_dbg($arg, file!(), line!())
     }};
 }
 #[macro_export]
 macro_rules! lc_dbg {
     ($arg:expr) => {{
-        __cpu_dbg($arg, file!(), line!())
+        $crate::lang::__cpu_dbg($arg, file!(), line!())
     }};
 }
 #[macro_export]
 macro_rules! lc_unreachable {
     () => {
-        __unreachable(file!(), line!(), column!())
+        $crate::lang::__unreachable(file!(), line!(), column!())
     };
 }
 #[macro_export]
@@ -812,16 +812,16 @@ macro_rules! struct_ {
 #[macro_export]
 macro_rules! var {
     ($t:ty) => {
-        local_zeroed::<$t>()
+        $crate::lang::local_zeroed::<$t>()
     };
     ($t:ty, 0) => {
-        local_zeroed::<$t>()
+        $crate::lang::local_zeroed::<$t>()
     };
     ($t:ty, $init:expr) => {
-        local::<$t>($init.into())
+        $crate::lang::local::<$t>($init.into())
     };
     ($e:expr) => {
-        def($e)
+        $crate::lang::def($e)
     };
 }
 pub fn def<E: ExprProxy<Value = T>, T: Value>(init: E) -> Var<T> {
@@ -2593,28 +2593,28 @@ impl<R: Aggregate> SwitchBuilder<R> {
  */
 macro_rules! if_ {
     ($cond:expr, $then:block, else $else_:block) => {
-        if_then_else($cond, || $then, || $else_)
+        $crate::lang::if_then_else($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block, else, $else_:block) => {
-        if_then_else($cond, || $then, || $else_)
+        $crate::lang::if_then_else($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block, $else_:block) => {
-        if_then_else($cond, || $then, || $else_)
+        $crate::lang::if_then_else($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block) => {
-        if_then_else($cond, || $then, || {})
+        $crate::lang::if_then_else($cond, || $then, || {})
     };
 }
 #[macro_export]
 macro_rules! while_ {
     ($cond:expr,$body:block) => {
-        generic_loop(|| $cond, || $body, || {})
+        $crate::lang::generic_loop(|| $cond, || $body, || {})
     };
 }
 #[macro_export]
 macro_rules! loop_ {
     ($body:block) => {
-        while_!(const_(true), $body)
+        $crate::lang::while_!(const_(true), $body)
     };
 }
 pub trait ForLoopRange {

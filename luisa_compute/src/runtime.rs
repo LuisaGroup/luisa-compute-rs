@@ -850,6 +850,7 @@ impl<'a> CommandList<'a> {
     pub fn extend<I: IntoIterator<Item = Command<'a>>>(&mut self, commands: I) {
         self.commands.extend(commands);
     }
+    #[allow(dead_code)]
     pub fn push(&mut self, command: Command<'a>) {
         self.commands.push(command);
     }
@@ -879,6 +880,7 @@ pub struct Command<'a> {
 pub(crate) struct AsyncShaderArtifact {
     shader: Option<api::CreatedShaderInfo>,
     // strange naming, huh?
+    #[allow(dead_code)]
     name: Arc<CString>,
 }
 

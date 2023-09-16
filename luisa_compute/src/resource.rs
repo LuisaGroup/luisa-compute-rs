@@ -1004,7 +1004,9 @@ impl_storage_texel!([f16; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uin
 // `T` is the read out type of the texture, which is not necessarily the same as the storage type
 // In fact, the texture can be stored in any format as long as it can be converted to `T`
 pub struct Tex2d<T: IoTexel> {
+    #[allow(dead_code)]
     pub(crate) width: u32,
+    #[allow(dead_code)]
     pub(crate) height: u32,
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
@@ -1013,8 +1015,11 @@ pub struct Tex2d<T: IoTexel> {
 // `T` is the read out type of the texture, which is not necessarily the same as the storage type
 // In fact, the texture can be stored in any format as long as it can be converted to `T`
 pub struct Tex3d<T: IoTexel> {
+    #[allow(dead_code)]
     pub(crate) width: u32,
+    #[allow(dead_code)]
     pub(crate) height: u32,
+    #[allow(dead_code)]
     pub(crate) depth: u32,
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: std::marker::PhantomData<T>,
@@ -1573,10 +1578,7 @@ impl BindlessArrayVar {
         };
         v
     }
-    pub fn byte_address_buffer(
-        &self,
-        buffer_index: impl Into<Expr<u32>>,
-    ) -> BindlessByteBufferVar {
+    pub fn byte_address_buffer(&self, buffer_index: impl Into<Expr<u32>>) -> BindlessByteBufferVar {
         let v = BindlessByteBufferVar {
             array: self.node,
             buffer_index: buffer_index.into(),

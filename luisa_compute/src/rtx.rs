@@ -41,6 +41,7 @@ pub(crate) struct ProceduralPrimitiveHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::ProceduralPrimitive,
     pub(crate) native_handle: *mut std::ffi::c_void,
+    #[allow(dead_code)]
     pub(crate) aabb_buffer: Arc<BufferHandle>,
 }
 impl Drop for ProceduralPrimitiveHandle {
@@ -85,7 +86,9 @@ pub(crate) struct MeshHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::Mesh,
     pub(crate) native_handle: *mut std::ffi::c_void,
+    #[allow(dead_code)]
     pub(crate) vbuffer: Arc<BufferHandle>,
+    #[allow(dead_code)]
     pub(crate) ibuffer: Arc<BufferHandle>,
 }
 impl Drop for MeshHandle {
@@ -148,7 +151,8 @@ impl Accel {
         let mut flags =
             api::AccelBuildModificationFlags::PRIMITIVE | AccelBuildModificationFlags::TRANSFORM;
 
-        flags |= api::AccelBuildModificationFlags::VISIBILITY | api::AccelBuildModificationFlags::USER_ID;
+        flags |= api::AccelBuildModificationFlags::VISIBILITY
+            | api::AccelBuildModificationFlags::USER_ID;
 
         if opaque {
             flags |= api::AccelBuildModificationFlags::OPAQUE_ON;
@@ -183,7 +187,8 @@ impl Accel {
     ) {
         let mut flags = api::AccelBuildModificationFlags::PRIMITIVE;
         dbg!(flags);
-        flags |= api::AccelBuildModificationFlags::VISIBILITY | api::AccelBuildModificationFlags::USER_ID;
+        flags |= api::AccelBuildModificationFlags::VISIBILITY
+            | api::AccelBuildModificationFlags::USER_ID;
 
         if opaque {
             flags |= api::AccelBuildModificationFlags::OPAQUE_ON;
@@ -372,8 +377,8 @@ pub enum HitType {
 
 pub fn offset_ray_origin(p: Expr<Float3>, n: Expr<Float3>) -> Expr<Float3> {
     lazy_static! {
-        static ref F: Callable<fn(Expr<Float3>, Expr<Float3>)-> Expr<Float3>> =
-            create_static_callable::<fn(Expr<Float3>, Expr<Float3>)->Expr<Float3>>(|p, n| {
+        static ref F: Callable<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>> =
+            create_static_callable::<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>>(|p, n| {
                 const ORIGIN: f32 = 1.0f32 / 32.0f32;
                 const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
                 const INT_SCALE: f32 = 256.0f32;

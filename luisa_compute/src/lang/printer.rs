@@ -6,6 +6,8 @@ use std::sync::atomic::AtomicBool;
 
 pub type LogFn = Box<dyn Fn(&[*const u32]) + Send + Sync>;
 struct PrinterItem {
+    #[allow(dead_code)]
+    level: log::Level,
     log_fn: LogFn,
     count: usize,
     count_per_arg: Vec<usize>,
@@ -122,7 +124,8 @@ impl Printer {
         let item_id = items.len() as u32;
 
         if_!(
-            offset.cmplt(data.len().uint()) & (offset + 1 + args.count as u32).cmple(data.len().uint()),
+            offset.cmplt(data.len().uint())
+                & (offset + 1 + args.count as u32).cmple(data.len().uint()),
             {
                 data.atomic_fetch_add(0, 1);
                 data.write(offset, item_id);
@@ -192,7 +195,7 @@ impl<'a> Scope<'a> {
             let items = data.items.read();
             let mut i = 2;
             let item_count = host_data[0] as usize;
-            for j in 0..item_count {
+            for _j in 0..item_count {
                 if i >= host_data.len() {
                     break;
                 }

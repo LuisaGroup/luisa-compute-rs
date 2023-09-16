@@ -2614,7 +2614,7 @@ macro_rules! while_ {
 #[macro_export]
 macro_rules! loop_ {
     ($body:block) => {
-        $crate::lang::while_!(const_(true), $body)
+        $crate::while_!(const_(true), $body)
     };
 }
 pub trait ForLoopRange {

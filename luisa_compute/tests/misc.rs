@@ -723,7 +723,7 @@ fn byte_buffer() {
             let v1 = def(buf.read::<Big>(i1));
             let v2 = def(buf.read::<i32>(i2));
             let v3 = def(buf.read::<f32>(i3));
-            *v0.get_mut() = make_float3(1.0, 2.0, 3.0);
+            *v0.get_mut() = Float3::expr(1.0, 2.0, 3.0);
             for_range(0u32..32u32, |i| {
                 v1.a().write(i, i.float() * 2.0);
             });
@@ -799,7 +799,7 @@ fn bindless_byte_buffer() {
             let v1 = def(buf.read::<Big>(i1));
             let v2 = def(buf.read::<i32>(i2));
             let v3 = def(buf.read::<f32>(i3));
-            *v0.get_mut() = make_float3(1.0, 2.0, 3.0);
+            *v0.get_mut() = Float3::expr(1.0, 2.0, 3.0);
             for_range(0u32..32u32, |i| {
                 v1.a().write(i, i.float() * 2.0);
             });

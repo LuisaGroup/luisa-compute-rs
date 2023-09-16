@@ -111,10 +111,10 @@ fn main() {
     let rt_kernel = device.create_kernel::<fn()>(&|| {
         let accel = accel.var();
         let px = dispatch_id().xy();
-        let xy = px.float() / make_float2(img_w as f32, img_h as f32);
+        let xy = px.float() / Float2::expr(img_w as f32, img_h as f32);
         let xy = 2.0 * xy - 1.0;
-        let o = make_float3(0.0, 0.0, -2.0);
-        let d = make_float3(xy.x(), xy.y(), 0.0) - o;
+        let o = Float3::expr(0.0, 0.0, -2.0);
+        let d = Float3::expr(xy.x(), xy.y(), 0.0) - o;
         let d = d.normalize();
         let ray = rtx::RayExpr::new(o + const_(translate), 1e-3, d, 1e9);
         let hit = accel.query_all(
@@ -123,9 +123,9 @@ fn main() {
             RayQuery {
                 on_triangle_hit: |candidate: TriangleCandidate| {
                     let bary = candidate.bary();
-                    let uvw = make_float3(1.0 - bary.x() - bary.y(), bary.x(), bary.y());
+                    let uvw = Float3::expr(1.0 - bary.x() - bary.y(), bary.x(), bary.y());
                     let t = candidate.committed_ray_t();
-                    if_!(px.cmpeq(make_uint2(400, 400)).all(), {
+                    if_!(px.cmpeq(Uint2::expr(400, 400)).all(), {
                         debug_hit_t.write(0, t);
                         debug_hit_t.write(1, candidate.ray().tmax());
                     });
@@ -151,7 +151,7 @@ fn main() {
                             .length()
                             - sphere.radius();
                         if_!(dist.cmplt(0.001), {
-                            if_!(px.cmpeq(make_uint2(400, 400)).all(), {
+                            if_!(px.cmpeq(Uint2::expr(400, 400)).all(), {
                                 debug_hit_t.write(2, *t);
                                 debug_hit_t.write(3, candidate.ray().tmax());
                             });
@@ -170,7 +170,7 @@ fn main() {
             hit.triangle_hit(),
             {
                 let bary = hit.bary();
-                let uvw = make_float3(1.0 - bary.x() - bary.y(), bary.x(), bary.y());
+                let uvw = Float3::expr(1.0 - bary.x() - bary.y(), bary.x(), bary.y());
                 uvw
             },
             else,
@@ -184,19 +184,19 @@ fn main() {
                             + ray.dir().unpack() * hit.committed_ray_t()
                             - sphere.center())
                         .normalize();
-                        let light_dir = make_float3(1.0, 0.6, -0.2).normalize();
-                        let light = make_float3(1.0, 1.0, 1.0);
-                        let ambient = make_float3(0.1, 0.1, 0.1);
+                        let light_dir = Float3::expr(1.0, 0.6, -0.2).normalize();
+                        let light = Float3::expr(1.0, 1.0, 1.0);
+                        let ambient = Float3::expr(0.1, 0.1, 0.1);
                         let diffuse = light * normal.dot(light_dir).max(0.0);
                         let color = ambient + diffuse;
                         color
                     },
                     else,
-                    { make_float3(0.0, 0.0, 0.0) }
+                    { Float3::expr(0.0, 0.0, 0.0) }
                 )
             }
         );
-        img.write(px, make_float4(color.x(), color.y(), color.z(), 1.0));
+        img.write(px, Float4::expr(color.x(), color.y(), color.z(), 1.0));
     });
     let event_loop = EventLoop::new();
     let window = winit::window::WindowBuilder::new()

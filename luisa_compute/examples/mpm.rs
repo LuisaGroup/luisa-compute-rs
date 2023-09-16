@@ -87,8 +87,8 @@ fn main() {
 
     let index = |xy: Expr<Uint2>| -> Expr<u32> {
         let p = xy.clamp(
-            make_uint2(0, 0),
-            make_uint2(N_GRID as u32 - 1, N_GRID as u32 - 1),
+            Uint2::expr(0, 0),
+            Uint2::expr(N_GRID as u32 - 1, N_GRID as u32 - 1),
         );
         p.x() + p.y() * N_GRID as u32
     };
@@ -113,11 +113,11 @@ fn main() {
         ];
         let stress = -4.0f32 * DT * E * P_VOL * (J.var().read(p) - 1.0f32) / (DX * DX);
         let affine =
-            Expr::<Mat2>::eye(make_float2(stress, stress)) + P_MASS as f32 * C.var().read(p);
+            Expr::<Mat2>::eye(Float2::expr(stress, stress)) + P_MASS as f32 * C.var().read(p);
         let vp = v.var().read(p);
         for ii in 0..9 {
             let (i, j) = (ii % 3, ii / 3);
-            let offset = make_int2(i as i32, j as i32);
+            let offset = Int2::expr(i as i32, j as i32);
             let dpos = (offset.float() - fx) * DX;
             let weight = w[i].x() * w[j].y();
             let vadd = weight * (P_MASS * vp + affine * dpos);
@@ -132,7 +132,7 @@ fn main() {
         let coord = dispatch_id().xy();
         let i = index(coord);
         let v = var!(Float2);
-        v.store(make_float2(
+        v.store(Float2::expr(
             grid_v.var().read(i * 2u32),
             grid_v.var().read(i * 2u32 + 1u32),
         ));
@@ -170,15 +170,15 @@ fn main() {
         ];
         let new_v = var!(Float2);
         let new_C = var!(Mat2);
-        new_v.store(make_float2(0.0f32, 0.0f32));
-        new_C.store(make_float2x2(make_float2(0., 0.), make_float2(0., 0.)));
+        new_v.store(Float2::expr(0.0f32, 0.0f32));
+        new_C.store(Mat2::expr(Float2::expr(0., 0.), Float2::expr(0., 0.)));
         for ii in 0..9 {
             let (i, j) = (ii % 3, ii / 3);
-            let offset = make_int2(i as i32, j as i32);
+            let offset = Int2::expr(i as i32, j as i32);
             let dpos = (offset.float() - fx) * DX;
             let weight = w[i].x() * w[j].y();
             let idx = index((base + offset).uint());
-            let g_v = make_float2(
+            let g_v = Float2::expr(
                 grid_v.var().read(idx * 2u32),
                 grid_v.var().read(idx * 2u32 + 1u32),
             );
@@ -195,14 +195,14 @@ fn main() {
     let clear_display = device.create_kernel_async::<fn()>(&|| {
         display.var().write(
             dispatch_id().xy(),
-            make_float4(0.1f32, 0.2f32, 0.3f32, 1.0f32),
+            Float4::expr(0.1f32, 0.2f32, 0.3f32, 1.0f32),
         );
     });
     let draw_particles = device.create_kernel_async::<fn()>(&|| {
         let p = dispatch_id().x();
         for i in -1..=1 {
             for j in -1..=1 {
-                let pos = (x.var().read(p) * RESOLUTION as f32).int() + make_int2(i, j);
+                let pos = (x.var().read(p) * RESOLUTION as f32).int() + Int2::expr(i, j);
                 if_!(
                     pos.x().cmpge(0i32)
                         & pos.x().cmplt(RESOLUTION as i32)
@@ -210,8 +210,8 @@ fn main() {
                         & pos.y().cmplt(RESOLUTION as i32),
                     {
                         display.var().write(
-                            make_uint2(pos.x().uint(), RESOLUTION - 1u32 - pos.y().uint()),
-                            make_float4(0.4f32, 0.6f32, 0.6f32, 1.0f32),
+                            Uint2::expr(pos.x().uint(), RESOLUTION - 1u32 - pos.y().uint()),
+                            Float4::expr(0.4f32, 0.6f32, 0.6f32, 1.0f32),
                         );
                     }
                 );

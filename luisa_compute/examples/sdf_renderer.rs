@@ -37,8 +37,8 @@ fn main() {
         device.create_kernel::<fn(Buffer<f32>, Buffer<Sphere>)>(
             &|buf_x: BufferVar<f32>, spheres: BufferVar<Sphere>| {
                 let tid = dispatch_id().x();
-                let o = make_float3(0.0, 0.0, -2.0);
-                let d = make_float3(0.0, 0.0, 1.0);
+                let o = Float3::expr(0.0, 0.0, -2.0);
+                let d = Float3::expr(0.0, 0.0, 1.0);
                 let sphere = spheres.read(0);
                 let t = var!(f32);
                 while_!(t.load().cmplt(10.0), {

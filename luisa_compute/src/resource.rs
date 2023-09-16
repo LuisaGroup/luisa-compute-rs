@@ -912,7 +912,7 @@ impl_io_texel!(
     f32,
     Float4,
     |x: Float4Expr| x.xy(),
-    |x: Float2Expr| { make_float4(x.x(), x.y(), 0.0, 0.0) }
+    |x: Float2Expr| { Float4::expr(x.x(), x.y(), 0.0, 0.0) }
 );
 impl_io_texel!(Float4, f32, Float4, |x: Float4Expr| x, |x: Float4Expr| x);
 
@@ -927,10 +927,10 @@ impl_io_texel!(u32, u32, Uint4, |x: Uint4Expr| x.x(), |x| Uint4Expr::splat(
 ));
 impl_io_texel!(i32, i32, Int4, |x: Int4Expr| x.x(), |x| Int4Expr::splat(x));
 impl_io_texel!(Uint2, u32, Uint4, |x: Uint4Expr| x.xy(), |x: Uint2Expr| {
-    make_uint4(x.x(), x.y(), 0u32, 0u32)
+    Uint4::expr(x.x(), x.y(), 0u32, 0u32)
 });
 impl_io_texel!(Int2, i32, Int4, |x: Int4Expr| x.xy(), |x: Int2Expr| {
-    make_int4(x.x(), x.y(), 0i32, 0i32)
+    Int4::expr(x.x(), x.y(), 0i32, 0i32)
 });
 impl_io_texel!(Uint4, u32, Uint4, |x: Uint4Expr| x, |x| x);
 impl_io_texel!(Int4, i32, Int4, |x: Int4Expr| x, |x| x);

@@ -546,6 +546,12 @@ macro_rules! impl_vec_proxy {
                 FromNode::from_node(__extract::<$scalar>(self.node, index))
             }
         }
+        impl $vec {
+            #[inline]
+            pub fn expr($($comp: impl Into<Expr<$scalar>>), *) -> $expr_proxy {
+                $expr_proxy::new($($comp.into()), *)
+            }
+        }
     };
 }
 
@@ -646,6 +652,12 @@ macro_rules! impl_mat_proxy {
                 Expr::<$vec>::from_node(__extract::<$vec>(self.node, index))
             }
         }
+        impl $mat {
+            #[inline]
+            pub fn expr($($comp: impl Into<Expr<$vec>>), *) -> $expr_proxy {
+                $expr_proxy::new($($comp.into()), *)
+            }
+        }
     };
 }
 
@@ -663,7 +675,18 @@ impl_vec_proxy!(Float4, Float4Expr, Float4Var, f32, Float32, 4, x, y, z, w);
 
 impl_vec_proxy!(Double2, Double2Expr, Double2Var, f64, Float64, 2, x, y);
 impl_vec_proxy!(Double3, Double3Expr, Double3Var, f64, Float64, 3, x, y, z);
-impl_vec_proxy!(Double4, Double4Expr, Double4Var, f64, Float64, 4, x, y, z, w);
+impl_vec_proxy!(
+    Double4,
+    Double4Expr,
+    Double4Var,
+    f64,
+    Float64,
+    4,
+    x,
+    y,
+    z,
+    w
+);
 
 impl_vec_proxy!(Ushort2, Ushort2Expr, Ushort2Var, u16, Uint16, 2, x, y);
 impl_vec_proxy!(Ushort3, Ushort3Expr, Ushort3Var, u16, Uint16, 3, x, y, z);
@@ -1668,10 +1691,10 @@ impl Mul<Float2Expr> for Mat2Expr {
 }
 impl Mat2Expr {
     pub fn fill(e: impl Into<Expr<f32>> + Copy) -> Self {
-        Self::new(make_float2(e, e), make_float2(e, e))
+        Self::new(Float2::expr(e, e), Float2::expr(e, e))
     }
     pub fn eye(e: Expr<Float2>) -> Self {
-        Self::new(make_float2(e.x(), 0.0), make_float2(0.0, e.y()))
+        Self::new(Float2::expr(e.x(), 0.0), Float2::expr(0.0, e.y()))
     }
     pub fn inverse(&self) -> Self {
         Mat2Expr::from_node(__current_scope(|s| {
@@ -1706,16 +1729,16 @@ impl Mul<Float3Expr> for Mat3Expr {
 impl Mat3Expr {
     pub fn fill(e: impl Into<PrimExpr<f32>> + Copy) -> Self {
         Self::new(
-            make_float3(e, e, e),
-            make_float3(e, e, e),
-            make_float3(e, e, e),
+            Float3::expr(e, e, e),
+            Float3::expr(e, e, e),
+            Float3::expr(e, e, e),
         )
     }
     pub fn eye(e: Expr<Float3>) -> Self {
         Self::new(
-            make_float3(e.x(), 0.0, 0.0),
-            make_float3(0.0, e.y(), 0.0),
-            make_float3(0.0, 0.0, e.z()),
+            Float3::expr(e.x(), 0.0, 0.0),
+            Float3::expr(0.0, e.y(), 0.0),
+            Float3::expr(0.0, 0.0, e.z()),
         )
     }
     pub fn inverse(&self) -> Self {
@@ -1751,18 +1774,18 @@ impl_arith_binop_for_mat!(Mat3, f32, Mat3Expr);
 impl Mat4Expr {
     pub fn fill(e: impl Into<PrimExpr<f32>> + Copy) -> Self {
         Self::new(
-            make_float4(e, e, e, e),
-            make_float4(e, e, e, e),
-            make_float4(e, e, e, e),
-            make_float4(e, e, e, e),
+            Float4::expr(e, e, e, e),
+            Float4::expr(e, e, e, e),
+            Float4::expr(e, e, e, e),
+            Float4::expr(e, e, e, e),
         )
     }
     pub fn eye(e: Expr<Float4>) -> Self {
         Self::new(
-            make_float4(e.x(), 0.0, 0.0, 0.0),
-            make_float4(0.0, e.y(), 0.0, 0.0),
-            make_float4(0.0, 0.0, e.z(), 0.0),
-            make_float4(0.0, 0.0, 0.0, e.w()),
+            Float4::expr(e.x(), 0.0, 0.0, 0.0),
+            Float4::expr(0.0, e.y(), 0.0, 0.0),
+            Float4::expr(0.0, 0.0, e.z(), 0.0),
+            Float4::expr(0.0, 0.0, 0.0, e.w()),
         )
     }
     pub fn inverse(&self) -> Self {
@@ -1782,193 +1805,6 @@ impl Mat4Expr {
     }
 }
 impl_arith_binop_for_mat!(Mat4, f32, Mat4Expr);
-
-#[inline]
-pub fn make_half2<X: Into<PrimExpr<f16>>, Y: Into<PrimExpr<f16>>>(x: X, y: Y) -> Expr<Half2> {
-    Expr::<Half2>::new(x.into(), y.into())
-}
-#[inline]
-pub fn make_half3<X: Into<PrimExpr<f16>>, Y: Into<PrimExpr<f16>>, Z: Into<PrimExpr<f16>>>(
-    x: X,
-    y: Y,
-    z: Z,
-) -> Expr<Half3> {
-    Expr::<Half3>::new(x.into(), y.into(), z.into())
-}
-#[inline]
-pub fn make_half4<
-    X: Into<PrimExpr<f16>>,
-    Y: Into<PrimExpr<f16>>,
-    Z: Into<PrimExpr<f16>>,
-    W: Into<PrimExpr<f16>>,
->(
-    x: X,
-    y: Y,
-    z: Z,
-    w: W,
-) -> Expr<Half4> {
-    Expr::<Half4>::new(x.into(), y.into(), z.into(), w.into())
-}
-
-#[inline]
-pub fn make_float2<X: Into<PrimExpr<f32>>, Y: Into<PrimExpr<f32>>>(x: X, y: Y) -> Expr<Float2> {
-    Expr::<Float2>::new(x.into(), y.into())
-}
-#[inline]
-pub fn make_float3<X: Into<PrimExpr<f32>>, Y: Into<PrimExpr<f32>>, Z: Into<PrimExpr<f32>>>(
-    x: X,
-    y: Y,
-    z: Z,
-) -> Expr<Float3> {
-    Expr::<Float3>::new(x.into(), y.into(), z.into())
-}
-#[inline]
-pub fn make_float4<
-    X: Into<PrimExpr<f32>>,
-    Y: Into<PrimExpr<f32>>,
-    Z: Into<PrimExpr<f32>>,
-    W: Into<PrimExpr<f32>>,
->(
-    x: X,
-    y: Y,
-    z: Z,
-    w: W,
-) -> Expr<Float4> {
-    Expr::<Float4>::new(x.into(), y.into(), z.into(), w.into())
-}
-#[inline]
-pub fn make_float2x2<X: Into<Expr<Float2>>, Y: Into<Expr<Float2>>>(x: X, y: Y) -> Expr<Mat2> {
-    Expr::<Mat2>::new(x.into(), y.into())
-}
-#[inline]
-pub fn make_float3x3<X: Into<Expr<Float3>>, Y: Into<Expr<Float3>>, Z: Into<Expr<Float3>>>(
-    x: X,
-    y: Y,
-    z: Z,
-) -> Expr<Mat3> {
-    Expr::<Mat3>::new(x.into(), y.into(), z.into())
-}
-#[inline]
-pub fn make_float4x4<
-    X: Into<Expr<Float4>>,
-    Y: Into<Expr<Float4>>,
-    Z: Into<Expr<Float4>>,
-    W: Into<Expr<Float4>>,
->(
-    x: X,
-    y: Y,
-    z: Z,
-    w: W,
-) -> Expr<Mat4> {
-    Expr::<Mat4>::new(x.into(), y.into(), z.into(), w.into())
-}
-
-#[inline]
-pub fn make_int2<X: Into<PrimExpr<i32>>, Y: Into<PrimExpr<i32>>>(x: X, y: Y) -> Expr<Int2> {
-    Expr::<Int2>::new(x.into(), y.into())
-}
-#[inline]
-pub fn make_int3<X: Into<PrimExpr<i32>>, Y: Into<PrimExpr<i32>>, Z: Into<PrimExpr<i32>>>(
-    x: X,
-    y: Y,
-    z: Z,
-) -> Expr<Int3> {
-    Expr::<Int3>::new(x.into(), y.into(), z.into())
-}
-#[inline]
-pub fn make_int4<
-    X: Into<PrimExpr<i32>>,
-    Y: Into<PrimExpr<i32>>,
-    Z: Into<PrimExpr<i32>>,
-    W: Into<PrimExpr<i32>>,
->(
-    x: X,
-    y: Y,
-    z: Z,
-    w: W,
-) -> Expr<Int4> {
-    Expr::<Int4>::new(x.into(), y.into(), z.into(), w.into())
-}
-#[inline]
-pub fn make_uint2<X: Into<PrimExpr<u32>>, Y: Into<PrimExpr<u32>>>(x: X, y: Y) -> Expr<Uint2> {
-    Expr::<Uint2>::new(x.into(), y.into())
-}
-#[inline]
-pub fn make_uint3<X: Into<PrimExpr<u32>>, Y: Into<PrimExpr<u32>>, Z: Into<PrimExpr<u32>>>(
-    x: X,
-    y: Y,
-    z: Z,
-) -> Expr<Uint3> {
-    Expr::<Uint3>::new(x.into(), y.into(), z.into())
-}
-#[inline]
-pub fn make_uint4<
-    X: Into<PrimExpr<u32>>,
-    Y: Into<PrimExpr<u32>>,
-    Z: Into<PrimExpr<u32>>,
-    W: Into<PrimExpr<u32>>,
->(
-    x: X,
-    y: Y,
-    z: Z,
-    w: W,
-) -> Expr<Uint4> {
-    Expr::<Uint4>::new(x.into(), y.into(), z.into(), w.into())
-}
-
-#[inline]
-pub fn make_short2<X: Into<PrimExpr<i16>>, Y: Into<PrimExpr<i16>>>(x: X, y: Y) -> Expr<Short2> {
-    Expr::<Short2>::new(x.into(), y.into())
-}
-#[inline]
-pub fn make_short3<X: Into<PrimExpr<i16>>, Y: Into<PrimExpr<i16>>, Z: Into<PrimExpr<i16>>>(
-    x: X,
-    y: Y,
-    z: Z,
-) -> Expr<Short3> {
-    Expr::<Short3>::new(x.into(), y.into(), z.into())
-}
-#[inline]
-pub fn make_short4<
-    X: Into<PrimExpr<i16>>,
-    Y: Into<PrimExpr<i16>>,
-    Z: Into<PrimExpr<i16>>,
-    W: Into<PrimExpr<i16>>,
->(
-    x: X,
-    y: Y,
-    z: Z,
-    w: W,
-) -> Expr<Short4> {
-    Expr::<Short4>::new(x.into(), y.into(), z.into(), w.into())
-}
-
-#[inline]
-pub fn make_ushort2<X: Into<PrimExpr<u16>>, Y: Into<PrimExpr<u16>>>(x: X, y: Y) -> Expr<Ushort2> {
-    Expr::<Ushort2>::new(x.into(), y.into())
-}
-#[inline]
-pub fn make_ushort3<X: Into<PrimExpr<u16>>, Y: Into<PrimExpr<u16>>, Z: Into<PrimExpr<u16>>>(
-    x: X,
-    y: Y,
-    z: Z,
-) -> Expr<Ushort3> {
-    Expr::<Ushort3>::new(x.into(), y.into(), z.into())
-}
-#[inline]
-pub fn make_ushort4<
-    X: Into<PrimExpr<u16>>,
-    Y: Into<PrimExpr<u16>>,
-    Z: Into<PrimExpr<u16>>,
-    W: Into<PrimExpr<u16>>,
->(
-    x: X,
-    y: Y,
-    z: Z,
-    w: W,
-) -> Expr<Ushort4> {
-    Expr::<Ushort4>::new(x.into(), y.into(), z.into(), w.into())
-}
 
 #[cfg(test)]
 mod test {

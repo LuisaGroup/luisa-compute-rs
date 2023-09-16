@@ -1,7 +1,6 @@
-use std::backtrace::Backtrace;
 use std::collections::HashSet;
 use std::marker::PhantomData;
-use std::{any::Any, collections::HashMap, fmt::Debug, rc::Rc, sync::Arc};
+use std::{any::Any, fmt::Debug, rc::Rc, sync::Arc};
 use std::{env, unreachable};
 
 use crate::lang::traits::VarCmp;
@@ -13,18 +12,15 @@ use bumpalo::Bump;
 use indexmap::IndexMap;
 pub use ir::ir::NodeRef;
 use ir::ir::{
+    new_node, BasicBlock, Binding, Capture, Const, CpuCustomOp, Func, Instruction, IrBuilder,
+    KernelModule, Module, ModuleKind, Node, PhiIncoming,
+};
+use ir::ir::{
     ArrayType, CallableModule, CallableModuleRef, ModuleFlags, ModulePools, SwitchCase,
     UserNodeData, INVALID_REF,
 };
 pub use ir::CArc;
 use ir::Pooled;
-use ir::{
-    ir::{
-        new_node, BasicBlock, Binding, Capture, Const, CpuCustomOp, Func, Instruction, IrBuilder,
-        KernelModule, Module, ModuleKind, Node, PhiIncoming,
-    },
-    transform::{self, Transform},
-};
 
 use luisa_compute_ir as ir;
 
@@ -34,10 +30,9 @@ pub use luisa_compute_ir::{
     ir::{StructType, Type},
     TypeOf,
 };
-use math::Uint3;
-use std::cell::{Cell, RefCell, UnsafeCell};
+use std::cell::{Cell, RefCell};
 use std::ffi::CString;
-use std::ops::{Bound, Deref, DerefMut, RangeBounds};
+use std::ops::{Deref, DerefMut};
 use std::sync::atomic::AtomicUsize;
 // use self::math::Uint3;
 pub mod math;
@@ -50,12 +45,15 @@ pub use math::*;
 pub use poly::*;
 pub use printer::*;
 
+#[allow(dead_code)]
 pub(crate) static KERNEL_ID: AtomicUsize = AtomicUsize::new(0);
 // prevent node being shared across kernels
 // TODO: replace NodeRef with SafeNodeRef
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct SafeNodeRef {
+    #[allow(dead_code)]
     pub(crate) node: NodeRef,
+    #[allow(dead_code)]
     pub(crate) kernel_id: usize,
 }
 pub trait Value: Copy + ir::TypeOf + 'static {

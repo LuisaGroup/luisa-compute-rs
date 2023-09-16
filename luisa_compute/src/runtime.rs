@@ -367,7 +367,7 @@ impl Device {
             modifications: RwLock::new(HashMap::new()),
         }
     }
-    pub fn create_callable<'a, S: CallableSignature<'a>>(&self, f:S::Fn) -> S::Callable {
+    pub fn create_callable<'a, S: CallableSignature<'a>>(&self, f: S::Fn) -> S::Callable {
         let mut builder = KernelBuilder::new(Some(self.clone()), false);
         let raw_callable = CallableBuildFn::build_callable(&f, None, &mut builder);
         S::wrap_raw_callable(raw_callable)
@@ -835,6 +835,7 @@ impl<'a> CommandList<'a> {
     pub fn extend<I: IntoIterator<Item = Command<'a>>>(&mut self, commands: I) {
         self.commands.extend(commands);
     }
+    #[allow(dead_code)]
     pub fn push(&mut self, command: Command<'a>) {
         self.commands.push(command);
     }
@@ -864,6 +865,7 @@ pub struct Command<'a> {
 pub(crate) struct AsyncShaderArtifact {
     shader: Option<api::CreatedShaderInfo>,
     // strange naming, huh?
+    #[allow(dead_code)]
     name: Arc<CString>,
 }
 

@@ -326,17 +326,26 @@ pub trait VarProxy: Copy + Aggregate + FromNode {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct PrimExpr<T> {
-    pub(crate) node: NodeRef,
-    pub(crate) _phantom: std::marker::PhantomData<T>,
+// This is a hack in order to get rust-analyzer to display type hints as Expr<f32>
+// instead of PrimExpr<f32>, which is rather redundant and generally clutters things up.
+mod _prim {
+    use super::NodeRef;
+
+    #[derive(Clone, Copy, Debug)]
+    pub struct Expr<T> {
+        pub(crate) node: NodeRef,
+        pub(crate) _phantom: std::marker::PhantomData<T>,
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    pub struct Var<T> {
+        pub(crate) node: NodeRef,
+        pub(crate) _phantom: std::marker::PhantomData<T>,
+    }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct PrimVar<T> {
-    pub(crate) node: NodeRef,
-    pub(crate) _phantom: std::marker::PhantomData<T>,
-}
+pub type PrimExpr<T> = _prim::Expr<T>;
+pub type PrimVar<T> = _prim::Var<T>;
 
 impl<T> Aggregate for PrimExpr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {

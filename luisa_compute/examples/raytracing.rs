@@ -4,11 +4,8 @@ use image::Rgb;
 #[allow(unused_imports)]
 use luisa::prelude::*;
 use luisa_compute as luisa;
-use winit::event::Event as WinitEvent;
-use winit::{
-    event::WindowEvent,
-    event_loop::{ControlFlow, EventLoop},
-};
+use winit::event::{Event as WinitEvent, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
 fn main() {
     use luisa::*;
     init_logger();

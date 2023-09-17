@@ -1,8 +1,8 @@
 use crate::backend::Backend;
-use crate::lang::KernelBuildOptions;
+use crate::lang::{KernelBuildOptions, Value};
+use crate::resource::*;
 use crate::rtx::ProceduralPrimitiveHandle;
 use crate::*;
-use crate::{lang::Value, resource::*};
 
 use api::AccelOption;
 use lang::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSignature};

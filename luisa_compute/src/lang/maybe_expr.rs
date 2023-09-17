@@ -2,7 +2,7 @@
 //! either be an expression or a normal value. This is necessary for making the
 //! trace macro work for both types of value.
 
-use super::{math::*, Aggregate, Bool, Expr, Var};
+use super::{vec::*, Aggregate, Bool, Expr, Var};
 use crate::{VarCmp, VarCmpEq};
 use half::f16;
 

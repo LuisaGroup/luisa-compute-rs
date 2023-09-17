@@ -4,8 +4,7 @@ use rand::Rng;
 use std::env::current_exe;
 use std::ops::{BitAnd, DerefMut};
 use std::time::Instant;
-use winit::event::Event as WinitEvent;
-use winit::event::WindowEvent;
+use winit::event::{Event as WinitEvent, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 #[allow(unused_imports)]

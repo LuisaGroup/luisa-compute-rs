@@ -1,10 +1,15 @@
-use std::{collections::HashMap, marker::PhantomData, sync::Arc};
+use std::collections::HashMap;
+use std::marker::PhantomData;
+use std::sync::Arc;
 
-use crate::{runtime::submit_default_stream_and_sync, ResourceTracker, *};
+use crate::runtime::submit_default_stream_and_sync;
+use crate::{ResourceTracker, *};
 use api::AccelBuildRequest;
 use luisa_compute_api_types as api;
 use luisa_compute_derive::__Value;
-use luisa_compute_ir::ir::{new_node, AccelBinding, Binding, Func, Instruction, IrBuilder, Node};
+use luisa_compute_ir::ir::{
+    new_node, AccelBinding, Binding, Func, Instruction, IrBuilder, Node, NodeRef,
+};
 use parking_lot::RwLock;
 use std::ops::Deref;
 pub(crate) struct AccelHandle {

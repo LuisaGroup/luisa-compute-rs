@@ -1,39 +1,29 @@
 use proc_macro::TokenStream;
-use syn::{parse::{Parse, ParseStream}, __private::quote::{quote_spanned, quote}, spanned::Spanned};
+use syn::__private::quote::{quote, quote_spanned};
+use syn::parse::{Parse, ParseStream};
+use syn::spanned::Spanned;
 
 #[proc_macro_derive(Value)]
 pub fn derive_value(item: TokenStream) -> TokenStream {
     let item: syn::ItemStruct = syn::parse(item).unwrap();
-    let compiler = luisa_compute_derive_impl::Compiler::new(false);
+    let compiler = luisa_compute_derive_impl::Compiler;
     compiler.derive_value(&item).into()
 }
 
 #[proc_macro_derive(BindGroup, attributes(luisa))]
 pub fn derive_kernel_arg(item: TokenStream) -> TokenStream {
     let item: syn::ItemStruct = syn::parse(item).unwrap();
-    let compiler = luisa_compute_derive_impl::Compiler::new(false);
+    let compiler = luisa_compute_derive_impl::Compiler;
     compiler.derive_kernel_arg(&item).into()
 }
 
 #[proc_macro_derive(Aggregate)]
 pub fn derive_aggregate(item: TokenStream) -> TokenStream {
     let item: syn::Item = syn::parse(item).unwrap();
-    let compiler = luisa_compute_derive_impl::Compiler::new(false);
+    let compiler = luisa_compute_derive_impl::Compiler;
     compiler.derive_aggregate(&item).into()
 }
 
-#[proc_macro_derive(__Value)]
-pub fn _derive_value(item: TokenStream) -> TokenStream {
-    let item: syn::ItemStruct = syn::parse(item).unwrap();
-    let compiler = luisa_compute_derive_impl::Compiler::new(true);
-    compiler.derive_value(&item).into()
-}
-#[proc_macro_derive(__Aggregate)]
-pub fn _derive_aggregate(item: TokenStream) -> TokenStream {
-    let item: syn::Item = syn::parse(item).unwrap();
-    let compiler = luisa_compute_derive_impl::Compiler::new(true);
-    compiler.derive_aggregate(&item).into()
-}
 struct LogInput {
     printer: syn::Expr,
     level: syn::Expr,
@@ -77,7 +67,6 @@ pub fn _log(item: TokenStream) -> TokenStream {
         .collect::<Vec<_>>();
     quote!{
         {
-            
             #(
                 let #arg_idents = #args;
             )*;

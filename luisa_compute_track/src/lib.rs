@@ -1,19 +1,21 @@
 use proc_macro2::TokenStream;
-use proc_macro_error::emit_error;
+use proc_macro_error::{abort, emit_error};
 use quote::quote;
-use syn::{spanned::Spanned, visit_mut::*, *};
+use syn::spanned::Spanned;
+use syn::visit_mut::*;
+use syn::*;
 
 #[cfg(test)]
 use pretty_assertions::{assert_eq, assert_ne};
 
 struct TraceVisitor {
     trait_path: TokenStream,
-    crate_path: TokenStream,
+    flow_path: TokenStream,
 }
 
 impl VisitMut for TraceVisitor {
     fn visit_expr_mut(&mut self, node: &mut Expr) {
-        let crate_path = &self.crate_path;
+        let flow_path = &self.flow_path;
         let trait_path = &self.trait_path;
         let span = node.span();
         match node {
@@ -42,7 +44,17 @@ impl VisitMut for TraceVisitor {
             Expr::Loop(expr) => {
                 let body = &expr.body;
                 *node = parse_quote_spanned! {span=>
-                    #crate_path::loop_!(|| #body)
+                    #flow_path::loop_!(|| #body)
+                }
+            }
+            Expr::ForLoop(expr) => {
+                let pat = &expr.pat;
+                let body = &expr.body;
+                let expr = &expr.expr;
+                if let Expr::Range(range) = &**expr {
+                    *node = parse_quote_spanned! {span=>
+                        #flow_path::for_range(#range, |#pat| #body)
+                    }
                 }
             }
             Expr::Binary(expr) => {
@@ -79,23 +91,40 @@ impl VisitMut for TraceVisitor {
                     }
                 }
             }
-            Expr::Return(_) => {
-                emit_error!(
-                    span,
-                    "return expressions are not traced\nif this is intentional, use `escape!(return)` to disable this error"
-                );
+            Expr::Return(expr) => {
+                if let Some(expr) = &expr.expr {
+                    *node = parse_quote_spanned! {span=>
+                        #flow_path::return_v(#expr)
+                    };
+                } else {
+                    *node = parse_quote_spanned! {span=>
+                        #flow_path::return_()
+                    };
+                }
             }
-            Expr::Continue(_) => {
-                emit_error!(
-                    span,
-                    "continue expressions are not traced\nif this is intentional, use `escape!(continue)` to disable this error"
-                );
+            Expr::Continue(expr) => {
+                if expr.label.is_some() {
+                    emit_error!(
+                        span,
+                        "continue expression tracing with labels is not supported\nif this is intended to be a normal loop, use the `escape!` macro"
+                    );
+                } else {
+                    *node = parse_quote_spanned! {span=>
+                        #flow_path::continue_()
+                    };
+                }
             }
-            Expr::Break(_) => {
-                emit_error!(
-                    span,
-                    "break expressions are not traced\nif this is intentional, use `escape!(break)` to disable this error",
-                );
+            Expr::Break(expr) => {
+                if expr.label.is_some() {
+                    emit_error!(
+                        span,
+                        "break expression tracing with labels is not supported\nif this is intended to be a normal loop, use the `escape!` macro"
+                    );
+                } else {
+                    *node = parse_quote_spanned! {span=>
+                        #flow_path::break_()
+                    };
+                }
             }
             Expr::Macro(expr) => {
                 let path = &expr.mac.path;
@@ -105,6 +134,10 @@ impl VisitMut for TraceVisitor {
                 {
                     let ident = &path.segments[0].ident;
                     if *ident == "escape" {
+                        let tokens = &expr.mac.tokens;
+                        *node = parse_quote_spanned! {span=>
+                            #tokens
+                        };
                         return;
                     }
                 }
@@ -116,13 +149,21 @@ impl VisitMut for TraceVisitor {
 }
 
 #[proc_macro]
+pub fn escape(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    abort!(
+        proc_macro2::Span::call_site(),
+        "`escape!` macro must be used within a `track!` block"
+    )
+}
+
+#[proc_macro]
 pub fn track(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     track_impl(parse_macro_input!(input as Expr)).into()
 }
 
 fn track_impl(mut ast: Expr) -> TokenStream {
     (TraceVisitor {
-        crate_path: quote!(::luisa_compute::lang),
+        flow_path: quote!(::luisa_compute::lang),
         trait_path: quote!(::luisa_compute::lang::maybe_expr),
     })
     .visit_expr_mut(&mut ast);

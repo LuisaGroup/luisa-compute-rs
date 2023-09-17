@@ -1,12 +1,5 @@
-pub use super::swizzle::*;
-use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*, Float};
-use crate::*;
-use half::f16;
-use luisa_compute_ir::{
-    context::register_type,
-    ir::{Func, MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType},
-    TypeOf,
-};
+use super::*;
+use ir::ir::{Func, MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType};
 use serde::{Deserialize, Serialize};
 use std::ops::Mul;
 
@@ -44,7 +37,7 @@ macro_rules! def_vec {
 macro_rules! def_packed_vec {
     ($name:ident, $vec_type:ident, $glam_type:ident, $scalar:ty, $($comp:ident), *) => {
         #[repr(C)]
-        #[derive(Copy, Clone, Debug, Default, __Value,PartialEq, Serialize, Deserialize)]
+        #[derive(Copy, Clone, Debug, Default, __Value, PartialEq, Serialize, Deserialize)]
         pub struct $name {
             $(pub $comp: $scalar), *
         }
@@ -807,16 +800,16 @@ macro_rules! impl_binop {
                 }))
             }
         }
-        impl std::ops::$tr<PrimExpr<$scalar>> for $proxy {
+        impl std::ops::$tr<Expr<$scalar>> for $proxy {
             type Output = $proxy;
-            fn $m(self, rhs: PrimExpr<$scalar>) -> Self::Output {
+            fn $m(self, rhs: Expr<$scalar>) -> Self::Output {
                 let rhs = Self::splat(rhs);
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::$tr, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
             }
         }
-        impl std::ops::$tr<$proxy> for PrimExpr<$scalar> {
+        impl std::ops::$tr<$proxy> for Expr<$scalar> {
             type Output = $proxy;
             fn $m(self, rhs: $proxy) -> Self::Output {
                 let lhs = <$proxy>::splat(self);
@@ -861,16 +854,16 @@ macro_rules! impl_binop_for_mat {
                 }))
             }
         }
-        impl std::ops::$tr<PrimExpr<$scalar>> for $proxy {
+        impl std::ops::$tr<Expr<$scalar>> for $proxy {
             type Output = $proxy;
-            fn $m(self, rhs: PrimExpr<$scalar>) -> Self::Output {
+            fn $m(self, rhs: Expr<$scalar>) -> Self::Output {
                 let rhs = Self::fill(rhs);
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::$tr, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
             }
         }
-        impl std::ops::$tr<$proxy> for PrimExpr<$scalar> {
+        impl std::ops::$tr<$proxy> for Expr<$scalar> {
             type Output = $proxy;
             fn $m(self, rhs: $proxy) -> Self::Output {
                 let lhs = <$proxy>::fill(self);
@@ -952,9 +945,9 @@ macro_rules! impl_arith_binop_for_mat {
                 }))
             }
         }
-        impl std::ops::Mul<PrimExpr<$scalar>> for $proxy {
+        impl std::ops::Mul<Expr<$scalar>> for $proxy {
             type Output = $proxy;
-            fn mul(self, rhs: PrimExpr<$scalar>) -> Self::Output {
+            fn mul(self, rhs: Expr<$scalar>) -> Self::Output {
                 let rhs = Self::fill(rhs);
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(
@@ -965,7 +958,7 @@ macro_rules! impl_arith_binop_for_mat {
                 }))
             }
         }
-        impl std::ops::Mul<$proxy> for PrimExpr<$scalar> {
+        impl std::ops::Mul<$proxy> for Expr<$scalar> {
             type Output = $proxy;
             fn mul(self, rhs: $proxy) -> Self::Output {
                 let lhs = <$proxy>::fill(self);
@@ -988,15 +981,15 @@ macro_rules! impl_arith_binop_for_mat {
         impl std::ops::Rem<$scalar> for $proxy {
             type Output = $proxy;
             fn rem(self, rhs: $scalar) -> Self::Output {
-                let rhs: PrimExpr<$scalar> = rhs.into();
+                let rhs: Expr<$scalar> = rhs.into();
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Rem, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
             }
         }
-        impl std::ops::Rem<PrimExpr<$scalar>> for $proxy {
+        impl std::ops::Rem<Expr<$scalar>> for $proxy {
             type Output = $proxy;
-            fn rem(self, rhs: PrimExpr<$scalar>) -> Self::Output {
+            fn rem(self, rhs: Expr<$scalar>) -> Self::Output {
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Rem, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
@@ -1012,15 +1005,15 @@ macro_rules! impl_arith_binop_for_mat {
         impl std::ops::Div<$scalar> for $proxy {
             type Output = $proxy;
             fn div(self, rhs: $scalar) -> Self::Output {
-                let rhs: PrimExpr<$scalar> = rhs.into();
+                let rhs: Expr<$scalar> = rhs.into();
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Div, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
             }
         }
-        impl std::ops::Div<PrimExpr<$scalar>> for $proxy {
+        impl std::ops::Div<Expr<$scalar>> for $proxy {
             type Output = $proxy;
-            fn div(self, rhs: PrimExpr<$scalar>) -> Self::Output {
+            fn div(self, rhs: Expr<$scalar>) -> Self::Output {
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Div, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
@@ -1104,7 +1097,7 @@ macro_rules! impl_bool_binop {
             bitxor_assign
         );
         impl $proxy {
-            pub fn splat<V: Into<PrimExpr<bool>>>(value: V) -> Self {
+            pub fn splat<V: Into<Expr<bool>>>(value: V) -> Self {
                 let value = value.into();
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Vec, &[value.node], <$t as TypeOf>::type_())
@@ -1178,7 +1171,7 @@ macro_rules! impl_reduce {
 macro_rules! impl_common_op {
     ($t:ty, $scalar:ty, $proxy:ty) => {
         impl $proxy {
-            pub fn splat<V: Into<PrimExpr<$scalar>>>(value: V) -> Self {
+            pub fn splat<V: Into<Expr<$scalar>>>(value: V) -> Self {
                 let value = value.into();
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Vec, &[value.node], <$t as TypeOf>::type_())
@@ -1273,7 +1266,7 @@ macro_rules! impl_arith_binop_f16 {
 macro_rules! impl_common_op_f16 {
     ($t:ty, $scalar:ty, $proxy:ty) => {
         impl $proxy {
-            pub fn splat<V: Into<PrimExpr<$scalar>>>(value: V) -> Self {
+            pub fn splat<V: Into<Expr<$scalar>>>(value: V) -> Self {
                 let value = value.into();
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Vec, &[value.node], <$t as TypeOf>::type_())
@@ -1727,7 +1720,7 @@ impl Mul<Float3Expr> for Mat3Expr {
     }
 }
 impl Mat3Expr {
-    pub fn fill(e: impl Into<PrimExpr<f32>> + Copy) -> Self {
+    pub fn fill(e: impl Into<Expr<f32>> + Copy) -> Self {
         Self::new(
             Float3::expr(e, e, e),
             Float3::expr(e, e, e),
@@ -1772,7 +1765,7 @@ impl Mul<Float4Expr> for Mat4Expr {
 }
 impl_arith_binop_for_mat!(Mat3, f32, Mat3Expr);
 impl Mat4Expr {
-    pub fn fill(e: impl Into<PrimExpr<f32>> + Copy) -> Self {
+    pub fn fill(e: impl Into<Expr<f32>> + Copy) -> Self {
         Self::new(
             Float4::expr(e, e, e, e),
             Float4::expr(e, e, e, e),

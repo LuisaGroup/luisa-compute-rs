@@ -2,8 +2,7 @@ use std::env::current_exe;
 use std::f32::consts::PI;
 
 use luisa::prelude::*;
-use luisa::Value;
-use luisa::{impl_polymorphic, Float};
+use luisa::{impl_polymorphic, Float, Value};
 use luisa_compute as luisa;
 
 trait Area {

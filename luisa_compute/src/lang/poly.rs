@@ -1,15 +1,13 @@
-use std::{
-    any::{Any, TypeId},
-    collections::HashMap,
-    fmt::Debug,
-    hash::Hash,
-};
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::hash::Hash;
 
-use crate::*;
-use crate::{resource::Buffer, Device};
+use crate::resource::Buffer;
+use crate::Device;
 use luisa_compute_derive::__Value;
 
-use super::{switch, traits::CommonVarOp, Aggregate, Uint, Value};
+use super::*;
 
 pub struct PolyArray<K, T: ?Sized + 'static> {
     tag: i32,

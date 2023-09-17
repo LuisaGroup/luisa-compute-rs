@@ -2,20 +2,12 @@ use std::collections::HashSet;
 
 use proc_macro2::{TokenStream, TokenTree};
 use quote::{quote, quote_spanned};
-use syn::{spanned::Spanned, Attribute, Item, ItemEnum, ItemFn, ItemStruct, ItemTrait};
-pub struct Compiler {
-    inside_crate: bool,
-}
+use syn::spanned::Spanned;
+use syn::{Attribute, Item, ItemEnum, ItemFn, ItemStruct, ItemTrait};
+pub struct Compiler;
 impl Compiler {
     fn crate_path(&self) -> TokenStream {
-        if self.inside_crate {
-            quote!(crate::lang)
-        } else {
-            quote!(luisa_compute::lang)
-        }
-    }
-    pub fn new(inside_crate: bool) -> Self {
-        Self { inside_crate }
+        quote!(::luisa_compute::lang)
     }
     pub fn compile_kernel(&self, func: &ItemFn) -> TokenStream {
         todo!()

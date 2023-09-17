@@ -1,16 +1,14 @@
 #![allow(non_snake_case)]
-use std::{env::current_exe, time::Instant};
+use std::env::current_exe;
+use std::time::Instant;
 
-use luisa::init_logger;
 #[allow(unused_imports)]
 use luisa::prelude::*;
-use luisa::*;
+use luisa::{init_logger, *};
 use luisa_compute as luisa;
 use rand::Rng;
-use winit::{
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-};
+use winit::event::{Event, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
 
 const N_GRID: usize = 128;
 const N_STEPS: usize = 50;

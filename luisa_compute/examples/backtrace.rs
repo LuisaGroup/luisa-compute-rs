@@ -1,4 +1,4 @@
-use std::env::{current_exe, self};
+use std::env::{self, current_exe};
 
 use luisa_compute as luisa;
 

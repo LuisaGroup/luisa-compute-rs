@@ -1,17 +1,19 @@
-use crate::macros::lc_assert;
-use crate::*;
-use api::BufferDownloadCommand;
-use api::BufferUploadCommand;
-use api::INVALID_RESOURCE_HANDLE;
-use lang::Value;
-use libc::c_void;
-use runtime::*;
-use std::cell::Cell;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ops::RangeBounds;
 use std::process::abort;
-
 use std::sync::Arc;
+
+use crate::lang::types::core::*;
+use crate::lang::types::vector::*;
+use crate::lang::types::*;
+use crate::runtime::*;
+
+use crate::macros::lc_assert;
+use crate::*;
+use api::{BufferDownloadCommand, BufferUploadCommand, INVALID_RESOURCE_HANDLE};
+use lang::Value;
+use libc::c_void;
+
 pub struct ByteBuffer {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BufferHandle>,

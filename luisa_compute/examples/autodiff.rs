@@ -1,6 +1,8 @@
-use std::{env::current_exe, f32::consts::PI};
+use std::env::current_exe;
+use std::f32::consts::PI;
 
-use luisa::{prelude::track, *};
+use luisa::prelude::track;
+use luisa::*;
 use luisa_compute as luisa;
 fn main() {
     luisa::init_logger_verbose();

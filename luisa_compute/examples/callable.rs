@@ -1,7 +1,7 @@
 use luisa::derive::*;
-use luisa_compute as luisa;
-use luisa::Value;
 use luisa::prelude::*;
+use luisa::Value;
+use luisa_compute as luisa;
 use std::env::current_exe;
 
 fn main() {

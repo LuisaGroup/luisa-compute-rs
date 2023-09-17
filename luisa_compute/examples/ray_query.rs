@@ -1,17 +1,14 @@
 use std::env::current_exe;
 
 use image::Rgb;
+use luisa::derive::*;
 #[allow(unused_imports)]
 use luisa::prelude::*;
 use luisa::rtx::{Aabb, ProceduralCandidate, RayQuery, TriangleCandidate};
-use luisa::Float3;
-use luisa::{derive::*, PackedFloat3};
+use luisa::{Float3, PackedFloat3};
 use luisa_compute as luisa;
-use winit::event::Event as WinitEvent;
-use winit::{
-    event::WindowEvent,
-    event_loop::{ControlFlow, EventLoop},
-};
+use winit::event::{Event as WinitEvent, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
 
 #[derive(Copy, Clone, Debug, Value)]
 #[repr(C)]

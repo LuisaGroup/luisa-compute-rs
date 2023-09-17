@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use syn::__private::quote::{quote, quote_spanned};
+use syn::__private::quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 

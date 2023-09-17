@@ -1,9 +1,7 @@
-use std::collections::HashSet;
-
 use proc_macro2::{TokenStream, TokenTree};
 use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;
-use syn::{Attribute, Item, ItemEnum, ItemFn, ItemStruct, ItemTrait};
+use syn::{Attribute, Item, ItemEnum, ItemFn, ItemStruct};
 pub struct Compiler;
 impl Compiler {
     fn lang_path(&self) -> TokenStream {
@@ -12,7 +10,7 @@ impl Compiler {
     fn runtime_path(&self) -> TokenStream {
         quote!(::luisa_compute::runtime)
     }
-    pub fn compile_kernel(&self, func: &ItemFn) -> TokenStream {
+    pub fn compile_kernel(&self, _func: &ItemFn) -> TokenStream {
         todo!()
     }
     fn check_repr_c(&self, attribtes: &Vec<Attribute>) {
@@ -369,7 +367,6 @@ impl Compiler {
     pub fn derive_aggregate_for_struct(&self, struct_: &ItemStruct) -> TokenStream {
         let span = struct_.span();
         let lang_path = self.lang_path();
-        let runtime_path = self.runtime_path();
         let name = &struct_.ident;
         let fields: Vec<_> = struct_.fields.iter().map(|f| f).collect();
         let field_types: Vec<_> = fields.iter().map(|f| &f.ty).collect();
@@ -391,7 +388,6 @@ impl Compiler {
     pub fn derive_aggregate_for_enum(&self, enum_: &ItemEnum) -> TokenStream {
         let span = enum_.span();
         let lang_path = self.lang_path();
-        let runtime_path = self.runtime_path();
         let name = &enum_.ident;
         let variants = &enum_.variants;
         let to_nodes = variants.iter().enumerate().map(|(i, v)|{

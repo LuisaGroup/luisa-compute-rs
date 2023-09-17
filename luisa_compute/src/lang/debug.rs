@@ -1,10 +1,9 @@
-use std::sync::Arc;
 use ir::CpuCustomOp;
 use std::ffi::CString;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 use crate::internal_prelude::*;
-
 
 pub struct CpuFn<T: Value> {
     op: CArc<CpuCustomOp>,

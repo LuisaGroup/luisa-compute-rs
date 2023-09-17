@@ -1,5 +1,5 @@
+use super::array::VLArrayExpr;
 use super::*;
-use super::array::{VLArrayExpr, VLArrayVar};
 use crate::lang::index::IntoIndex;
 use ir::ArrayType;
 

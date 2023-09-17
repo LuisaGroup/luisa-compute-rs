@@ -1,8 +1,8 @@
 use std::ffi::CString;
 
+use super::Mask;
 use crate::internal_prelude::*;
 use ir::SwitchCase;
-use super::Mask;
 
 /**
  * If you want rustfmt to format your code, use if_!(cond, { .. }, { .. }) or if_!(cond, { .. }, else, {...})

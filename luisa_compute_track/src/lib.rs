@@ -6,7 +6,7 @@ use syn::visit_mut::*;
 use syn::*;
 
 #[cfg(test)]
-use pretty_assertions::{assert_eq, assert_ne};
+use pretty_assertions::assert_eq;
 
 struct TraceVisitor {
     trait_path: TokenStream,

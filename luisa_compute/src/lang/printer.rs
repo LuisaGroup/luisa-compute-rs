@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::internal_prelude::*;
 
-use crate::lang::{packed_size, pack_to};
+use crate::lang::{pack_to, packed_size};
 
 pub type LogFn = Box<dyn Fn(&[*const u32]) + Send + Sync>;
 struct PrinterItem {
@@ -69,7 +69,7 @@ macro_rules! lc_log {
         //     )*
         //     $printer._log($level, printer_args, log_fn);
         // }
-        luisa_compute::derive::_log!(
+        $crate::_log!(
             $printer,
             $level,
             $fmt,

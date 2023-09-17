@@ -4,7 +4,10 @@ use super::*;
 macro_rules! impl_callable_param {
     ($t:ty, $e:ty, $v:ty) => {
         impl CallableParameter for $e {
-            fn def_param(_: Option<std::rc::Rc<dyn std::any::Any>>, builder: &mut KernelBuilder) -> Self {
+            fn def_param(
+                _: Option<std::rc::Rc<dyn std::any::Any>>,
+                builder: &mut KernelBuilder,
+            ) -> Self {
                 builder.value::<$t>()
             }
             fn encode(&self, encoder: &mut CallableArgEncoder) {
@@ -12,7 +15,10 @@ macro_rules! impl_callable_param {
             }
         }
         impl CallableParameter for $v {
-            fn def_param(_: Option<std::rc::Rc<dyn std::any::Any>>, builder: &mut KernelBuilder) -> Self {
+            fn def_param(
+                _: Option<std::rc::Rc<dyn std::any::Any>>,
+                builder: &mut KernelBuilder,
+            ) -> Self {
                 builder.var::<$t>()
             }
             fn encode(&self, encoder: &mut CallableArgEncoder) {

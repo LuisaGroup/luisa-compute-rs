@@ -21,49 +21,46 @@ pub mod prelude {
     pub use crate::lang::types::vector::*;
     pub use crate::lang::types::{Expr, ExprProxy, Value, Var, VarProxy};
     pub use crate::lang::Aggregate;
-    pub use crate::resource::{IoTexel, StorageTexel};
+    pub use crate::resource::{IoTexel, StorageTexel, *};
+    pub use crate::runtime::{Device, Scope, Stream};
     pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, while_};
     pub use half::f16;
-    pub use luisa_compute_track::track;
-    pub use crate::resource::*;
-    pub use crate::runtime::{Device, Scope, Stream};
     pub use luisa_compute_derive::*;
+    pub use luisa_compute_track::track;
 }
 
 mod internal_prelude {
-    pub(crate) use crate::lang::ir;
-    pub(crate) use crate::lang::ir::ffi::*;
-    pub(crate) use crate::lang::ir::{INVALID_REF, register_type, Instruction, new_node, Node, Type, TypeOf, Func, IrBuilder, Pooled, BasicBlock, Const, PhiIncoming};
-    pub(crate) use crate::lang::{Recorder, __module_pools, __compose, __insert, __extract, need_runtime_check, FromNode, NodeRef, ToNode, RECORDER, __current_scope, __pop_scope};
     pub(crate) use crate::lang::debug::{CpuFn, __env_need_backtrace, is_cpu_backend};
+    pub(crate) use crate::lang::ir::ffi::*;
+    pub(crate) use crate::lang::ir::{
+        new_node, register_type, BasicBlock, Const, Func, Instruction, IrBuilder, Node,
+        PhiIncoming, Pooled, Type, TypeOf, INVALID_REF,
+    };
+    pub(crate) use crate::lang::{
+        ir, Recorder, __compose, __extract, __insert, __module_pools, need_runtime_check, FromNode,
+        NodeRef, ToNode, __current_scope, __pop_scope, RECORDER,
+    };
     pub(crate) use crate::prelude::*;
-    pub(crate) use std::marker::PhantomData;
-    pub(crate) use crate::{impl_callable_param};
-    pub(crate) use crate::{get_backtrace, ResourceTracker};
-    pub(crate) use crate::runtime::{CallableRet, KernelBuilder, CallableParameter, CallableArgEncoder};
+    pub(crate) use crate::runtime::{
+        CallableArgEncoder, CallableParameter, CallableRet, KernelBuilder,
+    };
+    pub(crate) use crate::{get_backtrace, impl_callable_param, ResourceTracker};
     pub(crate) use luisa_compute_backend::Backend;
+    pub(crate) use std::marker::PhantomData;
 }
 
 pub use luisa_compute_derive::*;
 
-pub mod macros {
-    pub use crate::{
-        cpu_dbg, if_, impl_new_poly_array, impl_polymorphic, lc_assert, lc_dbg, lc_debug, lc_error,
-        lc_info, lc_log, lc_unreachable, lc_warn, loop_, struct_, while_,
-    };
-}
-
 use luisa_compute_api_types as api;
-pub use luisa_compute_backend as backend;
-pub use luisa_compute_sys as sys;
+pub use {luisa_compute_backend as backend, luisa_compute_sys as sys};
 
 use lazy_static::lazy_static;
 use luisa_compute_backend::Backend;
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
 use parking_lot::{Mutex, RawMutex};
+use runtime::{Device, DeviceHandle, StreamHandle};
 use std::collections::HashMap;
 use std::sync::Weak;
-use runtime::{DeviceHandle, StreamHandle, Device};
 
 pub struct Context {
     inner: Arc<backend::Context>,

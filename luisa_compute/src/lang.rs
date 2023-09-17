@@ -1,11 +1,7 @@
 use std::any::Any;
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
-use std::ffi::CString;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::{env, unreachable};
@@ -15,8 +11,7 @@ use crate::internal_prelude::*;
 use bumpalo::Bump;
 use indexmap::IndexMap;
 
-use crate::runtime::{AsyncShaderArtifact, CallableArgEncoder, Device, ShaderArtifact};
-use crate::{rtx, ResourceTracker};
+use crate::runtime::Device;
 
 pub mod ir {
     pub use luisa_compute_ir::context::register_type;
@@ -26,10 +21,8 @@ pub mod ir {
 
 pub use ir::NodeRef;
 use ir::{
-    new_node, new_user_node, register_type, ArrayType, BasicBlock, Binding, CArc, CallableModule,
-    CallableModuleRef, Capture, Const, CpuCustomOp, Func, Instruction, IrBuilder, KernelModule,
-    Module, ModuleFlags, ModuleKind, ModulePools, Node, PhiIncoming, Pooled, StructType,
-    SwitchCase, Type, TypeOf, UserNodeData, INVALID_REF,
+    new_user_node, BasicBlock, Binding, CArc, CallableModuleRef, Const, CpuCustomOp, Func,
+    Instruction, IrBuilder, ModulePools, Pooled, StructType, Type, TypeOf, UserNodeData,
 };
 
 // pub mod maybe_expr;
@@ -161,7 +154,6 @@ fn _store<T1: Aggregate, T2: Aggregate>(var: &T1, value: &T2) {
 
 #[inline(always)]
 pub fn __new_user_node<T: UserNodeData>(data: T) -> NodeRef {
-    use luisa_compute_ir::ir::new_user_node;
     new_user_node(__module_pools(), data)
 }
 macro_rules! impl_aggregate_for_tuple {
@@ -448,7 +440,7 @@ macro_rules! struct_ {
         {
             type Init = <$t as $crate::lang::StructInitiaizable>::Init;
             let init = Init { $($it : $value), *  };
-            type Expr = <$t as $crate::lang::Value>::Expr;
+            type Expr = <$t as $crate::lang::types::Value>::Expr;
             let e:Expr = init.into();
             e
         }

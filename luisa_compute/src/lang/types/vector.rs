@@ -1804,8 +1804,7 @@ impl_arith_binop_for_mat!(Mat4, f32, Mat4Expr);
 mod test {
     #[test]
     fn test_size() {
-        use crate::prelude::*;
-        use crate::*;
+        use crate::internal_prelude::*;
         macro_rules! assert_size {
             ($ty:ty) => {
                 {assert_eq!(std::mem::size_of::<$ty>(), <$ty as TypeOf>::type_().size());}

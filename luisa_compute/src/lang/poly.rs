@@ -47,12 +47,12 @@ macro_rules! impl_polymorphic {
     ($trait_:ident, $ty:ty) => {
         impl PolymorphicImpl<dyn $trait_> for $ty {
             fn new_poly_array<K>(
-                buffer: &luisa_compute::Buffer<Self>,
+                buffer: &luisa_compute::resource::Buffer<Self>,
                 tag: i32,
                 key: K,
-            ) -> luisa_compute::PolyArray<K, dyn $trait_> {
+            ) -> luisa_compute::lang::poly::PolyArray<K, dyn $trait_> {
                 let buffer = unsafe { buffer.shallow_clone() };
-                luisa_compute::PolyArray::new(
+                luisa_compute::lang::poly::PolyArray::new(
                     tag,
                     key,
                     Box::new(move |_, index| Box::new(buffer.var().read(index))),

@@ -1,29 +1,29 @@
+use std::any::Any;
 use std::cell::{Cell, RefCell};
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
+use std::env;
 use std::ffi::CString;
 use std::hash::Hash;
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::sync::{Weak, Arc};
 use std::rc::Rc;
-use std::any::Any;
-use std::env;
+use std::sync::{Arc, Weak};
 
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
 use parking_lot::{Condvar, Mutex, RawMutex, RwLock};
 
-use winit::window::Window;
 use raw_window_handle::HasRawWindowHandle;
-
+use winit::window::Window;
 
 use crate::internal_prelude::*;
-use ir::KernelModule;
-use ir::{ModulePools, ModuleKind, ModuleFlags, Module, CallableModuleRef, CallableModule, Capture, CpuCustomOp};
+use ir::{
+    CallableModule, CallableModuleRef, Capture, CpuCustomOp, KernelModule, Module, ModuleFlags,
+    ModuleKind, ModulePools,
+};
 
 use crate::backend::Backend;
-use crate::rtx::ProceduralPrimitiveHandle;
-use crate::rtx::{Accel, Mesh, MeshHandle};
 use crate::rtx;
+use crate::rtx::{Accel, Mesh, MeshHandle, ProceduralPrimitiveHandle};
 
 use api::AccelOption;
 pub use luisa_compute_api_types as api;

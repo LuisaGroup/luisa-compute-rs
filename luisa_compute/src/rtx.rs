@@ -7,17 +7,16 @@ use crate::internal_prelude::*;
 use crate::runtime::*;
 use crate::{ResourceTracker, *};
 use luisa_compute_ir::ir::{
-    new_node, AccelBinding, Binding, Func, Instruction, IrBuilder, Node, NodeRef, Type, StructType
+    new_node, AccelBinding, Binding, Func, Instruction, IrBuilder, Node, NodeRef, StructType, Type,
 };
 use parking_lot::RwLock;
 use std::ops::Deref;
 
-use luisa_compute_api_types as api;
 pub use api::{
     AccelBuildModificationFlags, AccelBuildRequest, AccelOption, AccelUsageHint, MeshType,
     PixelFormat, PixelStorage,
 };
-
+use luisa_compute_api_types as api;
 
 pub(crate) struct AccelHandle {
     pub(crate) device: Device,

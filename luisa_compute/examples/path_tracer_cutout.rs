@@ -425,7 +425,7 @@ fn main() {
                                 on_triangle_hit: |c: TriangleCandidate| {
                                 if_!(filter(&c), { c.commit(); });
                             },
-                                on_procedural_hit: |c| {}
+                                on_procedural_hit: |_c| {}
                             });
                             let occluded = !occluded.miss();
                             let cos_wi_light = wi_light.dot(n);

@@ -1,41 +1,12 @@
-use std::env::current_exe;
-
 use luisa::prelude::*;
 use luisa::*;
 use luisa_compute as luisa;
 use luisa_compute_api_types::StreamTag;
 use rand::prelude::*;
+#[path = "common.rs"]
+mod common;
+use common::*;
 
-fn _signal_handler(signal: libc::c_int) {
-    if signal == libc::SIGSEGV {
-        panic!("segfault detected");
-    }
-}
-static ONCE: std::sync::Once = std::sync::Once::new();
-fn device_name() -> String {
-    match std::env::var("LUISA_TEST_DEVICE") {
-        Ok(device) => device,
-        Err(_) => "cpu".to_string(),
-    }
-}
-fn get_device() -> Device {
-    let show_log = match std::env::var("LUISA_TEST_LOG") {
-        Ok(log) => log == "1",
-        Err(_) => false,
-    };
-    ONCE.call_once(|| unsafe {
-        if show_log {
-            init_logger_verbose();
-        }
-        libc::signal(libc::SIGSEGV, _signal_handler as usize);
-    });
-    let curr_exe = current_exe().unwrap();
-    let runtime_dir = curr_exe.parent().unwrap().parent().unwrap();
-    let ctx = Context::new(runtime_dir);
-    let device = device_name();
-    let device = ctx.create_device(&device);
-    device
-}
 #[test]
 fn event() {
     let device = get_device();
@@ -89,10 +60,6 @@ fn event() {
 #[test]
 #[should_panic]
 fn callable_return_mismatch() {
-    // Cpp backends cannot recover from panic
-    if device_name() != "cpu" {
-        panic!();
-    }
     let device = get_device();
     let _abs = device.create_callable::<fn(Expr<f32>) -> Expr<f32>>(&|x| {
         if_!(x.cmpgt(0.0), {
@@ -101,12 +68,10 @@ fn callable_return_mismatch() {
         -x
     });
 }
+
 #[test]
 #[should_panic]
 fn callable_return_void_mismatch() {
-    if device_name() != "cpu" {
-        panic!();
-    }
     let device = get_device();
     let _abs = device.create_callable::<fn(Var<f32>)>(&|x| {
         if_!(x.cmpgt(0.0), {

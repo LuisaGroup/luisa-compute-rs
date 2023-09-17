@@ -568,6 +568,8 @@ impl<T: Value> CpuFn<T> {
                 r.device
                     .as_ref()
                     .unwrap()
+                    .upgrade()
+                    .unwrap()
                     .inner
                     .query("device_name")
                     .unwrap(),
@@ -600,7 +602,7 @@ pub(crate) struct Recorder {
     pub(crate) cpu_custom_ops: IndexMap<u64, (usize, CArc<CpuCustomOp>)>,
     pub(crate) callables: IndexMap<u64, CallableModuleRef>,
     pub(crate) shared: Vec<NodeRef>,
-    pub(crate) device: Option<Device>,
+    pub(crate) device: Option<WeakDevice>,
     pub(crate) block_size: Option<[u32; 3]>,
     pub(crate) building_kernel: bool,
     pub(crate) pools: Option<CArc<ModulePools>>,
@@ -1855,7 +1857,7 @@ impl KernelBuilder {
                 "Cannot record multiple kernels at the same time"
             );
             r.lock = true;
-            r.device = device.clone();
+            r.device = device.as_ref().map(|d| WeakDevice::new(d));
             r.pools = Some(CArc::new(ModulePools::new()));
             r.scopes.clear();
             r.building_kernel = is_kernel;
@@ -3005,6 +3007,8 @@ pub fn is_cpu_backend() -> bool {
         }
         r.device
             .as_ref()
+            .unwrap()
+            .upgrade()
             .unwrap()
             .inner
             .query("device_name")

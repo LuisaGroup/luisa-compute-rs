@@ -19,7 +19,7 @@ pub mod prelude {
     pub use crate::lang::traits::{CommonVarOp, FloatVarTrait, IntVarTrait, VarCmp, VarCmpEq};
     pub use crate::lang::{
         Aggregate, ExprProxy, FromNode, IndexRead, IndexWrite, KernelBuildFn, KernelParameter,
-        KernelSignature, Value, VarProxy, Mask,
+        KernelSignature, Mask, Value, VarProxy,
     };
     pub use crate::lang::{
         __compose, __cpu_dbg, __current_scope, __env_need_backtrace, __extract, __insert,
@@ -34,7 +34,6 @@ pub use api::{
     AccelBuildModificationFlags, AccelBuildRequest, AccelOption, AccelUsageHint, MeshType,
     PixelFormat, PixelStorage,
 };
-pub use log;
 pub use glam;
 pub use lang::math;
 pub use lang::math::*;
@@ -42,6 +41,7 @@ pub use lang::poly;
 pub use lang::poly::*;
 pub use lang::traits::*;
 pub use lang::*;
+pub use log;
 pub use luisa_compute_derive as derive;
 pub use luisa_compute_derive::*;
 pub use luisa_compute_ir::ir::UserNodeData;
@@ -84,8 +84,8 @@ lazy_static! {
         Mutex::new(HashMap::new());
 }
 impl Context {
-    // path to libluisa-*
-    // if the current_exe() is in the same directory as libluisa-*, then passing current_exe() is enough
+    /// path to libluisa-*
+    /// if the current_exe() is in the same directory as libluisa-*, then passing current_exe() is enough
     pub fn new(lib_path: impl AsRef<Path>) -> Self {
         let mut lib_path = lib_path.as_ref().to_path_buf();
         lib_path = lib_path.canonicalize().unwrap();
@@ -124,6 +124,7 @@ impl Context {
                     device: weak.clone(),
                     mutex: RawMutex::INIT,
                 })),
+                ctx: self.inner.clone(),
             }),
         }
     }

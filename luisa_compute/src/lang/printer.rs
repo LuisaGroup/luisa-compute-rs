@@ -6,7 +6,6 @@ use std::sync::atomic::AtomicBool;
 
 pub type LogFn = Box<dyn Fn(&[*const u32]) + Send + Sync>;
 struct PrinterItem {
-    level: log::Level,
     log_fn: LogFn,
     count: usize,
     count_per_arg: Vec<usize>,
@@ -136,7 +135,6 @@ impl Printer {
         );
 
         items.push(PrinterItem {
-            level,
             log_fn,
             count: args.count + 1,
             count_per_arg: args.count_per_arg,

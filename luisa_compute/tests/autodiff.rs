@@ -1,4 +1,4 @@
-use std::{env::current_exe, ops::Range};
+use std::ops::Range;
 
 use luisa::prelude::*;
 use luisa::*;
@@ -8,34 +8,10 @@ use rayon::{
     prelude::{IntoParallelIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
-fn _signal_handler(signal: libc::c_int) {
-    if signal == libc::SIGSEGV {
-        panic!("segfault detected");
-    }
-}
-static ONCE: std::sync::Once = std::sync::Once::new();
-fn get_device() -> Device {
-    let show_log = match std::env::var("LUISA_TEST_LOG") {
-        Ok(log) => log == "1",
-        Err(_) => false,
-    };
-    ONCE.call_once(|| {
-        if show_log {
-            init_logger_verbose();
-        }
-        unsafe {
-            libc::signal(libc::SIGSEGV, _signal_handler as usize);
-        }
-    });
-    let curr_exe = current_exe().unwrap();
-    let runtime_dir = curr_exe.parent().unwrap().parent().unwrap();
-    let ctx = Context::new(runtime_dir);
-    let device = match std::env::var("LUISA_TEST_DEVICE") {
-        Ok(device) => device,
-        Err(_) => "cpu".to_string(),
-    };
-    ctx.create_device(&device)
-}
+#[path = "common.rs"]
+mod common;
+use common::*;
+
 fn finite_difference(inputs: &[Float], f: impl Fn(&[Float]) -> Float) -> Vec<Float> {
     let eps = 1e-4;
 

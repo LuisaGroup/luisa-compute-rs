@@ -27,7 +27,20 @@ use winit::window::Window;
 pub struct Device {
     pub(crate) inner: Arc<DeviceHandle>,
 }
-
+#[derive(Clone)]
+pub struct WeakDevice {
+    pub(crate) inner: Weak<DeviceHandle>,
+}
+impl WeakDevice {
+    pub fn new(device: &Device) -> Self {
+        Self {
+            inner: Arc::downgrade(&device.inner),
+        }
+    }
+    pub fn upgrade(&self) -> Option<Device> {
+        self.inner.upgrade().map(|inner| Device { inner })
+    }
+}
 impl Hash for Device {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         let ptr = Arc::as_ptr(&self.inner);
@@ -46,6 +59,8 @@ impl Eq for Device {}
 pub(crate) struct DeviceHandle {
     pub(crate) backend: ProxyBackend,
     pub(crate) default_stream: Option<Arc<StreamHandle>>,
+    #[allow(dead_code)]
+    pub(crate) ctx: Arc<backend::Context>,
 }
 
 unsafe impl Send for DeviceHandle {}
@@ -367,7 +382,7 @@ impl Device {
             modifications: RwLock::new(HashMap::new()),
         }
     }
-    pub fn create_callable<'a, S: CallableSignature<'a>>(&self, f:S::Fn) -> S::Callable {
+    pub fn create_callable<'a, S: CallableSignature<'a>>(&self, f: S::Fn) -> S::Callable {
         let mut builder = KernelBuilder::new(Some(self.clone()), false);
         let raw_callable = CallableBuildFn::build_callable(&f, None, &mut builder);
         S::wrap_raw_callable(raw_callable)
@@ -1192,7 +1207,7 @@ impl<S: CallableSignature<'static>> DynCallable<S> {
         RECORDER.with(|r| {
             if let Some(device) = r.borrow().device.as_ref() {
                 assert!(
-                    Arc::ptr_eq(&device.inner, &self.device.inner),
+                    Arc::ptr_eq(&device.inner.upgrade().unwrap(), &self.device.inner),
                     "Callable created on a different device than the one it is called on"
                 );
             }
@@ -1217,7 +1232,10 @@ impl<S: CallableSignature<'static>> DynCallable<S> {
         let (r_backup, device) = RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             let device = r.device.clone().unwrap();
-            (std::mem::replace(&mut *r, Recorder::new()), device)
+            (
+                std::mem::replace(&mut *r, Recorder::new()),
+                device.upgrade().unwrap(),
+            )
         });
         let mut builder = KernelBuilder::new(Some(device), false);
         let new_callable = (inner.builder)(args, &mut builder);

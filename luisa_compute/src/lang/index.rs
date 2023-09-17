@@ -5,22 +5,22 @@ pub trait IntoIndex {
 }
 impl IntoIndex for i32 {
     fn to_u64(&self) -> Expr<u64> {
-        const_(*self as u64)
+        (*self as u64).expr()
     }
 }
 impl IntoIndex for i64 {
     fn to_u64(&self) -> Expr<u64> {
-        const_(*self as u64)
+        (*self as u64).expr()
     }
 }
 impl IntoIndex for u32 {
     fn to_u64(&self) -> Expr<u64> {
-        const_(*self as u64)
+        (*self as u64).expr()
     }
 }
 impl IntoIndex for u64 {
     fn to_u64(&self) -> Expr<u64> {
-        const_(*self)
+        (*self).expr()
     }
 }
 impl IntoIndex for Expr<u32> {

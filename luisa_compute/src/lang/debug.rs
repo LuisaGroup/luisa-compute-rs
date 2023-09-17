@@ -61,28 +61,28 @@ impl<T: Value> CpuFn<T> {
 #[macro_export]
 macro_rules! cpu_dbg {
     ($arg:expr) => {{
-        $crate::lang::__cpu_dbg($arg, file!(), line!())
+        $crate::lang::debug::__cpu_dbg($arg, file!(), line!())
     }};
 }
 #[macro_export]
 macro_rules! lc_dbg {
     ($arg:expr) => {{
-        $crate::lang::__cpu_dbg($arg, file!(), line!())
+        $crate::lang::debug::__cpu_dbg($arg, file!(), line!())
     }};
 }
 #[macro_export]
 macro_rules! lc_unreachable {
     () => {
-        $crate::lang::__unreachable(file!(), line!(), column!())
+        $crate::lang::debug::__unreachable(file!(), line!(), column!())
     };
 }
 #[macro_export]
 macro_rules! lc_assert {
     ($arg:expr) => {
-        __assert($arg, stringify!($arg), file!(), line!(), column!())
+        $crate::lang::debug::__assert($arg, stringify!($arg), file!(), line!(), column!())
     };
     ($arg:expr, $msg:expr) => {
-        __assert($arg, $msg, file!(), line!(), column!())
+        $crate::lang::debug::__assert($arg, $msg, file!(), line!(), column!())
     };
 }
 pub fn __cpu_dbg<T: ExprProxy>(arg: T, file: &'static str, line: u32)

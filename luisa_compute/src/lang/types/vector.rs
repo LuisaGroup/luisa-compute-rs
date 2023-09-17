@@ -1,5 +1,6 @@
 use super::*;
 use ir::ir::{Func, MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType};
+use ir::CBoxedSlice;
 use serde::{Deserialize, Serialize};
 use std::ops::Mul;
 
@@ -37,7 +38,7 @@ macro_rules! def_vec {
 macro_rules! def_packed_vec {
     ($name:ident, $vec_type:ident, $glam_type:ident, $scalar:ty, $($comp:ident), *) => {
         #[repr(C)]
-        #[derive(Copy, Clone, Debug, Default, __Value, PartialEq, Serialize, Deserialize)]
+        #[derive(Copy, Clone, Debug, Default, Value, PartialEq, Serialize, Deserialize)]
         pub struct $name {
             $(pub $comp: $scalar), *
         }
@@ -80,7 +81,7 @@ macro_rules! def_packed_vec {
 macro_rules! def_packed_vec_no_glam {
     ($name:ident, $vec_type:ident, $scalar:ty, $($comp:ident), *) => {
         #[repr(C)]
-        #[derive(Copy, Clone, Debug, Default, __Value)]
+        #[derive(Copy, Clone, Debug, Default, Value)]
         pub struct $name {
             $(pub $comp: $scalar), *
         }
@@ -1528,7 +1529,7 @@ macro_rules! impl_var_trait2 {
         impl VarCmpEq for $t {}
         impl From<$v> for $t {
             fn from(v: $v) -> Self {
-                Self::new(const_(v.x), const_(v.y))
+                Self::new((v.x).expr(), (v.y).expr())
             }
         }
     };
@@ -1553,7 +1554,7 @@ macro_rules! impl_var_trait3 {
         impl VarCmpEq for $t {}
         impl From<$v> for $t {
             fn from(v: $v) -> Self {
-                Self::new(const_(v.x), const_(v.y), const_(v.z))
+                Self::new(v.x.expr(), v.y.expr(), v.z.expr())
             }
         }
     };
@@ -1578,7 +1579,7 @@ macro_rules! impl_var_trait4 {
         impl VarCmpEq for $t {}
         impl From<$v> for $t {
             fn from(v: $v) -> Self {
-                Self::new(const_(v.x), const_(v.y), const_(v.z), const_(v.w))
+                Self::new(v.x.expr(), v.y.expr(), v.z.expr(), v.w.expr())
             }
         }
     };
@@ -1699,7 +1700,7 @@ impl Mat2Expr {
             s.call(Func::Transpose, &[self.node], <Mat2 as TypeOf>::type_())
         }))
     }
-    pub fn determinant(&self) -> Float {
+    pub fn determinant(&self) -> Expr<f32> {
         FromNode::from_node(__current_scope(|s| {
             s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
         }))
@@ -1744,7 +1745,7 @@ impl Mat3Expr {
             s.call(Func::Transpose, &[self.node], <Mat3 as TypeOf>::type_())
         }))
     }
-    pub fn determinant(&self) -> Float {
+    pub fn determinant(&self) -> Expr<f32> {
         FromNode::from_node(__current_scope(|s| {
             s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
         }))
@@ -1791,7 +1792,7 @@ impl Mat4Expr {
             s.call(Func::Transpose, &[self.node], <Mat4 as TypeOf>::type_())
         }))
     }
-    pub fn determinant(&self) -> Float {
+    pub fn determinant(&self) -> Expr<f32> {
         FromNode::from_node(__current_scope(|s| {
             s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
         }))

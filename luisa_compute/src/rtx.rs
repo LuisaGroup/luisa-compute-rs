@@ -4,12 +4,14 @@ use std::sync::Arc;
 
 use crate::runtime::submit_default_stream_and_sync;
 use crate::{ResourceTracker, *};
+use crate::lang::types::{*, core::*, vector::*};
 use api::AccelBuildRequest;
 use luisa_compute_api_types as api;
-use luisa_compute_derive::__Value;
+use luisa_compute_derive::Value;
 use luisa_compute_ir::ir::{
-    new_node, AccelBinding, Binding, Func, Instruction, IrBuilder, Node, NodeRef,
+    new_node, AccelBinding, Binding, Func, Instruction, IrBuilder, Node, NodeRef, Type, StructType
 };
+use luisa_compute_ir::{TypeOf, CBoxedSlice, CArc};
 use parking_lot::RwLock;
 use std::ops::Deref;
 pub(crate) struct AccelHandle {
@@ -322,7 +324,7 @@ pub struct AccelVar {
 
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Clone, Copy, __Value, Debug)]
+#[derive(Clone, Copy, Value, Debug)]
 pub struct Ray {
     pub orig: PackedFloat3,
     pub tmin: f32,
@@ -330,14 +332,14 @@ pub struct Ray {
     pub tmax: f32,
 }
 #[repr(C)]
-#[derive(Clone, Copy, __Value, Debug)]
+#[derive(Clone, Copy, Value, Debug)]
 pub struct Aabb {
     pub min: PackedFloat3,
     pub max: PackedFloat3,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, __Value, Debug)]
+#[derive(Clone, Copy, Value, Debug)]
 pub struct TriangleHit {
     pub inst: u32,
     pub prim: u32,
@@ -346,14 +348,14 @@ pub struct TriangleHit {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, __Value, Debug)]
+#[derive(Clone, Copy, Value, Debug)]
 pub struct ProceduralHit {
     pub inst: u32,
     pub prim: u32,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, __Value, Debug)]
+#[derive(Clone, Copy, Value, Debug)]
 pub struct CommittedHit {
     pub inst_id: u32,
     pub prim_id: u32,
@@ -402,7 +404,7 @@ pub type Index = PackedUint3;
 
 #[repr(C)]
 #[repr(align(8))]
-#[derive(Clone, Copy, __Value, Debug)]
+#[derive(Clone, Copy, Value, Debug)]
 pub struct Hit {
     pub inst_id: u32,
     pub prim_id: u32,

@@ -1,11 +1,12 @@
 use crate::backend::Backend;
-use crate::lang::{KernelBuildOptions, Value};
+use crate::lang::{Value};
 use crate::resource::*;
 use crate::rtx::ProceduralPrimitiveHandle;
 use crate::*;
+use crate::lang::kernel::*;
 
 use api::AccelOption;
-use lang::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSignature};
+use lang::kernel::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSignature};
 pub use luisa_compute_api_types as api;
 use luisa_compute_backend::proxy::ProxyBackend;
 use luisa_compute_ir::ir::{self, KernelModule};

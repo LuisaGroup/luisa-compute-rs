@@ -15,22 +15,24 @@ use half::f16;
 use bumpalo::Bump;
 use indexmap::IndexMap;
 
-use crate::runtime::{AsyncShaderArtifact, CallableArgEncoder, ShaderArtifact};
+use crate::runtime::{AsyncShaderArtifact, CallableArgEncoder, ShaderArtifact, Device};
 use crate::{rtx, ResourceTracker};
 
-pub use luisa_compute_ir as ir;
+pub mod ir {
+    pub use luisa_compute_ir::ir::*;
+    pub use luisa_compute_ir::context::register_type;
+    pub use luisa_compute_ir::*;
+}
 
-use ir::context::register_type;
-use ir::ffi::CBoxedSlice;
-use ir::ir::{
+use ir::{
+    register_type,
     new_node, ArrayType, BasicBlock, Binding, CallableModule, CallableModuleRef, Capture, Const,
     CpuCustomOp, Func, Instruction, IrBuilder, KernelModule, Module, ModuleFlags, ModuleKind,
-    ModulePools, Node, NodeRef, PhiIncoming, StructType, SwitchCase, Type, UserNodeData,
-    INVALID_REF,
+    ModulePools, Node, PhiIncoming, StructType, SwitchCase, Type, UserNodeData,
+    INVALID_REF, CArc, Pooled, TypeOf, new_user_node
 };
-use ir::{CArc, Pooled, TypeOf};
 
-use luisa_compute_derive::__Aggregate;
+use luisa_compute_derive::Aggregate;
 
 // use self::math::Uint3;
 // pub mod maybe_expr;
@@ -40,22 +42,28 @@ pub mod flow;
 pub mod functions;
 pub mod index;
 pub mod kernel;
-// pub mod ops;
+pub mod ops;
 pub mod poly;
 pub mod printer;
 pub mod swizzle;
 pub mod types;
 
-use types::{Expr, Value, Var};
-use ops::{VarTrait, CommonVarOp, VarCmpEq, VarCmp, IntVarTrait, FloatVarTrait, ScalarVarTrait, VectorVarTrait, MatrixVarTrait, ScalarOrVector, BuiltinVarTrait}l
+use ops::{
+    BuiltinVarTrait, CommonVarOp, FloatVarTrait, IntVarTrait, MatrixVarTrait, ScalarOrVector,
+    ScalarVarTrait, VarCmp, VarCmpEq, VarTrait, VectorVarTrait,
+};
+use swizzle::*;
+use types::{Expr, ExprProxy, Value, Var, VarProxy};
 
 // REMOVE
+use crate::{cpu_dbg, if_, impl_callable_param, lc_assert, lc_dbg, lc_unreachable, loop_, while_};
 use flow::*;
 use functions::*;
 use index::*;
 use kernel::*;
 use types::core::*;
 use types::vector::*;
+pub use ir::NodeRef;
 
 #[allow(dead_code)]
 pub(crate) static KERNEL_ID: AtomicUsize = AtomicUsize::new(0);
@@ -242,13 +250,13 @@ pub fn select<A: Aggregate>(mask: impl Mask, a: A, b: A) -> A {
 
 impl ToNode for bool {
     fn node(&self) -> NodeRef {
-        const_(*self).node()
+        (*self).expr().node()
     }
 }
 
 unsafe impl Mask for bool {}
 
-unsafe impl Mask for Bool {}
+unsafe impl Mask for Expr<bool> {}
 
 extern "C" fn _trampoline<T, F: FnMut(&mut T)>(data: *mut u8, args: *mut u8) {
     unsafe {
@@ -525,5 +533,5 @@ pub(crate) fn need_runtime_check() -> bool {
             Ok(s) => s == "full" || s == "1",
             Err(_) => false,
         }
-        || __env_need_backtrace()
+        || debug::__env_need_backtrace()
 }

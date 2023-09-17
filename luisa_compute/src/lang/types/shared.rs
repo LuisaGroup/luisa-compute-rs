@@ -29,7 +29,7 @@ impl<T: Value> Shared<T> {
     }
     pub fn len(&self) -> Expr<u64> {
         match self.node.type_().as_ref() {
-            Type::Array(ArrayType { element: _, length }) => const_(*length as u64),
+            Type::Array(ArrayType { element: _, length }) => (*length as u64).expr(),
             _ => unreachable!(),
         }
     }

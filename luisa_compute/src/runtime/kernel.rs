@@ -1,4 +1,6 @@
 use super::*;
+use crate::runtime::*;
+use crate::resource::*;
 
 #[macro_export]
 macro_rules! impl_callable_param {

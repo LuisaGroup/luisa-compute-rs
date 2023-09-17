@@ -29,7 +29,7 @@ macro_rules! while_ {
 #[macro_export]
 macro_rules! loop_ {
     ($body:block) => {
-        $crate::while_!($crate::const_(true), $body)
+        $crate::while_!(true.expr(), $body)
     };
 }
 
@@ -168,10 +168,10 @@ macro_rules! impl_range {
         impl ForLoopRange for std::ops::RangeInclusive<$t> {
             type Element = $t;
             fn start(&self) -> NodeRef {
-                const_(*self.start()).node()
+                (*self.start()).expr().node()
             }
             fn end(&self) -> NodeRef {
-                const_(*self.end()).node()
+                (*self.end()).expr().node()
             }
             fn end_inclusive(&self) -> bool {
                 true
@@ -192,10 +192,10 @@ macro_rules! impl_range {
         impl ForLoopRange for std::ops::Range<$t> {
             type Element = $t;
             fn start(&self) -> NodeRef {
-                const_(self.start).node()
+                (self.start).expr().node()
             }
             fn end(&self) -> NodeRef {
-                const_(self.end).node()
+                (self.end).expr().node()
             }
             fn end_inclusive(&self) -> bool {
                 false

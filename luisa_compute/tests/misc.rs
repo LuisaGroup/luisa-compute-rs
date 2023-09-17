@@ -683,7 +683,7 @@ fn uniform() {
     let expected = (x.len() as f32 - 1.0) * x.len() as f32 * 0.5 * 6.0;
     assert!((actual - expected).abs() < 1e-4);
 }
-#[derive(Clone, Copy, Debug, __Value)]
+#[derive(Clone, Copy, Debug, Value)]
 #[repr(C)]
 struct Big {
     a: [f32; 32],

@@ -81,7 +81,8 @@ macro_rules! impl_from {
     ($from:ty, $to:ty) => {
         impl From<$from> for Expr<$to> {
             fn from(x: $from) -> Self {
-                const_::<$to>(x.try_into().unwrap())
+                let y: $to = (x.try_into().unwrap());
+                y.expr()
             }
         }
     };
@@ -171,13 +172,13 @@ macro_rules! impl_binop {
         impl $tr<$t> for $proxy {
             type Output = Expr<$t>;
             fn $method(self, rhs: $t) -> Self::Output {
-                $tr::$method(self, const_(rhs))
+                $tr::$method(self, rhs.expr())
             }
         }
         impl $tr<$proxy> for $t {
             type Output = Expr<$t>;
             fn $method(self, rhs: $proxy) -> Self::Output {
-                $tr::$method(const_(self), rhs)
+                $tr::$method(self.expr(), rhs)
             }
         }
     };

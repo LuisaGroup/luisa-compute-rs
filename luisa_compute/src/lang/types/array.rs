@@ -70,7 +70,7 @@ impl<T: Value, const N: usize> VarProxy for ArrayVar<T, N> {
 
 impl<T: Value, const N: usize> ArrayVar<T, N> {
     pub fn len(&self) -> Expr<u32> {
-        const_(N as u32)
+        (N as u32).expr()
     }
 }
 
@@ -80,7 +80,7 @@ impl<T: Value, const N: usize> ArrayExpr<T, N> {
         Self::from_node(node)
     }
     pub fn len(&self) -> Expr<u32> {
-        const_(N as u32)
+        (N as u32).expr()
     }
 }
 
@@ -89,7 +89,7 @@ impl<T: Value, const N: usize> IndexRead for ArrayExpr<T, N> {
     fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
         let i = i.to_u64();
 
-        lc_assert!(i.cmplt(const_(N as u64)));
+        lc_assert!(i.cmplt((N as u64).expr()));
 
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(Func::ExtractElement, &[self.node, i.node()], T::type_())
@@ -102,7 +102,7 @@ impl<T: Value, const N: usize> IndexRead for ArrayVar<T, N> {
     fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
         let i = i.to_u64();
         if need_runtime_check() {
-            lc_assert!(i.cmplt(const_(N as u64)));
+            lc_assert!(i.cmplt((N as u64).expr()));
         }
 
         Expr::<T>::from_node(__current_scope(|b| {
@@ -118,7 +118,7 @@ impl<T: Value, const N: usize> IndexWrite for ArrayVar<T, N> {
         let value = value.into();
 
         if need_runtime_check() {
-            lc_assert!(i.cmplt(const_(N as u64)));
+            lc_assert!(i.cmplt((N as u64).expr()));
         }
 
         __current_scope(|b| {
@@ -211,7 +211,7 @@ impl<T: Value> VLArrayVar<T> {
     }
     pub fn len(&self) -> Expr<u32> {
         match self.node.type_().as_ref() {
-            Type::Array(ArrayType { element: _, length }) => const_(*length as u32),
+            Type::Array(ArrayType { element: _, length }) => (*length as u32).expr(),
             _ => unreachable!(),
         }
     }
@@ -286,7 +286,7 @@ impl<T: Value> VLArrayExpr<T> {
     }
     pub fn len(&self) -> Expr<u64> {
         match self.node.type_().as_ref() {
-            Type::Array(ArrayType { element: _, length }) => const_(*length as u64),
+            Type::Array(ArrayType { element: _, length }) => (*length as u64).expr(),
             _ => unreachable!(),
         }
     }

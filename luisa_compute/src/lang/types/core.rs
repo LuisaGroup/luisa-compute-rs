@@ -70,7 +70,7 @@ macro_rules! impl_prim {
     ($t:ty) => {
         impl From<$t> for _prim::Expr<$t> {
             fn from(v: $t) -> Self {
-                const_(v)
+                (v).expr()
             }
         }
         impl From<Var<$t>> for _prim::Expr<$t> {

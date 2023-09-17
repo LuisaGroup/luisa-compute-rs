@@ -5,19 +5,19 @@ use std::hash::Hash;
 
 use crate::resource::Buffer;
 use crate::Device;
-use luisa_compute_derive::__Value;
+use luisa_compute_derive::Value;
 
 use super::*;
 
 pub struct PolyArray<K, T: ?Sized + 'static> {
     tag: i32,
     key: K,
-    get: Box<dyn Fn(&Self, Uint) -> Box<T>>,
+    get: Box<dyn Fn(&Self, Expr<u32>) -> Box<T>>,
     _marker: std::marker::PhantomData<T>,
 }
 
 impl<K, T: ?Sized + 'static> PolyArray<K, T> {
-    pub fn new(tag: i32, key: K, get: Box<dyn Fn(&Self, Uint) -> Box<T>>) -> Self {
+    pub fn new(tag: i32, key: K, get: Box<dyn Fn(&Self, Expr<u32>) -> Box<T>>) -> Self {
         Self {
             tag,
             get,
@@ -78,7 +78,7 @@ impl<K: 'static, T: ?Sized + 'static> PolyVec<K, T> {
     }
 }
 
-#[derive(Clone, Copy, Debug, __Value, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, Value, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(C)]
 pub struct TagIndex {
     pub tag: u32,

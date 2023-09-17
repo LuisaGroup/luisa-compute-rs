@@ -1,5 +1,5 @@
 use super::*;
-use luisa_compute_derive::__Value;
+use luisa_compute_derive::Value;
 
 pub mod array;
 pub mod core;
@@ -9,6 +9,31 @@ pub mod vector;
 
 pub type Expr<T> = <T as Value>::Expr;
 pub type Var<T> = <T as Value>::Var;
+
+pub enum ValueType {
+    Value,
+    Expr,
+    Var,
+}
+
+pub trait AsExpr<T: Value, const SOURCE: ValueType> {
+    fn as_expr(self) -> Expr<T>;
+}
+impl<T: Value> AsExpr<T, { ValueType::Expr }> for Expr<T> {
+    fn as_expr(self) -> Expr<T> {
+        *self
+    }
+}
+impl<T: Value> AsExpr<T, { ValueType::Value }> for T {
+    fn as_expr(self) -> Expr<T> {
+        self.expr()
+    }
+}
+impl<T: Value> AsExpr<T, { ValueType::Var }> for Var<T> {
+    fn as_expr(self) -> Expr<T> {
+        self.load()
+    }
+}
 
 pub trait Value: Copy + ir::TypeOf + 'static {
     type Expr: ExprProxy<Value = Self>;
@@ -69,7 +94,9 @@ pub trait VarProxy: Copy + Aggregate + FromNode {
             }
         })
     }
-    fn zeroed() -> Self {}
+    fn zeroed() -> Self {
+        local_zeroed::<Self::Value>()
+    }
 }
 
 pub struct VarDerefProxy<P, T: Value>

@@ -1,5 +1,7 @@
 #![allow(unused_unsafe)]
 
+extern crate self as luisa_compute;
+
 use std::any::Any;
 use std::backtrace::Backtrace;
 use std::path::Path;
@@ -7,7 +9,7 @@ use std::sync::Arc;
 
 pub mod lang;
 pub mod resource;
-// pub mod rtx;
+pub mod rtx;
 pub mod runtime;
 
 pub use half::f16;
@@ -15,23 +17,18 @@ pub use half::f16;
 pub use luisa_compute_backend as backend;
 
 pub mod prelude {
+    pub use crate::lang::ops::*;
     pub use crate::lang::poly::PolymorphicImpl;
-    pub use crate::lang::traits::{
-        CommonVarOp, FloatVarTrait, IntVarTrait, VarCmp, VarCmpEq, VarTrait,
-    };
     pub use crate::lang::{
-        Aggregate, ExprProxy, FromNode, IndexRead, IndexWrite, KernelBuildFn, KernelParameter,
-        KernelSignature, Mask, Value, VarProxy,
+        Aggregate, ExprProxy, FromNode, IndexRead, IndexWrite,
+         Mask, Value, VarProxy,
     };
+    pub use crate::lang::kernel::{KernelBuildFn, KernelParameter, KernelSignature};
     // pub use crate::lang::{
     //     __compose, __cpu_dbg, __current_scope, __env_need_backtrace, __extract, __insert,
     //     __module_pools, __new_user_node, __pop_scope,
     // };
-    pub use crate::lang::math::*;
-    pub use crate::lang::swizzle::*;
-    pub use crate::lang::{
-        dispatch_id, dispatch_size, Bool, F16, F32, F64, I16, I32, I64, U16, U32, U64,
-    };
+    pub use crate::lang::{dispatch_id, dispatch_size, *};
     pub use crate::resource::{IoTexel, StorageTexel};
     pub use crate::runtime::KernelArg;
     pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, while_};
@@ -43,10 +40,7 @@ pub use api::{
     AccelBuildModificationFlags, AccelBuildRequest, AccelOption, AccelUsageHint, MeshType,
     PixelFormat, PixelStorage,
 };
-pub use lang::math::*;
-pub use lang::poly::*;
-pub use lang::traits::*;
-pub use lang::{math, poly, *};
+pub use lang::*;
 pub use luisa_compute_derive::*;
 pub use luisa_compute_ir::ir::UserNodeData;
 pub use resource::*;
@@ -56,7 +50,7 @@ pub use {glam, log, luisa_compute_derive as derive};
 pub mod macros {
     pub use crate::{
         cpu_dbg, if_, impl_new_poly_array, impl_polymorphic, lc_assert, lc_dbg, lc_debug, lc_error,
-        lc_info, lc_log, lc_unreachable, lc_warn, loop_, struct_, var, while_,
+        lc_info, lc_log, lc_unreachable, lc_warn, loop_, struct_, while_,
     };
 }
 

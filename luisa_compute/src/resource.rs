@@ -3,10 +3,13 @@ use std::ops::RangeBounds;
 use std::process::abort;
 use std::sync::Arc;
 
+use crate::lang::index::*;
 use crate::lang::types::core::*;
 use crate::lang::types::vector::*;
 use crate::lang::types::*;
 use crate::runtime::*;
+use crate::lang::ir::{TypeOf, CArc, Type};
+use crate::lang::debug::*;
 
 use crate::macros::lc_assert;
 use crate::*;
@@ -1339,7 +1342,7 @@ impl<T: Value> IndexRead for BindlessBufferVar<T> {
 }
 impl<T: Value> BindlessBufferVar<T> {
     pub fn len(&self) -> Expr<u64> {
-        let stride = const_(T::type_().size() as u64);
+        let stride = (T::type_().size() as u64).expr();
         Expr::<u64>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessBufferSize,
@@ -1380,7 +1383,7 @@ impl BindlessByteBufferVar {
         }))
     }
     pub fn len(&self) -> Expr<u64> {
-        let s = const_(1u64);
+        let s = (1u64).expr();
         Expr::<u64>::from_node(__current_scope(|b| {
             b.call(
                 Func::BindlessBufferSize,

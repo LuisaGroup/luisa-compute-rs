@@ -1,12 +1,12 @@
 use std::env::current_exe;
 use std::f32::consts::PI;
 
+use luisa::lang::poly::*;
 use luisa::prelude::*;
-use luisa::{impl_polymorphic, Float, Value};
 use luisa_compute as luisa;
 
 trait Area {
-    fn area(&self) -> Float;
+    fn area(&self) -> Expr<f32>;
 }
 #[derive(Value, Clone, Copy)]
 #[repr(C)]
@@ -14,7 +14,7 @@ pub struct Circle {
     radius: f32,
 }
 impl Area for CircleExpr {
-    fn area(&self) -> Float {
+    fn area(&self) -> Expr<f32> {
         PI * self.radius() * self.radius()
     }
 }
@@ -25,13 +25,12 @@ pub struct Square {
     side: f32,
 }
 impl Area for SquareExpr {
-    fn area(&self) -> Float {
+    fn area(&self) -> Expr<f32> {
         self.side() * self.side()
     }
 }
 impl_polymorphic!(Area, Square);
 fn main() {
-    use luisa::*;
     let ctx = Context::new(current_exe().unwrap());
     let device = ctx.create_device("cpu");
     let circles = device.create_buffer::<Circle>(2);

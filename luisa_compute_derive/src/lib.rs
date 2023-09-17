@@ -65,7 +65,7 @@ pub fn _log(item: TokenStream) -> TokenStream {
         .enumerate()
         .map(|(i, a)| syn::Ident::new(&format!("__log_priv_arg{}", i), a.span()))
         .collect::<Vec<_>>();
-    quote!{
+    quote! {
         {
             #(
                 let #arg_idents = #args;
@@ -73,19 +73,20 @@ pub fn _log(item: TokenStream) -> TokenStream {
             let mut __log_priv_i = 0;
             let log_fn = Box::new(move |args: &[*const u32]| -> () {
                 let mut i = 0;
-                luisa_compute::lang::printer::_log::log!(#level, #fmt , #(
+                luisa_compute::printer::_log::log!(#level, #fmt , #(
                     {
-                        let ret = luisa_compute::lang::printer::_unpack_from_expr(args[i], #arg_idents);
+                        let ret = luisa_compute::printer::_unpack_from_expr(args[i], #arg_idents);
                         i += 1;
                         ret
                     }
                 ), *);
             });
-            let mut printer_args = luisa_compute::lang::printer::PrinterArgs::new();
+            let mut printer_args = luisa_compute::printer::PrinterArgs::new();
             #(
                 printer_args.append(#arg_idents);
             )*
             #printer._log(#level, printer_args, log_fn);
         }
-    }.into()
+    }
+    .into()
 }

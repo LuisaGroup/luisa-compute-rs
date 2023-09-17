@@ -2,8 +2,7 @@ use luisa::prelude::*;
 use luisa_compute as luisa;
 use std::env::current_exe;
 fn main() {
-    use luisa::*;
-    init_logger();
+    luisa::init_logger();
 
     std::env::set_var("WINIT_UNIX_BACKEND", "x11");
 
@@ -24,14 +23,13 @@ fn main() {
     let palette = device.create_callable::<fn(Expr<f32>) -> Expr<Float3>>(&|d| {
         Float3::expr(0.2, 0.7, 0.9).lerp(Float3::expr(1.0, 0.0, 1.0), Float3Expr::splat(d))
     });
-    let rotate =
-        device.create_callable::<fn(Expr<Float2>, Expr<f32>) -> Expr<Float2>>(&|mut p, a| {
-            let c = a.cos();
-            let s = a.sin();
-            Float2::expr(p.dot(Float2::expr(c, s)), p.dot(Float2::expr(-s, c)))
-        });
+    let rotate = device.create_callable::<fn(Expr<Float2>, Expr<f32>) -> Expr<Float2>>(&|p, a| {
+        let c = a.cos();
+        let s = a.sin();
+        Float2::expr(p.dot(Float2::expr(c, s)), p.dot(Float2::expr(-s, c)))
+    });
     let map = device.create_callable::<fn(Expr<Float3>, Expr<f32>) -> Expr<f32>>(&|mut p, time| {
-        for i in 0..8 {
+        for _i in 0..8 {
             let t = time * 0.2;
             let r = rotate.call(p.xz(), t);
             p = Float3::expr(r.x(), r.y(), p.y()).xzy();
@@ -43,10 +41,10 @@ fn main() {
     });
     let rm = device.create_callable::<fn(Expr<Float3>, Expr<Float3>, Expr<f32>) -> Expr<Float4>>(
         &|ro, rd, time| {
-            let t = var!(f32, 0.0);
-            let col = var!(Float3);
-            let d = var!(f32);
-            for_range(0i32..64, |i| {
+            let t = 0.0_f32.var();
+            let col = Var::<Float3>::zeroed();
+            let d = Var::<f32>::zeroed();
+            for_range(0i32..64, |_i| {
                 let p = ro + rd * *t;
                 *d.get_mut() = map.call(p, time) * 0.5;
                 if_!(d.cmplt(0.02) | d.cmpgt(100.0), { break_() });

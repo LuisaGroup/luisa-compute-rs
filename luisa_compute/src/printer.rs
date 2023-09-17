@@ -10,6 +10,8 @@ use crate::internal_prelude::*;
 
 use crate::lang::{pack_to, packed_size};
 
+pub use crate::{lc_debug, lc_error, lc_info, lc_warn};
+
 pub type LogFn = Box<dyn Fn(&[*const u32]) + Send + Sync>;
 struct PrinterItem {
     log_fn: LogFn,

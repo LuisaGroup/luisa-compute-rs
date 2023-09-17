@@ -32,7 +32,6 @@ pub mod index;
 pub mod maybe_expr;
 pub mod ops;
 pub mod poly;
-pub mod printer;
 pub mod swizzle;
 pub mod types;
 

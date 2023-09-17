@@ -1,10 +1,10 @@
 use std::env::current_exe;
 
+use luisa::prelude::*;
 use luisa_compute as luisa;
 
 fn main() {
-    use luisa::*;
-    init_logger();
+    luisa::init_logger();
     let args: Vec<String> = std::env::args().collect();
     assert!(
         args.len() <= 2,

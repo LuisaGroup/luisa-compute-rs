@@ -1,8 +1,8 @@
-use luisa::*;
+use luisa::prelude::*;
 use luisa_compute as luisa;
 #[derive(Aggregate)]
 pub struct Spectrum {
-    samples: Vec<Float>,
+    samples: Vec<Expr<f32>>,
 }
 
 #[derive(Aggregate)]

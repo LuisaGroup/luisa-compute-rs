@@ -47,6 +47,7 @@ impl Compiler {
         }
     }
     pub fn derive_kernel_arg(&self, struct_: &ItemStruct) -> TokenStream {
+        let runtime_path = self.runtime_path();
         let span = struct_.span();
         let name = &struct_.ident;
         let vis = &struct_.vis;
@@ -85,26 +86,26 @@ impl Compiler {
         let parameter_name = syn::Ident::new(&format!("{}Var", name), name.span());
         let parameter_def = quote!(
             #vis struct #parameter_name #generics {
-                #(#field_vis #field_names: <#field_types as luisa_compute::runtime::KernelArg>::Parameter),*
+                #(#field_vis #field_names: <#field_types as #runtime_path::KernelArg>::Parameter),*
             }
         );
         quote_spanned!(span=>
             #parameter_def
 
-            impl #impl_generics luisa_compute::lang::KernelParameter for #parameter_name #ty_generics #where_clause{
-                fn def_param(builder: &mut luisa_compute::KernelBuilder) -> Self {
+            impl #impl_generics #runtime_path::KernelParameter for #parameter_name #ty_generics #where_clause{
+                fn def_param(builder: &mut #runtime_path::KernelBuilder) -> Self {
                     Self{
-                        #(#field_names:  luisa_compute::lang::KernelParameter::def_param(builder)),*
+                        #(#field_names:  #runtime_path::KernelParameter::def_param(builder)),*
                     }
                 }
             }
-            impl #impl_generics luisa_compute::runtime::KernelArg for #name #ty_generics #where_clause{
+            impl #impl_generics #runtime_path::KernelArg for #name #ty_generics #where_clause{
                 type Parameter = #parameter_name #ty_generics;
-                fn encode(&self, encoder: &mut  luisa_compute::KernelArgEncoder) {
+                fn encode(&self, encoder: &mut  #runtime_path::KernelArgEncoder) {
                     #(self.#field_names.encode(encoder);)*
                 }
             }
-            impl #impl_generics luisa_compute::runtime::AsKernelArg<#name #ty_generics> for #name #ty_generics #where_clause {
+            impl #impl_generics #runtime_path::AsKernelArg<#name #ty_generics> for #name #ty_generics #where_clause {
             }
         )
     }
@@ -376,7 +377,7 @@ impl Compiler {
                 fn to_nodes(&self, nodes: &mut Vec<#lang_path::NodeRef>) {
                     #(self.#field_names.to_nodes(nodes);)*
                 }
-                fn from_nodes<__I: Iterator<Item = #lang_path  ::NodeRef>>(iter: &mut __I) -> Self {
+                fn from_nodes<__I: Iterator<Item = #lang_path::NodeRef>>(iter: &mut __I) -> Self {
                     #(let #field_names = <#field_types as #lang_path::Aggregate>::from_nodes(iter);)*
                     Self{
                         #(#field_names,)*
@@ -404,7 +405,7 @@ impl Compiler {
                     quote_spanned! {
                         field_span=>
                         Self::#name{#(#named),*}=>{
-                            nodes.push(__new_user_node(#i));
+                            nodes.push(#lang_path::__new_user_node(#i));
                             #(#named.to_nodes(nodes);)*
                         }
                     }
@@ -414,7 +415,7 @@ impl Compiler {
                     quote_spanned! {
                         field_span=>
                         Self::#name(#(#fields),*)=>{
-                            nodes.push(__new_user_node(#i));
+                            nodes.push(#lang_path::__new_user_node(#i));
                             #(#fields.to_nodes(nodes);)*
                         }
                     }
@@ -463,7 +464,7 @@ impl Compiler {
         quote_spanned! {span=>
             impl #lang_path::Aggregate for #name{
                 #[allow(non_snake_case)]
-                fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+                fn from_nodes<I: Iterator<Item = #lang_path::NodeRef>>(iter: &mut I) -> Self {
                     let variant = iter.next().unwrap();
                     let variant = variant.unwrap_user_data::<usize>();
                     match variant{
@@ -472,7 +473,7 @@ impl Compiler {
                     }
                 }
                 #[allow(non_snake_case)]
-                fn to_nodes(&self, nodes: &mut Vec<NodeRef>){
+                fn to_nodes(&self, nodes: &mut Vec<#lang_path::NodeRef>){
                     match self {
                         #(#to_nodes)*
                     }

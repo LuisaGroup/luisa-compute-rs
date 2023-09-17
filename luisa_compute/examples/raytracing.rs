@@ -1,14 +1,13 @@
 use std::env::current_exe;
 
 use image::Rgb;
-#[allow(unused_imports)]
 use luisa::prelude::*;
+use luisa::rtx::{AccelBuildRequest, AccelOption, RayExpr};
 use luisa_compute as luisa;
 use winit::event::{Event as WinitEvent, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 fn main() {
-    use luisa::*;
-    init_logger();
+    luisa::init_logger();
 
     std::env::set_var("WINIT_UNIX_BACKEND", "x11");
 
@@ -48,7 +47,7 @@ fn main() {
         let o = Float3::expr(0.0, 0.0, -1.0);
         let d = Float3::expr(xy.x(), xy.y(), 0.0) - o;
         let d = d.normalize();
-        let ray = rtx::RayExpr::new(o, 1e-3, d, 1e9);
+        let ray = RayExpr::new(o, 1e-3, d, 1e9);
         let hit = accel.trace_closest(ray);
         let img = img.view(0).var();
         let color = select(

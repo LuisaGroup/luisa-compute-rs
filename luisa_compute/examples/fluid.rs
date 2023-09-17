@@ -4,9 +4,7 @@ use std::env::current_exe;
 use std::mem::swap;
 use std::time::Instant;
 
-#[allow(unused_imports)]
 use luisa::prelude::*;
-use luisa::{init_logger, *};
 use luisa_compute as luisa;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -14,7 +12,7 @@ use winit::event_loop::{ControlFlow, EventLoop};
 const N_GRID: i32 = 512;
 
 fn main() {
-    init_logger();
+    luisa::init_logger();
     std::env::set_var("WINIT_UNIX_BACKEND", "x11");
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 2 {
@@ -76,11 +74,11 @@ fn main() {
         p.x() + p.y() * N_GRID as u32
     };
 
-    let lookup_float = |f: &BufferVar<f32>, x: Int, y: Int| -> Float {
+    let lookup_float = |f: &BufferVar<f32>, x: Expr<i32>, y: Expr<i32>| -> Expr<f32> {
         return f.read(index(Uint2::expr(x.uint(), y.uint())));
     };
 
-    let sample_float = |f: BufferVar<f32>, x: Float, y: Float| -> Float {
+    let sample_float = |f: BufferVar<f32>, x: Expr<f32>, y: Expr<f32>| -> Expr<f32> {
         let lx = x.floor().int();
         let ly = y.floor().int();
 
@@ -93,11 +91,11 @@ fn main() {
         return s0.lerp(s1, ty);
     };
 
-    let lookup_vel = |f: &BufferVar<Float2>, x: Int, y: Int| -> Float2Expr {
+    let lookup_vel = |f: &BufferVar<Float2>, x: Expr<i32>, y: Expr<i32>| -> Float2Expr {
         return f.read(index(Uint2::expr(x.uint(), y.uint())));
     };
 
-    let sample_vel = |f: BufferVar<Float2>, x: Float, y: Float| -> Float2Expr {
+    let sample_vel = |f: BufferVar<Float2>, x: Expr<f32>, y: Expr<f32>| -> Float2Expr {
         let lx = x.floor().int();
         let ly = y.floor().int();
 

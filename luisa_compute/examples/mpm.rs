@@ -2,9 +2,7 @@
 use std::env::current_exe;
 use std::time::Instant;
 
-#[allow(unused_imports)]
 use luisa::prelude::*;
-use luisa::{init_logger, *};
 use luisa_compute as luisa;
 use rand::Rng;
 use winit::event::{Event, WindowEvent};
@@ -24,7 +22,7 @@ const E: f32 = 400.0f32;
 const RESOLUTION: u32 = 512;
 
 fn main() {
-    init_logger();
+    luisa::init_logger();
     std::env::set_var("WINIT_UNIX_BACKEND", "x11");
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 2 {
@@ -98,7 +96,7 @@ fn main() {
         grid_m.var().write(idx, 0.0f32);
     });
 
-    let point_to_grid = device.create_kernel_async::<fn()>(&track!(|| {
+    let point_to_grid = device.create_kernel_async::<fn()>(&|| {
         let p = dispatch_id().x();
         let xp = x.var().read(p) / DX;
         let base = (xp - 0.5f32).int();
@@ -124,28 +122,30 @@ fn main() {
             grid_v.var().atomic_fetch_add(idx * 2 + 1, vadd.y());
             grid_m.var().atomic_fetch_add(idx, weight * P_MASS);
         }
-    }));
+    });
 
     let simulate_grid = device.create_kernel_async::<fn()>(&track!(|| {
         let coord = dispatch_id().xy();
         let i = index(coord);
-        let v = var!(Float2);
+        let v = Var::<Float2>::zeroed();
         v.store(Float2::expr(
             grid_v.var().read(i * 2u32),
             grid_v.var().read(i * 2u32 + 1u32),
         ));
         let m = grid_m.var().read(i);
 
-        v.store(select(m > 0.0f32, v.load() / m, v.load()));
+        v.store(select(m.cmpgt(0.0f32), v.load() / m, v.load()));
         let vx = v.load().x();
         let vy = v.load().y() - DT * GRAVITY;
         let vx = select(
-            coord.x() > BOUND && vx > 0.0f32 || coord.x() + BOUND > N_GRID as u32 && vx > 0.0f32,
+            ((coord.x() < BOUND) && (vx < 0.0f32))
+                || (coord.x() + BOUND > N_GRID as u32) && (vx > 0.0f32),
             0.0f32.into(),
             vx,
         );
         let vy = select(
-            coord.y() > BOUND && vy > 0.0f32 || coord.y() + BOUND > N_GRID as u32 && vy > 0.0f32,
+            ((coord.y() < BOUND) && (vy < 0.0f32))
+                || (coord.y() + BOUND > N_GRID as u32) && (vy > 0.0f32),
             0.0f32.into(),
             vy,
         );
@@ -164,8 +164,8 @@ fn main() {
             0.75f32 - (fx - 1.0f32) * (fx - 1.0f32),
             0.5f32 * (fx - 0.5f32) * (fx - 0.5f32),
         ];
-        let new_v = var!(Float2);
-        let new_C = var!(Mat2);
+        let new_v = Var::<Float2>::zeroed();
+        let new_C = Var::<Mat2>::zeroed();
         new_v.store(Float2::expr(0.0f32, 0.0f32));
         new_C.store(Mat2::expr(Float2::expr(0., 0.), Float2::expr(0., 0.)));
         for ii in 0..9 {

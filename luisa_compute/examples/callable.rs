@@ -1,13 +1,9 @@
-use luisa::derive::*;
 use luisa::prelude::*;
-use luisa::Value;
 use luisa_compute as luisa;
 use std::env::current_exe;
 
 fn main() {
-    use luisa::*;
-    init_logger();
-    let ctx = Context::new(current_exe().unwrap());
+    luisa::init_logger();
     let args: Vec<String> = std::env::args().collect();
     assert!(
         args.len() <= 2,
@@ -21,7 +17,7 @@ fn main() {
     } else {
         "cpu"
     });
-    let add = device.create_callable::<fn(Expr<f32>, Expr<f32>)->Expr<f32>>(&|a, b| a + b);
+    let add = device.create_callable::<fn(Expr<f32>, Expr<f32>) -> Expr<f32>>(&|a, b| a + b);
     let x = device.create_buffer::<f32>(1024);
     let y = device.create_buffer::<f32>(1024);
     let z = device.create_buffer::<f32>(1024);

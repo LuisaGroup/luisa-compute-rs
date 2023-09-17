@@ -7,6 +7,8 @@ use crate::internal_prelude::*;
 
 use crate::lang::control_flow::switch;
 
+pub use crate::impl_polymorphic;
+
 pub struct PolyArray<K, T: ?Sized + 'static> {
     tag: i32,
     key: K,
@@ -45,7 +47,7 @@ macro_rules! impl_new_poly_array {
 #[macro_export]
 macro_rules! impl_polymorphic {
     ($trait_:ident, $ty:ty) => {
-        impl PolymorphicImpl<dyn $trait_> for $ty {
+        impl luisa_compute::lang::poly::PolymorphicImpl<dyn $trait_> for $ty {
             fn new_poly_array<K>(
                 buffer: &luisa_compute::resource::Buffer<Self>,
                 tag: i32,

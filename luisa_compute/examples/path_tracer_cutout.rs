@@ -2,17 +2,16 @@ use image::Rgb;
 use luisa_compute_api_types::StreamTag;
 use rand::Rng;
 use std::env::current_exe;
-use std::ops::{BitAnd, DerefMut};
 use std::time::Instant;
 use winit::event::{Event as WinitEvent, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event_loop::EventLoop;
 
-#[allow(unused_imports)]
 use luisa::prelude::*;
-use luisa::rtx::{offset_ray_origin, Accel, AccelVar, Index, Ray};
-use luisa::{Expr, Float3, Value};
+use luisa::rtx::{
+    offset_ray_origin, Accel, AccelBuildRequest, AccelOption, AccelVar, Index, Ray, RayQuery,
+    TriangleCandidate,
+};
 use luisa_compute as luisa;
-use luisa_compute::rtx::{RayQuery, TriangleCandidate};
 
 #[derive(Value, Clone, Copy)]
 #[repr(C)]
@@ -175,8 +174,7 @@ f -4 -3 -2 -1";
 const SPP_PER_DISPATCH: u32 = 1u32;
 
 fn main() {
-    use luisa::*;
-    init_logger();
+    luisa::init_logger();
 
     std::env::set_var("WINIT_UNIX_BACKEND", "x11");
     let args: Vec<String> = std::env::args().collect();
@@ -258,7 +256,7 @@ fn main() {
               accel: AccelVar,
               resolution: Expr<Uint2>| {
                 set_block_size([16u32, 16u32, 1u32]);
-                let cbox_materials = const_([
+                let cbox_materials = [
                     Float3::new(0.725f32, 0.710f32, 0.680f32), // floor
                     Float3::new(0.725f32, 0.710f32, 0.680f32), // ceiling
                     Float3::new(0.725f32, 0.710f32, 0.680f32), // back wall
@@ -267,7 +265,7 @@ fn main() {
                     Float3::new(0.725f32, 0.710f32, 0.680f32), // short box
                     Float3::new(0.725f32, 0.710f32, 0.680f32), // tall box
                     Float3::new(0.000f32, 0.000f32, 0.000f32), // light
-                ]);
+                ].expr();
 
                 let lcg = |state: Var<u32>| -> Expr<f32> {
                     let lcg = create_static_callable::<fn(Var<u32>)->Expr<f32>>(|state: Var<u32>| {
@@ -280,7 +278,7 @@ fn main() {
                 };
 
                 let make_ray = |o: Expr<Float3>, d: Expr<Float3>, tmin: Expr<f32>, tmax: Expr<f32>| -> Expr<Ray> {
-                    struct_!(rtx::Ray {
+                    struct_!(Ray {
                         orig: o.into(),
                         tmin: tmin,
                         dir:d.into(),
@@ -326,7 +324,7 @@ fn main() {
 
                 let coord = dispatch_id().xy();
                 let frame_size = resolution.x().min(resolution.y()).float();
-                let state = var!(u32);
+                let state = Var::<u32>::zeroed();
                 state.store(seed_image.read(coord));
 
                 let rx = lcg(state);
@@ -334,16 +332,16 @@ fn main() {
 
                 let pixel = (coord.float() + Float2::expr(rx, ry)) / frame_size * 2.0f32 - 1.0f32;
 
-                let radiance = var!(Float3);
+                let radiance = Var::<Float3>::zeroed();
                 radiance.store(Float3::expr(0.0f32, 0.0f32, 0.0f32));
                 for_range(0..SPP_PER_DISPATCH as u32, |_| {
                     let init_ray = generate_ray(pixel * Float2::expr(1.0f32, -1.0f32));
-                    let ray = var!(Ray);
+                    let ray = Var::<Ray>::zeroed();
                     ray.store(init_ray);
 
-                    let beta = var!(Float3);
+                    let beta = Var::<Float3>::zeroed();
                     beta.store(Float3::expr(1.0f32, 1.0f32, 1.0f32));
-                    let pdf_bsdf = var!(f32);
+                    let pdf_bsdf = Var::<f32>::zeroed();
                     pdf_bsdf.store(0.0f32);
 
                     let light_position = Float3::expr(-0.24f32, 1.98f32, 0.16f32);
@@ -354,20 +352,20 @@ fn main() {
                     let light_normal = light_u.cross(light_v).normalize();
 
                     let filter = |c: &TriangleCandidate| {
-                        let valid = var!(bool, true);
+                        let valid = true.var();
                         if_!(c.inst().cmpeq(5u32), { valid.store((c.bary().y() * 6.0f32).fract().cmplt(0.6f32)); });
                         if_!(c.inst().cmpeq(6u32), { valid.store((c.bary().y() * 5.0f32).fract().cmplt(0.5f32)); });
                         valid.load()
                     };
 
-                    let depth = var!(u32);
+                    let depth = Var::<u32>::zeroed();
                     while_!(depth.load().cmplt(10u32), {
                         // let hit = accel.trace_closest(ray);
                         let hit = accel.query_all(ray, 255, RayQuery {
                             on_triangle_hit: |c: TriangleCandidate| {
                                 if_!(filter(&c), { c.commit(); });
                             },
-                            on_procedural_hit: |c| {}
+                            on_procedural_hit: |_c| {}
                         });
 
                         if_!(hit.miss(), {

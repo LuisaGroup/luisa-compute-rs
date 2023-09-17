@@ -163,7 +163,7 @@ pub fn track(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
 fn track_impl(mut ast: Expr) -> TokenStream {
     (TraceVisitor {
-        flow_path: quote!(::luisa_compute::lang),
+        flow_path: quote!(::luisa_compute::lang::control_flow),
         trait_path: quote!(::luisa_compute::lang::maybe_expr),
     })
     .visit_expr_mut(&mut ast);

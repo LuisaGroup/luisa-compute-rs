@@ -8,6 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 pub mod lang;
+pub mod printer;
 pub mod resource;
 pub mod rtx;
 pub mod runtime;
@@ -18,17 +19,18 @@ pub mod prelude {
     pub use crate::lang::control_flow::{
         break_, continue_, for_range, return_, return_v, select, switch,
     };
-    pub use crate::lang::functions::{dispatch_id, dispatch_size};
+    pub use crate::lang::functions::{block_size, dispatch_id, dispatch_size, set_block_size};
     pub use crate::lang::index::{IndexRead, IndexWrite};
     pub use crate::lang::ops::*;
-    pub use crate::lang::poly::PolymorphicImpl;
     pub use crate::lang::swizzle::*;
     pub use crate::lang::types::vector::*;
     pub use crate::lang::types::{Expr, ExprProxy, Value, Var, VarProxy};
     pub use crate::lang::Aggregate;
     pub use crate::resource::{IoTexel, StorageTexel, *};
-    pub use crate::runtime::{Device, KernelBuildOptions, Scope, Stream};
-    pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, while_, Context};
+    pub use crate::runtime::{
+        create_static_callable, Command, Device, KernelBuildOptions, Scope, Stream,
+    };
+    pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, struct_, while_, Context};
 
     pub use luisa_compute_derive::*;
     pub use luisa_compute_track::track;

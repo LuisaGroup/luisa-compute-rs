@@ -1,6 +1,5 @@
-use std::io;
-use std::path::Path;
-use std::{env, fs, path::PathBuf};
+use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 fn cmake_build() -> PathBuf {
     let mut config = cmake::Config::new("./LuisaCompute");
@@ -113,8 +112,7 @@ fn copy_dlls(out_dir: &PathBuf) {
     for entry in std::fs::read_dir(out_dir).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
-        if is_path_dll(&path)
-        {
+        if is_path_dll(&path) {
             // let target_dir = get_output_path();
             let comps: Vec<_> = path.components().collect();
             let copy_if_different = |src, dst| {
@@ -191,4 +189,3 @@ fn main() {
     let out_dir = cmake_build();
     copy_dlls(&out_dir);
 }
-

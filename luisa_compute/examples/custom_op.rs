@@ -1,7 +1,7 @@
 use std::env::current_exe;
 
-use luisa::lang::*;
-use luisa::Value;
+use luisa::lang::debug::CpuFn;
+use luisa::prelude::*;
 use luisa_compute as luisa;
 #[derive(Clone, Copy, Value, Debug)]
 #[repr(C)]
@@ -12,8 +12,6 @@ pub struct MyAddArgs {
 }
 
 fn main() {
-    use luisa::*;
-
     let ctx = Context::new(current_exe().unwrap());
     let device = ctx.create_device("cpu");
     let x = device.create_buffer::<f32>(1024);
@@ -36,7 +34,7 @@ fn main() {
         let tid = dispatch_id().x();
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
-        let args = MyAddArgsExpr::new(x, y, Float::zero());
+        let args = MyAddArgsExpr::new(x, y, Expr::<f32>::zero());
         let result = my_add.call(args);
         let _ = my_print.call(tid);
         if_!(tid.cmpeq(0), {

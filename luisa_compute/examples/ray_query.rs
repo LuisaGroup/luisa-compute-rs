@@ -1,11 +1,10 @@
 use std::env::current_exe;
 
 use image::Rgb;
-use luisa::derive::*;
-#[allow(unused_imports)]
 use luisa::prelude::*;
-use luisa::rtx::{Aabb, ProceduralCandidate, RayQuery, TriangleCandidate};
-use luisa::{Float3, PackedFloat3};
+use luisa::rtx::{
+    Aabb, AccelBuildRequest, AccelOption, ProceduralCandidate, RayExpr, RayQuery, TriangleCandidate,
+};
 use luisa_compute as luisa;
 use winit::event::{Event as WinitEvent, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -34,8 +33,7 @@ impl Sphere {
 }
 
 fn main() {
-    use luisa::*;
-    init_logger();
+    luisa::init_logger();
 
     std::env::set_var("WINIT_UNIX_BACKEND", "x11");
 
@@ -76,7 +74,7 @@ fn main() {
             radius: 0.8,
         },
     ];
-    let aabb = device.create_buffer_from_slice::<rtx::Aabb>(&[
+    let aabb = device.create_buffer_from_slice::<Aabb>(&[
         spheres[0].aabb(),
         spheres[1].aabb(),
         spheres[2].aabb(),
@@ -113,7 +111,7 @@ fn main() {
         let o = Float3::expr(0.0, 0.0, -2.0);
         let d = Float3::expr(xy.x(), xy.y(), 0.0) - o;
         let d = d.normalize();
-        let ray = rtx::RayExpr::new(o + const_(translate), 1e-3, d, 1e9);
+        let ray = RayExpr::new(o + translate.expr(), 1e-3, d, 1e9);
         let hit = accel.query_all(
             ray,
             255,
@@ -141,10 +139,10 @@ fn main() {
                     let sphere = spheres.var().read(prim);
                     let o = ray.orig().unpack();
                     let d = ray.dir().unpack();
-                    let t = var!(f32);
+                    let t = Var::<f32>::zeroed();
 
-                    for_range(const_(0i32)..const_(100i32), |_| {
-                        let dist = (o + d * t.load() - (sphere.center() + const_(translate)))
+                    for_range(0i32.expr()..100i32.expr(), |_| {
+                        let dist = (o + d * t.load() - (sphere.center() + translate.expr()))
                             .length()
                             - sphere.radius();
                         if_!(dist.cmplt(0.001), {

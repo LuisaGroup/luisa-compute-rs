@@ -21,7 +21,7 @@ fn main() {
     });
 
     let palette = device.create_callable::<fn(Expr<f32>) -> Expr<Float3>>(&|d| {
-        Float3::expr(0.2, 0.7, 0.9).lerp(Float3::expr(1.0, 0.0, 1.0), Float3Expr::splat(d))
+        Float3::expr(0.2, 0.7, 0.9).lerp(Float3::expr(1.0, 0.0, 1.0), Expr::<Float3>::splat(d))
     });
     let rotate = device.create_callable::<fn(Expr<Float2>, Expr<f32>) -> Expr<Float2>>(&|p, a| {
         let c = a.cos();
@@ -37,7 +37,7 @@ fn main() {
             p = Float3::expr(r.x(), r.y(), p.z());
             p = Float3::expr(p.x().abs() - 0.5, p.y(), p.z().abs() - 0.5)
         }
-        Float3Expr::splat(1.0).copysign(p).dot(p) * 0.2
+        Expr::<Float3>::splat(1.0).copysign(p).dot(p) * 0.2
     });
     let rm = device.create_callable::<fn(Expr<Float3>, Expr<Float3>, Expr<f32>) -> Expr<Float4>>(
         &|ro, rd, time| {
@@ -74,7 +74,7 @@ fn main() {
         let color = col.xyz();
         let alpha = col.w();
         let old = img.read(xy).xyz();
-        let accum = color.lerp(old, Float3Expr::splat(alpha));
+        let accum = color.lerp(old, Expr::<Float3>::splat(alpha));
         img.write(xy, Float4::expr(accum.x(), accum.y(), accum.z(), 1.0));
     });
 }

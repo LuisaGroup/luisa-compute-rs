@@ -149,14 +149,6 @@ impl VisitMut for TraceVisitor {
 }
 
 #[proc_macro]
-pub fn escape(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    abort!(
-        proc_macro2::Span::call_site(),
-        "`escape!` macro must be used within a `track!` block"
-    )
-}
-
-#[proc_macro]
 pub fn track(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     track_impl(parse_macro_input!(input as Expr)).into()
 }

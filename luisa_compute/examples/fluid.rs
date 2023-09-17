@@ -91,11 +91,11 @@ fn main() {
         return s0.lerp(s1, ty);
     };
 
-    let lookup_vel = |f: &BufferVar<Float2>, x: Expr<i32>, y: Expr<i32>| -> Float2Expr {
+    let lookup_vel = |f: &BufferVar<Float2>, x: Expr<i32>, y: Expr<i32>| -> Expr<Float2> {
         return f.read(index(Uint2::expr(x.uint(), y.uint())));
     };
 
-    let sample_vel = |f: BufferVar<Float2>, x: Expr<f32>, y: Expr<f32>| -> Float2Expr {
+    let sample_vel = |f: BufferVar<Float2>, x: Expr<f32>, y: Expr<f32>| -> Expr<Float2> {
         let lx = x.floor().int();
         let ly = y.floor().int();
 

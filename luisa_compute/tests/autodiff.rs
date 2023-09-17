@@ -2,6 +2,7 @@ use std::ops::Range;
 
 use luisa::lang::diff::*;
 use luisa::lang::types::core::*;
+use luisa::lang::types::vector::*;
 use luisa::prelude::*;
 use luisa_compute as luisa;
 use rand::prelude::*;

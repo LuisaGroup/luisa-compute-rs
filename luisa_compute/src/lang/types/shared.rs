@@ -1,13 +1,16 @@
 use super::*;
+use super::array::{VLArrayExpr, VLArrayVar};
+use crate::lang::index::IntoIndex;
+use ir::ArrayType;
 
 pub struct Shared<T: Value> {
-    marker: std::marker::PhantomData<T>,
+    marker: PhantomData<T>,
     node: NodeRef,
 }
 impl<T: Value> Shared<T> {
     pub fn new(length: usize) -> Self {
         Self {
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             node: __current_scope(|b| {
                 let shared = new_node(
                     b.pools(),

@@ -1,4 +1,4 @@
-use super::*;
+use crate::internal_prelude::*;
 
 pub trait IntoIndex {
     fn to_u64(&self) -> Expr<u64>;

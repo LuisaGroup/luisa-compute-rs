@@ -3,17 +3,15 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use crate::resource::Buffer;
-use crate::Device;
-use luisa_compute_derive::Value;
+use crate::internal_prelude::*;
 
-use super::*;
+use crate::lang::control_flow::switch;
 
 pub struct PolyArray<K, T: ?Sized + 'static> {
     tag: i32,
     key: K,
     get: Box<dyn Fn(&Self, Expr<u32>) -> Box<T>>,
-    _marker: std::marker::PhantomData<T>,
+    _marker: PhantomData<T>,
 }
 
 impl<K, T: ?Sized + 'static> PolyArray<K, T> {
@@ -22,7 +20,7 @@ impl<K, T: ?Sized + 'static> PolyArray<K, T> {
             tag,
             get,
             key,
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
         }
     }
     pub fn tag(&self) -> i32 {
@@ -207,7 +205,7 @@ impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBui
    Thus a tag can be retrieved by either (Key, TypeId) or Key alone if the key is unique for all types.
  */
 pub struct Polymorphic<DevirtualizationKey, Trait: ?Sized + 'static> {
-    _marker: std::marker::PhantomData<Trait>,
+    _marker: PhantomData<Trait>,
     arrays: Vec<PolyArray<DevirtualizationKey, Trait>>,
     key_typeid_to_tag: HashMap<(DevirtualizationKey, TypeId), u32>,
     key_to_tag: HashMap<DevirtualizationKey, Option<u32>>,
@@ -277,7 +275,7 @@ impl<'a, K: Eq + Clone + Hash, T: ?Sized + 'static> PolymorphicRef<'a, K, T> {
 impl<K: Hash + Eq + Clone, T: ?Sized + 'static> Polymorphic<K, T> {
     pub fn new() -> Self {
         Self {
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
             arrays: vec![],
             key_to_tag: HashMap::new(),
             key_typeid_to_tag: HashMap::new(),

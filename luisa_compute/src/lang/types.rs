@@ -1,5 +1,8 @@
-use super::*;
-use luisa_compute_derive::Value;
+use std::any::Any;
+use std::cell::Cell;
+use std::ops::{Deref, DerefMut};
+
+use crate::internal_prelude::*;
 
 pub mod array;
 pub mod core;
@@ -10,26 +13,28 @@ pub mod vector;
 pub type Expr<T> = <T as Value>::Expr;
 pub type Var<T> = <T as Value>::Var;
 
-pub enum ValueType {
-    Value,
-    Expr,
-    Var,
-}
+pub trait ValueType {}
+pub struct ValueValueType;
+pub struct ExprValueType;
+pub struct VarValueType;
+impl ValueType for ValueValueType {}
+impl ValueType for ExprValueType {}
+impl ValueType for VarValueType {}
 
-pub trait AsExpr<T: Value, const SOURCE: ValueType> {
+pub trait AsExpr<T: Value, S: ValueType> {
     fn as_expr(self) -> Expr<T>;
 }
-impl<T: Value> AsExpr<T, { ValueType::Expr }> for Expr<T> {
+impl<T: Value> AsExpr<T, ExprValueType> for Expr<T> {
     fn as_expr(self) -> Expr<T> {
-        *self
+        self
     }
 }
-impl<T: Value> AsExpr<T, { ValueType::Value }> for T {
+impl<T: Value> AsExpr<T, ValueValueType> for T {
     fn as_expr(self) -> Expr<T> {
         self.expr()
     }
 }
-impl<T: Value> AsExpr<T, { ValueType::Var }> for Var<T> {
+impl<T: Value> AsExpr<T, VarValueType> for Var<T> {
     fn as_expr(self) -> Expr<T> {
         self.load()
     }
@@ -43,7 +48,7 @@ pub trait Value: Copy + ir::TypeOf + 'static {
         const_(self)
     }
     fn var(self) -> Self::Var {
-        local(self.expr())
+        local::<Self>(self.expr())
     }
 }
 
@@ -55,7 +60,7 @@ pub trait ExprProxy: Copy + Aggregate + FromNode {
     }
 
     fn zeroed() -> Self {
-        zeroed()
+        zeroed::<Self::Value>()
     }
 }
 
@@ -63,7 +68,7 @@ pub trait VarProxy: Copy + Aggregate + FromNode {
     type Value: Value<Var = Self>;
     fn store<U: Into<Expr<Self::Value>>>(&self, value: U) {
         let value = value.into();
-        _store(self, &value);
+        super::_store(self, &value);
     }
     fn load(&self) -> Expr<Self::Value> {
         __current_scope(|b| {
@@ -80,7 +85,7 @@ pub trait VarProxy: Copy + Aggregate + FromNode {
             var: *self,
             dirty: Cell::new(false),
             assigned: self.load(),
-            _phantom: std::marker::PhantomData,
+            _phantom: PhantomData,
         }
     }
     fn _deref<'a>(&'a self) -> &'a Expr<Self::Value> {
@@ -106,7 +111,7 @@ where
     pub(crate) var: P,
     pub(crate) dirty: Cell<bool>,
     pub(crate) assigned: Expr<T>,
-    pub(crate) _phantom: std::marker::PhantomData<T>,
+    pub(crate) _phantom: PhantomData<T>,
 }
 
 impl<P, T: Value> Deref for VarDerefProxy<P, T>

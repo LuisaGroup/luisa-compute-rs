@@ -1,8 +1,14 @@
-use super::*;
+use std::sync::Arc;
+use ir::CpuCustomOp;
+use std::ffi::CString;
+use std::fmt::Debug;
+
+use crate::internal_prelude::*;
+
 
 pub struct CpuFn<T: Value> {
     op: CArc<CpuCustomOp>,
-    _marker: std::marker::PhantomData<T>,
+    _marker: PhantomData<T>,
 }
 
 /*
@@ -23,7 +29,7 @@ impl<T: Value> CpuFn<T> {
         };
         Self {
             op: CArc::new(op),
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
         }
     }
     pub fn call(&self, arg: impl ExprProxy<Value = T>) -> Expr<T> {
@@ -55,6 +61,21 @@ impl<T: Value> CpuFn<T> {
                 T::type_(),
             )
         }))
+    }
+}
+
+extern "C" fn _trampoline<T, F: FnMut(&mut T)>(data: *mut u8, args: *mut u8) {
+    unsafe {
+        let container = &*(data as *const ClosureContainer<T>);
+        let f = &container.f;
+        let args = &mut *(args as *mut T);
+        f(args);
+    }
+}
+
+extern "C" fn _drop<T>(data: *mut u8) {
+    unsafe {
+        let _ = Box::from_raw(data as *mut T);
     }
 }
 

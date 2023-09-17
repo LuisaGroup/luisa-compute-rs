@@ -1,4 +1,8 @@
-use super::*;
+use std::ffi::CString;
+
+use crate::internal_prelude::*;
+use ir::SwitchCase;
+use super::Mask;
 
 /**
  * If you want rustfmt to format your code, use if_!(cond, { .. }, { .. }) or if_!(cond, { .. }, else, {...})
@@ -8,22 +12,22 @@ use super::*;
 #[macro_export]
 macro_rules! if_ {
     ($cond:expr, $then:block, else $else_:block) => {
-        $crate::lang::if_then_else($cond, || $then, || $else_)
+        $crate::lang::control_flow::if_then_else($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block, else, $else_:block) => {
-        $crate::lang::if_then_else($cond, || $then, || $else_)
+        $crate::lang::control_flow::if_then_else($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block, $else_:block) => {
-        $crate::lang::if_then_else($cond, || $then, || $else_)
+        $crate::lang::control_flow::if_then_else($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block) => {
-        $crate::lang::if_then_else($cond, || $then, || {})
+        $crate::lang::control_flow::if_then_else($cond, || $then, || {})
     };
 }
 #[macro_export]
 macro_rules! while_ {
     ($cond:expr,$body:block) => {
-        $crate::lang::generic_loop(|| $cond, || $body, || {})
+        $crate::lang::control_flow::generic_loop(|| $cond, || $body, || {})
     };
 }
 #[macro_export]

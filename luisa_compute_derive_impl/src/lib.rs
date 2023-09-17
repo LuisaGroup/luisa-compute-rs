@@ -241,13 +241,13 @@ impl Compiler {
             #[allow(unused_parens)]
             #vis struct #expr_proxy_name #generics{
                 node: #lang_path::NodeRef,
-                _marker: std::marker::PhantomData<(#marker_args)>,
+                _marker: PhantomData<(#marker_args)>,
             }
             #[derive(Clone, Copy, Debug)]
             #[allow(unused_parens)]
             #vis struct #var_proxy_name #generics{
                 node: #lang_path::NodeRef,
-                _marker: std::marker::PhantomData<(#marker_args)>,
+                _marker: PhantomData<(#marker_args)>,
             }
             #[allow(unused_parens)]
             impl #impl_generics #lang_path::Aggregate for #expr_proxy_name #ty_generics #where_clause {
@@ -257,7 +257,7 @@ impl Compiler {
                 fn from_nodes<__I: Iterator<Item = #lang_path::NodeRef>>(iter: &mut __I) -> Self {
                     Self{
                         node: iter.next().unwrap(),
-                        _marker:std::marker::PhantomData
+                        _marker:PhantomData
                     }
                 }
             }
@@ -269,7 +269,7 @@ impl Compiler {
                 fn from_nodes<__I: Iterator<Item = #lang_path::NodeRef>>(iter: &mut __I) -> Self {
                     Self{
                         node: iter.next().unwrap(),
-                        _marker:std::marker::PhantomData
+                        _marker:PhantomData
                     }
                 }
             }
@@ -277,7 +277,7 @@ impl Compiler {
             impl #impl_generics #lang_path::FromNode  for #expr_proxy_name #ty_generics #where_clause {
                 #[allow(unused_assignments)]
                 fn from_node(node: #lang_path::NodeRef) -> Self {
-                    Self { node, _marker:std::marker::PhantomData }
+                    Self { node, _marker:PhantomData }
                 }
             }
             #[allow(unused_parens)]
@@ -294,7 +294,7 @@ impl Compiler {
             impl #impl_generics #lang_path::FromNode for #var_proxy_name #ty_generics #where_clause {
                 #[allow(unused_assignments)]
                 fn from_node(node: #lang_path::NodeRef) -> Self {
-                    Self { node, _marker:std::marker::PhantomData }
+                    Self { node, _marker:PhantomData }
                 }
             }
             impl #impl_generics #lang_path::ToNode for #var_proxy_name #ty_generics #where_clause {
@@ -320,7 +320,7 @@ impl Compiler {
                 }
             }
             #[allow(unused_parens)]
-            impl #impl_generics #lang_path::kernel::CallableParameter for #expr_proxy_name #ty_generics #where_clause {
+            impl #impl_generics #runtime_path::CallableParameter for #expr_proxy_name #ty_generics #where_clause {
                 fn def_param(_:Option<std::rc::Rc<dyn std::any::Any>>, builder: &mut #runtime_path::KernelBuilder) -> Self {
                     builder.value::<#name #ty_generics>()
                 }
@@ -329,7 +329,7 @@ impl Compiler {
                 }
             }
             #[allow(unused_parens)]
-            impl #impl_generics #lang_path::kernel::CallableParameter for #var_proxy_name #ty_generics #where_clause  {
+            impl #impl_generics #runtime_path::CallableParameter for #var_proxy_name #ty_generics #where_clause  {
                 fn def_param(_:Option<std::rc::Rc<dyn std::any::Any>>, builder: &mut #runtime_path::KernelBuilder) -> Self {
                     builder.var::<#name #ty_generics>()
                 }
@@ -358,7 +358,7 @@ impl Compiler {
                 #vis fn new(#(#field_names: impl Into<#lang_path::types::Expr<#field_types>>),*) -> Self {
                     use #lang_path::*;
                     let node = #lang_path::__compose::<#name #ty_generics>(&[ #( ToNode::node(&#field_names.into()) ),* ]);
-                    Self { node, _marker:std::marker::PhantomData }
+                    Self { node, _marker:PhantomData }
                 }
             }
             impl #impl_generics  #var_proxy_name #ty_generics #where_clause {

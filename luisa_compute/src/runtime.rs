@@ -1,28 +1,37 @@
-use crate::backend::Backend;
-use crate::lang::{Value};
-use crate::resource::*;
-use crate::rtx::ProceduralPrimitiveHandle;
-use crate::*;
-use crate::lang::kernel::*;
-
-use api::AccelOption;
-use lang::kernel::{KernelBuildFn, KernelBuilder, KernelParameter, KernelSignature};
-pub use luisa_compute_api_types as api;
-use luisa_compute_backend::proxy::ProxyBackend;
-use luisa_compute_ir::ir::{self, KernelModule};
-use luisa_compute_ir::CArc;
-use parking_lot::lock_api::RawMutex as RawMutexTrait;
-use parking_lot::{Condvar, Mutex, RawMutex, RwLock};
-use raw_window_handle::HasRawWindowHandle;
-use rtx::{Accel, Mesh, MeshHandle};
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 use std::ffi::CString;
 use std::hash::Hash;
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Weak, Arc};
+use std::rc::Rc;
+use std::any::Any;
+use std::env;
+
+use parking_lot::lock_api::RawMutex as RawMutexTrait;
+use parking_lot::{Condvar, Mutex, RawMutex, RwLock};
+
 use winit::window::Window;
+use raw_window_handle::HasRawWindowHandle;
+
+
+use crate::internal_prelude::*;
+use ir::KernelModule;
+use ir::{ModulePools, ModuleKind, ModuleFlags, Module, CallableModuleRef, CallableModule, Capture, CpuCustomOp};
+
+use crate::backend::Backend;
+use crate::rtx::ProceduralPrimitiveHandle;
+use crate::rtx::{Accel, Mesh, MeshHandle};
+use crate::rtx;
+
+use api::AccelOption;
+pub use luisa_compute_api_types as api;
+use luisa_compute_backend::proxy::ProxyBackend;
+
+mod kernel;
+
+pub use kernel::*;
 
 #[derive(Clone)]
 pub struct Device {
@@ -184,7 +193,7 @@ impl Device {
                 handle: api::Buffer(buffer.resource.handle),
                 native_handle: buffer.resource.native_handle,
             }),
-            _marker: std::marker::PhantomData {},
+            _marker: PhantomData {},
             len: count,
         };
         buffer
@@ -207,7 +216,7 @@ impl Device {
         let array = self.create_bindless_array(slots);
         BufferHeap {
             inner: array,
-            _marker: std::marker::PhantomData {},
+            _marker: PhantomData {},
         }
     }
     pub fn create_bindless_array(&self, slots: usize) -> BindlessArray {
@@ -260,7 +269,7 @@ impl Device {
             width,
             height,
             handle,
-            marker: std::marker::PhantomData {},
+            marker: PhantomData {},
         };
         tex
     }
@@ -292,7 +301,7 @@ impl Device {
             height,
             depth,
             handle,
-            marker: std::marker::PhantomData {},
+            marker: PhantomData {},
         };
         tex
     }
@@ -649,7 +658,7 @@ impl Drop for StreamHandle {
 
 pub struct Scope<'a> {
     handle: Arc<StreamHandle>,
-    marker: std::marker::PhantomData<&'a ()>,
+    marker: PhantomData<&'a ()>,
     synchronized: Cell<bool>,
     resource_tracker: RefCell<ResourceTracker>,
 }
@@ -675,7 +684,7 @@ impl<'a> Scope<'a> {
     #[inline]
     fn command_list(&self) -> CommandList<'a> {
         CommandList::<'a> {
-            marker: std::marker::PhantomData {},
+            marker: PhantomData {},
             commands: Vec::new(),
         }
     }
@@ -821,7 +830,7 @@ impl Stream {
         self.handle.lock();
         Scope {
             handle: self.handle.clone(),
-            marker: std::marker::PhantomData {},
+            marker: PhantomData {},
             synchronized: Cell::new(false),
             resource_tracker: RefCell::new(ResourceTracker::new()),
         }
@@ -837,7 +846,7 @@ impl Stream {
 }
 
 pub(crate) struct CommandList<'a> {
-    marker: std::marker::PhantomData<&'a ()>,
+    marker: PhantomData<&'a ()>,
     commands: Vec<Command<'a>>,
 }
 
@@ -872,7 +881,7 @@ pub struct Command<'a> {
     #[allow(dead_code)]
     pub(crate) inner: api::Command,
     // is this really necessary?
-    pub(crate) marker: std::marker::PhantomData<&'a ()>,
+    pub(crate) marker: PhantomData<&'a ()>,
     pub(crate) callback: Option<Box<dyn FnOnce() + Send + 'static>>,
     #[allow(dead_code)]
     pub(crate) resource_tracker: ResourceTracker,
@@ -1166,7 +1175,7 @@ impl RawKernel {
                 args_count: args.len(),
                 dispatch_size,
             }),
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             resource_tracker: rt,
             callback: None,
         }
@@ -1179,7 +1188,7 @@ impl RawKernel {
 pub struct Callable<S: CallableSignature<'static>> {
     #[allow(dead_code)]
     pub(crate) inner: RawCallable,
-    pub(crate) _marker: std::marker::PhantomData<S>,
+    pub(crate) _marker: PhantomData<S>,
 }
 pub(crate) struct DynCallableInner<S: CallableSignature<'static>> {
     builder: Box<dyn Fn(std::rc::Rc<dyn Any>, &mut KernelBuilder) -> Callable<S>>,
@@ -1220,8 +1229,8 @@ impl<S: CallableSignature<'static>> DynCallable<S> {
         {
             let callables = &mut inner.callables;
             for c in callables {
-                if lang::__check_callable(&c.inner.module, nodes) {
-                    return CallableRet::_from_return(lang::__invoke_callable(
+                if crate::lang::__check_callable(&c.inner.module, nodes) {
+                    return CallableRet::_from_return(crate::lang::__invoke_callable(
                         &c.inner.module,
                         nodes,
                     ));
@@ -1246,12 +1255,12 @@ impl<S: CallableSignature<'static>> DynCallable<S> {
             *r.borrow_mut() = r_backup;
         });
         assert!(
-            lang::__check_callable(&new_callable.inner.module, nodes),
+            crate::lang::__check_callable(&new_callable.inner.module, nodes),
             "Callable builder returned a callable that does not match the arguments"
         );
         let callables = &mut inner.callables;
         callables.push(new_callable);
-        CallableRet::_from_return(lang::__invoke_callable(
+        CallableRet::_from_return(crate::lang::__invoke_callable(
             &callables.last().unwrap().inner.module,
             nodes,
         ))
@@ -1267,7 +1276,7 @@ pub struct RawCallable {
 
 pub struct Kernel<T: KernelSignature<'static>> {
     pub(crate) inner: RawKernel,
-    pub(crate) _marker: std::marker::PhantomData<T>,
+    pub(crate) _marker: PhantomData<T>,
 }
 unsafe impl<T: KernelSignature<'static>> Send for Kernel<T> {}
 unsafe impl<T: KernelSignature<'static>> Sync for Kernel<T> {}
@@ -1330,7 +1339,7 @@ macro_rules! impl_call_for_callable {
                 $first.encode(&mut encoder);
                 $($rest.encode(&mut encoder);)*
                 CallableRet::_from_return(
-                    lang::__invoke_callable(&self.inner.module, &encoder.args))
+                    crate::lang::__invoke_callable(&self.inner.module, &encoder.args))
             }
         }
         impl <R:CallableRet+'static, $first:CallableParameter, $($rest: CallableParameter),*> DynCallable<fn($first, $($rest,)*)->R> {
@@ -1348,7 +1357,7 @@ macro_rules! impl_call_for_callable {
         impl<R:CallableRet+'static> Callable<fn()->R> {
             pub fn call(&self)->R {
                 CallableRet::_from_return(
-                    lang::__invoke_callable(&self.inner.module, &[]))
+                    crate::lang::__invoke_callable(&self.inner.module, &[]))
             }
         }
         impl<R:CallableRet+'static> DynCallable<fn()->R> {

@@ -1,4 +1,4 @@
-use super::*;
+use crate::internal_prelude::*;
 
 pub fn thread_id() -> Expr<Uint3> {
     Expr::<Uint3>::from_node(__current_scope(|b| {
@@ -200,7 +200,7 @@ pub fn block_size() -> Expr<Uint3> {
     RECORDER.with(|r| {
         let r = r.borrow();
         let s = r.block_size.unwrap_or_else(|| panic!("Block size not set"));
-        const_::<Uint3>(Uint3::new(s[0], s[1], s[2]))
+        Uint3::new(s[0], s[1], s[2]).expr()
     })
 }
 

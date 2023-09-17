@@ -1,5 +1,8 @@
-use super::*;
 use super::array::{VLArrayExpr, VLArrayVar};
+use super::*;
+use ir::ArrayType;
+use std::rc::Rc;
+use std::any::Any;
 
 #[derive(Clone, Copy)]
 pub struct DynExpr {

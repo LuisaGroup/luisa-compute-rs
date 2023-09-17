@@ -1,21 +1,23 @@
 use super::*;
+use crate::lang::index::IntoIndex;
+use ir::ArrayType;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ArrayExpr<T: Value, const N: usize> {
-    marker: std::marker::PhantomData<T>,
+    marker: PhantomData<T>,
     node: NodeRef,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct ArrayVar<T: Value, const N: usize> {
-    marker: std::marker::PhantomData<T>,
+    marker: PhantomData<T>,
     node: NodeRef,
 }
 
 impl<T: Value, const N: usize> FromNode for ArrayExpr<T, N> {
     fn from_node(node: NodeRef) -> Self {
         Self {
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             node,
         }
     }
@@ -39,7 +41,7 @@ impl<T: Value, const N: usize> Aggregate for ArrayExpr<T, N> {
 impl<T: Value, const N: usize> FromNode for ArrayVar<T, N> {
     fn from_node(node: NodeRef) -> Self {
         Self {
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             node,
         }
     }
@@ -139,14 +141,14 @@ impl<T: Value + TypeOf, const N: usize> Value for [T; N] {
 // TODO: What's the point of the two separate arrays?
 #[derive(Clone, Copy, Debug)]
 pub struct VLArrayExpr<T: Value> {
-    marker: std::marker::PhantomData<T>,
-    node: NodeRef,
+    marker: PhantomData<T>,
+    pub(super) node: NodeRef,
 }
 
 impl<T: Value> FromNode for VLArrayExpr<T> {
     fn from_node(node: NodeRef) -> Self {
         Self {
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             node,
         }
     }
@@ -169,14 +171,14 @@ impl<T: Value> Aggregate for VLArrayExpr<T> {
 
 #[derive(Clone, Copy, Debug)]
 pub struct VLArrayVar<T: Value> {
-    marker: std::marker::PhantomData<T>,
+    marker: PhantomData<T>,
     node: NodeRef,
 }
 
 impl<T: Value> FromNode for VLArrayVar<T> {
     fn from_node(node: NodeRef) -> Self {
         Self {
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             node,
         }
     }

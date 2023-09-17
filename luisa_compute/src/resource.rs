@@ -3,18 +3,15 @@ use std::ops::RangeBounds;
 use std::process::abort;
 use std::sync::Arc;
 
-use crate::lang::index::*;
-use crate::lang::types::core::*;
-use crate::lang::types::vector::*;
-use crate::lang::types::*;
-use crate::runtime::*;
-use crate::lang::ir::{TypeOf, CArc, Type};
-use crate::lang::debug::*;
+use parking_lot::lock_api::RawMutex as RawMutexTrait;
+use parking_lot::RawMutex;
 
-use crate::macros::lc_assert;
-use crate::*;
+use crate::internal_prelude::*;
+
+use crate::lang::index::IntoIndex;
+use crate::runtime::*;
+
 use api::{BufferDownloadCommand, BufferUploadCommand, INVALID_RESOURCE_HANDLE};
-use lang::Value;
 use libc::c_void;
 
 pub struct ByteBuffer {
@@ -115,7 +112,7 @@ impl<'a> ByteBufferView<'a> {
                 size: data.len(),
                 data: data.as_mut_ptr() as *mut u8,
             }),
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             resource_tracker: rt,
             callback: None,
         }
@@ -146,7 +143,7 @@ impl<'a> ByteBufferView<'a> {
                 size: data.len(),
                 data: data.as_ptr() as *const u8,
             }),
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             resource_tracker: rt,
             callback: None,
         }
@@ -173,7 +170,7 @@ impl<'a> ByteBufferView<'a> {
                 dst_offset: dst.offset,
                 size: self.len,
             }),
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             resource_tracker: rt,
             callback: None,
         }
@@ -247,7 +244,7 @@ pub struct Buffer<T: Value> {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BufferHandle>,
     pub(crate) len: usize,
-    pub(crate) _marker: std::marker::PhantomData<T>,
+    pub(crate) _marker: PhantomData<T>,
 }
 pub(crate) struct BufferHandle {
     pub(crate) device: Device,
@@ -286,7 +283,7 @@ impl<'a, T: Value> BufferView<'a, T> {
                 size: data.len() * std::mem::size_of::<T>(),
                 data: data.as_mut_ptr() as *mut u8,
             }),
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             resource_tracker: rt,
             callback: None,
         }
@@ -317,7 +314,7 @@ impl<'a, T: Value> BufferView<'a, T> {
                 size: data.len() * std::mem::size_of::<T>(),
                 data: data.as_ptr() as *const u8,
             }),
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             resource_tracker: rt,
             callback: None,
         }
@@ -344,7 +341,7 @@ impl<'a, T: Value> BufferView<'a, T> {
                 dst_offset: dst.offset * std::mem::size_of::<T>(),
                 size: self.len * std::mem::size_of::<T>(),
             }),
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             resource_tracker: rt,
             callback: None,
         }
@@ -364,7 +361,7 @@ impl<T: Value> Buffer<T> {
             device: self.device.clone(),
             handle: self.handle.clone(),
             len: self.len,
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
         }
     }
     #[inline]
@@ -466,18 +463,18 @@ pub(crate) struct BindlessArraySlot {
 }
 pub struct BufferHeap<T: Value> {
     pub(crate) inner: BindlessArray,
-    pub(crate) _marker: std::marker::PhantomData<T>,
+    pub(crate) _marker: PhantomData<T>,
 }
 pub struct BufferHeapVar<T: Value> {
     inner: BindlessArrayVar,
-    _marker: std::marker::PhantomData<T>,
+    _marker: PhantomData<T>,
 }
 impl<T: Value> BufferHeap<T> {
     #[inline]
     pub fn var(&self) -> BufferHeapVar<T> {
         BufferHeapVar {
             inner: self.inner.var(),
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
         }
     }
     #[inline]
@@ -790,7 +787,7 @@ impl BindlessArray {
                 modifications: modifications.as_ptr(),
                 modifications_count: modifications.len(),
             }),
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             resource_tracker: rt,
             callback: Some(Box::new(move || unsafe {
                 lock.unlock();
@@ -1014,7 +1011,7 @@ pub struct Tex2d<T: IoTexel> {
     #[allow(dead_code)]
     pub(crate) height: u32,
     pub(crate) handle: Arc<TextureHandle>,
-    pub(crate) marker: std::marker::PhantomData<T>,
+    pub(crate) marker: PhantomData<T>,
 }
 
 // `T` is the read out type of the texture, which is not necessarily the same as the storage type
@@ -1027,7 +1024,7 @@ pub struct Tex3d<T: IoTexel> {
     #[allow(dead_code)]
     pub(crate) depth: u32,
     pub(crate) handle: Arc<TextureHandle>,
-    pub(crate) marker: std::marker::PhantomData<T>,
+    pub(crate) marker: PhantomData<T>,
 }
 #[derive(Clone, Copy)]
 pub struct Tex2dView<'a, T: IoTexel> {
@@ -1072,7 +1069,7 @@ macro_rules! impl_tex_view {
                         data: data.as_mut_ptr() as *mut u8,
                     }),
                     resource_tracker: rt,
-                    marker: std::marker::PhantomData,
+                    marker: PhantomData,
                     callback: None,
                 }
             }
@@ -1103,7 +1100,7 @@ macro_rules! impl_tex_view {
                         data: data.as_ptr() as *const u8,
                     }),
                     resource_tracker: rt,
-                    marker: std::marker::PhantomData,
+                    marker: PhantomData,
                     callback: None,
                 }
             }
@@ -1132,7 +1129,7 @@ macro_rules! impl_tex_view {
                         buffer_offset: buffer_view.offset,
                     }),
                     resource_tracker: rt,
-                    marker: std::marker::PhantomData,
+                    marker: PhantomData,
                     callback: None,
                 }
             }
@@ -1164,7 +1161,7 @@ macro_rules! impl_tex_view {
                         buffer_offset: buffer_view.offset,
                     }),
                     resource_tracker: rt,
-                    marker: std::marker::PhantomData,
+                    marker: PhantomData,
                     callback: None,
                 }
             }
@@ -1194,7 +1191,7 @@ macro_rules! impl_tex_view {
                         dst_level: other.level,
                     }),
                     resource_tracker: rt,
-                    marker: std::marker::PhantomData,
+                    marker: PhantomData,
                     callback: None,
                 }
             }
@@ -1292,7 +1289,7 @@ impl<T: IoTexel> Tex3d<T> {
 }
 #[derive(Clone)]
 pub struct BufferVar<T: Value> {
-    pub(crate) marker: std::marker::PhantomData<T>,
+    pub(crate) marker: PhantomData<T>,
     #[allow(dead_code)]
     pub(crate) handle: Option<Arc<BufferHandle>>,
     pub(crate) node: NodeRef,
@@ -1315,7 +1312,7 @@ pub struct BindlessArrayVar {
 pub struct BindlessBufferVar<T> {
     array: NodeRef,
     buffer_index: Expr<u32>,
-    _marker: std::marker::PhantomData<T>,
+    _marker: PhantomData<T>,
 }
 impl<T: Value> ToNode for BindlessBufferVar<T> {
     fn node(&self) -> NodeRef {
@@ -1594,7 +1591,7 @@ impl BindlessArrayVar {
         let v = BindlessBufferVar {
             array: self.node,
             buffer_index: buffer_index.into(),
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
         };
         if __env_need_backtrace() && is_cpu_backend() {
             let vt = v.__type();
@@ -1725,7 +1722,7 @@ impl<T: Value> BufferVar<T> {
         });
         Self {
             node,
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             handle: Some(buffer.buffer.handle.clone()),
         }
     }
@@ -1918,7 +1915,7 @@ pub struct Tex2dVar<T: IoTexel> {
     pub(crate) node: NodeRef,
     #[allow(dead_code)]
     pub(crate) handle: Option<Arc<TextureHandle>>,
-    pub(crate) marker: std::marker::PhantomData<T>,
+    pub(crate) marker: PhantomData<T>,
     #[allow(dead_code)]
     pub(crate) level: Option<u32>,
 }
@@ -1950,7 +1947,7 @@ impl<T: IoTexel> Tex2dVar<T> {
             node,
             handle: Some(view.tex.handle.clone()),
             level: Some(view.level),
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
         }
     }
     pub fn read(&self, uv: impl Into<Expr<Uint2>>) -> Expr<T> {
@@ -2004,7 +2001,7 @@ impl<T: IoTexel> Tex3dVar<T> {
             node,
             handle: Some(view.tex.handle.clone()),
             level: Some(view.level),
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
         }
     }
     pub fn read(&self, uv: impl Into<Expr<Uint3>>) -> Expr<T> {
@@ -2035,7 +2032,7 @@ pub struct Tex3dVar<T: IoTexel> {
     pub(crate) node: NodeRef,
     #[allow(dead_code)]
     pub(crate) handle: Option<Arc<TextureHandle>>,
-    pub(crate) marker: std::marker::PhantomData<T>,
+    pub(crate) marker: PhantomData<T>,
     #[allow(dead_code)]
     pub(crate) level: Option<u32>,
 }

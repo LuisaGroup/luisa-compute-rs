@@ -10,60 +10,39 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::{env, unreachable};
 
-use half::f16;
+use crate::internal_prelude::*;
 
 use bumpalo::Bump;
 use indexmap::IndexMap;
 
-use crate::runtime::{AsyncShaderArtifact, CallableArgEncoder, ShaderArtifact, Device};
+use crate::runtime::{AsyncShaderArtifact, CallableArgEncoder, Device, ShaderArtifact};
 use crate::{rtx, ResourceTracker};
 
 pub mod ir {
-    pub use luisa_compute_ir::ir::*;
     pub use luisa_compute_ir::context::register_type;
+    pub use luisa_compute_ir::ir::*;
     pub use luisa_compute_ir::*;
 }
 
+pub use ir::NodeRef;
 use ir::{
-    register_type,
-    new_node, ArrayType, BasicBlock, Binding, CallableModule, CallableModuleRef, Capture, Const,
-    CpuCustomOp, Func, Instruction, IrBuilder, KernelModule, Module, ModuleFlags, ModuleKind,
-    ModulePools, Node, PhiIncoming, StructType, SwitchCase, Type, UserNodeData,
-    INVALID_REF, CArc, Pooled, TypeOf, new_user_node
+    new_node, new_user_node, register_type, ArrayType, BasicBlock, Binding, CArc, CallableModule,
+    CallableModuleRef, Capture, Const, CpuCustomOp, Func, Instruction, IrBuilder, KernelModule,
+    Module, ModuleFlags, ModuleKind, ModulePools, Node, PhiIncoming, Pooled, StructType,
+    SwitchCase, Type, TypeOf, UserNodeData, INVALID_REF,
 };
 
-use luisa_compute_derive::Aggregate;
-
-// use self::math::Uint3;
 // pub mod maybe_expr;
+pub mod control_flow;
 pub mod debug;
 pub mod diff;
-pub mod flow;
 pub mod functions;
 pub mod index;
-pub mod kernel;
 pub mod ops;
 pub mod poly;
 pub mod printer;
 pub mod swizzle;
 pub mod types;
-
-use ops::{
-    BuiltinVarTrait, CommonVarOp, FloatVarTrait, IntVarTrait, MatrixVarTrait, ScalarOrVector,
-    ScalarVarTrait, VarCmp, VarCmpEq, VarTrait, VectorVarTrait,
-};
-use swizzle::*;
-use types::{Expr, ExprProxy, Value, Var, VarProxy};
-
-// REMOVE
-use crate::{cpu_dbg, if_, impl_callable_param, lc_assert, lc_dbg, lc_unreachable, loop_, while_};
-use flow::*;
-use functions::*;
-use index::*;
-use kernel::*;
-use types::core::*;
-use types::vector::*;
-pub use ir::NodeRef;
 
 #[allow(dead_code)]
 pub(crate) static KERNEL_ID: AtomicUsize = AtomicUsize::new(0);
@@ -258,21 +237,6 @@ unsafe impl Mask for bool {}
 
 unsafe impl Mask for Expr<bool> {}
 
-extern "C" fn _trampoline<T, F: FnMut(&mut T)>(data: *mut u8, args: *mut u8) {
-    unsafe {
-        let container = &*(data as *const ClosureContainer<T>);
-        let f = &container.f;
-        let args = &mut *(args as *mut T);
-        f(args);
-    }
-}
-
-extern "C" fn _drop<T>(data: *mut u8) {
-    unsafe {
-        let _ = Box::from_raw(data as *mut T);
-    }
-}
-
 pub(crate) struct Recorder {
     pub(crate) scopes: Vec<IrBuilder>,
     pub(crate) kernel_id: Option<usize>,
@@ -289,7 +253,7 @@ pub(crate) struct Recorder {
 }
 
 impl Recorder {
-    fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.scopes.clear();
         self.captured_buffer.clear();
         self.cpu_custom_ops.clear();

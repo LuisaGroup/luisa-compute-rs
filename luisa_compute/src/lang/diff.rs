@@ -1,4 +1,6 @@
-use super::*;
+use std::cell::RefCell;
+
+use crate::internal_prelude::*;
 
 struct AdContext {
     started: bool,

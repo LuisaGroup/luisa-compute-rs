@@ -1,12 +1,10 @@
 use super::*;
-use crate::runtime::*;
-use crate::resource::*;
 
 #[macro_export]
 macro_rules! impl_callable_param {
     ($t:ty, $e:ty, $v:ty) => {
         impl CallableParameter for $e {
-            fn def_param(_: Option<std::rc::Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
+            fn def_param(_: Option<std::rc::Rc<dyn std::any::Any>>, builder: &mut KernelBuilder) -> Self {
                 builder.value::<$t>()
             }
             fn encode(&self, encoder: &mut CallableArgEncoder) {
@@ -14,7 +12,7 @@ macro_rules! impl_callable_param {
             }
         }
         impl CallableParameter for $v {
-            fn def_param(_: Option<std::rc::Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
+            fn def_param(_: Option<std::rc::Rc<dyn std::any::Any>>, builder: &mut KernelBuilder) -> Self {
                 builder.var::<$t>()
             }
             fn encode(&self, encoder: &mut CallableArgEncoder) {
@@ -248,7 +246,7 @@ impl KernelBuilder {
         self.args.push(node);
         BufferVar {
             node,
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             handle: None,
         }
     }
@@ -260,7 +258,7 @@ impl KernelBuilder {
         self.args.push(node);
         Tex2dVar {
             node,
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             handle: None,
             level: None,
         }
@@ -273,7 +271,7 @@ impl KernelBuilder {
         self.args.push(node);
         Tex3dVar {
             node,
-            marker: std::marker::PhantomData,
+            marker: PhantomData,
             handle: None,
             level: None,
         }
@@ -547,7 +545,7 @@ macro_rules! impl_callable_signature {
             fn wrap_raw_callable(callable: RawCallable) -> Self::Callable{
                 Callable {
                     inner: callable,
-                    _marker:std::marker::PhantomData,
+                    _marker:PhantomData,
                 }
             }
             fn create_dyn_callable(device:Device, init_once:bool, f: Self::DynFn) -> Self::DynCallable {
@@ -569,7 +567,7 @@ macro_rules! impl_callable_signature {
             fn wrap_raw_callable(callable: RawCallable) -> Self::Callable{
                 Callable {
                     inner: callable,
-                    _marker:std::marker::PhantomData,
+                    _marker:PhantomData,
                 }
             }
             fn create_dyn_callable(device:Device, init_once:bool, f: Self::DynFn) -> Self::DynCallable {
@@ -591,7 +589,7 @@ macro_rules! impl_kernel_signature {
             fn wrap_raw_kernel(kernel: crate::runtime::RawKernel) -> Self::Kernel {
                 Self::Kernel{
                     inner:kernel,
-                    _marker:std::marker::PhantomData,
+                    _marker:PhantomData,
                 }
             }
         }
@@ -603,7 +601,7 @@ macro_rules! impl_kernel_signature {
             fn wrap_raw_kernel(kernel: crate::runtime::RawKernel) -> Self::Kernel {
                 Self::Kernel{
                     inner:kernel,
-                    _marker:std::marker::PhantomData,
+                    _marker:PhantomData,
                 }
             }
         }

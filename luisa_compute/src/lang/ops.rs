@@ -1,7 +1,7 @@
-use super::*;
+use crate::internal_prelude::*;
 use std::ops::*;
 
-// pub mod impls;
+pub mod impls;
 
 pub trait VarTrait: Copy + Clone + 'static + FromNode {
     type Value: Value;

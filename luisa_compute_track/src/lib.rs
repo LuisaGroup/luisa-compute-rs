@@ -38,7 +38,7 @@ impl VisitMut for TraceVisitor {
                 let cond = &expr.cond;
                 let body = &expr.body;
                 *node = parse_quote_spanned! {span=>
-                    <_ as #trait_path::BoolWhileMaybeExpr<_>>::while_loop(|| #cond, || #body)
+                    <_ as #trait_path::BoolWhileMaybeExpr>::while_loop(|| #cond, || #body)
                 }
             }
             Expr::Loop(expr) => {

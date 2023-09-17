@@ -1,7 +1,6 @@
 use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::{env, unreachable};
@@ -22,15 +21,15 @@ pub mod ir {
 pub use ir::NodeRef;
 use ir::{
     new_user_node, BasicBlock, Binding, CArc, CallableModuleRef, Const, CpuCustomOp, Func,
-    Instruction, IrBuilder, ModulePools, Pooled, StructType, Type, TypeOf, UserNodeData,
+    Instruction, IrBuilder, ModulePools, Pooled, Type, TypeOf, UserNodeData,
 };
 
-// pub mod maybe_expr;
 pub mod control_flow;
 pub mod debug;
 pub mod diff;
 pub mod functions;
 pub mod index;
+pub mod maybe_expr;
 pub mod ops;
 pub mod poly;
 pub mod printer;
@@ -183,51 +182,6 @@ macro_rules! impl_aggregate_for_tuple {
 
 }
 impl_aggregate_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
-
-pub unsafe trait Mask: ToNode {}
-
-pub fn select<A: Aggregate>(mask: impl Mask, a: A, b: A) -> A {
-    let a_nodes = a.to_vec_nodes();
-    let b_nodes = b.to_vec_nodes();
-    assert_eq!(a_nodes.len(), b_nodes.len());
-    let mut ret = vec![];
-    __current_scope(|b| {
-        for (a_node, b_node) in a_nodes.into_iter().zip(b_nodes.into_iter()) {
-            assert_eq!(a_node.type_(), b_node.type_());
-            assert!(!a_node.is_local(), "cannot select local variables");
-            assert!(!b_node.is_local(), "cannot select local variables");
-            if a_node.is_user_data() || b_node.is_user_data() {
-                assert!(
-                    a_node.is_user_data() && b_node.is_user_data(),
-                    "cannot select user data and non-user data"
-                );
-                let a_data = a_node.get_user_data();
-                let b_data = b_node.get_user_data();
-                if a_data != b_data {
-                    panic!("cannot select different user data");
-                }
-                ret.push(a_node);
-            } else {
-                ret.push(b.call(
-                    Func::Select,
-                    &[mask.node(), a_node, b_node],
-                    a_node.type_().clone(),
-                ));
-            }
-        }
-    });
-    A::from_vec_nodes(ret)
-}
-
-impl ToNode for bool {
-    fn node(&self) -> NodeRef {
-        (*self).expr().node()
-    }
-}
-
-unsafe impl Mask for bool {}
-
-unsafe impl Mask for Expr<bool> {}
 
 pub(crate) struct Recorder {
     pub(crate) scopes: Vec<IrBuilder>,

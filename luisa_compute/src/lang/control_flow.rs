@@ -1,6 +1,5 @@
 use std::ffi::CString;
 
-use super::Mask;
 use crate::internal_prelude::*;
 use ir::SwitchCase;
 
@@ -12,22 +11,38 @@ use ir::SwitchCase;
 #[macro_export]
 macro_rules! if_ {
     ($cond:expr, $then:block, else $else_:block) => {
-        $crate::lang::control_flow::if_then_else($cond, || $then, || $else_)
+        <_ as $crate::lang::maybe_expr::BoolIfElseMaybeExpr<_>>::if_then_else(
+            $cond,
+            || $then,
+            || $else_,
+        )
     };
     ($cond:expr, $then:block, else, $else_:block) => {
-        $crate::lang::control_flow::if_then_else($cond, || $then, || $else_)
+        <_ as $crate::lang::maybe_expr::BoolIfElseMaybeExpr<_>>::if_then_else(
+            $cond,
+            || $then,
+            || $else_,
+        )
     };
     ($cond:expr, $then:block, $else_:block) => {
-        $crate::lang::control_flow::if_then_else($cond, || $then, || $else_)
+        <_ as $crate::lang::maybe_expr::BoolIfElseMaybeExpr<_>>::if_then_else(
+            $cond,
+            || $then,
+            || $else_,
+        )
     };
     ($cond:expr, $then:block) => {
-        $crate::lang::control_flow::if_then_else($cond, || $then, || {})
+        <_ as $crate::lang::maybe_expr::BoolIfElseMaybeExpr<_>>::if_then_else(
+            $cond,
+            || $then,
+            || {},
+        )
     };
 }
 #[macro_export]
 macro_rules! while_ {
     ($cond:expr,$body:block) => {
-        $crate::lang::control_flow::generic_loop(|| $cond, || $body, || {})
+        <_ as $crate::lang::maybe_expr::BoolWhileMaybeExpr>::while_loop(|| $cond, || $body)
     };
 }
 #[macro_export]
@@ -88,7 +103,7 @@ pub fn return_() {
 }
 
 pub fn if_then_else<R: Aggregate>(
-    cond: impl Mask,
+    cond: Expr<bool>,
     then: impl FnOnce() -> R,
     else_: impl FnOnce() -> R,
 ) -> R {
@@ -142,6 +157,39 @@ pub fn if_then_else<R: Aggregate>(
             .collect::<Vec<_>>()
     });
     R::from_vec_nodes(phis)
+}
+
+pub fn select<A: Aggregate>(mask: Expr<bool>, a: A, b: A) -> A {
+    let a_nodes = a.to_vec_nodes();
+    let b_nodes = b.to_vec_nodes();
+    assert_eq!(a_nodes.len(), b_nodes.len());
+    let mut ret = vec![];
+    __current_scope(|b| {
+        for (a_node, b_node) in a_nodes.into_iter().zip(b_nodes.into_iter()) {
+            assert_eq!(a_node.type_(), b_node.type_());
+            assert!(!a_node.is_local(), "cannot select local variables");
+            assert!(!b_node.is_local(), "cannot select local variables");
+            if a_node.is_user_data() || b_node.is_user_data() {
+                assert!(
+                    a_node.is_user_data() && b_node.is_user_data(),
+                    "cannot select user data and non-user data"
+                );
+                let a_data = a_node.get_user_data();
+                let b_data = b_node.get_user_data();
+                if a_data != b_data {
+                    panic!("cannot select different user data");
+                }
+                ret.push(a_node);
+            } else {
+                ret.push(b.call(
+                    Func::Select,
+                    &[mask.node(), a_node, b_node],
+                    a_node.type_().clone(),
+                ));
+            }
+        }
+    });
+    A::from_vec_nodes(ret)
 }
 
 pub fn generic_loop(

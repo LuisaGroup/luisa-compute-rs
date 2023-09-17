@@ -222,14 +222,14 @@ impl Compiler {
                     use #lang_path::*;
                     let size = std::mem::size_of::<#name #ty_generics>();
                     let alignment = std::mem::align_of::<#name #ty_generics>();
-                    let struct_type = StructType {
-                        fields: #lang_path::ir::CBoxedSlice::new(vec![#(<#field_types as TypeOf>::type_(),)*]),
+                    let struct_type = ir::StructType {
+                        fields: ir::CBoxedSlice::new(vec![#(<#field_types as ir::TypeOf>::type_(),)*]),
                         size,
                         alignment
                     };
-                    let type_ = #lang_path::ir::Type::Struct(struct_type);
+                    let type_ = ir::Type::Struct(struct_type);
                     assert_eq!(std::mem::size_of::<#name #ty_generics>(), type_.size());
-                    register_type(type_)
+                    ir::register_type(type_)
                 }
             }
         );
@@ -239,13 +239,13 @@ impl Compiler {
             #[allow(unused_parens)]
             #vis struct #expr_proxy_name #generics{
                 node: #lang_path::NodeRef,
-                _marker: PhantomData<(#marker_args)>,
+                _marker: std::marker::PhantomData<(#marker_args)>,
             }
             #[derive(Clone, Copy, Debug)]
             #[allow(unused_parens)]
             #vis struct #var_proxy_name #generics{
                 node: #lang_path::NodeRef,
-                _marker: PhantomData<(#marker_args)>,
+                _marker: std::marker::PhantomData<(#marker_args)>,
             }
             #[allow(unused_parens)]
             impl #impl_generics #lang_path::Aggregate for #expr_proxy_name #ty_generics #where_clause {
@@ -255,7 +255,7 @@ impl Compiler {
                 fn from_nodes<__I: Iterator<Item = #lang_path::NodeRef>>(iter: &mut __I) -> Self {
                     Self{
                         node: iter.next().unwrap(),
-                        _marker:PhantomData
+                        _marker:std::marker::PhantomData
                     }
                 }
             }
@@ -267,7 +267,7 @@ impl Compiler {
                 fn from_nodes<__I: Iterator<Item = #lang_path::NodeRef>>(iter: &mut __I) -> Self {
                     Self{
                         node: iter.next().unwrap(),
-                        _marker:PhantomData
+                        _marker:std::marker::PhantomData
                     }
                 }
             }
@@ -275,7 +275,7 @@ impl Compiler {
             impl #impl_generics #lang_path::FromNode  for #expr_proxy_name #ty_generics #where_clause {
                 #[allow(unused_assignments)]
                 fn from_node(node: #lang_path::NodeRef) -> Self {
-                    Self { node, _marker:PhantomData }
+                    Self { node, _marker:std::marker::PhantomData }
                 }
             }
             #[allow(unused_parens)]
@@ -292,7 +292,7 @@ impl Compiler {
             impl #impl_generics #lang_path::FromNode for #var_proxy_name #ty_generics #where_clause {
                 #[allow(unused_assignments)]
                 fn from_node(node: #lang_path::NodeRef) -> Self {
-                    Self { node, _marker:PhantomData }
+                    Self { node, _marker:std::marker::PhantomData }
                 }
             }
             impl #impl_generics #lang_path::ToNode for #var_proxy_name #ty_generics #where_clause {
@@ -356,7 +356,7 @@ impl Compiler {
                 #vis fn new(#(#field_names: impl Into<#lang_path::types::Expr<#field_types>>),*) -> Self {
                     use #lang_path::*;
                     let node = #lang_path::__compose::<#name #ty_generics>(&[ #( ToNode::node(&#field_names.into()) ),* ]);
-                    Self { node, _marker:PhantomData }
+                    Self { node, _marker:std::marker::PhantomData }
                 }
             }
             impl #impl_generics  #var_proxy_name #ty_generics #where_clause {

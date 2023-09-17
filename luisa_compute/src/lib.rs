@@ -15,7 +15,9 @@ pub mod runtime;
 pub mod prelude {
     pub use half::f16;
 
-    pub use crate::lang::control_flow::{break_, continue_, for_range, return_, return_v, switch};
+    pub use crate::lang::control_flow::{
+        break_, continue_, for_range, return_, return_v, select, switch,
+    };
     pub use crate::lang::functions::{dispatch_id, dispatch_size};
     pub use crate::lang::index::{IndexRead, IndexWrite};
     pub use crate::lang::ops::*;

@@ -2,9 +2,9 @@
 //! either be an expression or a normal value. This is necessary for making the
 //! trace macro work for both types of value.
 
-use super::{vec::*, Aggregate, Bool, Expr, Var};
-use crate::{VarCmp, VarCmpEq};
-use half::f16;
+use super::control_flow::{generic_loop, if_then_else};
+use super::types::core::*;
+use crate::internal_prelude::*;
 
 pub trait BoolIfElseMaybeExpr<R> {
     fn if_then_else(self, then: impl FnOnce() -> R, else_: impl FnOnce() -> R) -> R;
@@ -20,7 +20,7 @@ impl<R> BoolIfElseMaybeExpr<R> for bool {
 }
 impl<R: Aggregate> BoolIfElseMaybeExpr<R> for Bool {
     fn if_then_else(self, then: impl FnOnce() -> R, else_: impl FnOnce() -> R) -> R {
-        super::if_then_else(self, then, else_)
+        if_then_else(self, then, else_)
     }
 }
 
@@ -36,7 +36,7 @@ impl BoolIfMaybeExpr for bool {
 }
 impl BoolIfMaybeExpr for Bool {
     fn if_then(self, then: impl FnOnce()) {
-        super::if_then_else(self, then, || {})
+        if_then_else(self, then, || {})
     }
 }
 
@@ -52,7 +52,7 @@ impl BoolWhileMaybeExpr for bool {
 }
 impl BoolWhileMaybeExpr for Bool {
     fn while_loop(this: impl FnMut() -> Self, body: impl FnMut()) {
-        super::generic_loop(this, body, || {});
+        generic_loop(this, body, || {});
     }
 }
 
@@ -116,7 +116,7 @@ impl<R, A: PartialEq<R>> EqMaybeExpr<R> for A {
 macro_rules! impl_eme {
     ($t: ty, $s: ty) => {
         impl EqMaybeExpr<$s> for $t {
-            type Bool = <$t as $crate::VarTrait>::Bool;
+            type Bool = <$t as VarTrait>::Bool;
             fn eq(self, other: $s) -> Self::Bool {
                 self.cmpeq(other)
             }
@@ -129,7 +129,7 @@ macro_rules! impl_eme {
 macro_rules! impl_mem {
     ($t: ty, $s: ty) => {
         impl EqMaybeExpr<$s> for $t {
-            type Bool = <$s as $crate::VarTrait>::Bool;
+            type Bool = <$s as VarTrait>::Bool;
             fn eq(self, other: $s) -> Self::Bool {
                 other.cmpeq(self)
             }
@@ -179,7 +179,7 @@ macro_rules! impl_pome {
     ($t: ty, $s: ty) => {
         impl_eme!($t, $s);
         impl PartialOrdMaybeExpr<$s> for $t {
-            type Bool = <$t as $crate::VarTrait>::Bool;
+            type Bool = <$t as VarTrait>::Bool;
             fn lt(self, other: $s) -> Self::Bool {
                 self.cmplt(other)
             }
@@ -199,7 +199,7 @@ macro_rules! impl_emop {
     ($t: ty, $s: ty) => {
         impl_mem!($t, $s);
         impl PartialOrdMaybeExpr<$s> for $t {
-            type Bool = <$s as $crate::VarTrait>::Bool;
+            type Bool = <$s as VarTrait>::Bool;
             fn lt(self, other: $s) -> Self::Bool {
                 other.cmpgt(self)
             }

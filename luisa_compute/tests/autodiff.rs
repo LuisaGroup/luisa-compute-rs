@@ -226,7 +226,7 @@ struct Foo {
 }
 
 autodiff_2!(autodiff_const, 1.0..10.0, |x: Float, y: Float| {
-    let k = 2.0 / const_::<f32>(3.0);
+    let k = 2.0 / 3.0_f32.expr();
     x * k + y * k
 });
 autodiff_2!(autodiff_struct, 1.0..10.0, |x: Float, y: Float| {
@@ -361,12 +361,12 @@ fn autodiff_vec3_cross_x() {
         let ax = inputs[0];
         let ay = inputs[1];
         let az = inputs[2];
-        let a = def(Float3::expr(ax, ay, az));
+        let a = Float3::expr(ax, ay, az).var();
         let bx = inputs[3];
         let by = inputs[4];
         let bz = inputs[5];
-        let b = def(Float3::expr(bx, by, bz));
-        let v = def(a.cross(*b));
+        let b = Float3::expr(bx, by, bz).var();
+        let v = a.cross(*b).var();
         *v.x()
     });
 }
@@ -376,12 +376,12 @@ fn autodiff_vec3_cross_y() {
         let ax = inputs[0];
         let ay = inputs[1];
         let az = inputs[2];
-        let a = def(Float3::expr(ax, ay, az));
+        let a = Float3::expr(ax, ay, az).var();
         let bx = inputs[3];
         let by = inputs[4];
         let bz = inputs[5];
-        let b = def(Float3::expr(bx, by, bz));
-        let v = def(a.cross(*b));
+        let b = Float3::expr(bx, by, bz).var();
+        let v = a.cross(*b).var();
         *v.x()
     });
 }
@@ -899,9 +899,9 @@ fn autodiff_if_phi3() {
         let tid = dispatch_id().x();
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
-        let const_two = var!(f32, 2.0);
-        let const_three = var!(f32, 3.0);
-        let const_four = var!(f32);
+        let const_two = 2.0_f32.var();
+        let const_three = 3.0_f32.var();
+        let const_four = F32Var::zeroed();
 
         autodiff(|| {
             requires_grad(x);
@@ -961,7 +961,7 @@ fn autodiff_if_phi4() {
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
 
-        let consts = var!(Float3);
+        let consts = Float3Var::zeroed();
         autodiff(|| {
             requires_grad(x);
             requires_grad(y);
@@ -1101,8 +1101,8 @@ fn autodiff_callable() {
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
         let t = buf_t.read(tid);
-        let dx = def(x);
-        let dy = def(y);
+        let dx = x.var();
+        let dy = y.var();
         callable.call(dx, dy, t);
         buf_dx.write(tid, *dx);
         buf_dy.write(tid, *dy);

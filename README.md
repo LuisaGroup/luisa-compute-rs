@@ -3,26 +3,33 @@ Rust frontend to LuisaCompute and more! Unified API and embedded DSL for high pe
 
 To see the use of `luisa-compute-rs` in a high performance offline rendering system, checkout [our research renderer](https://github.com/shiinamiyuki/akari_render)
 ## Table of Contents
-* [Overview](#overview)
-    + [Embedded Domain-Specific Language](#embedded-domain-specific-language)
-    + [Automatic Differentiation](#automatic-differentiation)
-    + [A CPU backend](#cpu-backend)
-    + [IR Module for EDSL](#ir-module)
-    + [Debuggability](#debuggability)
-* [Usage](#usage)
-    + [Building](#building)
-    + [Variables and Expressions](#variables-and-expressions)
-    + [Builtin Functions](#builtin-functions)
-    + [Control Flow](#control-flow)
-    + [Custom Data Types](#custom-data-types)
-    + [Polymorphism](#polymorphism)
-    + [Autodiff](#autodiff)
-    + [Custom Operators](#custom-operators)
-    + [Callable](#callable)
-    + [Kernel](#kernel)
-* [Advanced Usage](#advanced-usage)
-* [Safety](#safety)
-* [Citation](#citation)
+- [luisa-compute-rs](#luisa-compute-rs)
+  - [Table of Contents](#table-of-contents)
+  - [Example](#example)
+    - [Vecadd](#vecadd)
+  - [Overview](#overview)
+    - [Embedded Domain-Specific Language](#embedded-domain-specific-language)
+    - [Automatic Differentiation](#automatic-differentiation)
+    - [CPU Backend](#cpu-backend)
+    - [IR Module](#ir-module)
+    - [Debuggability](#debuggability)
+  - [Usage](#usage)
+    - [Building](#building)
+    - [Variables and Expressions](#variables-and-expressions)
+    - [Builtin Functions](#builtin-functions)
+    - [Control Flow](#control-flow)
+    - [`track!` Mcro](#track-mcro)
+    - [Custom Data Types](#custom-data-types)
+    - [Polymorphism](#polymorphism)
+    - [Autodiff](#autodiff)
+    - [Custom Operators](#custom-operators)
+    - [Callable](#callable)
+    - [Kernel](#kernel)
+  - [Advanced Usage](#advanced-usage)
+  - [Safety](#safety)
+    - [API](#api)
+    - [Backend](#backend)
+  - [Citation](#citation)
 
 ## Example
 Try `cargo run --release --example path_tracer -- [cpu|cuda|dx|metal]`!
@@ -60,7 +67,7 @@ fn main() {
         let tid = dispatch_id().x();
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
-        let vx = var!(f32); // create a local mutable variable
+        let vx = 0.0f32.var(); // create a local mutable variable
         *vx.get_mut() += x;
         buf_z.write(tid, vx.load() + y);
     });
@@ -125,26 +132,26 @@ For each type, there are two EDSL proxy objects `Expr<T>` and `Var<T>`. `Expr<T>
 *Note*: Every DSL object in host code **must** be immutable due to Rust unable to overload `operator =`. For example:
 ```rust
 // **no good**
-let mut v = const_(0.0f32);
+let mut v = 0.0f32.expr();
 if_!(cond, {
     v += 1.0;
 });
 
 // also **not good**
-let v = Cell::new(const_(0.0f32));
+let v = Cell::new(0.0f32.expr());
 if_!(cond, {
     v.set(v.get() + 1.0);
 });
 
 // **good**
-let v = var!(f32);
+let v = 0.0f32.var();
 if_!(cond, {
     *v.get_mut() += 1.0;
 });
 ```
 *Note*: You should not store the referene obtained by `v.get_mut()` for repeated use, as the assigned value is only updated when `v.get_mut()` is dropped. For example,:
 ```rust
-let v = var!(f32);
+let v = 0.0f32.var();
 let bad = v.get_mut();
 *bad = 1.0;
 let u = *v;
@@ -152,15 +159,7 @@ drop(bad);
 cpu_dbg!(u); // prints 0.0
 cpu_dbg!(*v); // prints now 1.0
 ```
-All operations except load/store should be performed on `Expr<T>`. `Var<T>` can only be used to load/store values. While `Expr<T>` and `Var<T>` are sufficent in most cases, it cannot be placed in an `impl` block. To do so, the exact name of these proxies are needed.
-```rust
-Expr<Bool> == Bool, Var<Bool> == BoolVar
-Expr<f32> == Float32, Var<f32> == Float32Var
-Expr<i32> == Int32, Var<i32> == Int32Var
-Expr<u32> == UInt32, Var<u32> == UInt32Var
-Expr<i64> == Int64, Var<i64> == Int64Var
-Expr<u64> == UInt64, Var<u64> == UInt64Var
-```
+All operations except load/store should be performed on `Expr<T>`. `Var<T>` can only be used to load/store values.
 
 As in the C++ EDSL, we additionally supports the following vector/matrix types. Their proxy types are `XXXExpr` and `XXXVar`:
 
@@ -181,7 +180,7 @@ Mat2 // float2x2 in C++
 Mat3 // float3x3 in C++
 Mat4 // float4x4 in C++
 ```
-Array types `[T;N]` are also supported and their proxy types are `ArrayExpr<T, N>` and `ArrayVar<T, N>`. Call `arr.read(i)` and `arr.write(i, value)` on `ArrayVar<T, N>` for element access. `ArrayExpr<T,N>` can be stored to and loaded from `ArrayVar<T, N>`. The limitation is however the array length must be determined during host compile time. If runtime length is required, use `VLArrayVar<T>`. `VLArrayVar<T>::zero(length: usize` would create a zero initialized array. Similarly you can use `read` and `write` methods as well. To query the length of a `VLArrayVar<T>` in host, use ``VLArrayVar<T>::static_len()->usize`. To query the length in kernel, use ``VLArrayVar<T>::len()->Expr<u32>`
+Array types `[T;N]` are also supported and their proxy types are `ArrayExpr<T, N>` and `ArrayVar<T, N>`. Call `arr.read(i)` and `arr.write(i, value)` on `ArrayVar<T, N>` for element access. `ArrayExpr<T,N>` can be stored to and loaded from `ArrayVar<T, N>`. The limitation is however the array length must be determined during host compile time. If runtime length is required, use `VLArrayVar<T>`. `VLArrayVar<T>::zero(length: usize)` would create a zero initialized array. Similarly you can use `read` and `write` methods as well. To query the length of a `VLArrayVar<T>` in host, use `VLArrayVar<T>::static_len()->usize`. To query the length in kernel, use `VLArrayVar<T>::len()->Expr<u32>`
 
 Most operators are already overloaded with the only exception is comparision. We cannot overload comparision operators as `PartialOrd` cannot return a DSL type. Instead, use `cmpxx` methods such as `cmpgt, cmpeq`, etc. To cast a primitive/vector into another type, use `v.type()`. For example:
 ```rust
@@ -189,12 +188,11 @@ let iv = Int2::expr(1, 1, 1);
 let fv = iv.float(); //fv is Expr<Float2>
 let bv = fv.bool(); // bv is Expr<Bool2>
 ```
-To perform a bitwise cast, use the `bitcast` function. `let fv:Expr<f32> = bitcast::<u32, f32>(const_(0u32));`
+To perform a bitwise cast, use the `bitcast` function. `let fv:Expr<f32> = bitcast::<u32, f32>(0u32);`
 
 ### Builtin Functions
 
-We have extentded primitive types with methods similar to their host counterpart: `v.sin(), v.max(u)`, etc. Most methods accepts both a `Expr<T>` or a literal like `0.0`. However, the `select` function is slightly different as it do not accept literals. You need to use `select(cond, f_var, const_(1.0f32))`.
-
+We have extentded primitive types with methods similar to their host counterpart: `v.sin(), v.max(u)`, etc. Most methods accepts both a `Expr<T>` or a literal like `0.0`. However, the `select` function is slightly different as it does not accept literals. You need to use `select(cond, f_var, 1.0f32.expr())`.
 
 ### Control Flow
 *Note*, you cannot modify outer scope variables inside a control flow block by declaring the variable as `mut`. To modify outer scope variables, use `Var<T>` instead and call *var.get_mut() = value` to store the value back to the outer scope.
@@ -223,8 +221,60 @@ let (x,y) = switch::<(Expr<i32>, Expr<f32>)>(value)
     .finish();
 ```
 
+### `track!` Mcro
+
+We also offer a `track!` macro that automatically rewrites control flow primitves and comparison operators. For example (from [`examples/mpm.rs`](luisa_compute/examples/mpm.rs)):
+
+```rust
+track!(|| {
+    // ...
+    let vx = select(
+        coord.x() < BOUND && (vx < 0.0f32)
+            || coord.x() + BOUND > N_GRID as u32 && (vx > 0.0f32),
+        0.0f32.into(),
+        vx,
+    );
+    let vy = select(
+        coord.y() < BOUND && (vy < 0.0f32)
+            || coord.y() + BOUND > N_GRID as u32 && (vy > 0.0f32),
+        0.0f32.into(),
+        vy,
+    );
+    // ...
+})
+```
+is equivalent to:
+```rust
+|| {
+    // ...
+    let vx = select(
+        (coord.x().cmplt(BOUND) & vx.cmplt(0.0f32))
+            | (coord.x() + BOUND).cmpgt(N_GRID as u32) & vx.cmpgt(0.0f32),
+        0.0f32.into(),
+        vx,
+    );
+    let vy = select(
+        (coord.y().cmplt(BOUND) & vy.cmplt(0.0f32))
+            | (coord.y() + BOUND).cmpgt(N_GRID as u32) & vy.cmpgt(0.0f32),
+        0.0f32.into(),
+        vy,
+    );
+    // ...
+}
+```
+Similarily,
+```rust
+track!(if cond { foo } else if bar { baz } else { qux })
+```
+will be converted to
+```rust
+if_!(cond, { foo }, { if_!(bar, { baz }, { qux }) })
+```
+
+Note that this macro will rewrite `while`, `for _ in x..y`, and `loop` expressions to versions using functions, which will then break the `break` and `continue` expressions. In order to avoid this, it's possible to use the `escape!` macro within a `track!` context to disable rewriting for an expression.
+
 ### Custom Data Types
-To add custom data types to the EDSL, simply derive from `luisa::Value` macro. Note that `#[repr(C)]` is required for the struct to be compatible with C ABI. The proxy types are `XXXExpr` and `XXXVar`:
+To add custom data types to the EDSL, simply derive from `Value` macro. Note that `#[repr(C)]` is required for the struct to be compatible with C ABI. The proxy types are `XXXExpr` and `XXXVar`:
 
 ```rust
 #[derive(Copy, Clone, Default, Debug, Value)]
@@ -234,7 +284,7 @@ pub struct MyVec2 {
     pub y: f32,
 }
 
-let v = var!(MyVec2);
+let v = MyVec2.var();
 let sum = *v.x() + *v.y(); 
 *v.x().get_mut() += 1.0;
 ```
@@ -282,8 +332,6 @@ autodiff(||{
     buf_dv.write(.., dv);
     buf_dm.write(.., dm);
 });
-
-
 ```
 
 ### Custom Operators
@@ -304,8 +352,8 @@ let my_add = CpuFn::new(|args: &mut MyAddArgs| {
 
 let args = MyAddArgsExpr::new(x, y, Float32::zero());
 let result = my_add.call(args);
-
 ```
+
 ### Callable
 Users can define device-only functions using Callables. Callables have similar type signature to kernels: `Callable<fn(Args)->Ret>`. 
 The difference is that Callables are not dispatchable and can only be called from other Callables or Kernels. Callables can be created using `Device::create_callable`. To invoke a Callable, use `Callable::call(args...)`. Callables accepts arguments such as resources (`BufferVar<T>`, .etc), expressions and references (pass a `Var<T>` to the callable). For example:
@@ -317,7 +365,7 @@ let z = add.call(x, y);
 let pass_by_ref = device.create_callable::<fn(Var<f32>)>(&|a| {
     *a.get_mut() += 1.0;
 });
-let a = var!(f32, 1.0);
+let a = 1.0f32.var();
 pass_by_ref.call(a);
 cpu_dbg!(*a); // prints 2.0
 ```

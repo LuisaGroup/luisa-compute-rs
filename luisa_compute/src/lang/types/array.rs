@@ -138,7 +138,6 @@ impl<T: Value + TypeOf, const N: usize> Value for [T; N] {
     }
 }
 
-// TODO: What's the point of the two separate arrays?
 #[derive(Clone, Copy, Debug)]
 pub struct VLArrayExpr<T: Value> {
     marker: PhantomData<T>,

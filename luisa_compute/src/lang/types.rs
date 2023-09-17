@@ -13,33 +13,6 @@ pub mod vector;
 pub type Expr<T> = <T as Value>::Expr;
 pub type Var<T> = <T as Value>::Var;
 
-pub trait ValueType {}
-pub struct ValueValueType;
-pub struct ExprValueType;
-pub struct VarValueType;
-impl ValueType for ValueValueType {}
-impl ValueType for ExprValueType {}
-impl ValueType for VarValueType {}
-
-pub trait AsExpr<T: Value, S: ValueType> {
-    fn as_expr(self) -> Expr<T>;
-}
-impl<T: Value> AsExpr<T, ExprValueType> for Expr<T> {
-    fn as_expr(self) -> Expr<T> {
-        self
-    }
-}
-impl<T: Value> AsExpr<T, ValueValueType> for T {
-    fn as_expr(self) -> Expr<T> {
-        self.expr()
-    }
-}
-impl<T: Value> AsExpr<T, VarValueType> for Var<T> {
-    fn as_expr(self) -> Expr<T> {
-        self.load()
-    }
-}
-
 pub trait Value: Copy + ir::TypeOf + 'static {
     type Expr: ExprProxy<Value = Self>;
     type Var: VarProxy<Value = Self>;

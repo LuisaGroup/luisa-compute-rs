@@ -73,7 +73,7 @@ pub fn _log(item: TokenStream) -> TokenStream {
             let mut __log_priv_i = 0;
             let log_fn = Box::new(move |args: &[*const u32]| -> () {
                 let mut i = 0;
-                luisa_compute::log::log!(#level, #fmt , #(
+                luisa_compute::lang::printer::_log::log!(#level, #fmt , #(
                     {
                         let ret = luisa_compute::lang::printer::_unpack_from_expr(args[i], #arg_idents);
                         i += 1;

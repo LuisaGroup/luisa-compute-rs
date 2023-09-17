@@ -3,6 +3,9 @@ use std::fmt::Debug;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+#[doc(hidden)]
+pub use log as _log;
+
 use crate::internal_prelude::*;
 
 use crate::lang::{pack_to, packed_size};

@@ -1,13 +1,12 @@
 use std::ops::Range;
 
+use luisa::lang::diff::*;
+use luisa::lang::types::core::*;
 use luisa::prelude::*;
-use luisa::*;
 use luisa_compute as luisa;
 use rand::prelude::*;
-use rayon::{
-    prelude::{IntoParallelIterator, ParallelIterator},
-    slice::ParallelSliceMut,
-};
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use rayon::slice::ParallelSliceMut;
 #[path = "common.rs"]
 mod common;
 use common::*;

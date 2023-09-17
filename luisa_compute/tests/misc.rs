@@ -1,5 +1,5 @@
+use luisa::lang::types::core::*;
 use luisa::prelude::*;
-use luisa::*;
 use luisa_compute as luisa;
 use luisa_compute_api_types::StreamTag;
 use rand::prelude::*;
@@ -63,7 +63,7 @@ fn callable_return_mismatch() {
     let device = get_device();
     let _abs = device.create_callable::<fn(Expr<f32>) -> Expr<f32>>(&|x| {
         if_!(x.cmpgt(0.0), {
-            return_v(const_(true));
+            return_v(true.expr());
         });
         -x
     });
@@ -75,7 +75,7 @@ fn callable_return_void_mismatch() {
     let device = get_device();
     let _abs = device.create_callable::<fn(Var<f32>)>(&|x| {
         if_!(x.cmpgt(0.0), {
-            return_v(const_(true));
+            return_v(true.expr());
         });
         x.store(-*x);
     });
@@ -130,7 +130,7 @@ fn callable() {
         let tid = dispatch_id().x();
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
-        let z = var!(u32, add.call(x, y));
+        let z = add.call(x, y).var();
         write.call(buf_z, tid, z);
         buf_w.write(tid, z.load());
     });
@@ -494,7 +494,7 @@ fn array_read_write3() {
     let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let tid = dispatch_id().x();
-        let arr = local_zeroed::<[i32; 4]>();
+        let arr: Var<[i32; 4]> = Expr::<[i32; 4]>::zeroed().var();
         for_range(0..4u32, |i| {
             arr.write(i, tid.int() + i.int());
         });

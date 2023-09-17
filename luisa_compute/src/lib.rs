@@ -13,6 +13,9 @@ pub mod rtx;
 pub mod runtime;
 
 pub mod prelude {
+    pub use half::f16;
+
+    pub use crate::lang::control_flow::{break_, continue_, for_range, return_, return_v, switch};
     pub use crate::lang::functions::{dispatch_id, dispatch_size};
     pub use crate::lang::index::{IndexRead, IndexWrite};
     pub use crate::lang::ops::*;
@@ -22,9 +25,9 @@ pub mod prelude {
     pub use crate::lang::types::{Expr, ExprProxy, Value, Var, VarProxy};
     pub use crate::lang::Aggregate;
     pub use crate::resource::{IoTexel, StorageTexel, *};
-    pub use crate::runtime::{Device, Scope, Stream};
-    pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, while_};
-    pub use half::f16;
+    pub use crate::runtime::{Device, KernelBuildOptions, Scope, Stream};
+    pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, while_, Context};
+
     pub use luisa_compute_derive::*;
     pub use luisa_compute_track::track;
 }

@@ -20,7 +20,7 @@ pub fn get_device() -> Device {
     };
     ONCE.call_once(|| unsafe {
         if show_log {
-            init_logger_verbose();
+            luisa::init_logger_verbose();
         }
         libc::signal(libc::SIGSEGV, _signal_handler as usize);
     });

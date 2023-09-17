@@ -81,7 +81,7 @@ pub fn _log(item: TokenStream) -> TokenStream {
                     }
                 ), *);
             });
-            let mut printer_args = luisa_compute::lang::PrinterArgs::new();
+            let mut printer_args = luisa_compute::lang::printer::PrinterArgs::new();
             #(
                 printer_args.append(#arg_idents);
             )*

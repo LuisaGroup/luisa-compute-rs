@@ -1,6 +1,6 @@
-use std::env::current_exe;
-use luisa::*;
+use luisa::prelude::*;
 use luisa_compute as luisa;
+use std::env::current_exe;
 fn _signal_handler(signal: libc::c_int) {
     if signal == libc::SIGSEGV {
         panic!("segfault detected");

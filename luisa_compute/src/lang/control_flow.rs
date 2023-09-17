@@ -51,14 +51,37 @@ pub fn continue_() {
     });
 }
 
-// #[inline]
-// pub fn return_v<T: FromNode>(v: T) {
-//     __current_scope(|b| {
-//         b.return_(Some(v.node()));
-//     });
-// }
-#[inline]
+pub fn return_v<T: FromNode>(v: T) {
+    RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        if r.callable_ret_type.is_none() {
+            r.callable_ret_type = Some(v.node().type_().clone());
+        } else {
+            assert!(
+                luisa_compute_ir::context::is_type_equal(
+                    r.callable_ret_type.as_ref().unwrap(),
+                    v.node().type_()
+                ),
+                "return type mismatch"
+            );
+        }
+    });
+    __current_scope(|b| {
+        b.return_(v.node());
+    });
+}
 pub fn return_() {
+    RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        if r.callable_ret_type.is_none() {
+            r.callable_ret_type = Some(Type::void());
+        } else {
+            assert!(luisa_compute_ir::context::is_type_equal(
+                r.callable_ret_type.as_ref().unwrap(),
+                &Type::void()
+            ));
+        }
+    });
     __current_scope(|b| {
         b.return_(INVALID_REF);
     });

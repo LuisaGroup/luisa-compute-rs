@@ -11,7 +11,7 @@ use crate::internal_prelude::*;
 use bumpalo::Bump;
 use indexmap::IndexMap;
 
-use crate::runtime::Device;
+use crate::runtime::WeakDevice;
 
 pub mod ir {
     pub use luisa_compute_ir::context::register_type;
@@ -237,11 +237,12 @@ pub(crate) struct Recorder {
     pub(crate) cpu_custom_ops: IndexMap<u64, (usize, CArc<CpuCustomOp>)>,
     pub(crate) callables: IndexMap<u64, CallableModuleRef>,
     pub(crate) shared: Vec<NodeRef>,
-    pub(crate) device: Option<Device>,
+    pub(crate) device: Option<WeakDevice>,
     pub(crate) block_size: Option<[u32; 3]>,
     pub(crate) building_kernel: bool,
     pub(crate) pools: Option<CArc<ModulePools>>,
     pub(crate) arena: Bump,
+    pub(crate) callable_ret_type: Option<CArc<Type>>,
 }
 
 impl Recorder {
@@ -256,6 +257,7 @@ impl Recorder {
         self.arena.reset();
         self.shared.clear();
         self.kernel_id = None;
+        self.callable_ret_type = None;
     }
     pub(crate) fn new() -> Self {
         Recorder {
@@ -271,6 +273,7 @@ impl Recorder {
             arena: Bump::new(),
             building_kernel: false,
             kernel_id: None,
+            callable_ret_type: None,
         }
     }
 }

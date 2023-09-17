@@ -70,7 +70,7 @@ pub(crate) struct DeviceHandle {
     pub(crate) backend: ProxyBackend,
     pub(crate) default_stream: Option<Arc<StreamHandle>>,
     #[allow(dead_code)]
-    pub(crate) ctx: Arc<backend::Context>,
+    pub(crate) ctx: Arc<crate::backend::Context>,
 }
 
 unsafe impl Send for DeviceHandle {}

@@ -9,8 +9,6 @@ use crate::lang::{pack_to, packed_size};
 
 pub type LogFn = Box<dyn Fn(&[*const u32]) + Send + Sync>;
 struct PrinterItem {
-    #[allow(dead_code)]
-    level: log::Level,
     log_fn: LogFn,
     count: usize,
     count_per_arg: Vec<usize>,
@@ -118,7 +116,7 @@ impl Printer {
             }),
         }
     }
-    pub fn _log(&self, level: log::Level, args: PrinterArgs, log_fn: LogFn) {
+    pub fn _log(&self, _level: log::Level, args: PrinterArgs, log_fn: LogFn) {
         let inner = &self.inner;
         let data = inner.data.var();
         let offset = data.atomic_fetch_add(1, 1 + args.count as u32);

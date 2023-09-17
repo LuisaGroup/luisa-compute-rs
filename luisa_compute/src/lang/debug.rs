@@ -39,6 +39,8 @@ impl<T: Value> CpuFn<T> {
                 r.device
                     .as_ref()
                     .unwrap()
+                    .upgrade()
+                    .unwrap()
                     .inner
                     .query("device_name")
                     .unwrap(),
@@ -126,6 +128,8 @@ pub fn is_cpu_backend() -> bool {
         }
         r.device
             .as_ref()
+            .unwrap()
+            .upgrade()
             .unwrap()
             .inner
             .query("device_name")

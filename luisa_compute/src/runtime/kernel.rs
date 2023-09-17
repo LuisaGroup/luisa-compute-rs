@@ -200,7 +200,7 @@ impl KernelBuilder {
                 "Cannot record multiple kernels at the same time"
             );
             r.lock = true;
-            r.device = device.clone();
+            r.device = device.as_ref().map(|d| WeakDevice::new(d));
             r.pools = Some(CArc::new(ModulePools::new()));
             r.scopes.clear();
             r.building_kernel = is_kernel;
@@ -357,6 +357,14 @@ impl KernelBuilder {
             let mut r = r.borrow_mut();
             assert!(r.lock);
             r.lock = false;
+            if let Some(t) = &r.callable_ret_type {
+                assert!(
+                    luisa_compute_ir::context::is_type_equal(t, &ret_type),
+                    "Return type mismatch"
+                );
+            } else {
+                r.callable_ret_type = Some(ret_type.clone());
+            }
             assert_eq!(r.scopes.len(), 1);
             let scope = r.scopes.pop().unwrap();
             let entry = scope.finish();

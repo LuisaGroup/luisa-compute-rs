@@ -5,7 +5,19 @@ fn main() {
     use luisa::*;
     init_logger();
     let ctx = Context::new(current_exe().unwrap());
-    let device = ctx.create_device("cpu");
+    let args: Vec<String> = std::env::args().collect();
+    assert!(
+        args.len() <= 2,
+        "Usage: {} <backend>. <backend>: cpu, cuda, dx, metal, remote",
+        args[0]
+    );
+
+    let ctx = Context::new(current_exe().unwrap());
+    let device = ctx.create_device(if args.len() == 2 {
+        args[1].as_str()
+    } else {
+        "cpu"
+    });
     let add = device.create_dyn_callable::<fn(DynExpr, DynExpr) -> DynExpr>(Box::new(
         |a: DynExpr, b: DynExpr| -> DynExpr {
             if let Some(a) = a.downcast::<f32>() {

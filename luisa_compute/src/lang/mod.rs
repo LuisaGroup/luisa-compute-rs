@@ -605,6 +605,7 @@ pub(crate) struct Recorder {
     pub(crate) building_kernel: bool,
     pub(crate) pools: Option<CArc<ModulePools>>,
     pub(crate) arena: Bump,
+    pub(crate) callable_ret_type: Option<CArc<Type>>,
 }
 
 impl Recorder {
@@ -619,6 +620,7 @@ impl Recorder {
         self.arena.reset();
         self.shared.clear();
         self.kernel_id = None;
+        self.callable_ret_type = None;
     }
     pub(crate) fn new() -> Self {
         Recorder {
@@ -634,6 +636,7 @@ impl Recorder {
             arena: Bump::new(),
             building_kernel: false,
             kernel_id: None,
+            callable_ret_type: None,
         }
     }
 }
@@ -2009,6 +2012,14 @@ impl KernelBuilder {
             let mut r = r.borrow_mut();
             assert!(r.lock);
             r.lock = false;
+            if let Some(t) = &r.callable_ret_type {
+                assert!(
+                    luisa_compute_ir::context::is_type_equal(t, &ret_type),
+                    "Return type mismatch"
+                );
+            } else {
+                r.callable_ret_type = Some(ret_type.clone());
+            }
             assert_eq!(r.scopes.len(), 1);
             let scope = r.scopes.pop().unwrap();
             let entry = scope.finish();
@@ -2732,12 +2743,38 @@ pub fn continue_() {
     });
 }
 
-// pub fn return_v<T: FromNode>(v: T) {
-//     __current_scope(|b| {
-//         b.return_(Some(v.node()));
-//     });
-// }
+pub fn return_v<T: FromNode>(v: T) {
+    RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        if r.callable_ret_type.is_none() {
+            r.callable_ret_type = Some(v.node().type_().clone());
+        } else {
+            assert!(
+                luisa_compute_ir::context::is_type_equal(
+                    r.callable_ret_type.as_ref().unwrap(),
+                    v.node().type_()
+                ),
+                "return type mismatch"
+            );
+        }
+    });
+    __current_scope(|b| {
+        b.return_(v.node());
+    });
+}
+
 pub fn return_() {
+    RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+        if r.callable_ret_type.is_none() {
+            r.callable_ret_type = Some(Type::void());
+        } else {
+            assert!(luisa_compute_ir::context::is_type_equal(
+                r.callable_ret_type.as_ref().unwrap(),
+                &Type::void()
+            ));
+        }
+    });
     __current_scope(|b| {
         b.return_(INVALID_REF);
     });

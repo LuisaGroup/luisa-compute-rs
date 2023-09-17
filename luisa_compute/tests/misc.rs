@@ -83,6 +83,55 @@ fn event() {
     assert_eq!(v[0], (1 + 3) * (4 + 5));
 }
 #[test]
+#[should_panic]
+fn callable_return_mismatch() {
+    let device = get_device();
+    let _abs = device.create_callable::<fn(Expr<f32>) -> Expr<f32>>(&|x| {
+        if_!(x.cmpgt(0.0), {
+            return_v(const_(true));
+        });
+        -x
+    });
+}
+#[test]
+#[should_panic]
+fn callable_return_void_mismatch() {
+    let device = get_device();
+    let _abs = device.create_callable::<fn(Var<f32>)>(&|x| {
+        if_!(x.cmpgt(0.0), {
+            return_v(const_(true));
+        });
+        x.store(-*x);
+    });
+}
+#[test]
+fn callable_early_return() {
+    let device = get_device();
+    let abs = device.create_callable::<fn(Expr<f32>) -> Expr<f32>>(&|x| {
+        if_!(x.cmpgt(0.0), {
+            return_v(x);
+        });
+        -x
+    });
+    let x = device.create_buffer::<f32>(1024);
+    let mut rng = StdRng::seed_from_u64(0);
+    x.fill_fn(|_| rng.gen());
+    let y = device.create_buffer::<f32>(1024);
+    device
+        .create_kernel::<fn()>(&|| {
+            let i = dispatch_id().x();
+            let x = x.var().read(i);
+            let y = y.var();
+            y.write(i, abs.call(x));
+        })
+        .dispatch([x.len() as u32, 1, 1]);
+    let x = x.copy_to_vec();
+    let y = y.copy_to_vec();
+    for i in 0..x.len() {
+        assert_eq!(y[i], x[i].abs());
+    }
+}
+#[test]
 fn callable() {
     let device = get_device();
     let write = device.create_callable::<fn(BufferVar<u32>, Expr<u32>, Var<u32>)>(
@@ -91,7 +140,7 @@ fn callable() {
             v.store(v.load() + 1);
         },
     );
-    let add = device.create_callable::<fn(Expr<u32>, Expr<u32>)->Expr<u32>>(&|a, b| a + b);
+    let add = device.create_callable::<fn(Expr<u32>, Expr<u32>) -> Expr<u32>>(&|a, b| a + b);
     let x = device.create_buffer::<u32>(1024);
     let y = device.create_buffer::<u32>(1024);
     let z = device.create_buffer::<u32>(1024);
@@ -715,7 +764,11 @@ fn byte_buffer() {
         ($t:ty, $offset:expr) => {{
             let s = std::mem::size_of::<$t>();
             let bytes = &data[$offset..$offset + s];
-            let v = unsafe { std::mem::transmute_copy::<[u8; {std::mem::size_of::<$t>()}], $t>(bytes.try_into().unwrap()) };
+            let v = unsafe {
+                std::mem::transmute_copy::<[u8; { std::mem::size_of::<$t>() }], $t>(
+                    bytes.try_into().unwrap(),
+                )
+            };
             v
         }};
     }
@@ -723,7 +776,7 @@ fn byte_buffer() {
     let v1 = pop!(Big, i1);
     let v2 = pop!(i32, i2);
     let v3 = pop!(f32, i3);
-    assert_eq!(v0, Float3::new(1.0,2.0,3.0));
+    assert_eq!(v0, Float3::new(1.0, 2.0, 3.0));
     assert_eq!(v2, 1);
     assert_eq!(v3, 2.0);
     for i in 0..32 {
@@ -759,7 +812,7 @@ fn bindless_byte_buffer() {
     let i2 = push!(i32, 0i32);
     let i3 = push!(f32, 1f32);
     device
-        .create_kernel::<fn(ByteBuffer)>(&|out:ByteBufferVar| {
+        .create_kernel::<fn(ByteBuffer)>(&|out: ByteBufferVar| {
             let heap = heap.var();
             let buf = heap.byte_address_buffer(0);
             let i0 = i0 as u64;
@@ -787,7 +840,11 @@ fn bindless_byte_buffer() {
         ($t:ty, $offset:expr) => {{
             let s = std::mem::size_of::<$t>();
             let bytes = &data[$offset..$offset + s];
-            let v = unsafe { std::mem::transmute_copy::<[u8; {std::mem::size_of::<$t>()}], $t>(bytes.try_into().unwrap()) };
+            let v = unsafe {
+                std::mem::transmute_copy::<[u8; { std::mem::size_of::<$t>() }], $t>(
+                    bytes.try_into().unwrap(),
+                )
+            };
             v
         }};
     }
@@ -795,7 +852,7 @@ fn bindless_byte_buffer() {
     let v1 = pop!(Big, i1);
     let v2 = pop!(i32, i2);
     let v3 = pop!(f32, i3);
-    assert_eq!(v0, Float3::new(1.0,2.0,3.0));
+    assert_eq!(v0, Float3::new(1.0, 2.0, 3.0));
     assert_eq!(v2, 1);
     assert_eq!(v3, 2.0);
     for i in 0..32 {

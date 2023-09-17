@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use proc_macro_error::{abort, emit_error};
+use proc_macro_error::emit_error;
 use quote::quote;
 use syn::spanned::Spanned;
 use syn::visit_mut::*;
@@ -14,6 +14,27 @@ struct TraceVisitor {
 }
 
 impl VisitMut for TraceVisitor {
+    fn visit_block_mut(&mut self, node: &mut Block) {
+        let len = node.stmts.len();
+        if len > 0 {
+            for stmt in node.stmts[0..len - 1].iter_mut() {
+                self.visit_stmt_mut(stmt);
+            }
+            visit_stmt_mut(self, node.stmts.last_mut().unwrap());
+        }
+    }
+    fn visit_stmt_mut(&mut self, node: &mut Stmt) {
+        let span = node.span();
+        match node {
+            Stmt::Expr(_, semi) => {
+                if semi.is_none() {
+                    *semi = Some(Token![;](span));
+                }
+            }
+            _ => {}
+        }
+        visit_stmt_mut(self, node);
+    }
     fn visit_expr_mut(&mut self, node: &mut Expr) {
         let flow_path = &self.flow_path;
         let trait_path = &self.trait_path;
@@ -177,7 +198,7 @@ fn test_macro() {
         .to_string(),
         quote!(|x: Expr<f32>, y: Expr<f32>| {
             <_ as ::luisa_compute::lang::maybe_expr::BoolIfElseMaybeExpr<_> >::if_then_else(
-                <_ as ::luisa_compute::lang::maybe_expr::PartialOrdMaybeExpr>::gt(x, y),
+                <_ as ::luisa_compute::lang::maybe_expr::PartialOrdMaybeExpr<_> >::gt(x, y),
                 | | { x * y },
                 | | { y * x + (x / 32.0 * PI).sin() }
             )

@@ -138,14 +138,14 @@ fn main() {
         let vx = v.load().x();
         let vy = v.load().y() - DT * GRAVITY;
         let vx = select(
-            ((coord.x() < BOUND) && (vx < 0.0f32))
-                || (coord.x() + BOUND > N_GRID as u32) && (vx > 0.0f32),
+            coord.x() < BOUND && (vx < 0.0f32)
+                || coord.x() + BOUND > N_GRID as u32 && (vx > 0.0f32),
             0.0f32.into(),
             vx,
         );
         let vy = select(
-            ((coord.y() < BOUND) && (vy < 0.0f32))
-                || (coord.y() + BOUND > N_GRID as u32) && (vy > 0.0f32),
+            coord.y() < BOUND && (vy < 0.0f32)
+                || coord.y() + BOUND > N_GRID as u32 && (vy > 0.0f32),
             0.0f32.into(),
             vy,
         );

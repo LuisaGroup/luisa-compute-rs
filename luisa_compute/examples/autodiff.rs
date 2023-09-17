@@ -1,6 +1,6 @@
 use std::{env::current_exe, f32::consts::PI};
 
-use luisa::*;
+use luisa::{prelude::track, *};
 use luisa_compute as luisa;
 fn main() {
     luisa::init_logger_verbose();
@@ -31,11 +31,13 @@ fn main() {
         let buf_y = y.var();
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
-        let f = |x: Expr<f32>, y: Expr<f32>| {
-            if_!(x.cmpgt(y), { x * y }, else, {
+        let f = track!(|x: Expr<f32>, y: Expr<f32>| {
+            if x > y {
+                x * y
+            } else {
                 y * x + (x / 32.0 * PI).sin()
-            })
-        };
+            }
+        });
         autodiff(|| {
             requires_grad(x);
             requires_grad(y);

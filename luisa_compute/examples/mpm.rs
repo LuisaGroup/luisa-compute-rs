@@ -100,7 +100,7 @@ fn main() {
         grid_m.var().write(idx, 0.0f32);
     });
 
-    let point_to_grid = device.create_kernel_async::<fn()>(&|| {
+    let point_to_grid = device.create_kernel_async::<fn()>(&track!(|| {
         let p = dispatch_id().x();
         let xp = x.var().read(p) / DX;
         let base = (xp - 0.5f32).int();
@@ -126,9 +126,9 @@ fn main() {
             grid_v.var().atomic_fetch_add(idx * 2 + 1, vadd.y());
             grid_m.var().atomic_fetch_add(idx, weight * P_MASS);
         }
-    });
+    }));
 
-    let simulate_grid = device.create_kernel_async::<fn()>(&|| {
+    let simulate_grid = device.create_kernel_async::<fn()>(&track!(|| {
         let coord = dispatch_id().xy();
         let i = index(coord);
         let v = var!(Float2);
@@ -138,24 +138,22 @@ fn main() {
         ));
         let m = grid_m.var().read(i);
 
-        v.store(select(m.cmpgt(0.0f32), v.load() / m, v.load()));
+        v.store(select(m > 0.0f32, v.load() / m, v.load()));
         let vx = v.load().x();
         let vy = v.load().y() - DT * GRAVITY;
         let vx = select(
-            (coord.x().cmplt(BOUND) & vx.cmplt(0.0f32))
-                | (coord.x() + BOUND).cmpgt(N_GRID as u32) & vx.cmpgt(0.0f32),
+            coord.x() > BOUND && vx > 0.0f32 || coord.x() + BOUND > N_GRID as u32 && vx > 0.0f32,
             0.0f32.into(),
             vx,
         );
         let vy = select(
-            (coord.y().cmplt(BOUND) & vy.cmplt(0.0f32))
-                | (coord.y() + BOUND).cmpgt(N_GRID as u32) & vy.cmpgt(0.0f32),
+            coord.y() > BOUND && vy > 0.0f32 || coord.y() + BOUND > N_GRID as u32 && vy > 0.0f32,
             0.0f32.into(),
             vy,
         );
         grid_v.var().write(i * 2, vx);
         grid_v.var().write(i * 2 + 1, vy);
-    });
+    }));
 
     let grid_to_point = device.create_kernel_async::<fn()>(&|| {
         let p = dispatch_id().x();

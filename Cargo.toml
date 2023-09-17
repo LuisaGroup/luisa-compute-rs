@@ -4,7 +4,9 @@ members = [
     "luisa_compute_sys",
     "luisa_compute_derive_impl",
     "luisa_compute_derive",
+    "luisa_compute_track",
 ]
+resolver = "2"
 # exclude  = [
 #     "luisa_compute_sys/LuisaCompute/src/api/luisa_compute_api_types",
 # ]

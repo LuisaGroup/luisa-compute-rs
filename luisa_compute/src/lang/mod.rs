@@ -36,6 +36,7 @@ use std::ops::{Deref, DerefMut};
 use std::sync::atomic::AtomicUsize;
 // use self::math::Uint3;
 pub mod math;
+pub mod maybe_expr;
 pub mod poly;
 pub mod printer;
 pub mod swizzle;
@@ -397,6 +398,11 @@ macro_rules! impl_prim {
         impl From<$t> for PrimExpr<$t> {
             fn from(v: $t) -> Self {
                 const_(v)
+            }
+        }
+        impl From<PrimVar<$t>> for PrimExpr<$t> {
+            fn from(v: PrimVar<$t>) -> Self {
+                v.load()
             }
         }
         impl FromNode for PrimVar<$t> {
@@ -2398,8 +2404,8 @@ impl_kernel_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15)
 
 pub fn if_then_else<R: Aggregate>(
     cond: impl Mask,
-    then: impl Fn() -> R,
-    else_: impl Fn() -> R,
+    then: impl FnOnce() -> R,
+    else_: impl FnOnce() -> R,
 ) -> R {
     let cond = cond.node();
     RECORDER.with(|r| {
@@ -2453,7 +2459,11 @@ pub fn if_then_else<R: Aggregate>(
     R::from_vec_nodes(phis)
 }
 
-pub fn generic_loop(cond: impl Fn() -> Bool, body: impl Fn(), update: impl Fn()) {
+pub fn generic_loop(
+    mut cond: impl FnMut() -> Bool,
+    mut body: impl FnMut(),
+    mut update: impl FnMut(),
+) {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
         let pools = r.pools.clone().unwrap();
@@ -2634,7 +2644,7 @@ macro_rules! while_ {
 #[macro_export]
 macro_rules! loop_ {
     ($body:block) => {
-        $crate::while_!(const_(true), $body)
+        $crate::while_!($crate::const_(true), $body)
     };
 }
 pub trait ForLoopRange {

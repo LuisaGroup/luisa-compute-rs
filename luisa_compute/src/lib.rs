@@ -10,7 +10,7 @@ pub mod rtx;
 pub mod runtime;
 
 pub use half::f16;
-use luisa_compute_api_types as api;
+// use luisa_compute_api_types as api;
 pub use luisa_compute_backend as backend;
 
 pub mod prelude {
@@ -27,11 +27,14 @@ pub mod prelude {
     // };
     pub use crate::lang::math::*;
     pub use crate::lang::swizzle::*;
-    pub use crate::lang::{dispatch_id, dispatch_size};
+    pub use crate::lang::{
+        dispatch_id, dispatch_size, Bool, F16, F32, F64, I16, I32, I64, U16, U32, U64,
+    };
     pub use crate::resource::{IoTexel, StorageTexel};
     pub use crate::runtime::KernelArg;
     pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, while_};
     pub use luisa_compute_ir::TypeOf;
+    pub use luisa_compute_track::track;
 }
 
 pub use api::{

@@ -25,6 +25,7 @@ To see the use of `luisa-compute-rs` in a high performance offline rendering sys
     - [Custom Operators](#custom-operators)
     - [Callable](#callable)
     - [Kernel](#kernel)
+    - [Debugging](#debugging)
   - [Advanced Usage](#advanced-usage)
   - [Safety](#safety)
     - [API](#api)
@@ -437,6 +438,12 @@ let pair = BufferPair{a,b};
 kernel.dispatch([...], &packed);
 let BufferPair{a, b} = packed; // unpack if you need to use them later
 ```
+### Debugging
+We provide logging through the `log` crate. Users can either setup their own logger or use the `init_logger()` and `init_logger_verbose()` for handy initialization.
+For `debug` builds,  oob checks are automatically inserted so that an assertion failure would occur if oob access is detected. On CPU backend, it will be accompanied by an informative message such as `assertion failed: i.cmplt(self.len()) at xx.rs:yy:zz`. Setting the environment variable `LUISA_BACKTRACE=1` would display a stacktrace containing the *DSL* code that records the kernel. For other backends, assertion with message is still *WIP*.
+
+For `release` builds however, these checks are disabled by default for performance reasons. To enable them, set environment variable `LUISA_DEBUG=1` prior to launching the application.
+
 ## Advanced Usage
 Note that the IR module has a public interface. If needed, user can implement their own DSL syntax sugar. Every EDSL object implements either `Aggregate` or `FromNode` trait, which allows any EDSL type to be destructured into its underlying IR nodes and reconstructed from them.
 

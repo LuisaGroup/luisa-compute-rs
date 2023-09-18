@@ -171,6 +171,9 @@ impl VisitMut for TraceVisitor {
 
 #[proc_macro]
 pub fn track(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = TokenStream::from(input);
+    let input = quote!({ #input });
+    let input = proc_macro::TokenStream::from(input);
     track_impl(parse_macro_input!(input as Expr)).into()
 }
 

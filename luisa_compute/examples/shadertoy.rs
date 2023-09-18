@@ -2,8 +2,7 @@ use luisa::prelude::*;
 use luisa_compute as luisa;
 use std::env::current_exe;
 fn main() {
-    use luisa::*;
-    init_logger();
+    luisa::init_logger();
 
     std::env::set_var("WINIT_UNIX_BACKEND", "x11");
 
@@ -22,31 +21,30 @@ fn main() {
     });
 
     let palette = device.create_callable::<fn(Expr<f32>) -> Expr<Float3>>(&|d| {
-        make_float3(0.2, 0.7, 0.9).lerp(make_float3(1.0, 0.0, 1.0), Float3Expr::splat(d))
+        Float3::expr(0.2, 0.7, 0.9).lerp(Float3::expr(1.0, 0.0, 1.0), Expr::<Float3>::splat(d))
     });
-    let rotate =
-        device.create_callable::<fn(Expr<Float2>, Expr<f32>) -> Expr<Float2>>(&|mut p, a| {
-            let c = a.cos();
-            let s = a.sin();
-            make_float2(p.dot(make_float2(c, s)), p.dot(make_float2(-s, c)))
-        });
+    let rotate = device.create_callable::<fn(Expr<Float2>, Expr<f32>) -> Expr<Float2>>(&|p, a| {
+        let c = a.cos();
+        let s = a.sin();
+        Float2::expr(p.dot(Float2::expr(c, s)), p.dot(Float2::expr(-s, c)))
+    });
     let map = device.create_callable::<fn(Expr<Float3>, Expr<f32>) -> Expr<f32>>(&|mut p, time| {
-        for i in 0..8 {
+        for _i in 0..8 {
             let t = time * 0.2;
             let r = rotate.call(p.xz(), t);
-            p = make_float3(r.x(), r.y(), p.y()).xzy();
+            p = Float3::expr(r.x(), r.y(), p.y()).xzy();
             let r = rotate.call(p.xy(), t * 1.89);
-            p = make_float3(r.x(), r.y(), p.z());
-            p = make_float3(p.x().abs() - 0.5, p.y(), p.z().abs() - 0.5)
+            p = Float3::expr(r.x(), r.y(), p.z());
+            p = Float3::expr(p.x().abs() - 0.5, p.y(), p.z().abs() - 0.5)
         }
-        Float3Expr::splat(1.0).copysign(p).dot(p) * 0.2
+        Expr::<Float3>::splat(1.0).copysign(p).dot(p) * 0.2
     });
-    let rm = device.create_callable::<fn(Expr<Float3>, Expr<Float3>, Expr<f32>)-> Expr<Float4>>(
+    let rm = device.create_callable::<fn(Expr<Float3>, Expr<Float3>, Expr<f32>) -> Expr<Float4>>(
         &|ro, rd, time| {
-            let t = var!(f32, 0.0);
-            let col = var!(Float3);
-            let d = var!(f32);
-            for_range(0i32..64, |i| {
+            let t = 0.0_f32.var();
+            let col = Var::<Float3>::zeroed();
+            let d = Var::<f32>::zeroed();
+            for_range(0i32..64, |_i| {
                 let p = ro + rd * *t;
                 *d.get_mut() = map.call(p, time) * 0.5;
                 if_!(d.cmplt(0.02) | d.cmpgt(100.0), { break_() });
@@ -54,21 +52,21 @@ fn main() {
                 *t.get_mut() += *d;
             });
             let col = *col;
-            make_float4(col.x(), col.y(), col.z(), 1.0 / (100.0 * *d))
+            Float4::expr(col.x(), col.y(), col.z(), 1.0 / (100.0 * *d))
         },
     );
-    let clear_kernel = device.create_kernel::<fn(Tex2d<Float4>,)>(&|img| {
+    let clear_kernel = device.create_kernel::<fn(Tex2d<Float4>)>(&|img| {
         let coord = dispatch_id().xy();
-        img.write(coord, make_float4(0.3, 0.4, 0.5, 1.0));
+        img.write(coord, Float4::expr(0.3, 0.4, 0.5, 1.0));
     });
     let main_kernel = device.create_kernel::<fn(Tex2d<Float4>, f32)>(&|img, time| {
         let xy = dispatch_id().xy();
         let resolution = dispatch_size().xy();
         let uv = (xy.float() - resolution.float() * 0.5) / resolution.x().float();
-        let r = rotate.call(make_float2(0.0, -50.0), time);
-        let ro = make_float3(r.x(), r.y(), 0.0).xzy();
+        let r = rotate.call(Float2::expr(0.0, -50.0), time);
+        let ro = Float3::expr(r.x(), r.y(), 0.0).xzy();
         let cf = (-ro).normalize();
-        let cs = cf.cross(make_float3(0.0, 10.0, 0.0)).normalize();
+        let cs = cf.cross(Float3::expr(0.0, 10.0, 0.0)).normalize();
         let cu = cf.cross(cs).normalize();
         let uuv = ro + cf * 3.0 + uv.x() * cs + uv.y() * cu;
         let rd = (uuv - ro).normalize();
@@ -76,7 +74,7 @@ fn main() {
         let color = col.xyz();
         let alpha = col.w();
         let old = img.read(xy).xyz();
-        let accum = color.lerp(old, Float3Expr::splat(alpha));
-        img.write(xy, make_float4(accum.x(), accum.y(), accum.z(), 1.0));
+        let accum = color.lerp(old, Expr::<Float3>::splat(alpha));
+        img.write(xy, Float4::expr(accum.x(), accum.y(), accum.z(), 1.0));
     });
 }

@@ -1,5 +1,6 @@
+use luisa::lang::types::array::VLArrayVar;
+use luisa::lang::types::core::*;
 use luisa::prelude::*;
-use luisa::*;
 use luisa_compute as luisa;
 use luisa_compute_api_types::StreamTag;
 use rand::prelude::*;
@@ -63,7 +64,7 @@ fn callable_return_mismatch() {
     let device = get_device();
     let _abs = device.create_callable::<fn(Expr<f32>) -> Expr<f32>>(&|x| {
         if_!(x.cmpgt(0.0), {
-            return_v(const_(true));
+            return_v(true.expr());
         });
         -x
     });
@@ -75,7 +76,7 @@ fn callable_return_void_mismatch() {
     let device = get_device();
     let _abs = device.create_callable::<fn(Var<f32>)>(&|x| {
         if_!(x.cmpgt(0.0), {
-            return_v(const_(true));
+            return_v(true.expr());
         });
         x.store(-*x);
     });
@@ -130,7 +131,7 @@ fn callable() {
         let tid = dispatch_id().x();
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
-        let z = var!(u32, add.call(x, y));
+        let z = add.call(x, y).var();
         write.call(buf_z, tid, z);
         buf_w.write(tid, z.load());
     });
@@ -470,8 +471,8 @@ fn array_read_write() {
     let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let tid = dispatch_id().x();
-        let arr = local_zeroed::<[i32; 4]>();
-        let i = local_zeroed::<i32>();
+        let arr = Var::<[i32; 4]>::zeroed();
+        let i = IntVar::zeroed();
         while_!(i.load().cmplt(4), {
             arr.write(i.load().uint(), tid.int() + i.load());
             i.store(i.load() + 1);
@@ -494,7 +495,7 @@ fn array_read_write3() {
     let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let tid = dispatch_id().x();
-        let arr = local_zeroed::<[i32; 4]>();
+        let arr = Var::<[i32; 4]>::zeroed();
         for_range(0..4u32, |i| {
             arr.write(i, tid.int() + i.int());
         });
@@ -516,7 +517,7 @@ fn array_read_write4() {
     let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let tid = dispatch_id().x();
-        let arr = local_zeroed::<[i32; 4]>();
+        let arr = Var::<[i32; 4]>::zeroed();
         for_range(0..6u32, |_| {
             for_range(0..4u32, |i| {
                 arr.write(i, arr.read(i) + tid.int() + i.int());
@@ -547,8 +548,8 @@ fn array_read_write2() {
         let buf_x = x.var();
         let buf_y = y.var();
         let tid = dispatch_id().x();
-        let arr = local_zeroed::<[i32; 4]>();
-        let i = local_zeroed::<i32>();
+        let arr = Var::<[i32; 4]>::zeroed();
+        let i = IntVar::zeroed();
         while_!(i.load().cmplt(4), {
             arr.write(i.load().uint(), tid.int() + i.load());
             i.store(i.load() + 1);
@@ -578,13 +579,13 @@ fn array_read_write_vla() {
         let buf_y = y.var();
         let tid = dispatch_id().x();
         let vl = VLArrayVar::<i32>::zero(4);
-        let i = local_zeroed::<i32>();
+        let i = IntVar::zeroed();
         while_!(i.load().cmplt(4), {
             vl.write(i.load().uint(), tid.int() + i.load());
             i.store(i.load() + 1);
         });
-        let arr = local_zeroed::<[i32; 4]>();
-        let i = local_zeroed::<i32>();
+        let arr = Var::<[i32; 4]>::zeroed();
+        let i = IntVar::zeroed();
         while_!(i.load().cmplt(4), {
             arr.write(i.load().uint(), vl.read(i.load().uint()));
             i.store(i.load() + 1);
@@ -611,8 +612,8 @@ fn array_read_write_async_compile() {
     let kernel = device.create_kernel::<fn()>(&|| {
         let buf_x = x.var();
         let tid = dispatch_id().x();
-        let arr = local_zeroed::<[i32; 4]>();
-        let i = local_zeroed::<i32>();
+        let arr = Var::<[i32; 4]>::zeroed();
+        let i = IntVar::zeroed();
         while_!(i.load().cmplt(4), {
             arr.write(i.load().uint(), tid.int() + i.load());
             i.store(i.load() + 1);
@@ -636,7 +637,7 @@ fn capture_same_buffer_multiple_view() {
     x.view(..).fill_fn(|i| i as f32);
     sum.view(..).fill(0.0);
     let shader = device.create_kernel::<fn()>(&|| {
-        let tid = luisa::dispatch_id().x();
+        let tid = dispatch_id().x();
         let buf_x_lo = x.view(0..64).var();
         let buf_x_hi = x.view(64..).var();
         let x = if_!(tid.cmplt(64), {
@@ -664,7 +665,7 @@ fn uniform() {
     x.view(..).fill_fn(|i| i as f32);
     sum.view(..).fill(0.0);
     let shader = device.create_kernel::<fn(Float3)>(&|v: Expr<Float3>| {
-        let tid = luisa::dispatch_id().x();
+        let tid = dispatch_id().x();
         let buf_x_lo = x.view(0..64).var();
         let buf_x_hi = x.view(64..).var();
         let x = if_!(tid.cmplt(64), {
@@ -683,7 +684,7 @@ fn uniform() {
     let expected = (x.len() as f32 - 1.0) * x.len() as f32 * 0.5 * 6.0;
     assert!((actual - expected).abs() < 1e-4);
 }
-#[derive(Clone, Copy, Debug, __Value)]
+#[derive(Clone, Copy, Debug, Value)]
 #[repr(C)]
 struct Big {
     a: [f32; 32],
@@ -719,11 +720,11 @@ fn byte_buffer() {
             let i1 = i1 as u64;
             let i2 = i2 as u64;
             let i3 = i3 as u64;
-            let v0 = def(buf.read::<Float3>(i0));
-            let v1 = def(buf.read::<Big>(i1));
-            let v2 = def(buf.read::<i32>(i2));
-            let v3 = def(buf.read::<f32>(i3));
-            *v0.get_mut() = make_float3(1.0, 2.0, 3.0);
+            let v0 = buf.read::<Float3>(i0).var();
+            let v1 = buf.read::<Big>(i1).var();
+            let v2 = buf.read::<i32>(i2).var();
+            let v3 = buf.read::<f32>(i3).var();
+            *v0.get_mut() = Float3::expr(1.0, 2.0, 3.0);
             for_range(0u32..32u32, |i| {
                 v1.a().write(i, i.float() * 2.0);
             });
@@ -795,11 +796,11 @@ fn bindless_byte_buffer() {
             let i1 = i1 as u64;
             let i2 = i2 as u64;
             let i3 = i3 as u64;
-            let v0 = def(buf.read::<Float3>(i0));
-            let v1 = def(buf.read::<Big>(i1));
-            let v2 = def(buf.read::<i32>(i2));
-            let v3 = def(buf.read::<f32>(i3));
-            *v0.get_mut() = make_float3(1.0, 2.0, 3.0);
+            let v0 = buf.read::<Float3>(i0).var();
+            let v1 = buf.read::<Big>(i1).var();
+            let v2 = buf.read::<i32>(i2).var();
+            let v3 = buf.read::<f32>(i3).var();
+            *v0.get_mut() = Float3::expr(1.0, 2.0, 3.0);
             for_range(0u32..32u32, |i| {
                 v1.a().write(i, i.float() * 2.0);
             });

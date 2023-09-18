@@ -1,7 +1,8 @@
-use std::{env::current_exe, path::PathBuf};
+use std::env::current_exe;
+use std::path::PathBuf;
 
 use image::io::Reader as ImageReader;
-use luisa::*;
+use luisa::prelude::*;
 use luisa_compute as luisa;
 
 fn main() {
@@ -12,7 +13,7 @@ fn main() {
         args[0]
     );
 
-    init_logger();
+    luisa::init_logger();
     let ctx = Context::new(current_exe().unwrap());
     let device = ctx.create_device(if args.len() == 2 {
         args[1].as_str()
@@ -63,8 +64,8 @@ fn main() {
     let kernel = device.create_kernel::<fn(Buffer<f32>)>(&|buf_z| {
         let bindless = bindless.var();
         let tid = dispatch_id().x();
-        let buf_x = bindless.buffer::<f32>(Uint::from(0));
-        let buf_y = bindless.buffer::<f32>(Uint::from(1));
+        let buf_x = bindless.buffer::<f32>(0_u32.expr());
+        let buf_y = bindless.buffer::<f32>(1_u32.expr());
         let x = buf_x.read(tid).uint().float();
         let y = buf_y.read(tid);
         buf_z.write(tid, x + y);

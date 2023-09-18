@@ -1,6 +1,6 @@
-use std::env::current_exe;
-use luisa::*;
+use luisa::prelude::*;
 use luisa_compute as luisa;
+use std::env::current_exe;
 fn _signal_handler(signal: libc::c_int) {
     if signal == libc::SIGSEGV {
         panic!("segfault detected");
@@ -20,7 +20,7 @@ pub fn get_device() -> Device {
     };
     ONCE.call_once(|| unsafe {
         if show_log {
-            init_logger_verbose();
+            luisa::init_logger_verbose();
         }
         libc::signal(libc::SIGSEGV, _signal_handler as usize);
     });

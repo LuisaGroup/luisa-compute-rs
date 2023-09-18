@@ -2,7 +2,7 @@ use luisa_compute_derive_impl::*;
 use quote::ToTokens;
 
 fn main() {
-    let compiler = Compiler::new(false);
+    let compiler = Compiler;
     let item: syn::ItemStruct = syn::parse_str(
         r#"
         #[derive(__Value)]

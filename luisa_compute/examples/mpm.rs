@@ -1,16 +1,12 @@
 #![allow(non_snake_case)]
-use std::{env::current_exe, time::Instant};
+use std::env::current_exe;
+use std::time::Instant;
 
-use luisa::init_logger;
-#[allow(unused_imports)]
 use luisa::prelude::*;
-use luisa::*;
 use luisa_compute as luisa;
 use rand::Rng;
-use winit::{
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-};
+use winit::event::{Event, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
 
 const N_GRID: usize = 128;
 const N_STEPS: usize = 50;
@@ -26,7 +22,7 @@ const E: f32 = 400.0f32;
 const RESOLUTION: u32 = 512;
 
 fn main() {
-    init_logger();
+    luisa::init_logger();
     std::env::set_var("WINIT_UNIX_BACKEND", "x11");
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 2 {
@@ -87,8 +83,8 @@ fn main() {
 
     let index = |xy: Expr<Uint2>| -> Expr<u32> {
         let p = xy.clamp(
-            make_uint2(0, 0),
-            make_uint2(N_GRID as u32 - 1, N_GRID as u32 - 1),
+            Uint2::expr(0, 0),
+            Uint2::expr(N_GRID as u32 - 1, N_GRID as u32 - 1),
         );
         p.x() + p.y() * N_GRID as u32
     };
@@ -113,11 +109,11 @@ fn main() {
         ];
         let stress = -4.0f32 * DT * E * P_VOL * (J.var().read(p) - 1.0f32) / (DX * DX);
         let affine =
-            Expr::<Mat2>::eye(make_float2(stress, stress)) + P_MASS as f32 * C.var().read(p);
+            Expr::<Mat2>::eye(Float2::expr(stress, stress)) + P_MASS as f32 * C.var().read(p);
         let vp = v.var().read(p);
         for ii in 0..9 {
             let (i, j) = (ii % 3, ii / 3);
-            let offset = make_int2(i as i32, j as i32);
+            let offset = Int2::expr(i as i32, j as i32);
             let dpos = (offset.float() - fx) * DX;
             let weight = w[i].x() * w[j].y();
             let vadd = weight * (P_MASS * vp + affine * dpos);
@@ -128,11 +124,11 @@ fn main() {
         }
     });
 
-    let simulate_grid = device.create_kernel_async::<fn()>(&|| {
+    let simulate_grid = device.create_kernel_async::<fn()>(&track!(|| {
         let coord = dispatch_id().xy();
         let i = index(coord);
-        let v = var!(Float2);
-        v.store(make_float2(
+        let v = Var::<Float2>::zeroed();
+        v.store(Float2::expr(
             grid_v.var().read(i * 2u32),
             grid_v.var().read(i * 2u32 + 1u32),
         ));
@@ -142,20 +138,20 @@ fn main() {
         let vx = v.load().x();
         let vy = v.load().y() - DT * GRAVITY;
         let vx = select(
-            (coord.x().cmplt(BOUND) & vx.cmplt(0.0f32))
-                | (coord.x() + BOUND).cmpgt(N_GRID as u32) & vx.cmpgt(0.0f32),
+            coord.x() < BOUND && (vx < 0.0f32)
+                || coord.x() + BOUND > N_GRID as u32 && (vx > 0.0f32),
             0.0f32.into(),
             vx,
         );
         let vy = select(
-            (coord.y().cmplt(BOUND) & vy.cmplt(0.0f32))
-                | (coord.y() + BOUND).cmpgt(N_GRID as u32) & vy.cmpgt(0.0f32),
+            coord.y() < BOUND && (vy < 0.0f32)
+                || coord.y() + BOUND > N_GRID as u32 && (vy > 0.0f32),
             0.0f32.into(),
             vy,
         );
         grid_v.var().write(i * 2, vx);
         grid_v.var().write(i * 2 + 1, vy);
-    });
+    }));
 
     let grid_to_point = device.create_kernel_async::<fn()>(&|| {
         let p = dispatch_id().x();
@@ -168,17 +164,17 @@ fn main() {
             0.75f32 - (fx - 1.0f32) * (fx - 1.0f32),
             0.5f32 * (fx - 0.5f32) * (fx - 0.5f32),
         ];
-        let new_v = var!(Float2);
-        let new_C = var!(Mat2);
-        new_v.store(make_float2(0.0f32, 0.0f32));
-        new_C.store(make_float2x2(make_float2(0., 0.), make_float2(0., 0.)));
+        let new_v = Var::<Float2>::zeroed();
+        let new_C = Var::<Mat2>::zeroed();
+        new_v.store(Float2::expr(0.0f32, 0.0f32));
+        new_C.store(Mat2::expr(Float2::expr(0., 0.), Float2::expr(0., 0.)));
         for ii in 0..9 {
             let (i, j) = (ii % 3, ii / 3);
-            let offset = make_int2(i as i32, j as i32);
+            let offset = Int2::expr(i as i32, j as i32);
             let dpos = (offset.float() - fx) * DX;
             let weight = w[i].x() * w[j].y();
             let idx = index((base + offset).uint());
-            let g_v = make_float2(
+            let g_v = Float2::expr(
                 grid_v.var().read(idx * 2u32),
                 grid_v.var().read(idx * 2u32 + 1u32),
             );
@@ -195,14 +191,14 @@ fn main() {
     let clear_display = device.create_kernel_async::<fn()>(&|| {
         display.var().write(
             dispatch_id().xy(),
-            make_float4(0.1f32, 0.2f32, 0.3f32, 1.0f32),
+            Float4::expr(0.1f32, 0.2f32, 0.3f32, 1.0f32),
         );
     });
     let draw_particles = device.create_kernel_async::<fn()>(&|| {
         let p = dispatch_id().x();
         for i in -1..=1 {
             for j in -1..=1 {
-                let pos = (x.var().read(p) * RESOLUTION as f32).int() + make_int2(i, j);
+                let pos = (x.var().read(p) * RESOLUTION as f32).int() + Int2::expr(i, j);
                 if_!(
                     pos.x().cmpge(0i32)
                         & pos.x().cmplt(RESOLUTION as i32)
@@ -210,8 +206,8 @@ fn main() {
                         & pos.y().cmplt(RESOLUTION as i32),
                     {
                         display.var().write(
-                            make_uint2(pos.x().uint(), RESOLUTION - 1u32 - pos.y().uint()),
-                            make_float4(0.4f32, 0.6f32, 0.6f32, 1.0f32),
+                            Uint2::expr(pos.x().uint(), RESOLUTION - 1u32 - pos.y().uint()),
+                            Float4::expr(0.4f32, 0.6f32, 0.6f32, 1.0f32),
                         );
                     }
                 );

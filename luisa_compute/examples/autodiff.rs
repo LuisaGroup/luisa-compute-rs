@@ -1,6 +1,8 @@
-use std::{env::current_exe, f32::consts::PI};
+use std::env::current_exe;
+use std::f32::consts::PI;
 
-use luisa::*;
+use luisa::lang::diff::*;
+use luisa::prelude::*;
 use luisa_compute as luisa;
 fn main() {
     luisa::init_logger_verbose();
@@ -31,11 +33,13 @@ fn main() {
         let buf_y = y.var();
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
-        let f = |x: Expr<f32>, y: Expr<f32>| {
-            if_!(x.cmpgt(y), { x * y }, else, {
+        let f = track!(|x: Expr<f32>, y: Expr<f32>| {
+            if x > y {
+                x * y
+            } else {
                 y * x + (x / 32.0 * PI).sin()
-            })
-        };
+            }
+        });
         autodiff(|| {
             requires_grad(x);
             requires_grad(y);
@@ -45,8 +49,8 @@ fn main() {
             dy_rev.write(tid, gradient(y));
         });
         forward_autodiff(2, || {
-            propagate_gradient(x, &[const_(1.0f32), const_(0.0f32)]);
-            propagate_gradient(y, &[const_(0.0f32), const_(1.0f32)]);
+            propagate_gradient(x, &[1.0f32.expr(), 0.0f32.expr()]);
+            propagate_gradient(y, &[0.0f32.expr(), 1.0f32.expr()]);
             let z = f(x, y);
             let dx = output_gradients(z)[0];
             let dy = output_gradients(z)[1];

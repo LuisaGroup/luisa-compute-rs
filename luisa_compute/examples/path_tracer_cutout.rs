@@ -2,18 +2,16 @@ use image::Rgb;
 use luisa_compute_api_types::StreamTag;
 use rand::Rng;
 use std::env::current_exe;
-use std::ops::{BitAnd, DerefMut};
 use std::time::Instant;
-use winit::event::Event as WinitEvent;
-use winit::event::WindowEvent;
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event::{Event as WinitEvent, WindowEvent};
+use winit::event_loop::EventLoop;
 
-#[allow(unused_imports)]
 use luisa::prelude::*;
-use luisa::rtx::{offset_ray_origin, Accel, AccelVar, Index, Ray};
-use luisa::{Expr, Float3, Value};
+use luisa::rtx::{
+    offset_ray_origin, Accel, AccelBuildRequest, AccelOption, AccelVar, Index, Ray, RayQuery,
+    TriangleCandidate,
+};
 use luisa_compute as luisa;
-use luisa_compute::rtx::{RayQuery, TriangleCandidate};
 
 #[derive(Value, Clone, Copy)]
 #[repr(C)]
@@ -176,8 +174,7 @@ f -4 -3 -2 -1";
 const SPP_PER_DISPATCH: u32 = 1u32;
 
 fn main() {
-    use luisa::*;
-    init_logger();
+    luisa::init_logger();
 
     std::env::set_var("WINIT_UNIX_BACKEND", "x11");
     let args: Vec<String> = std::env::args().collect();
@@ -259,7 +256,7 @@ fn main() {
               accel: AccelVar,
               resolution: Expr<Uint2>| {
                 set_block_size([16u32, 16u32, 1u32]);
-                let cbox_materials = const_([
+                let cbox_materials = [
                     Float3::new(0.725f32, 0.710f32, 0.680f32), // floor
                     Float3::new(0.725f32, 0.710f32, 0.680f32), // ceiling
                     Float3::new(0.725f32, 0.710f32, 0.680f32), // back wall
@@ -268,7 +265,7 @@ fn main() {
                     Float3::new(0.725f32, 0.710f32, 0.680f32), // short box
                     Float3::new(0.725f32, 0.710f32, 0.680f32), // tall box
                     Float3::new(0.000f32, 0.000f32, 0.000f32), // light
-                ]);
+                ].expr();
 
                 let lcg = |state: Var<u32>| -> Expr<f32> {
                     let lcg = create_static_callable::<fn(Var<u32>)->Expr<f32>>(|state: Var<u32>| {
@@ -281,7 +278,7 @@ fn main() {
                 };
 
                 let make_ray = |o: Expr<Float3>, d: Expr<Float3>, tmin: Expr<f32>, tmax: Expr<f32>| -> Expr<Ray> {
-                    struct_!(rtx::Ray {
+                    struct_!(Ray {
                         orig: o.into(),
                         tmin: tmin,
                         dir:d.into(),
@@ -291,10 +288,10 @@ fn main() {
 
                 let generate_ray = |p: Expr<Float2>| -> Expr<Ray> {
                     const FOV: f32 = 27.8f32 * std::f32::consts::PI / 180.0f32;
-                    let origin = make_float3(-0.01f32, 0.995f32, 5.0f32);
+                    let origin = Float3::expr(-0.01f32, 0.995f32, 5.0f32);
 
                     let pixel = origin
-                        + make_float3(
+                        + Float3::expr(
                         p.x() * f32::tan(0.5f32 * FOV),
                         p.y() * f32::tan(0.5f32 * FOV),
                         -1.0f32,
@@ -310,9 +307,9 @@ fn main() {
                 let make_onb = |normal: Expr<Float3>| -> Expr<Onb> {
                     let binormal = if_!(
                         normal.x().abs().cmpgt(normal.z().abs()), {
-                            make_float3(-normal.y(), normal.x(), 0.0f32)
+                            Float3::expr(-normal.y(), normal.x(), 0.0f32)
                         }, else {
-                            make_float3(0.0f32, -normal.z(), normal.y())
+                            Float3::expr(0.0f32, -normal.z(), normal.y())
                         }
                     );
                     let tangent = binormal.cross(normal).normalize();
@@ -322,53 +319,53 @@ fn main() {
                 let cosine_sample_hemisphere = |u: Expr<Float2>| {
                     let r = u.x().sqrt();
                     let phi = 2.0f32 * std::f32::consts::PI * u.y();
-                    make_float3(r * phi.cos(), r * phi.sin(), (1.0f32 - u.x()).sqrt())
+                    Float3::expr(r * phi.cos(), r * phi.sin(), (1.0f32 - u.x()).sqrt())
                 };
 
                 let coord = dispatch_id().xy();
                 let frame_size = resolution.x().min(resolution.y()).float();
-                let state = var!(u32);
+                let state = Var::<u32>::zeroed();
                 state.store(seed_image.read(coord));
 
                 let rx = lcg(state);
                 let ry = lcg(state);
 
-                let pixel = (coord.float() + make_float2(rx, ry)) / frame_size * 2.0f32 - 1.0f32;
+                let pixel = (coord.float() + Float2::expr(rx, ry)) / frame_size * 2.0f32 - 1.0f32;
 
-                let radiance = var!(Float3);
-                radiance.store(make_float3(0.0f32, 0.0f32, 0.0f32));
+                let radiance = Var::<Float3>::zeroed();
+                radiance.store(Float3::expr(0.0f32, 0.0f32, 0.0f32));
                 for_range(0..SPP_PER_DISPATCH as u32, |_| {
-                    let init_ray = generate_ray(pixel * make_float2(1.0f32, -1.0f32));
-                    let ray = var!(Ray);
+                    let init_ray = generate_ray(pixel * Float2::expr(1.0f32, -1.0f32));
+                    let ray = Var::<Ray>::zeroed();
                     ray.store(init_ray);
 
-                    let beta = var!(Float3);
-                    beta.store(make_float3(1.0f32, 1.0f32, 1.0f32));
-                    let pdf_bsdf = var!(f32);
+                    let beta = Var::<Float3>::zeroed();
+                    beta.store(Float3::expr(1.0f32, 1.0f32, 1.0f32));
+                    let pdf_bsdf = Var::<f32>::zeroed();
                     pdf_bsdf.store(0.0f32);
 
-                    let light_position = make_float3(-0.24f32, 1.98f32, 0.16f32);
-                    let light_u = make_float3(-0.24f32, 1.98f32, -0.22f32) - light_position;
-                    let light_v = make_float3(0.23f32, 1.98f32, 0.16f32) - light_position;
-                    let light_emission = make_float3(17.0f32, 12.0f32, 4.0f32);
+                    let light_position = Float3::expr(-0.24f32, 1.98f32, 0.16f32);
+                    let light_u = Float3::expr(-0.24f32, 1.98f32, -0.22f32) - light_position;
+                    let light_v = Float3::expr(0.23f32, 1.98f32, 0.16f32) - light_position;
+                    let light_emission = Float3::expr(17.0f32, 12.0f32, 4.0f32);
                     let light_area = light_u.cross(light_v).length();
                     let light_normal = light_u.cross(light_v).normalize();
 
                     let filter = |c: &TriangleCandidate| {
-                        let valid = var!(bool, true);
+                        let valid = true.var();
                         if_!(c.inst().cmpeq(5u32), { valid.store((c.bary().y() * 6.0f32).fract().cmplt(0.6f32)); });
                         if_!(c.inst().cmpeq(6u32), { valid.store((c.bary().y() * 5.0f32).fract().cmplt(0.5f32)); });
                         valid.load()
                     };
 
-                    let depth = var!(u32);
+                    let depth = Var::<u32>::zeroed();
                     while_!(depth.load().cmplt(10u32), {
                         // let hit = accel.trace_closest(ray);
                         let hit = accel.query_all(ray, 255, RayQuery {
                             on_triangle_hit: |c: TriangleCandidate| {
                                 if_!(filter(&c), { c.commit(); });
                             },
-                            on_procedural_hit: |c| {}
+                            on_procedural_hit: |_c| {}
                         });
 
                         if_!(hit.miss(), {
@@ -386,9 +383,9 @@ fn main() {
                         let p2: Expr<Float3> = vertex_buffer.read(triangle.z()).into();
                         let m = accel.instance_transform(hit.inst_id());
                         let p = p0 * (1.0f32 - hit.bary().x() - hit.bary().y()) + p1 * hit.bary().x() + p2 * hit.bary().y();
-                        let p = (m * make_float4(p.x(), p.y(), p.z(), 1.0f32)).xyz();
+                        let p = (m * Float4::expr(p.x(), p.y(), p.z(), 1.0f32)).xyz();
                         let n = (p1 - p0).cross(p2 - p0);
-                        let n = (m * make_float4(n.x(), n.y(), n.z(), 0.0f32)).xyz().normalize();
+                        let n = (m * Float4::expr(n.x(), n.y(), n.z(), 0.0f32)).xyz().normalize();
 
                         let origin: Expr<Float3> = ray.load().orig().into();
                         let direction: Expr<Float3> = ray.load().dir().into();
@@ -443,13 +440,13 @@ fn main() {
                         let onb = make_onb(n);
                         let ux = lcg(state);
                         let uy = lcg(state);
-                        let new_direction = onb.to_world(cosine_sample_hemisphere(make_float2(ux, uy)));
+                        let new_direction = onb.to_world(cosine_sample_hemisphere(Float2::expr(ux, uy)));
                         *ray.get_mut() = make_ray(pp, new_direction, 0.0f32.into(), std::f32::MAX.into());
                         *beta.get_mut() *= albedo;
                         pdf_bsdf.store(cos_wi.abs() * std::f32::consts::FRAC_1_PI);
 
                         // russian roulette
-                        let l = make_float3(0.212671f32, 0.715160f32, 0.072169f32).dot(*beta);
+                        let l = Float3::expr(0.212671f32, 0.715160f32, 0.072169f32).dot(*beta);
                         if_!(l.cmpeq(0.0f32), { break_(); });
                         let q = l.max(0.05f32);
                         let r = lcg(state);
@@ -461,28 +458,29 @@ fn main() {
                 });
                 radiance.store(radiance.load() / SPP_PER_DISPATCH as f32);
                 seed_image.write(coord, *state);
-                if_!(radiance.load().is_nan().any(), { radiance.store(make_float3(0.0f32, 0.0f32, 0.0f32)); });
+                if_!(radiance.load().is_nan().any(), { radiance.store(Float3::expr(0.0f32, 0.0f32, 0.0f32)); });
                 let radiance = radiance.load().clamp(0.0f32, 30.0f32);
                 let old = image.read(dispatch_id().xy());
                 let spp = old.w();
                 let radiance = radiance + old.xyz();
-                image.write(dispatch_id().xy(), make_float4(radiance.x(), radiance.y(), radiance.z(), spp + 1.0f32));
+                image.write(dispatch_id().xy(), Float4::expr(radiance.x(), radiance.y(), radiance.z(), spp + 1.0f32));
             },
         )
         ;
-    let display = device.create_kernel_async::<fn(Tex2d<Float4>, Tex2d<Float4>)>(&|acc, display| {
-        set_block_size([16, 16, 1]);
-        let coord = dispatch_id().xy();
-        let radiance = acc.read(coord);
-        let spp = radiance.w();
-        let radiance = radiance.xyz() / spp;
+    let display =
+        device.create_kernel_async::<fn(Tex2d<Float4>, Tex2d<Float4>)>(&|acc, display| {
+            set_block_size([16, 16, 1]);
+            let coord = dispatch_id().xy();
+            let radiance = acc.read(coord);
+            let spp = radiance.w();
+            let radiance = radiance.xyz() / spp;
 
-        // workaround a rust-analyzer bug
-        let r = 1.055f32 * radiance.powf(1.0 / 2.4) - 0.055;
+            // workaround a rust-analyzer bug
+            let r = 1.055f32 * radiance.powf(1.0 / 2.4) - 0.055;
 
-        let srgb = Float3Expr::select(radiance.cmplt(0.0031308), radiance * 12.92, r);
-        display.write(coord, make_float4(srgb.x(), srgb.y(), srgb.z(), 1.0f32));
-    });
+            let srgb = Expr::<Float3>::select(radiance.cmplt(0.0031308), radiance * 12.92, r);
+            display.write(coord, Float4::expr(srgb.x(), srgb.y(), srgb.z(), 1.0f32));
+        });
     let img_w = 1024;
     let img_h = 1024;
     let acc_img = device.create_tex2d::<Float4>(PixelStorage::Float4, img_w, img_h, 1);

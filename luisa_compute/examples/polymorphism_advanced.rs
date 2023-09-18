@@ -1,9 +1,8 @@
 use std::env::current_exe;
 use std::f32::consts::PI;
 
+use luisa::lang::poly::*;
 use luisa::prelude::*;
-use luisa::Value;
-use luisa::{impl_polymorphic, lang::*};
 use luisa_compute as luisa;
 
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]

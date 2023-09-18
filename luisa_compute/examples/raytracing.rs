@@ -1,17 +1,13 @@
 use std::env::current_exe;
 
 use image::Rgb;
-#[allow(unused_imports)]
 use luisa::prelude::*;
+use luisa::rtx::{AccelBuildRequest, AccelOption, RayExpr};
 use luisa_compute as luisa;
-use winit::{
-    event::{WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-};
-use winit::event::Event as WinitEvent;
+use winit::event::{Event as WinitEvent, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
 fn main() {
-    use luisa::*;
-    init_logger();
+    luisa::init_logger();
 
     std::env::set_var("WINIT_UNIX_BACKEND", "x11");
 
@@ -46,20 +42,20 @@ fn main() {
     let rt_kernel = device.create_kernel::<fn()>(&|| {
         let accel = accel.var();
         let px = dispatch_id().xy();
-        let xy = px.float() / make_float2(img_w as f32, img_h as f32);
+        let xy = px.float() / Float2::expr(img_w as f32, img_h as f32);
         let xy = 2.0 * xy - 1.0;
-        let o = make_float3(0.0, 0.0, -1.0);
-        let d = make_float3(xy.x(), xy.y(), 0.0) - o;
+        let o = Float3::expr(0.0, 0.0, -1.0);
+        let d = Float3::expr(xy.x(), xy.y(), 0.0) - o;
         let d = d.normalize();
-        let ray = rtx::RayExpr::new(o, 1e-3, d, 1e9);
+        let ray = RayExpr::new(o, 1e-3, d, 1e9);
         let hit = accel.trace_closest(ray);
         let img = img.view(0).var();
         let color = select(
             hit.valid(),
-            make_float3(hit.u(), hit.v(), 1.0),
-            make_float3(0.0, 0.0, 0.0),
+            Float3::expr(hit.u(), hit.v(), 1.0),
+            Float3::expr(0.0, 0.0, 0.0),
         );
-        img.write(px, make_float4(color.x(), color.y(), color.z(), 1.0));
+        img.write(px, Float4::expr(color.x(), color.y(), color.z(), 1.0));
     });
     let event_loop = EventLoop::new();
     let window = winit::window::WindowBuilder::new()

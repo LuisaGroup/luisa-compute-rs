@@ -1,67 +1,81 @@
 #![allow(unused_unsafe)]
 
+extern crate self as luisa_compute;
+
+use std::any::Any;
 use std::backtrace::Backtrace;
 use std::path::Path;
-use std::{any::Any, sync::Arc};
+use std::sync::Arc;
 
 pub mod lang;
+pub mod printer;
 pub mod resource;
 pub mod rtx;
 pub mod runtime;
 
-pub use half::f16;
-use luisa_compute_api_types as api;
-pub use luisa_compute_backend as backend;
-
 pub mod prelude {
-    pub use crate::lang::poly::PolymorphicImpl;
-    pub use crate::lang::traits::VarTrait;
-    pub use crate::lang::traits::{CommonVarOp, FloatVarTrait, IntVarTrait, VarCmp, VarCmpEq};
-    pub use crate::lang::{
-        Aggregate, ExprProxy, FromNode, IndexRead, IndexWrite, KernelBuildFn, KernelParameter,
-        KernelSignature, Mask, Value, VarProxy,
+    pub use half::f16;
+
+    pub use crate::lang::control_flow::{
+        break_, continue_, for_range, return_, return_v, select, switch,
     };
-    pub use crate::lang::{
-        __compose, __cpu_dbg, __current_scope, __env_need_backtrace, __extract, __insert,
-        __module_pools, __new_user_node, __pop_scope,
+    pub use crate::lang::functions::{block_size, dispatch_id, dispatch_size, set_block_size};
+    pub use crate::lang::index::{IndexRead, IndexWrite};
+    pub use crate::lang::ops::*;
+    pub use crate::lang::swizzle::*;
+    pub use crate::lang::types::vector::{
+        Bool2, Bool3, Bool4, Byte2, Byte3, Byte4, Double2, Double3, Double4, Float2, Float3,
+        Float4, Half2, Half3, Half4, Int2, Int3, Int4, Long2, Long3, Long4, Mat2, Mat3, Mat4,
+        PackedBool2, PackedBool3, PackedBool4, PackedFloat2, PackedFloat3, PackedFloat4,
+        PackedInt2, PackedInt3, PackedInt4, PackedLong2, PackedLong3, PackedLong4, PackedShort2,
+        PackedShort3, PackedShort4, PackedUint2, PackedUint3, PackedUint4, PackedUlong2,
+        PackedUlong3, PackedUlong4, PackedUshort2, PackedUshort3, PackedUshort4, Short2, Short3,
+        Short4, Ubyte2, Ubyte3, Ubyte4, Uint2, Uint3, Uint4, Ulong2, Ulong3, Ulong4, Ushort2,
+        Ushort3, Ushort4,
     };
-    pub use crate::resource::{IoTexel, StorageTexel};
-    pub use crate::runtime::KernelArg;
-    pub use luisa_compute_ir::TypeOf;
+    pub use crate::lang::types::{Expr, ExprProxy, Value, Var, VarProxy};
+    pub use crate::lang::Aggregate;
+    pub use crate::resource::{IoTexel, StorageTexel, *};
+    pub use crate::runtime::{
+        create_static_callable, Command, Device, KernelBuildOptions, Scope, Stream,
+    };
+    pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, struct_, while_, Context};
+
+    pub use luisa_compute_derive::*;
+    pub use luisa_compute_track::track;
 }
 
-pub use api::{
-    AccelBuildModificationFlags, AccelBuildRequest, AccelOption, AccelUsageHint, MeshType,
-    PixelFormat, PixelStorage,
-};
-pub use glam;
-pub use lang::math;
-pub use lang::math::*;
-pub use lang::poly;
-pub use lang::poly::*;
-pub use lang::traits::*;
-pub use lang::*;
-pub use log;
-pub use luisa_compute_derive as derive;
+mod internal_prelude {
+    pub(crate) use crate::lang::debug::{CpuFn, __env_need_backtrace, is_cpu_backend};
+    pub(crate) use crate::lang::ir::ffi::*;
+    pub(crate) use crate::lang::ir::{
+        new_node, register_type, BasicBlock, Const, Func, Instruction, IrBuilder, Node,
+        PhiIncoming, Pooled, Type, TypeOf, INVALID_REF,
+    };
+    pub(crate) use crate::lang::types::vector::*;
+    pub(crate) use crate::lang::{
+        ir, Recorder, __compose, __extract, __insert, __module_pools, need_runtime_check, FromNode,
+        NodeRef, ToNode, __current_scope, __pop_scope, RECORDER,
+    };
+    pub(crate) use crate::prelude::*;
+    pub(crate) use crate::runtime::{
+        CallableArgEncoder, CallableParameter, CallableRet, KernelBuilder,
+    };
+    pub(crate) use crate::{get_backtrace, impl_callable_param, ResourceTracker};
+    pub(crate) use luisa_compute_backend::Backend;
+    pub(crate) use std::marker::PhantomData;
+}
+
 pub use luisa_compute_derive::*;
-pub use luisa_compute_ir::ir::UserNodeData;
-pub use resource::*;
-pub use runtime::*;
 
-pub mod macros {
-    pub use crate::{
-        cpu_dbg, if_, impl_new_poly_array, impl_polymorphic, lc_assert, lc_dbg, lc_unreachable,
-        loop_, struct_, var, while_,
-    };
-    pub use crate::{lc_debug, lc_error, lc_info, lc_log, lc_warn};
-}
+use luisa_compute_api_types as api;
+pub use {luisa_compute_backend as backend, luisa_compute_sys as sys};
 
 use lazy_static::lazy_static;
 use luisa_compute_backend::Backend;
-pub use luisa_compute_sys as sys;
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
 use parking_lot::{Mutex, RawMutex};
-pub use runtime::{Device, Scope, Stream};
+use runtime::{Device, DeviceHandle, StreamHandle};
 use std::collections::HashMap;
 use std::sync::Weak;
 

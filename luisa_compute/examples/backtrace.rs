@@ -1,10 +1,10 @@
-use std::env::{current_exe, self};
+use std::env::{self, current_exe};
 
+use luisa::prelude::*;
 use luisa_compute as luisa;
 
 fn main() {
-    use luisa::*;
-    init_logger();
+    luisa::init_logger();
     let ctx = Context::new(current_exe().unwrap());
     env::set_var("LUISA_DEBUG", "1");
     let device = ctx.create_device("cpu");
@@ -20,7 +20,7 @@ fn main() {
         let tid = dispatch_id().x();
         let x = buf_x.read(tid + 123);
         let y = buf_y.read(tid);
-        let vx = var!(f32); // create a local mutable variable
+        let vx = Var::<f32>::zeroed(); // create a local mutable variable
         vx.store(x);
         buf_z.write(tid, vx.load() + y);
     });

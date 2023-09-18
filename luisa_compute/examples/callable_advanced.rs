@@ -1,10 +1,10 @@
+use luisa::lang::types::dynamic::*;
+use luisa::prelude::*;
 use luisa_compute as luisa;
 use std::env::current_exe;
 
 fn main() {
-    use luisa::*;
-    init_logger();
-    let ctx = Context::new(current_exe().unwrap());
+    luisa::init_logger();
     let args: Vec<String> = std::env::args().collect();
     assert!(
         args.len() <= 2,

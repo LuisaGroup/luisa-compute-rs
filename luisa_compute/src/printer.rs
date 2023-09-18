@@ -1,8 +1,16 @@
-use crate::prelude::*;
-use crate::*;
 use parking_lot::RwLock;
 use std::fmt::Debug;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+
+#[doc(hidden)]
+pub use log as _log;
+
+use crate::internal_prelude::*;
+
+use crate::lang::{pack_to, packed_size};
+
+pub use crate::{lc_debug, lc_error, lc_info, lc_warn};
 
 pub type LogFn = Box<dyn Fn(&[*const u32]) + Send + Sync>;
 struct PrinterItem {
@@ -64,7 +72,7 @@ macro_rules! lc_log {
         //     )*
         //     $printer._log($level, printer_args, log_fn);
         // }
-        luisa_compute::derive::_log!(
+        $crate::_log!(
             $printer,
             $level,
             $fmt,
@@ -113,7 +121,7 @@ impl Printer {
             }),
         }
     }
-    pub fn _log(&self, level: log::Level, args: PrinterArgs, log_fn: LogFn) {
+    pub fn _log(&self, _level: log::Level, args: PrinterArgs, log_fn: LogFn) {
         let inner = &self.inner;
         let data = inner.data.var();
         let offset = data.atomic_fetch_add(1, 1 + args.count as u32);
@@ -122,7 +130,8 @@ impl Printer {
         let item_id = items.len() as u32;
 
         if_!(
-            offset.cmplt(data.len().uint()) & (offset + 1 + args.count as u32).cmple(data.len().uint()),
+            offset.cmplt(data.len().uint())
+                & (offset + 1 + args.count as u32).cmple(data.len().uint()),
             {
                 data.atomic_fetch_add(0, 1);
                 data.write(offset, item_id);
@@ -192,7 +201,7 @@ impl<'a> Scope<'a> {
             let items = data.items.read();
             let mut i = 2;
             let item_count = host_data[0] as usize;
-            for j in 0..item_count {
+            for _j in 0..item_count {
                 if i >= host_data.len() {
                     break;
                 }

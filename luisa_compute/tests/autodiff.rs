@@ -1,13 +1,13 @@
 use std::ops::Range;
 
+use luisa::lang::diff::*;
+use luisa::lang::types::core::*;
+use luisa::lang::types::vector::*;
 use luisa::prelude::*;
-use luisa::*;
 use luisa_compute as luisa;
 use rand::prelude::*;
-use rayon::{
-    prelude::{IntoParallelIterator, ParallelIterator},
-    slice::ParallelSliceMut,
-};
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use rayon::slice::ParallelSliceMut;
 #[path = "common.rs"]
 mod common;
 use common::*;
@@ -227,7 +227,7 @@ struct Foo {
 }
 
 autodiff_2!(autodiff_const, 1.0..10.0, |x: Float, y: Float| {
-    let k = 2.0 / const_::<f32>(3.0);
+    let k = 2.0 / 3.0_f32.expr();
     x * k + y * k
 });
 autodiff_2!(autodiff_struct, 1.0..10.0, |x: Float, y: Float| {
@@ -266,7 +266,7 @@ fn autodiff_vec3_reduce_add_manual() {
         let x = inputs[0];
         let y = inputs[1];
         let z = inputs[2];
-        let v = make_float3(x, y, z);
+        let v = Float3::expr(x, y, z);
         v.x() + v.y() + v.z()
     });
 }
@@ -277,7 +277,7 @@ fn autodiff_vec3_reduce_prod_manual() {
         let x = inputs[0];
         let y = inputs[1];
         let z = inputs[2];
-        let v = make_float3(x, y, z);
+        let v = Float3::expr(x, y, z);
         v.x() * v.y() * v.z()
     });
 }
@@ -287,7 +287,7 @@ fn autodiff_vec3_reduce_add() {
         let x = inputs[0];
         let y = inputs[1];
         let z = inputs[2];
-        let v = make_float3(x, y, z);
+        let v = Float3::expr(x, y, z);
         v.reduce_sum()
     });
 }
@@ -297,7 +297,7 @@ fn autodiff_vec3_reduce_mul() {
         let x = inputs[0];
         let y = inputs[1];
         let z = inputs[2];
-        let v = make_float3(x, y, z);
+        let v = Float3::expr(x, y, z);
         v.reduce_prod()
     });
 }
@@ -307,7 +307,7 @@ fn autodiff_vec3_dot() {
         let x = inputs[0];
         let y = inputs[1];
         let z = inputs[2];
-        let v = make_float3(x, y, z);
+        let v = Float3::expr(x, y, z);
         v.dot(v)
     });
 }
@@ -317,7 +317,7 @@ fn autodiff_vec3_length() {
         let x = inputs[0];
         let y = inputs[1];
         let z = inputs[2];
-        let v = make_float3(x, y, z);
+        let v = Float3::expr(x, y, z);
         v.length()
     });
 }
@@ -327,7 +327,7 @@ fn autodiff_vec3_length_squared() {
         let x = inputs[0];
         let y = inputs[1];
         let z = inputs[2];
-        let v = make_float3(x, y, z);
+        let v = Float3::expr(x, y, z);
         v.length_squared()
     });
 }
@@ -337,21 +337,21 @@ fn autodiff_vec3_normalize() {
         let x = inputs[0];
         let y = inputs[1];
         let z = inputs[2];
-        let v = make_float3(x, y, z);
+        let v = Float3::expr(x, y, z);
         v.normalize().x()
     });
     autodiff_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
         let x = inputs[0];
         let y = inputs[1];
         let z = inputs[2];
-        let v = make_float3(x, y, z);
+        let v = Float3::expr(x, y, z);
         v.normalize().y()
     });
     autodiff_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
         let x = inputs[0];
         let y = inputs[1];
         let z = inputs[2];
-        let v = make_float3(x, y, z);
+        let v = Float3::expr(x, y, z);
         v.normalize().z()
     });
 }
@@ -362,12 +362,12 @@ fn autodiff_vec3_cross_x() {
         let ax = inputs[0];
         let ay = inputs[1];
         let az = inputs[2];
-        let a = def(make_float3(ax, ay, az));
+        let a = Float3::expr(ax, ay, az).var();
         let bx = inputs[3];
         let by = inputs[4];
         let bz = inputs[5];
-        let b = def(make_float3(bx, by, bz));
-        let v = def(a.cross(*b));
+        let b = Float3::expr(bx, by, bz).var();
+        let v = a.cross(*b).var();
         *v.x()
     });
 }
@@ -377,12 +377,12 @@ fn autodiff_vec3_cross_y() {
         let ax = inputs[0];
         let ay = inputs[1];
         let az = inputs[2];
-        let a = def(make_float3(ax, ay, az));
+        let a = Float3::expr(ax, ay, az).var();
         let bx = inputs[3];
         let by = inputs[4];
         let bz = inputs[5];
-        let b = def(make_float3(bx, by, bz));
-        let v = def(a.cross(*b));
+        let b = Float3::expr(bx, by, bz).var();
+        let v = a.cross(*b).var();
         *v.x()
     });
 }
@@ -393,11 +393,11 @@ fn autodiff_vec3_cross_z() {
         let ax = inputs[0];
         let ay = inputs[1];
         let az = inputs[2];
-        let a = make_float3(ax, ay, az);
+        let a = Float3::expr(ax, ay, az);
         let bx = inputs[3];
         let by = inputs[4];
         let bz = inputs[5];
-        let b = make_float3(bx, by, bz);
+        let b = Float3::expr(bx, by, bz);
         let v = a.cross(b);
         v.z()
     });
@@ -408,11 +408,11 @@ fn autodiff_vec3_distance() {
         let ax = inputs[0];
         let ay = inputs[1];
         let az = inputs[2];
-        let a = make_float3(ax, ay, az);
+        let a = Float3::expr(ax, ay, az);
         let bx = inputs[3];
         let by = inputs[4];
         let bz = inputs[5];
-        let b = make_float3(bx, by, bz);
+        let b = Float3::expr(bx, by, bz);
         a.distance(b)
     });
 }
@@ -422,7 +422,7 @@ fn autodiff_vec3_replace() {
         let ax = inputs[0];
         let ay = inputs[1];
         let az = inputs[2];
-        let a = make_float3(ax, ay, az);
+        let a = Float3::expr(ax, ay, az);
         let b = inputs[3];
         let c = a.set_y(b);
         a.dot(c)
@@ -434,19 +434,19 @@ fn autodiff_matmul() {
         let ax = inputs[0];
         let ay = inputs[1];
         let az = inputs[2];
-        let a = make_float3(ax, ay, az);
+        let a = Float3::expr(ax, ay, az);
         let bx = inputs[0 + 3];
         let by = inputs[1 + 3];
         let bz = inputs[2 + 3];
-        let b = make_float3(bx, by, bz);
+        let b = Float3::expr(bx, by, bz);
         let cx = inputs[0 + 6];
         let cy = inputs[1 + 6];
         let cz = inputs[2 + 6];
-        let c = make_float3(cx, cy, cz);
+        let c = Float3::expr(cx, cy, cz);
         let dx = inputs[0 + 9];
         let dy = inputs[1 + 9];
         let dz = inputs[2 + 9];
-        let d = make_float3(dx, dy, dz);
+        let d = Float3::expr(dx, dy, dz);
         let m = Mat3Expr::new(a, b, c);
         let o = m * d;
         o.x()
@@ -458,19 +458,19 @@ fn autodiff_matmul_transpose() {
         let ax = inputs[0];
         let ay = inputs[1];
         let az = inputs[2];
-        let a = make_float3(ax, ay, az);
+        let a = Float3::expr(ax, ay, az);
         let bx = inputs[0 + 3];
         let by = inputs[1 + 3];
         let bz = inputs[2 + 3];
-        let b = make_float3(bx, by, bz);
+        let b = Float3::expr(bx, by, bz);
         let cx = inputs[0 + 6];
         let cy = inputs[1 + 6];
         let cz = inputs[2 + 6];
-        let c = make_float3(cx, cy, cz);
+        let c = Float3::expr(cx, cy, cz);
         let dx = inputs[0 + 9];
         let dy = inputs[1 + 9];
         let dz = inputs[2 + 9];
-        let d = make_float3(dx, dy, dz);
+        let d = Float3::expr(dx, dy, dz);
         let m = Mat3Expr::new(a, b, c);
         let o = m.transpose() * d;
         o.y()
@@ -482,19 +482,19 @@ fn autodiff_matmul_2() {
         let ax = inputs[0];
         let ay = inputs[1];
         let az = inputs[2];
-        let a = make_float3(ax, ay, az);
+        let a = Float3::expr(ax, ay, az);
         let bx = inputs[0 + 3];
         let by = inputs[1 + 3];
         let bz = inputs[2 + 3];
-        let b = make_float3(bx, by, bz);
+        let b = Float3::expr(bx, by, bz);
         let cx = inputs[0 + 6];
         let cy = inputs[1 + 6];
         let cz = inputs[2 + 6];
-        let c = make_float3(cx, cy, cz);
+        let c = Float3::expr(cx, cy, cz);
         let dx = inputs[0 + 9];
         let dy = inputs[1 + 9];
         let dz = inputs[2 + 9];
-        let d = make_float3(dx, dy, dz);
+        let d = Float3::expr(dx, dy, dz);
         let m = Mat3Expr::new(a, b, c);
         let o = m * m * d;
         o.z()
@@ -506,19 +506,19 @@ fn autodiff_matmul_4() {
         let ax = inputs[0];
         let ay = inputs[1];
         let az = inputs[2];
-        let a = make_float3(ax, ay, az);
+        let a = Float3::expr(ax, ay, az);
         let bx = inputs[0 + 3];
         let by = inputs[1 + 3];
         let bz = inputs[2 + 3];
-        let b = make_float3(bx, by, bz);
+        let b = Float3::expr(bx, by, bz);
         let cx = inputs[0 + 6];
         let cy = inputs[1 + 6];
         let cz = inputs[2 + 6];
-        let c = make_float3(cx, cy, cz);
+        let c = Float3::expr(cx, cy, cz);
         let dx = inputs[0 + 9];
         let dy = inputs[1 + 9];
         let dz = inputs[2 + 9];
-        let d = make_float3(dx, dy, dz);
+        let d = Float3::expr(dx, dy, dz);
         let m = Mat3Expr::new(a, b, c);
         let o = (m * m) * d;
         o.z()
@@ -530,19 +530,19 @@ fn autodiff_matmul_5() {
         let ax = inputs[0];
         let ay = inputs[1];
         let az = inputs[2];
-        let a = make_float3(ax, ay, az);
+        let a = Float3::expr(ax, ay, az);
         let bx = inputs[0 + 3];
         let by = inputs[1 + 3];
         let bz = inputs[2 + 3];
-        let b = make_float3(bx, by, bz);
+        let b = Float3::expr(bx, by, bz);
         let cx = inputs[0 + 6];
         let cy = inputs[1 + 6];
         let cz = inputs[2 + 6];
-        let c = make_float3(cx, cy, cz);
+        let c = Float3::expr(cx, cy, cz);
         let dx = inputs[0 + 9];
         let dy = inputs[1 + 9];
         let dz = inputs[2 + 9];
-        let d = make_float3(dx, dy, dz);
+        let d = Float3::expr(dx, dy, dz);
         let m = Mat3Expr::new(a, b, c);
         let o = m.comp_mul(m) * d;
         o.z()
@@ -554,15 +554,15 @@ fn autodiff_mat_det() {
         let ax = inputs[0];
         let ay = inputs[1];
         let az = inputs[2];
-        let a = make_float3(ax, ay, az);
+        let a = Float3::expr(ax, ay, az);
         let bx = inputs[0 + 3];
         let by = inputs[1 + 3];
         let bz = inputs[2 + 3];
-        let b = make_float3(bx, by, bz);
+        let b = Float3::expr(bx, by, bz);
         let cx = inputs[0 + 6];
         let cy = inputs[1 + 6];
         let cz = inputs[2 + 6];
-        let c = make_float3(cx, cy, cz);
+        let c = Float3::expr(cx, cy, cz);
         let m = Mat3Expr::new(a, b, c);
         m.determinant()
     });
@@ -574,7 +574,7 @@ fn autodiff_mat_det() {
 //         let x = inputs[0];
 //         let y = inputs[1];
 //         let z = inputs[2];
-//         let v = make_float3(x, y, z);
+//         let v = Float3::expr(x, y, z);
 //         v.reduce_min()
 //     });
 // }
@@ -586,7 +586,7 @@ fn autodiff_mat_det() {
 //         let x = inputs[0];
 //         let y = inputs[1];
 //         let z = inputs[2];
-//         let v = make_float3(x, y, z);
+//         let v = Float3::expr(x, y, z);
 //         v.reduce_max()
 //     });
 // }
@@ -900,9 +900,9 @@ fn autodiff_if_phi3() {
         let tid = dispatch_id().x();
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
-        let const_two = var!(f32, 2.0);
-        let const_three = var!(f32, 3.0);
-        let const_four = var!(f32);
+        let const_two = 2.0_f32.var();
+        let const_three = 3.0_f32.var();
+        let const_four = F32Var::zeroed();
 
         autodiff(|| {
             requires_grad(x);
@@ -962,11 +962,11 @@ fn autodiff_if_phi4() {
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
 
-        let consts = var!(Float3);
+        let consts = Float3Var::zeroed();
         autodiff(|| {
             requires_grad(x);
             requires_grad(y);
-            consts.store(make_float3(2.0, 3.0, 4.0));
+            consts.store(Float3::expr(2.0, 3.0, 4.0));
             let const_two = consts.x();
             let const_three = consts.y();
             let const_four = consts.z();
@@ -1102,8 +1102,8 @@ fn autodiff_callable() {
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
         let t = buf_t.read(tid);
-        let dx = def(x);
-        let dy = def(y);
+        let dx = x.var();
+        let dy = y.var();
         callable.call(dx, dy, t);
         buf_dx.write(tid, *dx);
         buf_dy.write(tid, *dy);

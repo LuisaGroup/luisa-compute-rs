@@ -1,12 +1,23 @@
-use std::{collections::HashMap, marker::PhantomData, sync::Arc};
+use std::collections::HashMap;
+use std::marker::PhantomData;
+use std::sync::Arc;
 
-use crate::{runtime::submit_default_stream_and_sync, ResourceTracker, *};
-use api::AccelBuildRequest;
-use luisa_compute_api_types as api;
-use luisa_compute_derive::__Value;
-use luisa_compute_ir::ir::{new_node, AccelBinding, Binding, Func, Instruction, IrBuilder, Node};
+use crate::internal_prelude::*;
+
+use crate::runtime::*;
+use crate::{ResourceTracker, *};
+use luisa_compute_ir::ir::{
+    new_node, AccelBinding, Binding, Func, Instruction, IrBuilder, Node, NodeRef, Type,
+};
 use parking_lot::RwLock;
 use std::ops::Deref;
+
+pub use api::{
+    AccelBuildModificationFlags, AccelBuildRequest, AccelOption, AccelUsageHint, MeshType,
+    PixelFormat, PixelStorage,
+};
+use luisa_compute_api_types as api;
+
 pub(crate) struct AccelHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::Accel,
@@ -41,6 +52,7 @@ pub(crate) struct ProceduralPrimitiveHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::ProceduralPrimitive,
     pub(crate) native_handle: *mut std::ffi::c_void,
+    #[allow(dead_code)]
     pub(crate) aabb_buffer: Arc<BufferHandle>,
 }
 impl Drop for ProceduralPrimitiveHandle {
@@ -85,7 +97,9 @@ pub(crate) struct MeshHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::Mesh,
     pub(crate) native_handle: *mut std::ffi::c_void,
+    #[allow(dead_code)]
     pub(crate) vbuffer: Arc<BufferHandle>,
+    #[allow(dead_code)]
     pub(crate) ibuffer: Arc<BufferHandle>,
 }
 impl Drop for MeshHandle {
@@ -148,7 +162,8 @@ impl Accel {
         let mut flags =
             api::AccelBuildModificationFlags::PRIMITIVE | AccelBuildModificationFlags::TRANSFORM;
 
-        flags |= api::AccelBuildModificationFlags::VISIBILITY | api::AccelBuildModificationFlags::USER_ID;
+        flags |= api::AccelBuildModificationFlags::VISIBILITY
+            | api::AccelBuildModificationFlags::USER_ID;
 
         if opaque {
             flags |= api::AccelBuildModificationFlags::OPAQUE_ON;
@@ -183,7 +198,8 @@ impl Accel {
     ) {
         let mut flags = api::AccelBuildModificationFlags::PRIMITIVE;
         dbg!(flags);
-        flags |= api::AccelBuildModificationFlags::VISIBILITY | api::AccelBuildModificationFlags::USER_ID;
+        flags |= api::AccelBuildModificationFlags::VISIBILITY
+            | api::AccelBuildModificationFlags::USER_ID;
 
         if opaque {
             flags |= api::AccelBuildModificationFlags::OPAQUE_ON;
@@ -312,7 +328,7 @@ pub struct AccelVar {
 
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Clone, Copy, __Value, Debug)]
+#[derive(Clone, Copy, Value, Debug)]
 pub struct Ray {
     pub orig: PackedFloat3,
     pub tmin: f32,
@@ -320,14 +336,14 @@ pub struct Ray {
     pub tmax: f32,
 }
 #[repr(C)]
-#[derive(Clone, Copy, __Value, Debug)]
+#[derive(Clone, Copy, Value, Debug)]
 pub struct Aabb {
     pub min: PackedFloat3,
     pub max: PackedFloat3,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, __Value, Debug)]
+#[derive(Clone, Copy, Value, Debug)]
 pub struct TriangleHit {
     pub inst: u32,
     pub prim: u32,
@@ -336,14 +352,14 @@ pub struct TriangleHit {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, __Value, Debug)]
+#[derive(Clone, Copy, Value, Debug)]
 pub struct ProceduralHit {
     pub inst: u32,
     pub prim: u32,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, __Value, Debug)]
+#[derive(Clone, Copy, Value, Debug)]
 pub struct CommittedHit {
     pub inst_id: u32,
     pub prim_id: u32,
@@ -372,8 +388,8 @@ pub enum HitType {
 
 pub fn offset_ray_origin(p: Expr<Float3>, n: Expr<Float3>) -> Expr<Float3> {
     lazy_static! {
-        static ref F: Callable<fn(Expr<Float3>, Expr<Float3>)-> Expr<Float3>> =
-            create_static_callable::<fn(Expr<Float3>, Expr<Float3>)->Expr<Float3>>(|p, n| {
+        static ref F: Callable<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>> =
+            create_static_callable::<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>>(|p, n| {
                 const ORIGIN: f32 = 1.0f32 / 32.0f32;
                 const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
                 const INT_SCALE: f32 = 256.0f32;
@@ -392,7 +408,7 @@ pub type Index = PackedUint3;
 
 #[repr(C)]
 #[repr(align(8))]
-#[derive(Clone, Copy, __Value, Debug)]
+#[derive(Clone, Copy, Value, Debug)]
 pub struct Hit {
     pub inst_id: u32,
     pub prim_id: u32,

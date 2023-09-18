@@ -1,30 +1,28 @@
-use std::{
-    any::{Any, TypeId},
-    collections::HashMap,
-    fmt::Debug,
-    hash::Hash,
-};
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::hash::Hash;
 
-use crate::*;
-use crate::{resource::Buffer, Device};
-use luisa_compute_derive::__Value;
+use crate::internal_prelude::*;
 
-use super::{switch, traits::CommonVarOp, Aggregate, Uint, Value};
+use crate::lang::control_flow::switch;
+
+pub use crate::impl_polymorphic;
 
 pub struct PolyArray<K, T: ?Sized + 'static> {
     tag: i32,
     key: K,
-    get: Box<dyn Fn(&Self, Uint) -> Box<T>>,
-    _marker: std::marker::PhantomData<T>,
+    get: Box<dyn Fn(&Self, Expr<u32>) -> Box<T>>,
+    _marker: PhantomData<T>,
 }
 
 impl<K, T: ?Sized + 'static> PolyArray<K, T> {
-    pub fn new(tag: i32, key: K, get: Box<dyn Fn(&Self, Uint) -> Box<T>>) -> Self {
+    pub fn new(tag: i32, key: K, get: Box<dyn Fn(&Self, Expr<u32>) -> Box<T>>) -> Self {
         Self {
             tag,
             get,
             key,
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
         }
     }
     pub fn tag(&self) -> i32 {
@@ -49,14 +47,14 @@ macro_rules! impl_new_poly_array {
 #[macro_export]
 macro_rules! impl_polymorphic {
     ($trait_:ident, $ty:ty) => {
-        impl PolymorphicImpl<dyn $trait_> for $ty {
+        impl luisa_compute::lang::poly::PolymorphicImpl<dyn $trait_> for $ty {
             fn new_poly_array<K>(
-                buffer: &luisa_compute::Buffer<Self>,
+                buffer: &luisa_compute::resource::Buffer<Self>,
                 tag: i32,
                 key: K,
-            ) -> luisa_compute::PolyArray<K, dyn $trait_> {
+            ) -> luisa_compute::lang::poly::PolyArray<K, dyn $trait_> {
                 let buffer = unsafe { buffer.shallow_clone() };
-                luisa_compute::PolyArray::new(
+                luisa_compute::lang::poly::PolyArray::new(
                     tag,
                     key,
                     Box::new(move |_, index| Box::new(buffer.var().read(index))),
@@ -80,7 +78,7 @@ impl<K: 'static, T: ?Sized + 'static> PolyVec<K, T> {
     }
 }
 
-#[derive(Clone, Copy, Debug, __Value, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, Value, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(C)]
 pub struct TagIndex {
     pub tag: u32,
@@ -209,7 +207,7 @@ impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBui
    Thus a tag can be retrieved by either (Key, TypeId) or Key alone if the key is unique for all types.
  */
 pub struct Polymorphic<DevirtualizationKey, Trait: ?Sized + 'static> {
-    _marker: std::marker::PhantomData<Trait>,
+    _marker: PhantomData<Trait>,
     arrays: Vec<PolyArray<DevirtualizationKey, Trait>>,
     key_typeid_to_tag: HashMap<(DevirtualizationKey, TypeId), u32>,
     key_to_tag: HashMap<DevirtualizationKey, Option<u32>>,
@@ -279,7 +277,7 @@ impl<'a, K: Eq + Clone + Hash, T: ?Sized + 'static> PolymorphicRef<'a, K, T> {
 impl<K: Hash + Eq + Clone, T: ?Sized + 'static> Polymorphic<K, T> {
     pub fn new() -> Self {
         Self {
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
             arrays: vec![],
             key_to_tag: HashMap::new(),
             key_typeid_to_tag: HashMap::new(),

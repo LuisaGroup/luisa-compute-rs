@@ -1,10 +1,10 @@
 use std::env::current_exe;
 
+use luisa::prelude::*;
 use luisa_compute as luisa;
 
 fn main() {
-    use luisa::*;
-    init_logger();
+    luisa::init_logger();
     let args: Vec<String> = std::env::args().collect();
     assert!(
         args.len() <= 2,
@@ -30,7 +30,7 @@ fn main() {
         let tid = dispatch_id().x();
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
-        let vx = var!(f32, 2.0); // create a local mutable variable
+        let vx = 2.0_f32.var(); // create a local mutable variable
         *vx.get_mut() += *vx + x;
         buf_z.write(tid, vx.load() + y);
     });

@@ -1,12 +1,6 @@
-pub use super::swizzle::*;
-use super::{Aggregate, ExprProxy, Value, VarProxy, __extract, traits::*, Float};
-use crate::*;
-use half::f16;
-use luisa_compute_ir::{
-    context::register_type,
-    ir::{Func, MatrixType, NodeRef, Primitive, Type, VectorElementType, VectorType},
-    TypeOf,
-};
+use super::core::*;
+use super::*;
+use ir::{MatrixType, Primitive, VectorElementType, VectorType};
 use serde::{Deserialize, Serialize};
 use std::ops::Mul;
 
@@ -44,7 +38,7 @@ macro_rules! def_vec {
 macro_rules! def_packed_vec {
     ($name:ident, $vec_type:ident, $glam_type:ident, $scalar:ty, $($comp:ident), *) => {
         #[repr(C)]
-        #[derive(Copy, Clone, Debug, Default, __Value,PartialEq, Serialize, Deserialize)]
+        #[derive(Copy, Clone, Debug, Default, Value, PartialEq, Serialize, Deserialize)]
         pub struct $name {
             $(pub $comp: $scalar), *
         }
@@ -87,7 +81,7 @@ macro_rules! def_packed_vec {
 macro_rules! def_packed_vec_no_glam {
     ($name:ident, $vec_type:ident, $scalar:ty, $($comp:ident), *) => {
         #[repr(C)]
-        #[derive(Copy, Clone, Debug, Default, __Value)]
+        #[derive(Copy, Clone, Debug, Default, Value)]
         pub struct $name {
             $(pub $comp: $scalar), *
         }
@@ -363,11 +357,11 @@ macro_rules! impl_proxy_fields {
     ($vec:ident, $proxy:ident, $scalar:ty, x) => {
         impl $proxy {
             #[inline]
-            pub fn x(&self) -> Expr<$scalar> {
+            pub fn x(&self) -> prim::Expr<$scalar> {
                 FromNode::from_node(__extract::<$scalar>(self.node, 0))
             }
             #[inline]
-            pub fn set_x(&self, value: Expr<$scalar>) -> Self {
+            pub fn set_x(&self, value: prim::Expr<$scalar>) -> Self {
                 Self::from_node(__insert::<$vec>(self.node, 0, ToNode::node(&value)))
             }
         }
@@ -375,11 +369,11 @@ macro_rules! impl_proxy_fields {
     ($vec:ident,$proxy:ident, $scalar:ty, y) => {
         impl $proxy {
             #[inline]
-            pub fn y(&self) -> Expr<$scalar> {
+            pub fn y(&self) -> prim::Expr<$scalar> {
                 FromNode::from_node(__extract::<$scalar>(self.node, 1))
             }
             #[inline]
-            pub fn set_y(&self, value: Expr<$scalar>) -> Self {
+            pub fn set_y(&self, value: prim::Expr<$scalar>) -> Self {
                 Self::from_node(__insert::<$vec>(self.node, 1, ToNode::node(&value)))
             }
         }
@@ -387,11 +381,11 @@ macro_rules! impl_proxy_fields {
     ($vec:ident,$proxy:ident, $scalar:ty, z) => {
         impl $proxy {
             #[inline]
-            pub fn z(&self) -> Expr<$scalar> {
+            pub fn z(&self) -> prim::Expr<$scalar> {
                 FromNode::from_node(__extract::<$scalar>(self.node, 2))
             }
             #[inline]
-            pub fn set_z(&self, value: Expr<$scalar>) -> Self {
+            pub fn set_z(&self, value: prim::Expr<$scalar>) -> Self {
                 Self::from_node(__insert::<$vec>(self.node, 2, ToNode::node(&value)))
             }
         }
@@ -399,11 +393,11 @@ macro_rules! impl_proxy_fields {
     ($vec:ident,$proxy:ident, $scalar:ty, w) => {
         impl $proxy {
             #[inline]
-            pub fn w(&self) -> Expr<$scalar> {
+            pub fn w(&self) -> prim::Expr<$scalar> {
                 FromNode::from_node(__extract::<$scalar>(self.node, 3))
             }
             #[inline]
-            pub fn set_w(&self, value: Expr<$scalar>) -> Self {
+            pub fn set_w(&self, value: prim::Expr<$scalar>) -> Self {
                 Self::from_node(__insert::<$vec>(self.node, 3, ToNode::node(&value)))
             }
         }
@@ -481,7 +475,7 @@ macro_rules! impl_vec_proxy {
         }
         impl VectorVarTrait for $expr_proxy { }
         impl ScalarOrVector for $expr_proxy {
-            type Element = Expr<$scalar>;
+            type Element = prim::Expr<$scalar>;
             type ElementHost = $scalar;
         }
         impl BuiltinVarTrait for $expr_proxy { }
@@ -537,13 +531,19 @@ macro_rules! impl_vec_proxy {
         $(impl_var_proxy_fields!($var_proxy, $scalar, $comp);)*
         impl $expr_proxy {
             #[inline]
-            pub fn new($($comp: Expr<$scalar>), *) -> Self {
+            pub fn new($($comp: prim::Expr<$scalar>), *) -> Self {
                 Self {
                     node: __compose::<$vec>(&[$(ToNode::node(&$comp)), *]),
                 }
             }
-            pub fn at(&self, index: usize) -> Expr<$scalar> {
+            pub fn at(&self, index: usize) -> prim::Expr<$scalar> {
                 FromNode::from_node(__extract::<$scalar>(self.node, index))
+            }
+        }
+        impl $vec {
+            #[inline]
+            pub fn expr($($comp: impl Into<prim::Expr<$scalar>>), *) -> $expr_proxy {
+                $expr_proxy::new($($comp.into()), *)
             }
         }
     };
@@ -646,6 +646,12 @@ macro_rules! impl_mat_proxy {
                 Expr::<$vec>::from_node(__extract::<$vec>(self.node, index))
             }
         }
+        impl $mat {
+            #[inline]
+            pub fn expr($($comp: impl Into<Expr<$vec>>), *) -> $expr_proxy {
+                $expr_proxy::new($($comp.into()), *)
+            }
+        }
     };
 }
 
@@ -663,7 +669,18 @@ impl_vec_proxy!(Float4, Float4Expr, Float4Var, f32, Float32, 4, x, y, z, w);
 
 impl_vec_proxy!(Double2, Double2Expr, Double2Var, f64, Float64, 2, x, y);
 impl_vec_proxy!(Double3, Double3Expr, Double3Var, f64, Float64, 3, x, y, z);
-impl_vec_proxy!(Double4, Double4Expr, Double4Var, f64, Float64, 4, x, y, z, w);
+impl_vec_proxy!(
+    Double4,
+    Double4Expr,
+    Double4Var,
+    f64,
+    Float64,
+    4,
+    x,
+    y,
+    z,
+    w
+);
 
 impl_vec_proxy!(Ushort2, Ushort2Expr, Ushort2Var, u16, Uint16, 2, x, y);
 impl_vec_proxy!(Ushort3, Ushort3Expr, Ushort3Var, u16, Uint16, 3, x, y, z);
@@ -784,16 +801,16 @@ macro_rules! impl_binop {
                 }))
             }
         }
-        impl std::ops::$tr<PrimExpr<$scalar>> for $proxy {
+        impl std::ops::$tr<prim::Expr<$scalar>> for $proxy {
             type Output = $proxy;
-            fn $m(self, rhs: PrimExpr<$scalar>) -> Self::Output {
+            fn $m(self, rhs: prim::Expr<$scalar>) -> Self::Output {
                 let rhs = Self::splat(rhs);
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::$tr, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
             }
         }
-        impl std::ops::$tr<$proxy> for PrimExpr<$scalar> {
+        impl std::ops::$tr<$proxy> for prim::Expr<$scalar> {
             type Output = $proxy;
             fn $m(self, rhs: $proxy) -> Self::Output {
                 let lhs = <$proxy>::splat(self);
@@ -838,16 +855,16 @@ macro_rules! impl_binop_for_mat {
                 }))
             }
         }
-        impl std::ops::$tr<PrimExpr<$scalar>> for $proxy {
+        impl std::ops::$tr<prim::Expr<$scalar>> for $proxy {
             type Output = $proxy;
-            fn $m(self, rhs: PrimExpr<$scalar>) -> Self::Output {
+            fn $m(self, rhs: prim::Expr<$scalar>) -> Self::Output {
                 let rhs = Self::fill(rhs);
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::$tr, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
             }
         }
-        impl std::ops::$tr<$proxy> for PrimExpr<$scalar> {
+        impl std::ops::$tr<$proxy> for prim::Expr<$scalar> {
             type Output = $proxy;
             fn $m(self, rhs: $proxy) -> Self::Output {
                 let lhs = <$proxy>::fill(self);
@@ -929,9 +946,9 @@ macro_rules! impl_arith_binop_for_mat {
                 }))
             }
         }
-        impl std::ops::Mul<PrimExpr<$scalar>> for $proxy {
+        impl std::ops::Mul<prim::Expr<$scalar>> for $proxy {
             type Output = $proxy;
-            fn mul(self, rhs: PrimExpr<$scalar>) -> Self::Output {
+            fn mul(self, rhs: prim::Expr<$scalar>) -> Self::Output {
                 let rhs = Self::fill(rhs);
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(
@@ -942,7 +959,7 @@ macro_rules! impl_arith_binop_for_mat {
                 }))
             }
         }
-        impl std::ops::Mul<$proxy> for PrimExpr<$scalar> {
+        impl std::ops::Mul<$proxy> for prim::Expr<$scalar> {
             type Output = $proxy;
             fn mul(self, rhs: $proxy) -> Self::Output {
                 let lhs = <$proxy>::fill(self);
@@ -965,15 +982,15 @@ macro_rules! impl_arith_binop_for_mat {
         impl std::ops::Rem<$scalar> for $proxy {
             type Output = $proxy;
             fn rem(self, rhs: $scalar) -> Self::Output {
-                let rhs: PrimExpr<$scalar> = rhs.into();
+                let rhs: prim::Expr<$scalar> = rhs.into();
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Rem, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
             }
         }
-        impl std::ops::Rem<PrimExpr<$scalar>> for $proxy {
+        impl std::ops::Rem<prim::Expr<$scalar>> for $proxy {
             type Output = $proxy;
-            fn rem(self, rhs: PrimExpr<$scalar>) -> Self::Output {
+            fn rem(self, rhs: prim::Expr<$scalar>) -> Self::Output {
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Rem, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
@@ -989,15 +1006,15 @@ macro_rules! impl_arith_binop_for_mat {
         impl std::ops::Div<$scalar> for $proxy {
             type Output = $proxy;
             fn div(self, rhs: $scalar) -> Self::Output {
-                let rhs: PrimExpr<$scalar> = rhs.into();
+                let rhs: prim::Expr<$scalar> = rhs.into();
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Div, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
             }
         }
-        impl std::ops::Div<PrimExpr<$scalar>> for $proxy {
+        impl std::ops::Div<prim::Expr<$scalar>> for $proxy {
             type Output = $proxy;
-            fn div(self, rhs: PrimExpr<$scalar>) -> Self::Output {
+            fn div(self, rhs: prim::Expr<$scalar>) -> Self::Output {
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Div, &[self.node, rhs.node], <$t as TypeOf>::type_())
                 }))
@@ -1081,7 +1098,7 @@ macro_rules! impl_bool_binop {
             bitxor_assign
         );
         impl $proxy {
-            pub fn splat<V: Into<PrimExpr<bool>>>(value: V) -> Self {
+            pub fn splat<V: Into<prim::Expr<bool>>>(value: V) -> Self {
                 let value = value.into();
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Vec, &[value.node], <$t as TypeOf>::type_())
@@ -1093,12 +1110,12 @@ macro_rules! impl_bool_binop {
             pub fn one() -> Self {
                 Self::splat(true)
             }
-            pub fn all(&self) -> Expr<bool> {
+            pub fn all(&self) -> prim::Expr<bool> {
                 Expr::<bool>::from_node(__current_scope(|s| {
                     s.call(Func::All, &[self.node], <bool as TypeOf>::type_())
                 }))
             }
-            pub fn any(&self) -> Expr<bool> {
+            pub fn any(&self) -> prim::Expr<bool> {
                 Expr::<bool>::from_node(__current_scope(|s| {
                     s.call(Func::Any, &[self.node], <bool as TypeOf>::type_())
                 }))
@@ -1116,31 +1133,31 @@ macro_rules! impl_reduce {
     ($t:ty, $scalar:ty, $proxy:ty) => {
         impl $proxy {
             #[inline]
-            pub fn reduce_sum(&self) -> Expr<$scalar> {
+            pub fn reduce_sum(&self) -> prim::Expr<$scalar> {
                 FromNode::from_node(__current_scope(|s| {
                     s.call(Func::ReduceSum, &[self.node], <$scalar as TypeOf>::type_())
                 }))
             }
             #[inline]
-            pub fn reduce_prod(&self) -> Expr<$scalar> {
+            pub fn reduce_prod(&self) -> prim::Expr<$scalar> {
                 FromNode::from_node(__current_scope(|s| {
                     s.call(Func::ReduceProd, &[self.node], <$scalar as TypeOf>::type_())
                 }))
             }
             #[inline]
-            pub fn reduce_min(&self) -> Expr<$scalar> {
+            pub fn reduce_min(&self) -> prim::Expr<$scalar> {
                 FromNode::from_node(__current_scope(|s| {
                     s.call(Func::ReduceMin, &[self.node], <$scalar as TypeOf>::type_())
                 }))
             }
             #[inline]
-            pub fn reduce_max(&self) -> Expr<$scalar> {
+            pub fn reduce_max(&self) -> prim::Expr<$scalar> {
                 FromNode::from_node(__current_scope(|s| {
                     s.call(Func::ReduceMax, &[self.node], <$scalar as TypeOf>::type_())
                 }))
             }
             #[inline]
-            pub fn dot(&self, rhs: $proxy) -> Expr<$scalar> {
+            pub fn dot(&self, rhs: $proxy) -> prim::Expr<$scalar> {
                 FromNode::from_node(__current_scope(|s| {
                     s.call(
                         Func::Dot,
@@ -1155,7 +1172,7 @@ macro_rules! impl_reduce {
 macro_rules! impl_common_op {
     ($t:ty, $scalar:ty, $proxy:ty) => {
         impl $proxy {
-            pub fn splat<V: Into<PrimExpr<$scalar>>>(value: V) -> Self {
+            pub fn splat<V: Into<prim::Expr<$scalar>>>(value: V) -> Self {
                 let value = value.into();
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Vec, &[value.node], <$t as TypeOf>::type_())
@@ -1174,7 +1191,7 @@ macro_rules! impl_vec_op {
     ($t:ty, $scalar:ty, $proxy:ty, $mat:ty) => {
         impl $proxy {
             #[inline]
-            pub fn length(&self) -> Expr<$scalar> {
+            pub fn length(&self) -> prim::Expr<$scalar> {
                 FromNode::from_node(__current_scope(|s| {
                     s.call(Func::Length, &[self.node], <$scalar as TypeOf>::type_())
                 }))
@@ -1186,7 +1203,7 @@ macro_rules! impl_vec_op {
                 }))
             }
             #[inline]
-            pub fn length_squared(&self) -> Expr<$scalar> {
+            pub fn length_squared(&self) -> prim::Expr<$scalar> {
                 FromNode::from_node(__current_scope(|s| {
                     s.call(
                         Func::LengthSquared,
@@ -1196,11 +1213,11 @@ macro_rules! impl_vec_op {
                 }))
             }
             #[inline]
-            pub fn distance(&self, rhs: $proxy) -> Expr<$scalar> {
+            pub fn distance(&self, rhs: $proxy) -> prim::Expr<$scalar> {
                 (*self - rhs).length()
             }
             #[inline]
-            pub fn distance_squared(&self, rhs: $proxy) -> Expr<$scalar> {
+            pub fn distance_squared(&self, rhs: $proxy) -> prim::Expr<$scalar> {
                 (*self - rhs).length_squared()
             }
             #[inline]
@@ -1250,7 +1267,7 @@ macro_rules! impl_arith_binop_f16 {
 macro_rules! impl_common_op_f16 {
     ($t:ty, $scalar:ty, $proxy:ty) => {
         impl $proxy {
-            pub fn splat<V: Into<PrimExpr<$scalar>>>(value: V) -> Self {
+            pub fn splat<V: Into<prim::Expr<$scalar>>>(value: V) -> Self {
                 let value = value.into();
                 <$proxy>::from_node(__current_scope(|s| {
                     s.call(Func::Vec, &[value.node], <$t as TypeOf>::type_())
@@ -1512,7 +1529,7 @@ macro_rules! impl_var_trait2 {
         impl VarCmpEq for $t {}
         impl From<$v> for $t {
             fn from(v: $v) -> Self {
-                Self::new(const_(v.x), const_(v.y))
+                Self::new((v.x).expr(), (v.y).expr())
             }
         }
     };
@@ -1537,7 +1554,7 @@ macro_rules! impl_var_trait3 {
         impl VarCmpEq for $t {}
         impl From<$v> for $t {
             fn from(v: $v) -> Self {
-                Self::new(const_(v.x), const_(v.y), const_(v.z))
+                Self::new(v.x.expr(), v.y.expr(), v.z.expr())
             }
         }
     };
@@ -1562,7 +1579,7 @@ macro_rules! impl_var_trait4 {
         impl VarCmpEq for $t {}
         impl From<$v> for $t {
             fn from(v: $v) -> Self {
-                Self::new(const_(v.x), const_(v.y), const_(v.z), const_(v.w))
+                Self::new(v.x.expr(), v.y.expr(), v.z.expr(), v.w.expr())
             }
         }
     };
@@ -1667,11 +1684,11 @@ impl Mul<Float2Expr> for Mat2Expr {
     }
 }
 impl Mat2Expr {
-    pub fn fill(e: impl Into<Expr<f32>> + Copy) -> Self {
-        Self::new(make_float2(e, e), make_float2(e, e))
+    pub fn fill(e: impl Into<prim::Expr<f32>> + Copy) -> Self {
+        Self::new(Float2::expr(e, e), Float2::expr(e, e))
     }
     pub fn eye(e: Expr<Float2>) -> Self {
-        Self::new(make_float2(e.x(), 0.0), make_float2(0.0, e.y()))
+        Self::new(Float2::expr(e.x(), 0.0), Float2::expr(0.0, e.y()))
     }
     pub fn inverse(&self) -> Self {
         Mat2Expr::from_node(__current_scope(|s| {
@@ -1683,7 +1700,7 @@ impl Mat2Expr {
             s.call(Func::Transpose, &[self.node], <Mat2 as TypeOf>::type_())
         }))
     }
-    pub fn determinant(&self) -> Float {
+    pub fn determinant(&self) -> prim::Expr<f32> {
         FromNode::from_node(__current_scope(|s| {
             s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
         }))
@@ -1704,18 +1721,18 @@ impl Mul<Float3Expr> for Mat3Expr {
     }
 }
 impl Mat3Expr {
-    pub fn fill(e: impl Into<PrimExpr<f32>> + Copy) -> Self {
+    pub fn fill(e: impl Into<prim::Expr<f32>> + Copy) -> Self {
         Self::new(
-            make_float3(e, e, e),
-            make_float3(e, e, e),
-            make_float3(e, e, e),
+            Float3::expr(e, e, e),
+            Float3::expr(e, e, e),
+            Float3::expr(e, e, e),
         )
     }
     pub fn eye(e: Expr<Float3>) -> Self {
         Self::new(
-            make_float3(e.x(), 0.0, 0.0),
-            make_float3(0.0, e.y(), 0.0),
-            make_float3(0.0, 0.0, e.z()),
+            Float3::expr(e.x(), 0.0, 0.0),
+            Float3::expr(0.0, e.y(), 0.0),
+            Float3::expr(0.0, 0.0, e.z()),
         )
     }
     pub fn inverse(&self) -> Self {
@@ -1728,7 +1745,7 @@ impl Mat3Expr {
             s.call(Func::Transpose, &[self.node], <Mat3 as TypeOf>::type_())
         }))
     }
-    pub fn determinant(&self) -> Float {
+    pub fn determinant(&self) -> prim::Expr<f32> {
         FromNode::from_node(__current_scope(|s| {
             s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
         }))
@@ -1749,20 +1766,20 @@ impl Mul<Float4Expr> for Mat4Expr {
 }
 impl_arith_binop_for_mat!(Mat3, f32, Mat3Expr);
 impl Mat4Expr {
-    pub fn fill(e: impl Into<PrimExpr<f32>> + Copy) -> Self {
+    pub fn fill(e: impl Into<prim::Expr<f32>> + Copy) -> Self {
         Self::new(
-            make_float4(e, e, e, e),
-            make_float4(e, e, e, e),
-            make_float4(e, e, e, e),
-            make_float4(e, e, e, e),
+            Float4::expr(e, e, e, e),
+            Float4::expr(e, e, e, e),
+            Float4::expr(e, e, e, e),
+            Float4::expr(e, e, e, e),
         )
     }
     pub fn eye(e: Expr<Float4>) -> Self {
         Self::new(
-            make_float4(e.x(), 0.0, 0.0, 0.0),
-            make_float4(0.0, e.y(), 0.0, 0.0),
-            make_float4(0.0, 0.0, e.z(), 0.0),
-            make_float4(0.0, 0.0, 0.0, e.w()),
+            Float4::expr(e.x(), 0.0, 0.0, 0.0),
+            Float4::expr(0.0, e.y(), 0.0, 0.0),
+            Float4::expr(0.0, 0.0, e.z(), 0.0),
+            Float4::expr(0.0, 0.0, 0.0, e.w()),
         )
     }
     pub fn inverse(&self) -> Self {
@@ -1775,7 +1792,7 @@ impl Mat4Expr {
             s.call(Func::Transpose, &[self.node], <Mat4 as TypeOf>::type_())
         }))
     }
-    pub fn determinant(&self) -> Float {
+    pub fn determinant(&self) -> prim::Expr<f32> {
         FromNode::from_node(__current_scope(|s| {
             s.call(Func::Determinant, &[self.node], <f32 as TypeOf>::type_())
         }))
@@ -1783,199 +1800,11 @@ impl Mat4Expr {
 }
 impl_arith_binop_for_mat!(Mat4, f32, Mat4Expr);
 
-#[inline]
-pub fn make_half2<X: Into<PrimExpr<f16>>, Y: Into<PrimExpr<f16>>>(x: X, y: Y) -> Expr<Half2> {
-    Expr::<Half2>::new(x.into(), y.into())
-}
-#[inline]
-pub fn make_half3<X: Into<PrimExpr<f16>>, Y: Into<PrimExpr<f16>>, Z: Into<PrimExpr<f16>>>(
-    x: X,
-    y: Y,
-    z: Z,
-) -> Expr<Half3> {
-    Expr::<Half3>::new(x.into(), y.into(), z.into())
-}
-#[inline]
-pub fn make_half4<
-    X: Into<PrimExpr<f16>>,
-    Y: Into<PrimExpr<f16>>,
-    Z: Into<PrimExpr<f16>>,
-    W: Into<PrimExpr<f16>>,
->(
-    x: X,
-    y: Y,
-    z: Z,
-    w: W,
-) -> Expr<Half4> {
-    Expr::<Half4>::new(x.into(), y.into(), z.into(), w.into())
-}
-
-#[inline]
-pub fn make_float2<X: Into<PrimExpr<f32>>, Y: Into<PrimExpr<f32>>>(x: X, y: Y) -> Expr<Float2> {
-    Expr::<Float2>::new(x.into(), y.into())
-}
-#[inline]
-pub fn make_float3<X: Into<PrimExpr<f32>>, Y: Into<PrimExpr<f32>>, Z: Into<PrimExpr<f32>>>(
-    x: X,
-    y: Y,
-    z: Z,
-) -> Expr<Float3> {
-    Expr::<Float3>::new(x.into(), y.into(), z.into())
-}
-#[inline]
-pub fn make_float4<
-    X: Into<PrimExpr<f32>>,
-    Y: Into<PrimExpr<f32>>,
-    Z: Into<PrimExpr<f32>>,
-    W: Into<PrimExpr<f32>>,
->(
-    x: X,
-    y: Y,
-    z: Z,
-    w: W,
-) -> Expr<Float4> {
-    Expr::<Float4>::new(x.into(), y.into(), z.into(), w.into())
-}
-#[inline]
-pub fn make_float2x2<X: Into<Expr<Float2>>, Y: Into<Expr<Float2>>>(x: X, y: Y) -> Expr<Mat2> {
-    Expr::<Mat2>::new(x.into(), y.into())
-}
-#[inline]
-pub fn make_float3x3<X: Into<Expr<Float3>>, Y: Into<Expr<Float3>>, Z: Into<Expr<Float3>>>(
-    x: X,
-    y: Y,
-    z: Z,
-) -> Expr<Mat3> {
-    Expr::<Mat3>::new(x.into(), y.into(), z.into())
-}
-#[inline]
-pub fn make_float4x4<
-    X: Into<Expr<Float4>>,
-    Y: Into<Expr<Float4>>,
-    Z: Into<Expr<Float4>>,
-    W: Into<Expr<Float4>>,
->(
-    x: X,
-    y: Y,
-    z: Z,
-    w: W,
-) -> Expr<Mat4> {
-    Expr::<Mat4>::new(x.into(), y.into(), z.into(), w.into())
-}
-
-#[inline]
-pub fn make_int2<X: Into<PrimExpr<i32>>, Y: Into<PrimExpr<i32>>>(x: X, y: Y) -> Expr<Int2> {
-    Expr::<Int2>::new(x.into(), y.into())
-}
-#[inline]
-pub fn make_int3<X: Into<PrimExpr<i32>>, Y: Into<PrimExpr<i32>>, Z: Into<PrimExpr<i32>>>(
-    x: X,
-    y: Y,
-    z: Z,
-) -> Expr<Int3> {
-    Expr::<Int3>::new(x.into(), y.into(), z.into())
-}
-#[inline]
-pub fn make_int4<
-    X: Into<PrimExpr<i32>>,
-    Y: Into<PrimExpr<i32>>,
-    Z: Into<PrimExpr<i32>>,
-    W: Into<PrimExpr<i32>>,
->(
-    x: X,
-    y: Y,
-    z: Z,
-    w: W,
-) -> Expr<Int4> {
-    Expr::<Int4>::new(x.into(), y.into(), z.into(), w.into())
-}
-#[inline]
-pub fn make_uint2<X: Into<PrimExpr<u32>>, Y: Into<PrimExpr<u32>>>(x: X, y: Y) -> Expr<Uint2> {
-    Expr::<Uint2>::new(x.into(), y.into())
-}
-#[inline]
-pub fn make_uint3<X: Into<PrimExpr<u32>>, Y: Into<PrimExpr<u32>>, Z: Into<PrimExpr<u32>>>(
-    x: X,
-    y: Y,
-    z: Z,
-) -> Expr<Uint3> {
-    Expr::<Uint3>::new(x.into(), y.into(), z.into())
-}
-#[inline]
-pub fn make_uint4<
-    X: Into<PrimExpr<u32>>,
-    Y: Into<PrimExpr<u32>>,
-    Z: Into<PrimExpr<u32>>,
-    W: Into<PrimExpr<u32>>,
->(
-    x: X,
-    y: Y,
-    z: Z,
-    w: W,
-) -> Expr<Uint4> {
-    Expr::<Uint4>::new(x.into(), y.into(), z.into(), w.into())
-}
-
-#[inline]
-pub fn make_short2<X: Into<PrimExpr<i16>>, Y: Into<PrimExpr<i16>>>(x: X, y: Y) -> Expr<Short2> {
-    Expr::<Short2>::new(x.into(), y.into())
-}
-#[inline]
-pub fn make_short3<X: Into<PrimExpr<i16>>, Y: Into<PrimExpr<i16>>, Z: Into<PrimExpr<i16>>>(
-    x: X,
-    y: Y,
-    z: Z,
-) -> Expr<Short3> {
-    Expr::<Short3>::new(x.into(), y.into(), z.into())
-}
-#[inline]
-pub fn make_short4<
-    X: Into<PrimExpr<i16>>,
-    Y: Into<PrimExpr<i16>>,
-    Z: Into<PrimExpr<i16>>,
-    W: Into<PrimExpr<i16>>,
->(
-    x: X,
-    y: Y,
-    z: Z,
-    w: W,
-) -> Expr<Short4> {
-    Expr::<Short4>::new(x.into(), y.into(), z.into(), w.into())
-}
-
-#[inline]
-pub fn make_ushort2<X: Into<PrimExpr<u16>>, Y: Into<PrimExpr<u16>>>(x: X, y: Y) -> Expr<Ushort2> {
-    Expr::<Ushort2>::new(x.into(), y.into())
-}
-#[inline]
-pub fn make_ushort3<X: Into<PrimExpr<u16>>, Y: Into<PrimExpr<u16>>, Z: Into<PrimExpr<u16>>>(
-    x: X,
-    y: Y,
-    z: Z,
-) -> Expr<Ushort3> {
-    Expr::<Ushort3>::new(x.into(), y.into(), z.into())
-}
-#[inline]
-pub fn make_ushort4<
-    X: Into<PrimExpr<u16>>,
-    Y: Into<PrimExpr<u16>>,
-    Z: Into<PrimExpr<u16>>,
-    W: Into<PrimExpr<u16>>,
->(
-    x: X,
-    y: Y,
-    z: Z,
-    w: W,
-) -> Expr<Ushort4> {
-    Expr::<Ushort4>::new(x.into(), y.into(), z.into(), w.into())
-}
-
 #[cfg(test)]
 mod test {
     #[test]
     fn test_size() {
-        use crate::prelude::*;
-        use crate::*;
+        use crate::internal_prelude::*;
         macro_rules! assert_size {
             ($ty:ty) => {
                 {assert_eq!(std::mem::size_of::<$ty>(), <$ty as TypeOf>::type_().size());}

@@ -1,6 +1,6 @@
 use std::env::current_exe;
 
-use luisa::*;
+use luisa::prelude::*;
 use luisa_compute as luisa;
 #[derive(BindGroup)]
 struct MyArgStruct<T: Value> {

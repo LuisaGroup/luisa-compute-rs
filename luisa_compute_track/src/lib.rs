@@ -65,7 +65,7 @@ impl VisitMut for TraceVisitor {
             Expr::Loop(expr) => {
                 let body = &expr.body;
                 *node = parse_quote_spanned! {span=>
-                    #flow_path::loop_!(|| #body)
+                    #flow_path::loop_(|| #body)
                 }
             }
             Expr::ForLoop(expr) => {

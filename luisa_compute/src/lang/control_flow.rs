@@ -295,6 +295,10 @@ impl_range!(i64);
 impl_range!(u32);
 impl_range!(u64);
 
+pub fn loop_(body: impl Fn()) {
+    while_!(true.expr(), { body(); });
+}
+
 pub fn for_range<R: ForLoopRange>(r: R, body: impl Fn(Expr<R::Element>)) {
     let start = r.start();
     let end = r.end();

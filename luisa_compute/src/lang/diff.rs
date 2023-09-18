@@ -118,7 +118,7 @@ pub fn grad<T: ExprProxy>(var: T) -> T {
 //         .collect();
 //     R::from_vec_nodes(nodes)
 // }
-pub fn detach<T: FromNode>(v: T) -> T {
+pub fn detach<T: NodeLike>(v: T) -> T {
     let v = v.node();
     let node = __current_scope(|b| b.call(Func::Detach, &[v], v.type_().clone()));
     T::from_node(node)

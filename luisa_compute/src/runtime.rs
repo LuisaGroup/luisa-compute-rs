@@ -957,7 +957,7 @@ impl CallableArgEncoder {
     pub fn bindless_array(&mut self, array: &BindlessArrayVar) {
         self.args.push(array.node);
     }
-    pub fn var(&mut self, value: impl FromNode) {
+    pub fn var(&mut self, value: impl NodeLike) {
         self.args.push(value.node());
     }
     pub fn accel(&mut self, accel: &rtx::AccelVar) {

@@ -66,7 +66,7 @@ pub fn continue_() {
     });
 }
 
-pub fn return_v<T: FromNode>(v: T) {
+pub fn return_v<T: NodeLike>(v: T) {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
         if r.callable_ret_type.is_none() {
@@ -296,7 +296,9 @@ impl_range!(u32);
 impl_range!(u64);
 
 pub fn loop_(body: impl Fn()) {
-    while_!(true.expr(), { body(); });
+    while_!(true.expr(), {
+        body();
+    });
 }
 
 pub fn for_range<R: ForLoopRange>(r: R, body: impl Fn(Expr<R::Element>)) {

@@ -36,8 +36,9 @@ pub mod prelude {
     pub use crate::lang::types::{Expr, ExprProxy, Value, Var, VarProxy};
     pub use crate::lang::Aggregate;
     pub use crate::resource::{IoTexel, StorageTexel, *};
+    pub use crate::runtime::api::StreamTag;
     pub use crate::runtime::{
-        api::StreamTag, create_static_callable, Command, Device, KernelBuildOptions, Scope, Stream,
+        create_static_callable, Command, Device, KernelBuildOptions, Scope, Stream,
     };
     pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, struct_, while_, Context};
 
@@ -55,7 +56,7 @@ mod internal_prelude {
     pub(crate) use crate::lang::types::vector::*;
     pub(crate) use crate::lang::{
         ir, Recorder, __compose, __extract, __insert, __module_pools, need_runtime_check, FromNode,
-        NodeRef, ToNode, __current_scope, __pop_scope, RECORDER,
+        NodeLike, NodeRef, ToNode, __current_scope, __pop_scope, RECORDER,
     };
     pub(crate) use crate::prelude::*;
     pub(crate) use crate::runtime::{

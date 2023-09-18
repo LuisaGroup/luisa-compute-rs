@@ -25,7 +25,7 @@ pub trait Value: Copy + ir::TypeOf + 'static {
     }
 }
 
-pub trait ExprProxy: Copy + Aggregate + FromNode {
+pub trait ExprProxy: Copy + Aggregate + NodeLike {
     type Value: Value<Expr = Self>;
 
     fn var(self) -> Var<Self::Value> {
@@ -37,7 +37,7 @@ pub trait ExprProxy: Copy + Aggregate + FromNode {
     }
 }
 
-pub trait VarProxy: Copy + Aggregate + FromNode {
+pub trait VarProxy: Copy + Aggregate + NodeLike {
     type Value: Value<Var = Self>;
     fn store<U: Into<Expr<Self::Value>>>(&self, value: U) {
         let value = value.into();

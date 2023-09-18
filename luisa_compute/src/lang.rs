@@ -135,7 +135,10 @@ pub trait ToNode {
     fn node(&self) -> NodeRef;
 }
 
-pub trait FromNode: ToNode {
+pub trait NodeLike: FromNode + ToNode {}
+impl<T> NodeLike for T where T: FromNode + ToNode {}
+
+pub trait FromNode {
     fn from_node(node: NodeRef) -> Self;
 }
 

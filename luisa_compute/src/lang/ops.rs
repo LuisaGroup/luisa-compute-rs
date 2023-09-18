@@ -3,7 +3,7 @@ use std::ops::*;
 
 pub mod impls;
 
-pub trait VarTrait: Copy + Clone + 'static + FromNode {
+pub trait VarTrait: Copy + Clone + 'static + NodeLike {
     type Value: Value;
     type Short: VarTrait;
     type Ushort: VarTrait;

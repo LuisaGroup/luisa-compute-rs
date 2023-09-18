@@ -37,7 +37,7 @@ pub mod prelude {
     pub use crate::lang::Aggregate;
     pub use crate::resource::{IoTexel, StorageTexel, *};
     pub use crate::runtime::{
-        create_static_callable, Command, Device, KernelBuildOptions, Scope, Stream,
+        api::StreamTag, create_static_callable, Command, Device, KernelBuildOptions, Scope, Stream,
     };
     pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, struct_, while_, Context};
 

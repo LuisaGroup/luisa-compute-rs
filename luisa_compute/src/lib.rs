@@ -23,16 +23,7 @@ pub mod prelude {
     pub use crate::lang::index::{IndexRead, IndexWrite};
     pub use crate::lang::ops::*;
     pub use crate::lang::swizzle::*;
-    pub use crate::lang::types::vector::{
-        Bool2, Bool3, Bool4, Byte2, Byte3, Byte4, Double2, Double3, Double4, Float2, Float3,
-        Float4, Half2, Half3, Half4, Int2, Int3, Int4, Long2, Long3, Long4, Mat2, Mat3, Mat4,
-        PackedBool2, PackedBool3, PackedBool4, PackedFloat2, PackedFloat3, PackedFloat4,
-        PackedInt2, PackedInt3, PackedInt4, PackedLong2, PackedLong3, PackedLong4, PackedShort2,
-        PackedShort3, PackedShort4, PackedUint2, PackedUint3, PackedUint4, PackedUlong2,
-        PackedUlong3, PackedUlong4, PackedUshort2, PackedUshort3, PackedUshort4, Short2, Short3,
-        Short4, Ubyte2, Ubyte3, Ubyte4, Uint2, Uint3, Uint4, Ulong2, Ulong3, Ulong4, Ushort2,
-        Ushort3, Ushort4,
-    };
+    pub use crate::lang::types::vector::Vector;
     pub use crate::lang::types::{Expr, ExprProxy, Value, Var, VarProxy};
     pub use crate::lang::Aggregate;
     pub use crate::resource::{IoTexel, StorageTexel, *};
@@ -53,7 +44,6 @@ mod internal_prelude {
         new_node, register_type, BasicBlock, Const, Func, Instruction, IrBuilder, Node,
         PhiIncoming, Pooled, Type, TypeOf, INVALID_REF,
     };
-    pub(crate) use crate::lang::types::vector::*;
     pub(crate) use crate::lang::{
         ir, Recorder, __compose, __extract, __insert, __module_pools, need_runtime_check, FromNode,
         NodeLike, NodeRef, ToNode, __current_scope, __pop_scope, RECORDER,

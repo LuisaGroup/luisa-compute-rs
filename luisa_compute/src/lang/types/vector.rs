@@ -27,6 +27,7 @@ impl<T: Debug + VectorElement<N>, const N: usize> Debug for Vector<T, N> {
 #[repr(C)]
 #[derive(Copy, Clone, Hash, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Vector<T: VectorElement<N>, const N: usize> {
+    #[serde(skip)]
     _align: T::A,
     elements: [T; N],
 }
@@ -92,8 +93,8 @@ macro_rules! vector_proxies {
             $(pub $c: Var<T>),*
         }
 
-        unsafe impl<T: VectorElement<$N>> HasExprLayout<Vector<T, $N>::ExprData> for $ExprName<T> {}
-        unsafe impl<T: VectorElement<$N>> HasVarLayout<Vector<T, $N>::VarData> for $VarName<T> {}
+        unsafe impl<T: VectorElement<$N>> HasExprLayout<<Vector<T, $N> as Value>::ExprData> for $ExprName<T> {}
+        unsafe impl<T: VectorElement<$N>> HasVarLayout<<Vector<T, $N> as Value>::VarData> for $VarName<T> {}
 
         impl<T: VectorElement<$N>> ExprProxy for $ExprName<T> {
             type Value = Vector<T, $N>;
@@ -102,7 +103,7 @@ macro_rules! vector_proxies {
             type Value = Vector<T, $N>;
         }
         impl<T: VectorElement<$N>> Deref for $VarName<T> {
-            type Target = $ExprName<T>;
+            type Target = Expr<Vector<T, $N>>;
             fn deref(&self) -> &Self::Target {
                 _deref_proxy(self)
             }

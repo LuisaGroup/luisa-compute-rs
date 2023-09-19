@@ -1,6 +1,6 @@
 use super::*;
 use crate::lang::types::core::*;
-use crate::lang::types::VarDerefProxy;
+use crate::lang::types::VarDeref;
 
 macro_rules! impl_var_trait {
     ($t:ty) => {

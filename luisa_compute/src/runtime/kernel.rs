@@ -1,31 +1,20 @@
 use super::*;
 
-#[macro_export]
-macro_rules! impl_callable_param {
-    ($t:ty, $e:ty, $v:ty) => {
-        impl CallableParameter for $e {
-            fn def_param(
-                _: Option<std::rc::Rc<dyn std::any::Any>>,
-                builder: &mut KernelBuilder,
-            ) -> Self {
-                builder.value::<$t>()
-            }
-            fn encode(&self, encoder: &mut CallableArgEncoder) {
-                encoder.var(*self)
-            }
-        }
-        impl CallableParameter for $v {
-            fn def_param(
-                _: Option<std::rc::Rc<dyn std::any::Any>>,
-                builder: &mut KernelBuilder,
-            ) -> Self {
-                builder.var::<$t>()
-            }
-            fn encode(&self, encoder: &mut CallableArgEncoder) {
-                encoder.var(*self)
-            }
-        }
-    };
+impl<T: Value> CallableParameter for Expr<T> {
+    fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
+        builder.value::<T>()
+    }
+    fn encode(&self, encoder: &mut CallableArgEncoder) {
+        encoder.var(*self)
+    }
+}
+impl<T: Value> CallableParameter for Var<T> {
+    fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
+        builder.var::<T>()
+    }
+    fn encode(&self, encoder: &mut CallableArgEncoder) {
+        encoder.var(*self)
+    }
 }
 
 // Not recommended to use this directly

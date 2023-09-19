@@ -142,6 +142,12 @@ pub trait FromNode {
     fn from_node(node: NodeRef) -> Self;
 }
 
+impl<T: Default> FromNode for T {
+    fn from_node(_: NodeRef) -> Self {
+        Default::default()
+    }
+}
+
 fn _store<T1: Aggregate, T2: Aggregate>(var: &T1, value: &T2) {
     let value_nodes = value.to_vec_nodes();
     let self_nodes = var.to_vec_nodes();

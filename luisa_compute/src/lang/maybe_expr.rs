@@ -2,9 +2,87 @@
 //! either be an expression or a normal value. This is necessary for making the
 //! trace macro work for both types of value.
 
+use std::ops::DerefMut;
+
 use super::control_flow::{generic_loop, if_then_else};
 use super::types::core::*;
+use super::types::AsExpr;
 use crate::internal_prelude::*;
+
+/*== Version 1
+pub trait DerefSet {
+    type Target;
+    fn deref_set(&mut self, target: Self::Target);
+}
+impl<T: DerefMut> DerefSet for T
+where
+    T::Target: Sized,
+{
+    type Target = T::Target;
+    fn deref_set(&mut self, target: Self::Target) {
+        **self = target;
+    }
+}
+impl<T: Value> DerefSet for Var<T> {
+    type Target = Expr<T>;
+    fn deref_set(&mut self, target: Self::Target) {
+        self.store(target);
+    }
+}
+*/
+/*== Version 2
+pub trait DerefSet {
+    type Target;
+    fn deref_set(self, target: Self::Target);
+}
+impl<T: DerefMut> DerefSet for &mut T
+where
+    T::Target: Sized,
+{
+    type Target = T::Target;
+    fn deref_set(self, target: Self::Target) {
+        *self = target;
+    }
+}
+impl<T: Value> DerefSet for Var<T> {
+    type Target = Expr<T>;
+    fn deref_set(&mut self, target: Self::Target) {
+        self.store(target);
+    }
+}
+// TODO: Confirm that `&mut Var` errors. Otherwise, make a `&mut Var` impl that
+// panics.
+impl<T: Value> DerefSet for &Var<T> {
+    type Target = Expr<T>;
+    fn deref_set(&mut self, target: Self::Target) {
+        self.store(target);
+    }
+}
+*/
+/* == Version 3 == */
+pub trait DerefSet<X> {
+    fn deref_set(self, target: X);
+}
+impl<T: DerefMut> DerefSet<T::Target> for &mut T
+where
+    T::Target: Sized,
+{
+    fn deref_set(self, target: T::Target) {
+        *self = target;
+    }
+}
+impl<T: Value, X: AsExpr<Value = T>> DerefSet<X> for Var<T> {
+    fn deref_set(self, target: X) {
+        self.store(target.as_expr());
+    }
+}
+// TODO: Confirm that `&mut Var` errors. Otherwise, make a `&mut Var` impl that
+// panics.
+impl<T: Value, X: AsExpr<Value = T>> DerefSet<X> for &Var<T> {
+    fn deref_set(self, target: X) {
+        self.store(target.as_expr());
+    }
+}
 
 pub trait BoolIfElseMaybeExpr<R> {
     fn if_then_else(self, then: impl FnOnce() -> R, else_: impl FnOnce() -> R) -> R;

@@ -1,357 +1,93 @@
+use super::alignment::*;
 use super::core::*;
 use super::*;
-use ir::{MatrixType, Primitive, VectorElementType, VectorType};
+use ir::{MatrixType, VectorElementType, VectorType};
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use std::ops::Mul;
 
-macro_rules! def_vec {
-    ($name:ident, $glam_type:ident, $scalar:ty, $align:literal, $($comp:ident), *) => {
-        #[repr(C, align($align))]
-        #[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-        pub struct $name {
-            $(pub $comp: $scalar), *
+#[cfg(feature = "glam")]
+mod glam;
+#[cfg(feature = "nalgebra")]
+mod nalgebra;
+
+pub mod coords;
+
+trait VectorElement<const N: usize, const PACKED: bool>: Primitive {
+    type A: Alignment;
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Vector<const N: usize, T: VectorElement<N, PACKED>, const PACKED: bool = false> {
+    _align: T::A,
+    elements: [T; N],
+}
+impl<const N: usize, T: Debug + VectorElement<N, P>, const P: bool> Debug for Vector<N, T, P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.elements.fmt(f)
+    }
+}
+
+impl<const N: usize, T: VectorElement<N, PACKED>, const PACKED: bool = false> 
+
+macro_rules! element {
+    ($t:ty [ $l:literal ]: $a: ident, $p: ident) => {
+        impl VectorElement<$l, false> for $t {
+            type A = $a;
         }
-        impl $name {
-            #[inline]
-            pub const fn new($($comp: $scalar), *) -> Self {
-                Self { $($comp), * }
-            }
-            #[inline]
-            pub const fn splat(scalar: $scalar) -> Self {
-                Self { $($comp: scalar), * }
-            }
-        }
-        impl From<$name> for glam::$glam_type {
-            #[inline]
-            fn from(v: $name) -> Self {
-                Self::new($(v.$comp), *)
-            }
-        }
-        impl From<glam::$glam_type> for $name {
-            #[inline]
-            fn from(v: glam::$glam_type) -> Self {
-                Self::new($(v.$comp), *)
-            }
+        impl VectorElement<$l, true> for $t {
+            type A = $p;
         }
     };
-}
-macro_rules! def_packed_vec {
-    ($name:ident, $vec_type:ident, $glam_type:ident, $scalar:ty, $($comp:ident), *) => {
-        #[repr(C)]
-        #[derive(Copy, Clone, Debug, Default, Value, PartialEq, Serialize, Deserialize)]
-        pub struct $name {
-            $(pub $comp: $scalar), *
-        }
-        impl $name {
-            #[inline]
-            pub const fn new($($comp: $scalar), *) -> Self {
-                Self { $($comp), * }
-            }
-            #[inline]
-            pub const fn splat(scalar: $scalar) -> Self {
-                Self { $($comp: scalar), * }
-            }
-        }
-        impl From<$name> for glam::$glam_type {
-            #[inline]
-            fn from(v: $name) -> Self {
-                Self::new($(v.$comp), *)
-            }
-        }
-        impl From<glam::$glam_type> for $name {
-            #[inline]
-            fn from(v: glam::$glam_type) -> Self {
-                Self::new($(v.$comp), *)
-            }
-        }
-        impl From<$name> for $vec_type {
-            #[inline]
-            fn from(v: $name) -> Self {
-                Self::new($(v.$comp), *)
-            }
-        }
-        impl From<$vec_type> for $name {
-            #[inline]
-            fn from(v: $vec_type) -> Self {
-                Self::new($(v.$comp), *)
-            }
-        }
-    };
-}
-macro_rules! def_packed_vec_no_glam {
-    ($name:ident, $vec_type:ident, $scalar:ty, $($comp:ident), *) => {
-        #[repr(C)]
-        #[derive(Copy, Clone, Debug, Default, Value)]
-        pub struct $name {
-            $(pub $comp: $scalar), *
-        }
-        impl $name {
-            #[inline]
-            pub const fn new($($comp: $scalar), *) -> Self {
-                Self { $($comp), * }
-            }
-            #[inline]
-            pub const fn splat(scalar: $scalar) -> Self {
-                Self { $($comp: scalar), * }
-            }
-        }
-        impl From<$name> for $vec_type {
-            #[inline]
-            fn from(v: $name) -> Self {
-                Self::new($(v.$comp), *)
-            }
-        }
-        impl From<$vec_type> for $name {
-            #[inline]
-            fn from(v: $vec_type) -> Self {
-                Self::new($(v.$comp), *)
-            }
-        }
-    };
-}
-macro_rules! def_vec_no_glam {
-    ($name:ident, $scalar:ty, $align:literal, $($comp:ident), *) => {
-        #[repr(C, align($align))]
-        #[derive(Copy, Clone, Debug, Default)]
-        pub struct $name {
-            $(pub $comp: $scalar), *
-        }
-        impl $name {
-            #[inline]
-            pub fn new($($comp: $scalar), *) -> Self {
-                Self { $($comp), * }
-            }
-            #[inline]
-            pub fn splat(scalar: $scalar) -> Self {
-                Self { $($comp: scalar), * }
-            }
-        }
-    };
-}
-def_vec!(Float2, Vec2, f32, 8, x, y);
-def_vec!(Float3, Vec3, f32, 16, x, y, z);
-def_vec!(Float4, Vec4, f32, 16, x, y, z, w);
-
-def_packed_vec!(PackedFloat2, Float2, Vec2, f32, x, y);
-def_packed_vec!(PackedFloat3, Float3, Vec3, f32, x, y, z);
-def_packed_vec!(PackedFloat4, Float4, Vec4, f32, x, y, z, w);
-
-def_vec!(Uint2, UVec2, u32, 8, x, y);
-def_vec!(Uint3, UVec3, u32, 16, x, y, z);
-def_vec!(Uint4, UVec4, u32, 16, x, y, z, w);
-
-def_packed_vec!(PackedUint2, Uint2, UVec2, u32, x, y);
-def_packed_vec!(PackedUint3, Uint3, UVec3, u32, x, y, z);
-def_packed_vec!(PackedUint4, Uint4, UVec4, u32, x, y, z, w);
-
-def_vec!(Int2, IVec2, i32, 8, x, y);
-def_vec!(Int3, IVec3, i32, 16, x, y, z);
-def_vec!(Int4, IVec4, i32, 16, x, y, z, w);
-
-def_packed_vec!(PackedInt2, Int2, IVec2, i32, x, y);
-def_packed_vec!(PackedInt3, Int3, IVec3, i32, x, y, z);
-def_packed_vec!(PackedInt4, Int4, IVec4, i32, x, y, z, w);
-
-def_vec!(Double2, DVec2, f64, 16, x, y);
-def_vec!(Double3, DVec3, f64, 32, x, y, z);
-def_vec!(Double4, DVec4, f64, 32, x, y, z, w);
-
-def_vec!(Bool2, BVec2, bool, 2, x, y);
-def_vec!(Bool3, BVec3, bool, 4, x, y, z);
-def_vec!(Bool4, BVec4, bool, 4, x, y, z, w);
-
-def_packed_vec!(PackedBool2, Bool2, BVec2, bool, x, y);
-def_packed_vec!(PackedBool3, Bool3, BVec3, bool, x, y, z);
-def_packed_vec!(PackedBool4, Bool4, BVec4, bool, x, y, z, w);
-
-def_vec_no_glam!(Ulong2, u64, 16, x, y);
-def_vec_no_glam!(Ulong3, u64, 32, x, y, z);
-def_vec_no_glam!(Ulong4, u64, 32, x, y, z, w);
-
-def_packed_vec_no_glam!(PackedUlong2, Ulong2, u64, x, y);
-def_packed_vec_no_glam!(PackedUlong3, Ulong3, u64, x, y, z);
-def_packed_vec_no_glam!(PackedUlong4, Ulong4, u64, x, y, z, w);
-
-def_vec_no_glam!(Long2, i64, 16, x, y);
-def_vec_no_glam!(Long3, i64, 32, x, y, z);
-def_vec_no_glam!(Long4, i64, 32, x, y, z, w);
-
-def_packed_vec_no_glam!(PackedLong2, Long2, i64, x, y);
-def_packed_vec_no_glam!(PackedLong3, Long3, i64, x, y, z);
-def_packed_vec_no_glam!(PackedLong4, Long4, i64, x, y, z, w);
-
-def_vec_no_glam!(Ushort2, u16, 4, x, y);
-def_vec_no_glam!(Ushort3, u16, 8, x, y, z);
-def_vec_no_glam!(Ushort4, u16, 8, x, y, z, w);
-
-def_packed_vec_no_glam!(PackedUshort2, Ushort2, u16, x, y);
-def_packed_vec_no_glam!(PackedUshort3, Ushort3, u16, x, y, z);
-def_packed_vec_no_glam!(PackedUshort4, Ushort4, u16, x, y, z, w);
-
-def_vec_no_glam!(Short2, i16, 4, x, y);
-def_vec_no_glam!(Short3, i16, 8, x, y, z);
-def_vec_no_glam!(Short4, i16, 8, x, y, z, w);
-
-def_packed_vec_no_glam!(PackedShort2, Short2, i16, x, y);
-def_packed_vec_no_glam!(PackedShort3, Short3, i16, x, y, z);
-def_packed_vec_no_glam!(PackedShort4, Short4, i16, x, y, z, w);
-
-def_vec_no_glam!(Half2, f16, 4, x, y);
-def_vec_no_glam!(Half3, f16, 8, x, y, z);
-def_vec_no_glam!(Half4, f16, 8, x, y, z, w);
-
-// def_packed_vec_no_glam!(PackedHalf2, f16, x, y);
-// def_packed_vec_no_glam!(PackedHalf3, f16, x, y, z);
-// pub type PackHalf4 = Half4;
-
-def_vec_no_glam!(Ubyte2, u8, 2, x, y);
-def_vec_no_glam!(Ubyte3, u8, 4, x, y, z);
-def_vec_no_glam!(Ubyte4, u8, 4, x, y, z, w);
-
-// def_packed_vec_no_glam!(PackedUbyte2, u8, x, y);
-// def_packed_vec_no_glam!(PackedUbyte3, u8, x, y, z);
-// pub type PackUbyte4 = Ubyte4;
-
-def_vec_no_glam!(Byte2, u8, 2, x, y);
-def_vec_no_glam!(Byte3, u8, 4, x, y, z);
-def_vec_no_glam!(Byte4, u8, 4, x, y, z, w);
-
-// def_packed_vec_no_glam!(PackedByte2, u8, x, y);
-// def_packed_vec_no_glam!(PackedByte3, u8, x, y, z);
-// pub type PackByte4 = Byte4;
-
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
-#[repr(C, align(8))]
-pub struct Mat2 {
-    pub cols: [Float2; 2],
-}
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
-#[repr(C, align(16))]
-pub struct Mat3 {
-    pub cols: [Float3; 3],
-}
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
-#[repr(C, align(16))]
-pub struct Mat4 {
-    pub cols: [Float4; 4],
-}
-impl Mat2 {
-    pub const fn from_cols(c0: Float2, c1: Float2) -> Self {
-        Self { cols: [c0, c1] }
-    }
-    pub const fn identity() -> Self {
-        Self::from_cols(Float2::new(1.0, 0.0), Float2::new(0.0, 1.0))
+    ($t:ty [ $l:literal ]: $a: ident) => {
+        element!($t [ $l ] : $a, Align1);
     }
 }
-impl Mat3 {
-    pub const fn from_cols(c0: Float3, c1: Float3, c2: Float3) -> Self {
-        Self { cols: [c0, c1, c2] }
-    }
-    pub const fn identity() -> Self {
-        Self::from_cols(
-            Float3::new(1.0, 0.0, 0.0),
-            Float3::new(0.0, 1.0, 0.0),
-            Float3::new(0.0, 0.0, 1.0),
-        )
-    }
-}
-impl Mat4 {
-    pub const fn from_cols(c0: Float4, c1: Float4, c2: Float4, c3: Float4) -> Self {
-        Self {
-            cols: [c0, c1, c2, c3],
-        }
-    }
-    pub const fn identity() -> Self {
-        Self::from_cols(
-            Float4::new(1.0, 0.0, 0.0, 0.0),
-            Float4::new(0.0, 1.0, 0.0, 0.0),
-            Float4::new(0.0, 0.0, 1.0, 0.0),
-            Float4::new(0.0, 0.0, 0.0, 1.0),
-        )
-    }
-    pub fn into_affine3x4(self) -> [f32; 12] {
-        // [
-        //     self.cols[0].x,
-        //     self.cols[0].y,
-        //     self.cols[0].z,
-        //     self.cols[1].x,
-        //     self.cols[1].y,
-        //     self.cols[1].z,
-        //     self.cols[2].x,
-        //     self.cols[2].y,
-        //     self.cols[2].z,
-        //     self.cols[3].x,
-        //     self.cols[3].y,
-        //     self.cols[3].z,
-        // ]
-        [
-            self.cols[0].x,
-            self.cols[1].x,
-            self.cols[2].x,
-            self.cols[3].x,
-            self.cols[0].y,
-            self.cols[1].y,
-            self.cols[2].y,
-            self.cols[3].y,
-            self.cols[0].z,
-            self.cols[1].z,
-            self.cols[2].z,
-            self.cols[3].z,
-        ]
-    }
-}
-impl From<Mat2> for glam::Mat2 {
-    #[inline]
-    fn from(m: Mat2) -> Self {
-        Self::from_cols(m.cols[0].into(), m.cols[1].into())
-    }
-}
-impl From<Mat3> for glam::Mat3 {
-    #[inline]
-    fn from(m: Mat3) -> Self {
-        Self::from_cols(m.cols[0].into(), m.cols[1].into(), m.cols[2].into())
-    }
-}
-impl From<Mat4> for glam::Mat4 {
-    #[inline]
-    fn from(m: Mat4) -> Self {
-        Self::from_cols(
-            m.cols[0].into(),
-            m.cols[1].into(),
-            m.cols[2].into(),
-            m.cols[3].into(),
-        )
-    }
-}
-impl From<glam::Mat2> for Mat2 {
-    #[inline]
-    fn from(m: glam::Mat2) -> Self {
-        Self {
-            cols: [m.x_axis.into(), m.y_axis.into()],
-        }
-    }
-}
-impl From<glam::Mat3> for Mat3 {
-    #[inline]
-    fn from(m: glam::Mat3) -> Self {
-        Self {
-            cols: [m.x_axis.into(), m.y_axis.into(), m.z_axis.into()],
-        }
-    }
-}
-impl From<glam::Mat4> for Mat4 {
-    #[inline]
-    fn from(m: glam::Mat4) -> Self {
-        Self {
-            cols: [
-                m.x_axis.into(),
-                m.y_axis.into(),
-                m.z_axis.into(),
-                m.w_axis.into(),
-            ],
-        }
-    }
-}
+
+element!(bool[2]: Align2);
+element!(bool[3]: Align4);
+element!(bool[4]: Align4);
+// TODO: Make u8 support ir::TypeOf.
+// element!(u8[2]: Align2);
+// element!(u8[3]: Align4);
+// element!(u8[4]: Align4);
+// element!(i8[2]: Align2);
+// element!(i8[3]: Align4);
+// element!(i8[4]: Align4);
+
+element!(f16[2]: Align4);
+element!(f16[3]: Align8);
+element!(f16[4]: Align8);
+element!(u16[2]: Align4);
+element!(u16[3]: Align8);
+element!(u16[4]: Align8);
+element!(i16[2]: Align4);
+element!(i16[3]: Align8);
+element!(i16[4]: Align8);
+
+element!(f32[2]: Align8);
+element!(f32[3]: Align16);
+element!(f32[4]: Align16);
+element!(u32[2]: Align8);
+element!(u32[3]: Align16);
+element!(u32[4]: Align16);
+element!(i32[2]: Align8);
+element!(i32[3]: Align16);
+element!(i32[4]: Align16);
+
+// TODO: Check whether size 8 alignment on packed f32 is necessary.
+// This is an x86 feature though.
+element!(f64[2]: Align16, Align8);
+element!(f64[3]: Align32, Align8);
+element!(f64[4]: Align32, Align8);
+element!(u64[2]: Align16, Align8);
+element!(u64[3]: Align32, Align8);
+element!(u64[4]: Align32, Align8);
+element!(i64[2]: Align16, Align8);
+element!(i64[3]: Align32, Align8);
+element!(i64[4]: Align32, Align8);
+
 
 macro_rules! impl_proxy_fields {
     ($vec:ident, $proxy:ident, $scalar:ty, x) => {

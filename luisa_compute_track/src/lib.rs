@@ -40,6 +40,20 @@ impl VisitMut for TraceVisitor {
         let trait_path = &self.trait_path;
         let span = node.span();
         match node {
+            Expr::Assign(expr) => {
+                let left = &expr.left;
+                let right = &expr.right;
+                if let Expr::Unary(ExprUnary {
+                    op: UnOp::Deref(_),
+                    expr,
+                    ..
+                }) = &**left
+                {
+                    *node = parse_quote_spanned! {span=>
+                        <_ as #trait_path::DerefSet>::deref_set(#expr, #right)
+                    }
+                }
+            }
             Expr::If(expr) => {
                 let cond = &expr.cond;
                 let then_branch = &expr.then_branch;

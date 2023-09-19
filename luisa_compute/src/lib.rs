@@ -62,7 +62,9 @@ mod internal_prelude {
     pub(crate) use crate::runtime::{
         CallableArgEncoder, CallableParameter, CallableRet, KernelBuilder,
     };
-    pub(crate) use crate::{get_backtrace, impl_callable_param, ResourceTracker};
+    pub(crate) use crate::{
+        get_backtrace, impl_simple_expr_proxy, impl_simple_var_proxy, ResourceTracker,
+    };
     pub(crate) use luisa_compute_backend::Backend;
     pub(crate) use std::marker::PhantomData;
 }
@@ -100,7 +102,8 @@ lazy_static! {
 }
 impl Context {
     /// path to libluisa-*
-    /// if the current_exe() is in the same directory as libluisa-*, then passing current_exe() is enough
+    /// if the current_exe() is in the same directory as libluisa-*, then
+    /// passing current_exe() is enough
     pub fn new(lib_path: impl AsRef<Path>) -> Self {
         let mut lib_path = lib_path.as_ref().to_path_buf();
         lib_path = lib_path.canonicalize().unwrap();

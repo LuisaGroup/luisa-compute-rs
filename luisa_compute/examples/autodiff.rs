@@ -33,13 +33,13 @@ fn main() {
         let buf_y = y.var();
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
-        let f = track!(|x: Expr<f32>, y: Expr<f32>| {
-            if x > y {
+        let f = |x: Expr<f32>, y: Expr<f32>| {
+            track!(if x > y {
                 x * y
             } else {
                 y * x + (x / 32.0 * PI).sin()
-            }
-        });
+            })
+        };
         autodiff(|| {
             requires_grad(x);
             requires_grad(y);

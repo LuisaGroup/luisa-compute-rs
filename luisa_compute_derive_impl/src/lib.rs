@@ -109,6 +109,7 @@ impl Compiler {
             }
         )
     }
+
     pub fn derive_value(&self, struct_: &ItemStruct) -> TokenStream {
         self.check_repr_c(&struct_.attrs);
         let span = struct_.span();

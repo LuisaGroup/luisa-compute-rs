@@ -16,6 +16,7 @@ use raw_window_handle::HasRawWindowHandle;
 use winit::window::Window;
 
 use crate::internal_prelude::*;
+use crate::lang::soa::SoaBuffer;
 use ir::{
     CallableModule, CallableModuleRef, Capture, CpuCustomOp, KernelModule, Module, ModuleFlags,
     ModuleKind, ModulePools,
@@ -179,6 +180,10 @@ impl Device {
             len,
         };
         buffer
+    }
+    pub fn create_soa_buffer<T: Value>(&self, count: usize) -> SoaBuffer<T> {
+        // let inner = self.create_byte_buffer(len)
+        todo!()
     }
     pub fn create_buffer<T: Value>(&self, count: usize) -> Buffer<T> {
         assert!(

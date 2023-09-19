@@ -34,6 +34,7 @@ pub mod ops;
 pub mod poly;
 pub mod swizzle;
 pub mod types;
+pub mod soa;
 
 #[allow(dead_code)]
 pub(crate) static KERNEL_ID: AtomicUsize = AtomicUsize::new(0);

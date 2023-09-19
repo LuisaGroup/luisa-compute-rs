@@ -1,4 +1,3 @@
-use std::mem::transmute;
 use std::ops::Deref;
 
 use crate::internal_prelude::*;
@@ -151,13 +150,13 @@ impl<T: Value> ToNode for Var<T> {
 impl<T: Value> Deref for Expr<T> {
     type Target = T::Expr;
     fn deref(&self) -> &Self::Target {
-        unsafe { transmute(self) }
+        unsafe { &*(self as *const Self as *const T::Expr) }
     }
 }
 impl<T: Value> Deref for Var<T> {
     type Target = T::Var;
     fn deref(&self) -> &Self::Target {
-        unsafe { transmute(self) }
+        unsafe { &*(self as *const Self as *const T::Var) }
     }
 }
 
@@ -173,7 +172,7 @@ impl<T: Value> Expr<T> {
             let r = r.borrow();
             let v: &Expr<T> = r.arena.alloc(self);
             unsafe {
-                let v: &'a Expr<T> = transmute(v);
+                let v: &'a Expr<T> = std::mem::transmute(v);
                 v
             }
         })
@@ -200,9 +199,12 @@ impl<T: Value> Var<T> {
         let value = value.as_expr();
         super::_store(self, &value);
     }
-    pub fn _deref(&self) -> &Expr<T> {
-        self.load()._ref()
-    }
+}
+
+pub fn _deref_proxy<P: VarProxy>(proxy: &P) -> &Expr<P::Value> {
+    unsafe { &*(proxy as *const P as *const Var<P::Value>) }
+        .load()
+        ._ref()
 }
 
 #[macro_export]
@@ -231,7 +233,7 @@ macro_rules! impl_simple_var_proxy {
         impl < $($bounds)* > std::ops::Deref for $name < $($qualifiers)* > {
             type Target = $crate::lang::types::Expr<$t>;
             fn deref(&self) -> &Self::Target {
-                self.0._deref()
+                $crate::lang::types::_deref_proxy(self)
             }
         }
     }

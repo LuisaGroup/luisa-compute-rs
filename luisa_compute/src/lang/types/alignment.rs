@@ -5,11 +5,11 @@ pub(crate) trait Alignment: Default {
 }
 
 macro_rules! alignment {
-    ($t:ident, $align:literal) => {
-        #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+    ($T:ident, $align:literal) => {
+        #[derive(Copy, Clone, Debug, Hash, Default, PartialEq, Eq)]
         #[repr(align($align))]
-        pub struct $t;
-        impl Alignment for $t {
+        pub struct $T;
+        impl Alignment for $T {
             const ALIGNMENT: usize = $align;
         }
     };

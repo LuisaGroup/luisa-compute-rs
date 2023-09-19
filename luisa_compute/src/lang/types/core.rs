@@ -3,6 +3,7 @@ use std::ops::Deref;
 
 pub(crate) trait Primitive: Copy + TypeOf + 'static {
     fn const_(&self) -> Const;
+    fn primitive(&self) -> ir::Primitive;
 }
 impl<T: Primitive> Value for T {
     type Expr = PrimitiveExpr<T>;
@@ -23,21 +24,33 @@ impl Primitive for bool {
     fn const_(&self) -> Const {
         Const::Bool(*self)
     }
+    fn primitive(&self) -> ir::Primitive {
+        ir::Primitive::Bool
+    }
 }
 
 impl Primitive for f16 {
     fn const_(&self) -> Const {
         Const::F16(*self)
     }
+    fn primitive(&self) -> ir::Primitive {
+        ir::Primitive::F16
+    }
 }
 impl Primitive for f32 {
     fn const_(&self) -> Const {
         Const::F32(*self)
     }
+    fn primitive(&self) -> ir::Primitive {
+        ir::Primitive::F32
+    }
 }
 impl Primitive for f64 {
     fn const_(&self) -> Const {
         Const::F64(*self)
+    }
+    fn primitive(&self) -> ir::Primitive {
+        ir::Primitive::F64
     }
 }
 
@@ -50,15 +63,24 @@ impl Primitive for i16 {
     fn const_(&self) -> Const {
         Const::I16(*self)
     }
+    fn primitive(&self) -> ir::Primitive {
+        ir::Primitive::Int16
+    }
 }
 impl Primitive for i32 {
     fn const_(&self) -> Const {
         Const::I32(*self)
     }
+    fn primitive(&self) -> ir::Primitive {
+        ir::Primitive::Int32
+    }
 }
 impl Primitive for i64 {
     fn const_(&self) -> Const {
         Const::I64(*self)
+    }
+    fn primitive(&self) -> ir::Primitive {
+        ir::Primitive::Int64
     }
 }
 
@@ -71,15 +93,24 @@ impl Primitive for u16 {
     fn const_(&self) -> Const {
         Const::U16(*self)
     }
+    fn primitive(&self) -> ir::Primitive {
+        ir::Primitive::UInt16
+    }
 }
 impl Primitive for u32 {
     fn const_(&self) -> Const {
         Const::U32(*self)
     }
+    fn primitive(&self) -> ir::Primitive {
+        ir::Primitive::UInt32
+    }
 }
 impl Primitive for u64 {
     fn const_(&self) -> Const {
         Const::U64(*self)
+    }
+    fn primitive(&self) -> ir::Primitive {
+        ir::Primitive::UInt64
     }
 }
 

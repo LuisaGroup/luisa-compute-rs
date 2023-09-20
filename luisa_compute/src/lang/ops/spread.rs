@@ -42,36 +42,36 @@ macro_rules! impl_spread {
         }
     };
 }
-impl_spread!([T: Value] T: |x| x.expr(), Expr<T>: |x| x => Expr<T>);
-impl_spread!([T: Value] &T: |x| x.expr(), Expr<T>: |x| x => Expr<T>);
-impl_spread!([T: Value] T: |x| x.expr(), &Expr<T>: |x| x.clone() => Expr<T>);
-impl_spread!([T: Value] &T: |x| x.expr(), &Expr<T>: |x| x.clone() => Expr<T>);
+impl_spread!([T: Linear] T: |x| x.expr(), Expr<T>: |x| x => Expr<T>);
+impl_spread!([T: Linear] &T: |x| x.expr(), Expr<T>: |x| x => Expr<T>);
+impl_spread!([T: Linear] T: |x| x.expr(), &Expr<T>: |x| x.clone() => Expr<T>);
+impl_spread!([T: Linear] &T: |x| x.expr(), &Expr<T>: |x| x.clone() => Expr<T>);
 
-impl_spread!([T: Value] Expr<T>: |x| x, &Expr<T>: |x| x.clone() => Expr<T>);
-impl_spread!([T: Value] &Expr<T>: |x| x.clone(), &Expr<T>: |x| x.clone() => Expr<T>);
+impl_spread!([T: Linear] Expr<T>: |x| x, &Expr<T>: |x| x.clone() => Expr<T>);
+impl_spread!([T: Linear] &Expr<T>: |x| x.clone(), &Expr<T>: |x| x.clone() => Expr<T>);
 
-impl_spread!([T: Value] T: |x| x.expr(), Var<T>: |x| x.load() => Expr<T>);
-impl_spread!([T: Value] &T: |x| x.expr(), Var<T>: |x| x.load() => Expr<T>);
-impl_spread!([T: Value] T: |x| x.expr(), &Var<T>: |x| x.load() => Expr<T>);
-impl_spread!([T: Value] &T: |x| x.expr(), &Var<T>: |x| x.load() => Expr<T>);
+impl_spread!([T: Linear] T: |x| x.expr(), Var<T>: |x| x.load() => Expr<T>);
+impl_spread!([T: Linear] &T: |x| x.expr(), Var<T>: |x| x.load() => Expr<T>);
+impl_spread!([T: Linear] T: |x| x.expr(), &Var<T>: |x| x.load() => Expr<T>);
+impl_spread!([T: Linear] &T: |x| x.expr(), &Var<T>: |x| x.load() => Expr<T>);
 
 // Other way is unneded because of the deref impl.
-impl_spread_single!([T: Value] &Expr<T>: |x| x.clone(), Var<T>: |x| x.load() => Expr<T>);
-impl_spread_single!([T: Value] &Expr<T>: |x| x.clone(), &Var<T>: |x| x.load() => Expr<T>);
+impl_spread_single!([T: Linear] &Expr<T>: |x| x.clone(), Var<T>: |x| x.load() => Expr<T>);
+impl_spread_single!([T: Linear] &Expr<T>: |x| x.clone(), &Var<T>: |x| x.load() => Expr<T>);
 
-impl_spread!([const N: usize, T: VectorElement<N>] T: |x| Vector::<T, N>::splat_expr(x), Expr<Vector<T, N>>: |x| x => Expr<Vector<T, N>>);
-impl_spread!([const N: usize, T: VectorElement<N>] &T: |x| Vector::<T, N>::splat_expr(x), Expr<Vector<T, N>>: |x| x => Expr<Vector<T, N>>);
-impl_spread!([const N: usize, T: VectorElement<N>] Expr<T>: |x| Vector::<T, N>::splat_expr(x), Expr<Vector<T, N>>: |x| x => Expr<Vector<T, N>>);
-impl_spread!([const N: usize, T: VectorElement<N>] &Expr<T>: |x| Vector::<T, N>::splat_expr(x), Expr<Vector<T, N>>: |x| x => Expr<Vector<T, N>>);
-impl_spread!([const N: usize, T: VectorElement<N>] T: |x| Vector::<T, N>::splat_expr(x), &Expr<Vector<T, N>>: |x| x.clone() => Expr<Vector<T, N>>);
-impl_spread!([const N: usize, T: VectorElement<N>] &T: |x| Vector::<T, N>::splat_expr(x), &Expr<Vector<T, N>>: |x| x.clone() => Expr<Vector<T, N>>);
-impl_spread!([const N: usize, T: VectorElement<N>] Expr<T>: |x| Vector::<T, N>::splat_expr(x), &Expr<Vector<T, N>>: |x| x.clone() => Expr<Vector<T, N>>);
-impl_spread!([const N: usize, T: VectorElement<N>] &Expr<T>: |x| Vector::<T, N>::splat_expr(x), &Expr<Vector<T, N>>: |x| x.clone() => Expr<Vector<T, N>>);
+impl_spread!([const N: usize, T: VectorAlign<N>] T: |x| Vector::<T, N>::splat_expr(x), Expr<Vector<T, N>>: |x| x => Expr<Vector<T, N>>);
+impl_spread!([const N: usize, T: VectorAlign<N>] &T: |x| Vector::<T, N>::splat_expr(x), Expr<Vector<T, N>>: |x| x => Expr<Vector<T, N>>);
+impl_spread!([const N: usize, T: VectorAlign<N>] Expr<T>: |x| Vector::<T, N>::splat_expr(x), Expr<Vector<T, N>>: |x| x => Expr<Vector<T, N>>);
+impl_spread!([const N: usize, T: VectorAlign<N>] &Expr<T>: |x| Vector::<T, N>::splat_expr(x), Expr<Vector<T, N>>: |x| x => Expr<Vector<T, N>>);
+impl_spread!([const N: usize, T: VectorAlign<N>] T: |x| Vector::<T, N>::splat_expr(x), &Expr<Vector<T, N>>: |x| x.clone() => Expr<Vector<T, N>>);
+impl_spread!([const N: usize, T: VectorAlign<N>] &T: |x| Vector::<T, N>::splat_expr(x), &Expr<Vector<T, N>>: |x| x.clone() => Expr<Vector<T, N>>);
+impl_spread!([const N: usize, T: VectorAlign<N>] Expr<T>: |x| Vector::<T, N>::splat_expr(x), &Expr<Vector<T, N>>: |x| x.clone() => Expr<Vector<T, N>>);
+impl_spread!([const N: usize, T: VectorAlign<N>] &Expr<T>: |x| Vector::<T, N>::splat_expr(x), &Expr<Vector<T, N>>: |x| x.clone() => Expr<Vector<T, N>>);
 
-impl_spread!([const N: usize, T: VectorElement<N>] Expr<T>: |x| Vector::<T, N>::splat_expr(x), Vector<T, N>: |x| x.expr() => Expr<Vector<T, N>>);
-impl_spread!([const N: usize, T: VectorElement<N>] &Expr<T>: |x| Vector::<T, N>::splat_expr(x), Vector<T, N>: |x| x.expr() => Expr<Vector<T, N>>);
-impl_spread!([const N: usize, T: VectorElement<N>] Expr<T>: |x| Vector::<T, N>::splat_expr(x), &Vector<T, N>: |x| x.expr() => Expr<Vector<T, N>>);
-impl_spread!([const N: usize, T: VectorElement<N>] &Expr<T>: |x| Vector::<T, N>::splat_expr(x), &Vector<T, N>: |x| x.expr() => Expr<Vector<T, N>>);
+impl_spread!([const N: usize, T: VectorAlign<N>] Expr<T>: |x| Vector::<T, N>::splat_expr(x), Vector<T, N>: |x| x.expr() => Expr<Vector<T, N>>);
+impl_spread!([const N: usize, T: VectorAlign<N>] &Expr<T>: |x| Vector::<T, N>::splat_expr(x), Vector<T, N>: |x| x.expr() => Expr<Vector<T, N>>);
+impl_spread!([const N: usize, T: VectorAlign<N>] Expr<T>: |x| Vector::<T, N>::splat_expr(x), &Vector<T, N>: |x| x.expr() => Expr<Vector<T, N>>);
+impl_spread!([const N: usize, T: VectorAlign<N>] &Expr<T>: |x| Vector::<T, N>::splat_expr(x), &Vector<T, N>: |x| x.expr() => Expr<Vector<T, N>>);
 
 mod impls {
     use super::*;

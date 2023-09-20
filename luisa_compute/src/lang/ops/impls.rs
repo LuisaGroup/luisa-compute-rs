@@ -1,14 +1,14 @@
 use super::*;
 use traits::*;
 
-impl<const N: usize, X: Linear<N>> Expr<X> {
-    fn as_<Y: Linear<N, Scalar = X::Scalar>>(self) -> Y
+impl<X: Linear> Expr<X> {
+    fn as_<Y: Linear<Scalar = X::Scalar>>(self) -> Y
     where
         Y::Scalar: CastFrom<X::Scalar>,
     {
         Func::Cast.call(self)
     }
-    fn cast<S: VectorElement<N>>(self) -> Expr<X::WithScalar<S>>
+    fn cast<S: VectorElement>(self) -> Expr<X::WithScalar<S>>
     where
         S: CastFrom<X::Scalar>,
     {
@@ -16,7 +16,7 @@ impl<const N: usize, X: Linear<N>> Expr<X> {
     }
 }
 
-impl<const N: usize, X: Linear<N>> MinMaxExpr for Expr<X>
+impl<X: Linear> MinMaxExpr for Expr<X>
 where
     X::Scalar: Numeric,
 {
@@ -30,7 +30,7 @@ where
     }
 }
 
-impl<const N: usize, X: Linear<N>> ClampExpr for Expr<X>
+impl<X: Linear> ClampExpr for Expr<X>
 where
     X::Scalar: Numeric,
 {
@@ -41,7 +41,7 @@ where
     }
 }
 
-impl<const N: usize, X: Linear<N>> AbsExpr for Expr<X>
+impl<X: Linear> AbsExpr for Expr<X>
 where
     X::Scalar: Signed,
 {
@@ -50,7 +50,7 @@ where
     }
 }
 
-impl<const N: usize, X: Linear<N>> EqExpr for Expr<X> {
+impl<X: Linear> EqExpr for Expr<X> {
     type Output = Expr<X::WithBool>;
     fn eq(self, other: Self) -> Self::Output {
         Func::Eq.call2(self, other)
@@ -59,7 +59,7 @@ impl<const N: usize, X: Linear<N>> EqExpr for Expr<X> {
         Func::Ne.call2(self, other)
     }
 }
-impl<const N: usize, X: Linear<N>> CmpExpr for Expr<X> {
+impl<X: Linear> CmpExpr for Expr<X> {
     fn lt(self, other: Self) -> Self::Output {
         Func::Lt.call2(self, other)
     }
@@ -74,7 +74,7 @@ impl<const N: usize, X: Linear<N>> CmpExpr for Expr<X> {
     }
 }
 
-impl<const N: usize, X: Linear<N>> Add for Expr<X>
+impl<X: Linear> Add for Expr<X>
 where
     X::Scalar: Numeric,
 {
@@ -83,7 +83,7 @@ where
         Func::Add.call2(self, other)
     }
 }
-impl<const N: usize, X: Linear<N>> Sub for Expr<X>
+impl<X: Linear> Sub for Expr<X>
 where
     X::Scalar: Numeric,
 {
@@ -92,7 +92,7 @@ where
         Func::Sub.call2(self, other)
     }
 }
-impl<const N: usize, X: Linear<N>> Mul for Expr<X>
+impl<X: Linear> Mul for Expr<X>
 where
     X::Scalar: Numeric,
 {
@@ -101,7 +101,7 @@ where
         Func::Mul.call2(self, other)
     }
 }
-impl<const N: usize, X: Linear<N>> Div for Expr<X>
+impl<X: Linear> Div for Expr<X>
 where
     X::Scalar: Numeric,
 {
@@ -110,7 +110,7 @@ where
         Func::Div.call2(self, other)
     }
 }
-impl<const N: usize, X: Linear<N>> Rem for Expr<X>
+impl<X: Linear> Rem for Expr<X>
 where
     X::Scalar: Numeric,
 {
@@ -120,7 +120,7 @@ where
     }
 }
 
-impl<const N: usize, X: Linear<N>> BitAnd for Expr<X>
+impl<X: Linear> BitAnd for Expr<X>
 where
     X::Scalar: Integral,
 {
@@ -129,7 +129,7 @@ where
         Func::BitAnd.call2(self, other)
     }
 }
-impl<const N: usize, X: Linear<N>> BitOr for Expr<X>
+impl<X: Linear> BitOr for Expr<X>
 where
     X::Scalar: Integral,
 {
@@ -138,7 +138,7 @@ where
         Func::BitOr.call2(self, other)
     }
 }
-impl<const N: usize, X: Linear<N>> BitXor for Expr<X>
+impl<X: Linear> BitXor for Expr<X>
 where
     X::Scalar: Integral,
 {
@@ -147,7 +147,7 @@ where
         Func::BitXor.call2(self, other)
     }
 }
-impl<const N: usize, X: Linear<N>> Shl for Expr<X>
+impl<X: Linear> Shl for Expr<X>
 where
     X::Scalar: Integral,
 {
@@ -156,7 +156,7 @@ where
         Func::Shl.call2(self, other)
     }
 }
-impl<const N: usize, X: Linear<N>> Shr for Expr<X>
+impl<X: Linear> Shr for Expr<X>
 where
     X::Scalar: Integral,
 {
@@ -166,7 +166,7 @@ where
     }
 }
 
-impl<const N: usize, X: Linear<N>> Neg for Expr<X>
+impl<X: Linear> Neg for Expr<X>
 where
     X::Scalar: Signed,
 {
@@ -175,7 +175,7 @@ where
         Func::Neg.call(self)
     }
 }
-impl<const N: usize, X: Linear<N>> Not for Expr<X>
+impl<X: Linear> Not for Expr<X>
 where
     X::Scalar: Integral,
 {
@@ -185,7 +185,7 @@ where
     }
 }
 
-impl<const N: usize, X: Linear<N>> IntExpr for Expr<X>
+impl<X: Linear> IntExpr for Expr<X>
 where
     X::Scalar: Integral + Numeric,
 {
@@ -205,7 +205,7 @@ macro_rules! impl_simple_fns {
     )+};
 }
 
-impl<const N: usize, X: Linear<N>> FloatExpr for Expr<X>
+impl<X: Linear> FloatExpr for Expr<X>
 where
     X::Scalar: Floating,
 {
@@ -255,7 +255,7 @@ where
         (self.sin(), self.cos())
     }
 }
-impl<const N: usize, X: Linear<N>> FloatMulAddExpr for Expr<X>
+impl<X: Linear> FloatMulAddExpr for Expr<X>
 where
     X::Scalar: Floating,
 {
@@ -265,7 +265,7 @@ where
         Func::Fma.call3(self, a, b)
     }
 }
-impl<const N: usize, X: Linear<N>> FloatCopySignExpr for Expr<X>
+impl<X: Linear> FloatCopySignExpr for Expr<X>
 where
     X::Scalar: Floating,
 {
@@ -275,7 +275,7 @@ where
         Func::Copysign.call2(self, sign)
     }
 }
-impl<const N: usize, X: Linear<N>> FloatStepExpr for Expr<X>
+impl<X: Linear> FloatStepExpr for Expr<X>
 where
     X::Scalar: Floating,
 {
@@ -285,7 +285,7 @@ where
         Func::Step.call2(edge, self)
     }
 }
-impl<const N: usize, X: Linear<N>> FloatSmoothStepExpr for Expr<X>
+impl<X: Linear> FloatSmoothStepExpr for Expr<X>
 where
     X::Scalar: Floating,
 {
@@ -295,7 +295,7 @@ where
         Func::SmoothStep.call3(edge0, edge1, self)
     }
 }
-impl<const N: usize, X: Linear<N>> FloatArcTan2Expr for Expr<X>
+impl<X: Linear> FloatArcTan2Expr for Expr<X>
 where
     X::Scalar: Floating,
 {
@@ -305,7 +305,7 @@ where
         Func::Atan2.call2(self, other)
     }
 }
-impl<const N: usize, X: Linear<N>> FloatLogExpr for Expr<X>
+impl<X: Linear> FloatLogExpr for Expr<X>
 where
     X::Scalar: Floating,
 {
@@ -315,7 +315,7 @@ where
         self.ln() / base.ln()
     }
 }
-impl<const N: usize, X: Linear<N>> FloatPowfExpr for Expr<X>
+impl<X: Linear> FloatPowfExpr for Expr<X>
 where
     X::Scalar: Floating,
 {
@@ -325,7 +325,7 @@ where
         Func::Powf.call2(self, exponent)
     }
 }
-impl<const N: usize, X: Linear<N>, Y: Linear<N, Scalar = i32>> FloatPowiExpr<Expr<Y>> for Expr<X>
+impl<X: Linear, Y: Linear<Scalar = i32>> FloatPowiExpr<Expr<Y>> for Expr<X>
 where
     X::Scalar: Floating,
 {
@@ -335,7 +335,7 @@ where
         Func::Powi.call2(self, exponent)
     }
 }
-impl<const N: usize, X: Linear<N>> FloatLerpExpr for Expr<X>
+impl<X: Linear> FloatLerpExpr for Expr<X>
 where
     X::Scalar: Floating,
 {

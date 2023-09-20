@@ -1,13 +1,13 @@
 use super::*;
 
 // Stupid hack to make ops work.
-impl<T: Primitive> VectorElement<1> for T {
+impl<T: Primitive> VectorAlign<1> for T {
     type A = Align1;
 }
 
 macro_rules! element {
     ($t:ty [ $l:literal ]: $a: ident) => {
-        impl VectorElement<$l> for $t {
+        impl VectorAlign<$l> for $t {
             type A = $a;
         }
     };

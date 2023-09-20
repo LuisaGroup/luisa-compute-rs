@@ -17,11 +17,14 @@ pub mod swizzle;
 
 use swizzle::*;
 
-pub trait VectorElement<const N: usize>: Primitive {
+pub trait VectorElement: VectorAlign<2> + VectorAlign<3> + VectorAlign<4> {}
+impl<T: VectorAlign<2> + VectorAlign<3> + VectorAlign<4>> VectorElement for T {}
+
+pub trait VectorAlign<const N: usize>: Primitive {
     type A: Alignment;
 }
 
-impl<T: Debug + VectorElement<N>, const N: usize> Debug for Vector<T, N> {
+impl<T: Debug + VectorAlign<N>, const N: usize> Debug for Vector<T, N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.elements.fmt(f)
     }
@@ -29,13 +32,13 @@ impl<T: Debug + VectorElement<N>, const N: usize> Debug for Vector<T, N> {
 
 #[repr(C)]
 #[derive(Copy, Clone, Hash, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Vector<T: VectorElement<N>, const N: usize> {
+pub struct Vector<T: VectorAlign<N>, const N: usize> {
     #[serde(skip)]
     _align: T::A,
     elements: [T; N],
 }
 
-impl<T: VectorElement<N>, const N: usize> Vector<T, N> {
+impl<T: VectorAlign<N>, const N: usize> Vector<T, N> {
     pub fn from_elements(elements: [T; N]) -> Self {
         Self {
             _align: T::A::default(),
@@ -53,13 +56,13 @@ impl<T: VectorElement<N>, const N: usize> Vector<T, N> {
     }
     fn _permute2(&self, x: u32, y: u32) -> Vector<T, 2>
     where
-        T: VectorElement<2>,
+        T: VectorAlign<2>,
     {
         Vector::from_elements([self.elements[x as usize], self.elements[y as usize]])
     }
     fn _permute3(&self, x: u32, y: u32, z: u32) -> Vector<T, 3>
     where
-        T: VectorElement<3>,
+        T: VectorAlign<3>,
     {
         Vector::from_elements([
             self.elements[x as usize],
@@ -69,7 +72,7 @@ impl<T: VectorElement<N>, const N: usize> Vector<T, N> {
     }
     fn _permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Vector<T, 4>
     where
-        T: VectorElement<4>,
+        T: VectorAlign<4>,
     {
         Vector::from_elements([
             self.elements[x as usize],
@@ -82,8 +85,8 @@ impl<T: VectorElement<N>, const N: usize> Vector<T, N> {
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct VectorExprData<T: VectorElement<N>, const N: usize>([Expr<T>; N]);
-impl<T: VectorElement<N>, const N: usize> FromNode for VectorExprData<T, N> {
+pub struct VectorExprData<T: VectorAlign<N>, const N: usize>([Expr<T>; N]);
+impl<T: VectorAlign<N>, const N: usize> FromNode for VectorExprData<T, N> {
     fn from_node(node: NodeRef) -> Self {
         Self(std::array::from_fn(|i| {
             FromNode::from_node(__extract::<T>(node, i))
@@ -92,8 +95,8 @@ impl<T: VectorElement<N>, const N: usize> FromNode for VectorExprData<T, N> {
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct VectorVarData<T: VectorElement<N>, const N: usize>([Var<T>; N]);
-impl<T: VectorElement<N>, const N: usize> FromNode for VectorVarData<T, N> {
+pub struct VectorVarData<T: VectorAlign<N>, const N: usize>([Var<T>; N]);
+impl<T: VectorAlign<N>, const N: usize> FromNode for VectorVarData<T, N> {
     fn from_node(node: NodeRef) -> Self {
         Self(std::array::from_fn(|i| {
             FromNode::from_node(__extract::<T>(node, i))
@@ -117,30 +120,30 @@ macro_rules! vector_proxies {
     ($N:literal [ $($c:ident),* ]: $ExprName:ident, $VarName:ident) => {
         #[repr(C)]
         #[derive(Debug, Copy, Clone)]
-        pub struct $ExprName<T: VectorElement<$N>> {
+        pub struct $ExprName<T: VectorAlign<$N>> {
             _node: NodeRef,
             $(pub $c: Expr<T>),*
         }
         #[repr(C)]
         #[derive(Debug, Copy, Clone)]
-        pub struct $VarName<T: VectorElement<$N>> {
+        pub struct $VarName<T: VectorAlign<$N>> {
             _node: NodeRef,
             $(pub $c: Var<T>),*
         }
 
-        unsafe impl<T: VectorElement<$N>> HasExprLayout<<Vector<T, $N> as Value>::ExprData> for $ExprName<T> {}
-        unsafe impl<T: VectorElement<$N>> HasVarLayout<<Vector<T, $N> as Value>::VarData> for $VarName<T> {}
+        unsafe impl<T: VectorAlign<$N>> HasExprLayout<<Vector<T, $N> as Value>::ExprData> for $ExprName<T> {}
+        unsafe impl<T: VectorAlign<$N>> HasVarLayout<<Vector<T, $N> as Value>::VarData> for $VarName<T> {}
 
-        impl<T: VectorElement<$N>> ExprProxy for $ExprName<T> {
+        impl<T: VectorAlign<$N>> ExprProxy for $ExprName<T> {
             type Value = Vector<T, $N>;
         }
-        impl<T: VectorElement<$N>> VectorExprProxy for $ExprName<T> {
+        impl<T: VectorAlign<$N>> VectorExprProxy for $ExprName<T> {
             type T = T;
         }
-        impl<T: VectorElement<$N>> VarProxy for $VarName<T> {
+        impl<T: VectorAlign<$N>> VarProxy for $VarName<T> {
             type Value = Vector<T, $N>;
         }
-        impl<T: VectorElement<$N>> Deref for $VarName<T> {
+        impl<T: VectorAlign<$N>> Deref for $VarName<T> {
             type Target = Expr<Vector<T, $N>>;
             fn deref(&self) -> &Self::Target {
                 _deref_proxy(self)
@@ -153,7 +156,7 @@ vector_proxies!(2 [x, y]: VectorExprProxy2, VectorVarProxy2);
 vector_proxies!(3 [x, y, z, r, g, b]: VectorExprProxy3, VectorVarProxy3);
 vector_proxies!(4 [x, y, z, w, r, g, b, a]: VectorExprProxy4, VectorVarProxy4);
 
-impl<T: VectorElement<N>, const N: usize> TypeOf for Vector<T, N> {
+impl<T: VectorAlign<N>, const N: usize> TypeOf for Vector<T, N> {
     fn type_() -> CArc<Type> {
         let type_ = Type::Vector(VectorType {
             element: VectorElementType::Scalar(T::type_()),
@@ -163,26 +166,26 @@ impl<T: VectorElement<N>, const N: usize> TypeOf for Vector<T, N> {
     }
 }
 
-impl<T: VectorElement<2>> Value for Vector<T, 2> {
+impl<T: VectorAlign<2>> Value for Vector<T, 2> {
     type Expr = VectorExprProxy2<T>;
     type Var = VectorVarProxy2<T>;
     type ExprData = VectorExprData<T, 2>;
     type VarData = VectorVarData<T, 2>;
 }
-impl<T: VectorElement<3>> Value for Vector<T, 3> {
+impl<T: VectorAlign<3>> Value for Vector<T, 3> {
     type Expr = VectorExprProxy3<T>;
     type Var = VectorVarProxy3<T>;
     type ExprData = DoubledProxyData<VectorExprData<T, 3>>;
     type VarData = DoubledProxyData<VectorVarData<T, 3>>;
 }
-impl<T: VectorElement<4>> Value for Vector<T, 4> {
+impl<T: VectorAlign<4>> Value for Vector<T, 4> {
     type Expr = VectorExprProxy4<T>;
     type Var = VectorVarProxy4<T>;
     type ExprData = DoubledProxyData<VectorExprData<T, 4>>;
     type VarData = DoubledProxyData<VectorVarData<T, 4>>;
 }
 
-impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec2Swizzle for Vector<T, 2> {
+impl<T: VectorElement> Vec2Swizzle for Vector<T, 2> {
     type Vec2 = Self;
     type Vec3 = Vector<T, 3>;
     type Vec4 = Vector<T, 4>;
@@ -196,7 +199,7 @@ impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec2Swizzle for 
         self._permute4(x, y, z, w)
     }
 }
-impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec3Swizzle for Vector<T, 3> {
+impl<T: VectorElement> Vec3Swizzle for Vector<T, 3> {
     type Vec2 = Vector<T, 2>;
     type Vec3 = Self;
     type Vec4 = Vector<T, 4>;
@@ -210,7 +213,7 @@ impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec3Swizzle for 
         self._permute4(x, y, z, w)
     }
 }
-impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec4Swizzle for Vector<T, 4> {
+impl<T: VectorElement> Vec4Swizzle for Vector<T, 4> {
     type Vec2 = Vector<T, 2>;
     type Vec3 = Vector<T, 3>;
     type Vec4 = Self;
@@ -225,10 +228,10 @@ impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec4Swizzle for 
     }
 }
 
-impl<T: VectorElement<N>, const N: usize> VectorExprData<T, N> {
+impl<T: VectorAlign<N>, const N: usize> VectorExprData<T, N> {
     fn _permute2(&self, x: u32, y: u32) -> Expr<Vector<T, 2>>
     where
-        T: VectorElement<2>,
+        T: VectorAlign<2>,
     {
         assert!(x < N as u32);
         assert!(y < N as u32);
@@ -244,7 +247,7 @@ impl<T: VectorElement<N>, const N: usize> VectorExprData<T, N> {
     }
     fn _permute3(&self, x: u32, y: u32, z: u32) -> Expr<Vector<T, 3>>
     where
-        T: VectorElement<3>,
+        T: VectorAlign<3>,
     {
         assert!(x < N as u32);
         assert!(y < N as u32);
@@ -267,7 +270,7 @@ impl<T: VectorElement<N>, const N: usize> VectorExprData<T, N> {
     }
     fn _permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Expr<Vector<T, 4>>
     where
-        T: VectorElement<4>,
+        T: VectorAlign<4>,
     {
         assert!(x < N as u32);
         assert!(y < N as u32);
@@ -293,9 +296,7 @@ impl<T: VectorElement<N>, const N: usize> VectorExprData<T, N> {
     }
 }
 
-impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec2Swizzle
-    for VectorExprProxy2<T>
-{
+impl<T: VectorElement> Vec2Swizzle for VectorExprProxy2<T> {
     type Vec2 = Self;
     type Vec3 = Expr<Vector<T, 3>>;
     type Vec4 = Expr<Vector<T, 4>>;
@@ -310,9 +311,7 @@ impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec2Swizzle
     }
 }
 
-impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec3Swizzle
-    for VectorExprProxy3<T>
-{
+impl<T: VectorElement> Vec3Swizzle for VectorExprProxy3<T> {
     type Vec2 = Expr<Vector<T, 2>>;
     type Vec3 = Self;
     type Vec4 = Expr<Vector<T, 4>>;
@@ -326,9 +325,7 @@ impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec3Swizzle
         self._permute4(x, y, z, w)
     }
 }
-impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec4Swizzle
-    for VectorExprProxy4<T>
-{
+impl<T: VectorElement> Vec4Swizzle for VectorExprProxy4<T> {
     type Vec2 = Expr<Vector<T, 2>>;
     type Vec3 = Expr<Vector<T, 3>>;
     type Vec4 = Self;

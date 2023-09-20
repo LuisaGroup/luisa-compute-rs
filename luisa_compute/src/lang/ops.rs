@@ -2,7 +2,7 @@ use crate::internal_prelude::*;
 use std::ops::*;
 
 use super::types::core::{Floating, Integral, Numeric, Primitive, Signed};
-use super::types::vector::VectorElement;
+use super::types::vector::{VectorAlign, VectorElement};
 
 pub mod impls;
 pub mod spread;
@@ -12,19 +12,21 @@ trait CastFrom<T: Primitive>: Primitive {}
 impl<T: Numeric, S: Numeric> CastFrom<S> for T {}
 impl<T: Integral> CastFrom<bool> for T {}
 
-// Hack because using an associated constant is not allowed within a trait bound
-// without #![feature(generic_const_exprs)].
-pub trait Linear<const N: usize>: Value {
-    type Scalar: VectorElement<N>;
-    type WithScalar<S: VectorElement<N>>: Linear<N, Scalar = S>;
+pub trait Linear: Value {
+    // Note that without #![feature(generic_const_exprs)], I can't use this within
+    // the WithScalar restriction. As such, we can't support higher dimensional
+    // vector operations. If that ever becomes necessary, check commit
+    // 9e6eacf6b0c2b59a2646f45a727e4d82e84a46cd.
+    const N: usize;
+    type Scalar: VectorElement;
+    type WithScalar<S: VectorElement>: Linear<Scalar = S>;
     // We don't actually know that the vector has equivalent vectors of every
     // primitive type.
-    type WithBool: Linear<N, Scalar = bool>;
 }
-impl<T: Primitive> Linear<1> for T {
+impl<T: Primitive> Linear for T {
+    const N: usize = 1;
     type Scalar = T;
     type WithScalar<S> = S;
-    type WithBool = bool;
 }
 macro_rules! impl_linear_vectors {
     ($t:ty) => {
@@ -36,10 +38,10 @@ macro_rules! impl_linear_vectors {
     };
     ($t:ty : $($n:literal),+) => {
         $(
-            impl Linear<$n> for Vector<$t, $n> {
+            impl Linear for Vector<$t, $n> {
+                const N: usize = $n;
                 type Scalar = $t;
                 type WithScalar<S> = Vector<S, $n>;
-                type WithBool = Vector<bool, $n>;
             }
         )+
     }

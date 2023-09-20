@@ -40,5 +40,5 @@ pub trait IndexRead: ToNode {
 }
 
 pub trait IndexWrite: IndexRead {
-    fn write<I: IntoIndex, V: Into<Expr<Self::Element>>>(&self, i: I, value: V);
+    fn write<I: IntoIndex, V: AsExpr<Value = Self::Element>>(&self, i: I, value: V);
 }

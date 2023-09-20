@@ -259,6 +259,10 @@ mod private {
     impl<T: Value> Sealed for &Expr<T> {}
     impl<T: Value> Sealed for Var<T> {}
     impl<T: Value> Sealed for &Var<T> {}
+
+    impl Sealed for ValueType {}
+    impl Sealed for ExprType {}
+    impl Sealed for VarType {}
 }
 
 pub trait Tracked: private::Sealed {
@@ -266,12 +270,12 @@ pub trait Tracked: private::Sealed {
     type Value: Value;
 }
 
-trait TrackingType {}
-struct ValueType;
+pub trait TrackingType: private::Sealed {}
+pub struct ValueType;
 impl TrackingType for ValueType {}
-struct ExprType;
+pub struct ExprType;
 impl TrackingType for ExprType {}
-struct VarType;
+pub struct VarType;
 impl TrackingType for VarType {}
 
 impl<T: Value> Tracked for T {

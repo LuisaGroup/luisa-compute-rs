@@ -1,7 +1,7 @@
 use super::*;
 use traits::*;
 
-trait SpreadOps<Other> {
+pub trait SpreadOps<Other> {
     type Join: Value;
     fn lift_self(x: Self) -> Expr<Self::Join>;
     fn lift_other(x: Other) -> Expr<Self::Join>;

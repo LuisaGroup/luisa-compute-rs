@@ -10,7 +10,7 @@ macro_rules! ops_trait {
             )+
         }
     ) => {
-        pub(crate) trait $TraitThis {
+        pub trait $TraitThis {
             $(
                 fn $fn_this(self, $($arg: Self),*) -> Self;
             )*
@@ -31,7 +31,7 @@ macro_rules! ops_trait {
             )+
         }
     ) => {
-        pub(crate) trait $TraitThis {
+        pub trait $TraitThis {
             type Output;
             $(
                 fn $fn_this(self, $($arg: Self),*) -> Self::Output;

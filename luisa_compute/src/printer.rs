@@ -37,6 +37,7 @@ impl PrinterArgs {
         let n = packed_size::<V>();
         self.count_per_arg.push(n);
         self.pack_fn.push(Box::new(move |offset, data| {
+            let v = (&v).clone();
             pack_to(v, data, offset);
         }));
         self.count += n;
@@ -127,8 +128,8 @@ impl Printer {
         let item_id = items.len() as u32;
 
         if_!(
-            offset.cmplt(data.len().uint())
-                & (offset + 1 + args.count as u32).cmple(data.len().uint()),
+            offset.lt(data.len().cast::<u32>())
+                & (offset + 1 + args.count as u32).le(data.len().cast::<u32>()),
             {
                 data.atomic_fetch_add(0, 1);
                 data.write(offset, item_id);

@@ -71,7 +71,63 @@ impl<X: FromNode + Copy> FromNode for DoubledProxyData<X> {
 }
 
 pub trait VectorExprProxy {
+    const N: usize;
     type T: Primitive;
+    fn node(&self) -> NodeRef;
+    fn _permute2(&self, x: u32, y: u32) -> Expr<Vec2<Self::T>>
+    where
+        Self::T: VectorAlign<2>,
+    {
+        assert!(x < Self::N as u32);
+        assert!(y < Self::N as u32);
+        let x = x.expr();
+        let y = y.expr();
+        Expr::<Vec2<Self::T>>::from_node(__current_scope(|s| {
+            s.call(
+                Func::Permute,
+                &[self.node(), x.node(), y.node()],
+                Vec2::<Self::T>::type_(),
+            )
+        }))
+    }
+    fn _permute3(&self, x: u32, y: u32, z: u32) -> Expr<Vec3<Self::T>>
+    where
+        Self::T: VectorAlign<3>,
+    {
+        assert!(x < Self::N as u32);
+        assert!(y < Self::N as u32);
+        assert!(z < Self::N as u32);
+        let x = x.expr();
+        let y = y.expr();
+        let z = z.expr();
+        Expr::<Vec3<Self::T>>::from_node(__current_scope(|s| {
+            s.call(
+                Func::Permute,
+                &[self.node(), x.node(), y.node(), z.node()],
+                Vec3::<Self::T>::type_(),
+            )
+        }))
+    }
+    fn _permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Expr<Vec4<Self::T>>
+    where
+        Self::T: VectorAlign<4>,
+    {
+        assert!(x < Self::N as u32);
+        assert!(y < Self::N as u32);
+        assert!(z < Self::N as u32);
+        assert!(w < Self::N as u32);
+        let x = x.expr();
+        let y = y.expr();
+        let z = z.expr();
+        let w = w.expr();
+        Expr::<Vec4<Self::T>>::from_node(__current_scope(|s| {
+            s.call(
+                Func::Permute,
+                &[self.node(), x.node(), y.node(), z.node(), w.node()],
+                Vec4::<Self::T>::type_(),
+            )
+        }))
+    }
 }
 
 macro_rules! vector_proxies {
@@ -96,7 +152,11 @@ macro_rules! vector_proxies {
             type Value = Vector<T, $N>;
         }
         impl<T: VectorAlign<$N>> VectorExprProxy for $ExprName<T> {
+            const N: usize = $N;
             type T = T;
+            fn node(&self) -> NodeRef {
+                self._node
+            }
         }
         impl<T: VectorAlign<$N, VectorVar = $VarName<T>>> VarProxy for $VarName<T> {
             type Value = Vector<T, $N>;
@@ -204,76 +264,8 @@ impl<T: VectorElement> Vec4Swizzle for Vec4<T> {
     }
 }
 
-impl<T: VectorAlign<N>, const N: usize> VectorExprData<T, N> {
-    fn _permute2(&self, x: u32, y: u32) -> Expr<Vec2<T>>
-    where
-        T: VectorAlign<2>,
-    {
-        assert!(x < N as u32);
-        assert!(y < N as u32);
-        let x = x.expr();
-        let y = y.expr();
-        Expr::<Vec2<T>>::from_node(__current_scope(|s| {
-            s.call(
-                Func::Permute,
-                &[self.node, ToNode::node(&x), ToNode::node(&y)],
-                Vector::<T, 2>::type_(),
-            )
-        }))
-    }
-    fn _permute3(&self, x: u32, y: u32, z: u32) -> Expr<Vec3<T>>
-    where
-        T: VectorAlign<3>,
-    {
-        assert!(x < N as u32);
-        assert!(y < N as u32);
-        assert!(z < N as u32);
-        let x = x.expr();
-        let y = y.expr();
-        let z = z.expr();
-        Expr::<Vec3<T>>::from_node(__current_scope(|s| {
-            s.call(
-                Func::Permute,
-                &[
-                    self.node,
-                    ToNode::node(&x),
-                    ToNode::node(&y),
-                    ToNode::node(&z),
-                ],
-                Vector::<T, 3>::type_(),
-            )
-        }))
-    }
-    fn _permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Expr<Vec4<T>>
-    where
-        T: VectorAlign<4>,
-    {
-        assert!(x < N as u32);
-        assert!(y < N as u32);
-        assert!(z < N as u32);
-        assert!(w < N as u32);
-        let x = x.expr();
-        let y = y.expr();
-        let z = z.expr();
-        let w = w.expr();
-        Expr::<Vec4<T>>::from_node(__current_scope(|s| {
-            s.call(
-                Func::Permute,
-                &[
-                    self.node,
-                    ToNode::node(&x),
-                    ToNode::node(&y),
-                    ToNode::node(&z),
-                    ToNode::node(&w),
-                ],
-                Vector::<T, 4>::type_(),
-            )
-        }))
-    }
-}
-
 impl<T: VectorElement> Vec2Swizzle for VectorExprProxy2<T> {
-    type Vec2 = Self;
+    type Vec2 = Expr<Vec2<T>>;
     type Vec3 = Expr<Vec3<T>>;
     type Vec4 = Expr<Vec4<T>>;
     fn permute2(&self, x: u32, y: u32) -> Self::Vec2 {
@@ -288,7 +280,7 @@ impl<T: VectorElement> Vec2Swizzle for VectorExprProxy2<T> {
 }
 impl<T: VectorElement> Vec3Swizzle for VectorExprProxy3<T> {
     type Vec2 = Expr<Vec2<T>>;
-    type Vec3 = Self;
+    type Vec3 = Expr<Vec3<T>>;
     type Vec4 = Expr<Vec4<T>>;
     fn permute2(&self, x: u32, y: u32) -> Self::Vec2 {
         self._permute2(x, y)
@@ -303,7 +295,7 @@ impl<T: VectorElement> Vec3Swizzle for VectorExprProxy3<T> {
 impl<T: VectorElement> Vec4Swizzle for VectorExprProxy4<T> {
     type Vec2 = Expr<Vec2<T>>;
     type Vec3 = Expr<Vec3<T>>;
-    type Vec4 = Self;
+    type Vec4 = Expr<Vec4<T>>;
     fn permute2(&self, x: u32, y: u32) -> Self::Vec2 {
         self._permute2(x, y)
     }
@@ -315,9 +307,9 @@ impl<T: VectorElement> Vec4Swizzle for VectorExprProxy4<T> {
     }
 }
 
-pub type Vec2<T: VectorAlign<2>> = Vector<T, 2>;
-pub type Vec3<T: VectorAlign<3>> = Vector<T, 3>;
-pub type Vec4<T: VectorAlign<4>> = Vector<T, 4>;
+pub type Vec2<T> = Vector<T, 2>;
+pub type Vec3<T> = Vector<T, 3>;
+pub type Vec4<T> = Vector<T, 4>;
 
 // Matrix
 
@@ -331,7 +323,7 @@ where
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct SquareMatrix<const N: usize>
 where
     f32: VectorAlign<N>,
@@ -345,8 +337,8 @@ where
 {
     fn type_() -> CArc<Type> {
         let type_ = Type::Matrix(ir::MatrixType {
-            element: VectorElementType::Scalar(Primitive::Float32),
-            dimension: N,
+            element: VectorElementType::Scalar(f32::primitive()),
+            dimension: N as u32,
         });
         register_type(type_)
     }

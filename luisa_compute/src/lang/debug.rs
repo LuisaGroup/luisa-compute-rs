@@ -58,7 +58,7 @@ impl<T: Value> CpuFn<T> {
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(
                 Func::CpuCustomOp(self.op.clone()),
-                &[arg.node()],
+                &[arg.as_expr().node()],
                 T::type_(),
             )
         }))

@@ -161,7 +161,6 @@ unsafe impl Send for ResourceTracker {}
 
 unsafe impl Sync for ResourceTracker {}
 
- */
 pub(crate) fn get_backtrace() -> Backtrace {
     Backtrace::force_capture()
 }

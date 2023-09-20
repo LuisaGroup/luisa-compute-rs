@@ -12,7 +12,7 @@ macro_rules! impl_coords {
 }
 macro_rules! impl_deref {
     ($T:ident; $N:literal) => {
-        impl<T: VectorElement<$N>> Deref for Vector<T, $N> {
+        impl<T: VectorAlign<$N>> Deref for Vector<T, $N> {
             type Target = $T<T>;
 
             #[inline]
@@ -21,7 +21,7 @@ macro_rules! impl_deref {
             }
         }
 
-        impl<T: VectorElement<$N>> DerefMut for Vector<T, $N> {
+        impl<T: VectorAlign<$N>> DerefMut for Vector<T, $N> {
             #[inline]
             fn deref_mut(&self) -> &$T<T> {
                 unsafe { &*(self as *const Self as *const $T<T>) }

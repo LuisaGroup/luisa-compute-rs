@@ -51,7 +51,7 @@ where
 }
 
 impl<X: Linear> EqExpr for Expr<X> {
-    type Output = Expr<X::WithBool>;
+    type Output = Expr<X::WithScalar<bool>>;
     fn eq(self, other: Self) -> Self::Output {
         Func::Eq.call2(self, other)
     }
@@ -209,7 +209,7 @@ impl<X: Linear> FloatExpr for Expr<X>
 where
     X::Scalar: Floating,
 {
-    type Bool = Self::WithBool;
+    type Bool = Expr<X::WithScalar<bool>>;
     impl_simple_fns! {
         ceil => Ceil,
         floor => Floor,

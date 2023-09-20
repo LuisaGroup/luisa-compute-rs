@@ -36,7 +36,7 @@ pub trait IntExpr {
     fn rotate_left(&self, n: Expr<u32>) -> Self;
 }
 
-pub trait FloatExpr {
+pub trait FloatExpr: Sized {
     type Bool;
 
     fn ceil(&self) -> Self;

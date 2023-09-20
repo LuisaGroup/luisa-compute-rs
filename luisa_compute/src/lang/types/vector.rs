@@ -1,10 +1,9 @@
 use super::alignment::*;
 use super::core::*;
 use super::*;
-use ir::{MatrixType, VectorElementType, VectorType};
+use ir::{VectorElementType, VectorType};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use std::ops::Mul;
 
 #[cfg(feature = "glam")]
 mod glam;
@@ -22,6 +21,10 @@ impl<T: VectorAlign<2> + VectorAlign<3> + VectorAlign<4>> VectorElement for T {}
 
 pub trait VectorAlign<const N: usize>: Primitive {
     type A: Alignment;
+    type VectorExpr: ExprProxy<Value = Vector<Self, N>>;
+    type VectorVar: VarProxy<Value = Vector<Self, N>>;
+    type VectorExprData: Clone + FromNode + 'static;
+    type VectorVarData: Clone + FromNode + 'static;
 }
 
 impl<T: Debug + VectorAlign<N>, const N: usize> Debug for Vector<T, N> {
@@ -51,7 +54,7 @@ impl<T: VectorAlign<N>, const N: usize> Vector<T, N> {
             elements: [element; N],
         }
     }
-    pub fn splat_expr(element: impl AsExpr<T>) -> Expr<Self> {
+    pub fn splat_expr(element: impl AsExpr<Value = T>) -> Expr<Self> {
         Func::Vec.call(element.as_expr())
     }
     fn _permute2(&self, x: u32, y: u32) -> Vector<T, 2>
@@ -166,23 +169,11 @@ impl<T: VectorAlign<N>, const N: usize> TypeOf for Vector<T, N> {
     }
 }
 
-impl<T: VectorAlign<2>> Value for Vector<T, 2> {
-    type Expr = VectorExprProxy2<T>;
-    type Var = VectorVarProxy2<T>;
-    type ExprData = VectorExprData<T, 2>;
-    type VarData = VectorVarData<T, 2>;
-}
-impl<T: VectorAlign<3>> Value for Vector<T, 3> {
-    type Expr = VectorExprProxy3<T>;
-    type Var = VectorVarProxy3<T>;
-    type ExprData = DoubledProxyData<VectorExprData<T, 3>>;
-    type VarData = DoubledProxyData<VectorVarData<T, 3>>;
-}
-impl<T: VectorAlign<4>> Value for Vector<T, 4> {
-    type Expr = VectorExprProxy4<T>;
-    type Var = VectorVarProxy4<T>;
-    type ExprData = DoubledProxyData<VectorExprData<T, 4>>;
-    type VarData = DoubledProxyData<VectorVarData<T, 4>>;
+impl<T: VectorAlign<N>, const N: usize> Value for Vector<T, N> {
+    type Expr = T::VectorExpr;
+    type Var = T::VectorVar;
+    type ExprData = T::VectorExprData;
+    type VarData = T::VectorVarData;
 }
 
 impl<T: VectorElement> Vec2Swizzle for Vector<T, 2> {

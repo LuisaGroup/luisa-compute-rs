@@ -2,7 +2,7 @@ use super::*;
 use traits::*;
 
 trait SpreadOps<Other> {
-    type Join;
+    type Join: Value;
     fn lift_self(x: Self) -> Expr<Self::Join>;
     fn lift_other(x: Other) -> Expr<Self::Join>;
 }
@@ -48,7 +48,7 @@ impl_spread!([T: Linear] T: |x| x.expr(), &Expr<T>: |x| x.clone() => Expr<T>);
 impl_spread!([T: Linear] &T: |x| x.expr(), &Expr<T>: |x| x.clone() => Expr<T>);
 
 impl_spread!([T: Linear] Expr<T>: |x| x, &Expr<T>: |x| x.clone() => Expr<T>);
-impl_spread!([T: Linear] &Expr<T>: |x| x.clone(), &Expr<T>: |x| x.clone() => Expr<T>);
+impl_spread_single!([T: Linear] &Expr<T>: |x| x.clone(), &Expr<T>: |x| x.clone() => Expr<T>);
 
 impl_spread!([T: Linear] T: |x| x.expr(), Var<T>: |x| x.load() => Expr<T>);
 impl_spread!([T: Linear] &T: |x| x.expr(), Var<T>: |x| x.load() => Expr<T>);
@@ -80,7 +80,7 @@ mod impls {
         T: SpreadOps<S>,
         Expr<T::Join>: MinMaxExpr,
     {
-        type Output = Expr<T::Join>::Output;
+        type Output = <Expr<T::Join> as MinMaxExpr>::Output;
         fn max(self, other: S) -> Self::Output {
             Expr::<T::Join>::max(Self::lift_self(self), Self::lift_other(other))
         }
@@ -106,7 +106,7 @@ mod impls {
         ///  /            /             \
         /// T            S               U
 
-        type Output = Expr<T::Join>::Output;
+        type Output = <Expr<T::Join> as ClampExpr>::Output;
         fn clamp(&self, min: S, max: U) -> Self::Output {
             Expr::<T::Join>::clamp(
                 Self::lift_self(self),
@@ -120,7 +120,7 @@ mod impls {
         T: SpreadOps<S>,
         Expr<T::Join>: EqExpr,
     {
-        type Output = Expr<T::Join>::Output;
+        type Output = <Expr<T::Join> as EqExpr>::Output;
         fn eq(self, other: S) -> Self::Output {
             Expr::<T::Join>::eq(Self::lift_self(self), Self::lift_other(other))
         }
@@ -152,7 +152,7 @@ mod impls {
         T: SpreadOps<S::Join>,
         Expr<T::Join>: FloatMulAddExpr,
     {
-        type Output = Expr<T::Join>::Output;
+        type Output = <Expr<T::Join> as FloatMulAddExpr>::Output;
         fn mul_add(self, mul: S, add: U) -> Self::Output {
             Expr::<T::Join>::mul_add(
                 Self::lift_self(self),
@@ -166,7 +166,7 @@ mod impls {
         T: SpreadOps<S>,
         Expr<T::Join>: FloatCopySignExpr,
     {
-        type Output = Expr<T::Join>::Output;
+        type Output = <Expr<T::Join> as FloatCopySignExpr>::Output;
         fn copy_sign(self, sign: S) -> Self::Output {
             Expr::<T::Join>::copy_sign(Self::lift_self(self), Self::lift_other(sign))
         }
@@ -176,7 +176,7 @@ mod impls {
         T: SpreadOps<S>,
         Expr<T::Join>: FloatStepExpr,
     {
-        type Output = Expr<T::Join>::Output;
+        type Output = <Expr<T::Join> as FloatStepExpr>::Output;
         fn step(self, edge: S) -> Self::Output {
             Expr::<T::Join>::step(Self::lift_self(self), Self::lift_other(edge))
         }
@@ -187,7 +187,7 @@ mod impls {
         T: SpreadOps<S::Join>,
         Expr<T::Join>: FloatSmoothStepExpr,
     {
-        type Output = Expr<T::Join>::Output;
+        type Output = <Expr<T::Join> as FloatSmoothStepExpr>::Output;
         fn smooth_step(self, edge0: S, edge1: U) -> Self::Output {
             Expr::<T::Join>::smooth_step(
                 Self::lift_self(self),
@@ -201,7 +201,7 @@ mod impls {
         T: SpreadOps<S>,
         Expr<T::Join>: FloatArcTan2Expr,
     {
-        type Output = Expr<T::Join>::Output;
+        type Output = <Expr<T::Join> as FloatArcTan2Expr>::Output;
         fn atan2(self, other: S) -> Self::Output {
             Expr::<T::Join>::atan2(Self::lift_self(self), Self::lift_other(other))
         }
@@ -211,7 +211,7 @@ mod impls {
         T: SpreadOps<S>,
         Expr<T::Join>: FloatLogExpr,
     {
-        type Output = Expr<T::Join>::Output;
+        type Output = <Expr<T::Join> as FloatLogExpr>::Output;
         fn log(self, base: S) -> Self::Output {
             Expr::<T::Join>::log(Self::lift_self(self), Self::lift_other(base))
         }
@@ -221,7 +221,7 @@ mod impls {
         T: SpreadOps<S>,
         Expr<T::Join>: FloatPowfExpr,
     {
-        type Output = Expr<T::Join>::Output;
+        type Output = <Expr<T::Join> as FloatPowfExpr>::Output;
         fn powf(self, exponent: S) -> Self::Output {
             Expr::<T::Join>::powf(Self::lift_self(self), Self::lift_other(exponent))
         }
@@ -232,7 +232,7 @@ mod impls {
         T: SpreadOps<S::Join>,
         Expr<T::Join>: FloatLerpExpr,
     {
-        type Output = Expr<T::Join>::Output;
+        type Output = <Expr<T::Join> as FloatLerpExpr>::Output;
         fn lerp(self, other: S, frac: U) -> Self::Output {
             Expr::<T::Join>::lerp(
                 Self::lift_self(self),
@@ -261,4 +261,15 @@ macro_rules! impl_num_spread {
         impl_spread_op!( [ $($bounds)* ]: Div::div for $T, $S);
         impl_spread_op!( [ $($bounds)* ]: Rem::rem for $T, $S);
     };
+}
+
+mod tests {
+    fn test() {
+        let x = 10.0f32;
+        let y = 20.0f32;
+        let z = x.min(y);
+
+        let w = x.expr().min(y);
+        println!("{:?}", w);
+    }
 }

@@ -1,14 +1,31 @@
 use super::*;
 
-// Stupid hack to make ops work.
-impl<T: Primitive> VectorAlign<1> for T {
-    type A = Align1;
-}
-
 macro_rules! element {
-    ($t:ty [ $l:literal ]: $a: ident) => {
-        impl VectorAlign<$l> for $t {
-            type A = $a;
+    ($T:ty [ 2 ]: $A: ident) => {
+        impl VectorAlign<2> for $T {
+            type A = $A;
+            type VectorExpr = VectorExprProxy2<$T>;
+            type VectorVar = VectorVarProxy2<$T>;
+            type VectorExprData = VectorExprData<$T, 2>;
+            type VectorVarData = VectorVarData<$T, 2>;
+        }
+    };
+    ($T:ty [ 3 ]: $A: ident) => {
+        impl VectorAlign<3> for $T {
+            type A = $A;
+            type VectorExpr = VectorExprProxy3<$T>;
+            type VectorVar = VectorVarProxy3<$T>;
+            type VectorExprData = DoubledProxyData<VectorExprData<$T, 3>>;
+            type VectorVarData = DoubledProxyData<VectorVarData<$T, 3>>;
+        }
+    };
+    ($T:ty [ 4 ]: $A: ident) => {
+        impl VectorAlign<4> for $T {
+            type A = $A;
+            type VectorExpr = VectorExprProxy4<$T>;
+            type VectorVar = VectorVarProxy4<$T>;
+            type VectorExprData = DoubledProxyData<VectorExprData<$T, 4>>;
+            type VectorVarData = DoubledProxyData<VectorVarData<$T, 4>>;
         }
     };
 }

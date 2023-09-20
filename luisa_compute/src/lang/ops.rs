@@ -23,27 +23,24 @@ pub trait Linear: Value {
     // We don't actually know that the vector has equivalent vectors of every
     // primitive type.
 }
-impl<T: Primitive> Linear for T {
+impl<T: VectorElement> Linear for T {
     const N: usize = 1;
     type Scalar = T;
-    type WithScalar<S> = S;
+    type WithScalar<S: VectorElement> = S;
 }
-macro_rules! impl_linear_vectors {
-    ($t:ty) => {
-        impl_linear_vectors!($t: 2, 3, 4);
-    };
-    ($t:ty, $($ts:ty),+) => {
-        impl_linear_vectors!($t);
-        impl_linear_vectors!($($ts),+);
-    };
-    ($t:ty : $($n:literal),+) => {
-        $(
-            impl Linear for Vector<$t, $n> {
-                const N: usize = $n;
-                type Scalar = $t;
-                type WithScalar<S> = Vector<S, $n>;
-            }
-        )+
-    }
+
+impl<T: VectorElement> Linear for Vector<T, 2> {
+    const N: usize = 2;
+    type Scalar = T;
+    type WithScalar<S: VectorElement> = Vector<S, 2>;
 }
-impl_linear_vectors!(bool, f16, f32, f64, i8, i16, i32, i64, u8, u16, u32, u64);
+impl<T: VectorElement> Linear for Vector<T, 3> {
+    const N: usize = 3;
+    type Scalar = T;
+    type WithScalar<S: VectorElement> = Vector<S, 3>;
+}
+impl<T: VectorElement> Linear for Vector<T, 4> {
+    const N: usize = 4;
+    type Scalar = T;
+    type WithScalar<S: VectorElement> = Vector<S, 4>;
+}

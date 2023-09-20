@@ -5,7 +5,7 @@ use crate::internal_prelude::*;
 pub mod alignment;
 pub mod array;
 pub mod core;
-pub mod dynamic;
+// pub mod dynamic;
 pub mod shared;
 pub mod vector;
 

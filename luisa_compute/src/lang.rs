@@ -10,7 +10,7 @@ use crate::internal_prelude::*;
 use bumpalo::Bump;
 use indexmap::IndexMap;
 
-// use crate::runtime::WeakDevice;
+use crate::runtime::WeakDevice;
 
 pub mod ir {
     pub use luisa_compute_ir::context::register_type;
@@ -26,11 +26,11 @@ use ir::{
 
 pub mod control_flow;
 pub mod debug;
-// pub mod diff;
-// pub mod functions;
+pub mod diff;
+pub mod functions;
 pub mod index;
 pub mod ops;
-// pub mod poly;
+pub mod poly;
 pub mod types;
 
 pub(crate) trait CallFuncTrait {
@@ -252,7 +252,7 @@ pub(crate) struct Recorder {
     pub(crate) cpu_custom_ops: IndexMap<u64, (usize, CArc<CpuCustomOp>)>,
     pub(crate) callables: IndexMap<u64, CallableModuleRef>,
     pub(crate) shared: Vec<NodeRef>,
-    // pub(crate) device: Option<WeakDevice>,
+    pub(crate) device: Option<WeakDevice>,
     pub(crate) block_size: Option<[u32; 3]>,
     pub(crate) building_kernel: bool,
     pub(crate) pools: Option<CArc<ModulePools>>,
@@ -267,7 +267,7 @@ impl Recorder {
         self.cpu_custom_ops.clear();
         self.callables.clear();
         self.lock = false;
-        // self.device = None;
+        self.device = None;
         self.block_size = None;
         self.arena.reset();
         self.shared.clear();
@@ -282,7 +282,7 @@ impl Recorder {
             cpu_custom_ops: IndexMap::new(),
             callables: IndexMap::new(),
             shared: vec![],
-            // device: None,
+            device: None,
             block_size: None,
             pools: None,
             arena: Bump::new(),

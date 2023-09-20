@@ -26,10 +26,10 @@ impl<T: Value, const N: usize, X: IntoIndex> Index<X> for ArrayExpr<T, N> {
         let i = i.to_u64();
 
         // TODO: Add need_runtime_check()?
-        lc_assert!(i.cmplt((N as u64).expr()));
+        lc_assert!(i.lt((N as u64).expr()));
 
         Expr::<T>::from_node(__current_scope(|b| {
-            b.call(Func::ExtractElement, &[self.node, i.node()], T::type_())
+            b.call(Func::ExtractElement, &[self.0.node, i.node()], T::type_())
         }))
         ._ref()
     }
@@ -99,7 +99,7 @@ impl<T: Value> VLArrayVar<T> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
         if need_runtime_check() {
-            lc_assert!(i.cmplt(self.len()), "VLArrayVar::read out of bounds");
+            lc_assert!(i.lt(self.len()), "VLArrayVar::read out of bounds");
         }
 
         Expr::<T>::from_node(__current_scope(|b| {
@@ -124,7 +124,7 @@ impl<T: Value> VLArrayVar<T> {
         let value = value.into();
 
         if need_runtime_check() {
-            lc_assert!(i.cmplt(self.len()), "VLArrayVar::read out of bounds");
+            lc_assert!(i.lt(self.len()), "VLArrayVar::read out of bounds");
         }
 
         __current_scope(|b| {
@@ -175,7 +175,7 @@ impl<T: Value> VLArrayExpr<T> {
     pub fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
         let i = i.to_u64();
         if need_runtime_check() {
-            lc_assert!(i.cmplt(self.len()));
+            lc_assert!(i.lt(self.len()));
         }
 
         Expr::<T>::from_node(__current_scope(|b| {

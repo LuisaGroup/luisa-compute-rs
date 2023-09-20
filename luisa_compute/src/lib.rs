@@ -25,7 +25,7 @@ pub mod prelude {
     pub use crate::lang::ops::*;
     pub use crate::lang::types::vector::swizzle::*;
     pub use crate::lang::types::vector::Vector;
-    pub use crate::lang::types::{Expr, ExprProxy, Value, Var, VarProxy};
+    pub use crate::lang::types::{AsExpr, Expr, Value, Var};
     pub use crate::lang::Aggregate;
     // pub use crate::resource::{IoTexel, StorageTexel, *};
     // pub use crate::runtime::api::StreamTag;
@@ -39,7 +39,7 @@ pub mod prelude {
 }
 
 mod internal_prelude {
-    pub(crate) use crate::lang::debug::{CpuFn, __env_need_backtrace, is_cpu_backend};
+    pub(crate) use crate::lang::debug::{__env_need_backtrace, is_cpu_backend};
     pub(crate) use crate::lang::ir::ffi::*;
     pub(crate) use crate::lang::ir::{
         new_node, register_type, BasicBlock, Const, Func, Instruction, IrBuilder, Node,

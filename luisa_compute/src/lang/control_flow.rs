@@ -4,45 +4,30 @@ use crate::internal_prelude::*;
 use ir::SwitchCase;
 
 /**
- * If you want rustfmt to format your code, use if_!(cond, { .. }, { .. }) or if_!(cond, { .. }, else, {...})
- * instead of if_!(cond, { .. }, else {...}).
+ * If you want rustfmt to format your code, use if_!(cond, { .. }, { .. })
+ * or if_!(cond, { .. }, else, {...}) instead of if_!(cond, { .. }, else
+ * {...}).
  *
  */
 #[macro_export]
 macro_rules! if_ {
     ($cond:expr, $then:block, else $else_:block) => {
-        <_ as $crate::lang::maybe_expr::BoolIfElseMaybeExpr<_>>::if_then_else(
-            $cond,
-            || $then,
-            || $else_,
-        )
+        <_ as $crate::lang::ops::SelectMaybeExpr<_>>::select($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block, else, $else_:block) => {
-        <_ as $crate::lang::maybe_expr::BoolIfElseMaybeExpr<_>>::if_then_else(
-            $cond,
-            || $then,
-            || $else_,
-        )
+        <_ as $crate::lang::ops::SelectMaybeExpr<_>>::select($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block, $else_:block) => {
-        <_ as $crate::lang::maybe_expr::BoolIfElseMaybeExpr<_>>::if_then_else(
-            $cond,
-            || $then,
-            || $else_,
-        )
+        <_ as $crate::lang::ops::SelectMaybeExpr<_>>::select($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block) => {
-        <_ as $crate::lang::maybe_expr::BoolIfElseMaybeExpr<_>>::if_then_else(
-            $cond,
-            || $then,
-            || {},
-        )
+        <_ as $crate::lang::ops::ActivateMaybeExpr>::activate($cond, || $then)
     };
 }
 #[macro_export]
 macro_rules! while_ {
     ($cond:expr,$body:block) => {
-        <_ as $crate::lang::maybe_expr::BoolWhileMaybeExpr>::while_loop(|| $cond, || $body)
+        <_ as $crate::lang::ops::LoopMaybeExpr>::while_loop(|| $cond, || $body)
     };
 }
 #[macro_export]

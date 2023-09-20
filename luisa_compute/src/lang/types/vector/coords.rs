@@ -23,8 +23,8 @@ macro_rules! impl_deref {
 
         impl<T: VectorAlign<$N>> DerefMut for Vector<T, $N> {
             #[inline]
-            fn deref_mut(&self) -> &$T<T> {
-                unsafe { &*(self as *const Self as *const $T<T>) }
+            fn deref_mut(&mut self) -> &mut $T<T> {
+                unsafe { &mut *(self as *mut Self as *mut $T<T>) }
             }
         }
     };
@@ -50,8 +50,8 @@ impl<T: Primitive> Deref for XYZ<T> {
 }
 impl<T: Primitive> DerefMut for XYZ<T> {
     #[inline]
-    fn deref_mut(&self) -> &RGB<T> {
-        unsafe { &*(self as *const Self as *const RGB<T>) }
+    fn deref_mut(&mut self) -> &mut RGB<T> {
+        unsafe { &mut *(self as *mut Self as *mut RGB<T>) }
     }
 }
 impl<T: Primitive> Deref for XYZW<T> {
@@ -64,7 +64,7 @@ impl<T: Primitive> Deref for XYZW<T> {
 }
 impl<T: Primitive> DerefMut for XYZW<T> {
     #[inline]
-    fn deref_mut(&self) -> &RGBA<T> {
-        unsafe { &*(self as *const Self as *const RGBA<T>) }
+    fn deref_mut(&mut self) -> &mut RGBA<T> {
+        unsafe { &mut *(self as *mut Self as *mut RGBA<T>) }
     }
 }

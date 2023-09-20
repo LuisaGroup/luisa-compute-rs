@@ -54,7 +54,7 @@ impl VisitMut for TraceVisitor {
                 }) = &**left
                 {
                     *node = parse_quote_spanned! {span=>
-                        <_ as #trait_path::DerefSet>::deref_set(#expr, #right)
+                        <_ as #trait_path::StoreMaybeExpr>::deref_set(#expr, #right)
                     }
                 }
             }
@@ -65,11 +65,11 @@ impl VisitMut for TraceVisitor {
                 if let Expr::Let(_) = **cond {
                 } else if let Some((_, else_branch)) = else_branch {
                     *node = parse_quote_spanned! {span=>
-                        <_ as #trait_path::BoolIfElseMaybeExpr<_>>::if_then_else(#cond, || #then_branch, || #else_branch)
+                        <_ as #trait_path::SelectMaybeExpr<_>>::select(#cond, || #then_branch, || #else_branch)
                     }
                 } else {
                     *node = parse_quote_spanned! {span=>
-                        <_ as #trait_path::BoolIfMaybeExpr>::if_then(#cond, || #then_branch)
+                        <_ as #trait_path::ActivateMaybeExpr>::activate(#cond, || #then_branch)
                     }
                 }
             }
@@ -77,7 +77,7 @@ impl VisitMut for TraceVisitor {
                 let cond = &expr.cond;
                 let body = &expr.body;
                 *node = parse_quote_spanned! {span=>
-                    <_ as #trait_path::BoolWhileMaybeExpr>::while_loop(|| #cond, || #body)
+                    <_ as #trait_path::LoopMaybeExpr>::while_loop(|| #cond, || #body)
                 }
             }
             Expr::Loop(expr) => {
@@ -117,15 +117,15 @@ impl VisitMut for TraceVisitor {
                     let op_fn = Ident::new(op_fn_str, expr.op.span());
                     if op_fn_str == "eq" || op_fn_str == "ne" {
                         *node = parse_quote_spanned! {span=>
-                            <_ as #trait_path::EqMaybeExpr<_>>::#op_fn(#left, #right)
+                            <_ as #trait_path::EqMaybeExpr<_, _>>::#op_fn(#left, #right)
                         }
                     } else if op_fn_str == "and" || op_fn_str == "or" {
                         *node = parse_quote_spanned! {span=>
-                            <_ as #trait_path::BoolLazyOpsMaybeExpr<_>>::#op_fn(#left, || #right)
+                            <_ as #trait_path::LazyBoolMaybeExpr<_>>::#op_fn(#left, || #right)
                         }
                     } else {
                         *node = parse_quote_spanned! {span=>
-                            <_ as #trait_path::PartialOrdMaybeExpr<_>>::#op_fn(#left, #right)
+                            <_ as #trait_path::CmpMaybeExpr<_, _>>::#op_fn(#left, #right)
                         }
                     }
                 }

@@ -24,12 +24,11 @@ use ir::{
     Instruction, IrBuilder, ModulePools, Pooled, Type, TypeOf, UserNodeData,
 };
 
-// pub mod control_flow;
+pub mod control_flow;
 pub mod debug;
 // pub mod diff;
 // pub mod functions;
 pub mod index;
-// pub mod maybe_expr;
 pub mod ops;
 // pub mod poly;
 pub mod types;
@@ -43,6 +42,9 @@ pub(crate) trait CallFuncTrait {
         y: Expr<S>,
         z: Expr<U>,
     ) -> Expr<V>;
+    fn call_void<T: Value>(self, x: Expr<T>);
+    fn call2_void<T: Value, S: Value>(self, x: Expr<T>, y: Expr<S>);
+    fn call3_void<T: Value, S: Value, U: Value>(self, x: Expr<T>, y: Expr<S>, z: Expr<U>);
 }
 impl CallFuncTrait for Func {
     fn call<T: Value, S: Value>(self, x: Expr<T>) -> Expr<S> {
@@ -68,6 +70,21 @@ impl CallFuncTrait for Func {
                 <V as TypeOf>::type_(),
             )
         }))
+    }
+    fn call_void<T: Value>(self, x: Expr<T>) {
+        __current_scope(|b| {
+            b.call(self, &[x.node()], Type::void());
+        });
+    }
+    fn call2_void<T: Value, S: Value>(self, x: Expr<T>, y: Expr<S>) {
+        __current_scope(|b| {
+            b.call(self, &[x.node(), y.node()], Type::void());
+        });
+    }
+    fn call3_void<T: Value, S: Value, U: Value>(self, x: Expr<T>, y: Expr<S>, z: Expr<U>) {
+        __current_scope(|b| {
+            b.call(self, &[x.node(), y.node(), z.node()], Type::void());
+        });
     }
 }
 
@@ -452,12 +469,11 @@ pub const fn packed_size<T: Value>() -> usize {
     (std::mem::size_of::<T>() + 3) / 4
 }
 
-pub fn pack_to<E, B>(expr: E, buffer: &B, index: impl Into<Expr<u32>>)
+pub fn pack_to<V: Value, B>(expr: Expr<V>, buffer: &B, index: impl AsExpr<Value = u32>)
 where
-    E: ExprProxy,
     B: IndexWrite<Element = u32>,
 {
-    let index = index.into();
+    let index = index.as_expr();
     __current_scope(|b| {
         b.call(
             Func::Pack,

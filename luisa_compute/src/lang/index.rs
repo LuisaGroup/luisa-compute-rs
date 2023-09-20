@@ -25,7 +25,7 @@ impl IntoIndex for u64 {
 }
 impl IntoIndex for Expr<u32> {
     fn to_u64(&self) -> Expr<u64> {
-        self.ulong()
+        self.cast::<u64>()
     }
 }
 impl IntoIndex for Expr<u64> {

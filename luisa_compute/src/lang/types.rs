@@ -198,12 +198,8 @@ impl<T: Value> Var<T> {
             for node in nodes {
                 ret.push(b.call(Func::Load, &[node], node.type_().clone()));
             }
-            Expr::<Self::Value>::from_nodes(&mut ret.into_iter())
+            Expr::<T>::from_nodes(&mut ret.into_iter())
         })
-    }
-    pub fn store(&self, value: impl AsExpr) {
-        let value = value.as_expr();
-        super::_store(self, &value);
     }
 }
 
@@ -245,8 +241,16 @@ macro_rules! impl_simple_var_proxy {
     }
 }
 
+#[macro_export]
+macro_rules! impl_marker_trait {
+    ($T:ident for $($t:ty),*) => {
+        $(impl $T for $t {})*
+    };
+}
+
 mod private {
     use super::*;
+
     pub trait Sealed {}
     impl<T: Value> Sealed for T {}
     impl<T: Value> Sealed for Expr<T> {}
@@ -300,12 +304,12 @@ impl<T: Value> AsExpr for T {
 }
 impl<T: Value> AsExpr for Expr<T> {
     fn as_expr(&self) -> Expr<T> {
-        *self
+        self.clone()
     }
 }
 impl<T: Value> AsExpr for &Expr<T> {
     fn as_expr(&self) -> Expr<T> {
-        **self
+        (*self).clone()
     }
 }
 impl<T: Value> AsExpr for Var<T> {

@@ -8,6 +8,8 @@ pub mod impls;
 pub mod spread;
 pub mod traits;
 
+pub use traits::*;
+
 trait CastFrom<T: Primitive>: Primitive {}
 impl<T: Numeric, S: Numeric> CastFrom<S> for T {}
 impl<T: Integral> CastFrom<bool> for T {}

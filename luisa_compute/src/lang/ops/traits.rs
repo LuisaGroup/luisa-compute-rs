@@ -1,35 +1,78 @@
 use super::*;
 
-pub trait MinMaxExpr<T = Self> {
-    type Output;
+macro_rules! ops_trait {
+    (
+        $TraitExpr:ident<$($T:ident),*> [ $TraitThis:ident] {
+            $(
+                fn $fn:ident [$fn_this:ident] (self, $($arg:ident: $S:ident),*);
+            )+
+        }
+    ) => {
+        pub(crate) trait $TraitThis {
+            $(
+                fn $fn_this(self, $($arg: Self),*) -> Self;
+            )*
+        }
+        pub trait $TraitExpr<$($T = Self),*> {
+            type Output;
 
-    fn max(self, other: T) -> Self::Output;
-    fn min(self, other: T) -> Self::Output;
+            $(
+                fn $fn(self, $($arg: $S),*) -> Self::Output;
+            )*
+        }
+    };
+    (
+        $TraitExpr:ident<$($T:ident),*> [ $TraitThis:ident] {
+            type Output;
+            $(
+                fn $fn:ident [$fn_this:ident] (self, $($arg:ident: $S:ident),*);
+            )+
+        }
+    ) => {
+        pub(crate) trait $TraitThis {
+            type Output;
+            $(
+                fn $fn_this(self, $($arg: Self),*) -> Self::Output;
+            )*
+        }
+        pub trait $TraitExpr<$($T = Self),*> {
+            type Output;
+
+            $(
+                fn $fn(self, $($arg: $S),*) -> Self::Output;
+            )*
+        }
+    }
 }
 
-pub trait ClampExpr<A = Self, B = Self> {
-    type Output;
+ops_trait!(MinMaxExpr<T>[MinMaxThis] {
+    fn max[_max](self, other: T);
+    fn min[_min](self, other: T);
+});
 
-    fn clamp(self, min: A, max: B) -> Self::Output;
-}
+ops_trait!(ClampExpr<A, B>[ClampThis] {
+    fn clamp[_clamp](self, min: A, max: B);
+});
 
 pub trait AbsExpr {
     fn abs(&self) -> Self;
 }
 
-pub trait EqExpr<T = Self> {
+ops_trait!(EqExpr<T>[EqThis] {
     type Output;
 
-    fn eq(self, other: T) -> Self::Output;
-    fn ne(self, other: T) -> Self::Output;
-}
+    fn eq[_eq](self, other: T);
+    fn ne[_ne](self, other: T);
+});
 
-pub trait CmpExpr<T = Self>: EqExpr<T> {
-    fn lt(self, other: T) -> Self::Output;
-    fn le(self, other: T) -> Self::Output;
-    fn gt(self, other: T) -> Self::Output;
-    fn ge(self, other: T) -> Self::Output;
-}
+ops_trait!(CmpExpr<T>[CmpThis] {
+    type Output;
+
+    fn lt[_lt](self, other: T);
+    fn le[_le](self, other: T);
+    fn gt[_gt](self, other: T);
+    fn ge[_ge](self, other: T);
+});
 
 pub trait IntExpr {
     fn rotate_right(&self, n: Expr<u32>) -> Self;
@@ -72,70 +115,78 @@ pub trait FloatExpr: Sized {
     fn recip(&self) -> Self;
     fn sin_cos(&self) -> (Self, Self);
 }
-pub trait FloatMulAddExpr<A = Self, B = Self> {
-    type Output;
 
-    fn mul_add(self, a: A, b: B) -> Self::Output;
-}
-pub trait FloatCopySignExpr<T = Self> {
-    type Output;
+ops_trait!(FloatMulAddExpr<A, B>[FloatMulAddThis] {
+    fn mul_add[_mul_add](self, a: A, b: B);
+});
 
-    fn copy_sign(self, sign: T) -> Self::Output;
-}
-pub trait FloatStepExpr<T = Self> {
-    type Output;
+ops_trait!(FloatCopySignExpr<T>[FloatCopySignThis] {
+    fn copy_sign[_copy_sign](self, sign: T);
+});
 
-    fn step(self, edge: T) -> Self::Output;
-}
-pub trait FloatSmoothStepExpr<T = Self, S = Self> {
-    type Output;
+ops_trait!(FloatStepExpr<T>[FloatStepThis] {
+    fn step[_step](self, edge: T);
+});
 
-    fn smooth_step(self, edge0: T, edge1: S) -> Self::Output;
-}
-pub trait FloatArcTan2Expr<T = Self> {
-    type Output;
+ops_trait!(FloatSmoothStepExpr<T, S>[FloatSmoothStepThis] {
+    fn smooth_step[_smooth_step](self, edge0: T, edge1: S);
+});
 
-    fn atan2(self, other: T) -> Self::Output;
-}
-pub trait FloatLogExpr<T = Self> {
-    type Output;
+ops_trait!(FloatArcTan2Expr<T>[FloatArcTan2This] {
+    fn atan2[_atan2](self, other: T);
+});
 
-    fn log(self, base: T) -> Self::Output;
-}
-pub trait FloatPowfExpr<T = Self> {
-    type Output;
+ops_trait!(FloatLogExpr<T>[FloatLogThis] {
+    fn log[_log](self, base: T);
+});
 
-    fn powf(self, exponent: T) -> Self::Output;
-}
+ops_trait!(FloatPowfExpr<T>[FloatPowfThis] {
+    fn powf[_powf](self, exponent: T);
+});
+
 pub trait FloatPowiExpr<T> {
     type Output;
 
     fn powi(self, exponent: T) -> Self::Output;
 }
-pub trait FloatLerpExpr<T = Self, S = Self> {
-    type Output;
 
-    fn lerp(self, other: T, frac: S) -> Self::Output;
-}
+ops_trait!(FloatLerpExpr<A, B>[FloatLerpThis] {
+    fn lerp[_lerp](self, other: A, frac: B);
+});
 
-pub trait StoreExpr<V> {
+pub trait StoreMaybeExpr<V> {
     fn store(self, value: V);
 }
 
-pub trait SwitchExpr<R> {
-    fn switch(self, on: impl FnOnce() -> R, off: impl FnOnce() -> R) -> R;
+pub trait SelectMaybeExpr<R> {
+    fn if_then_else(self, on: impl FnOnce() -> R, off: impl FnOnce() -> R) -> R;
+    fn select(self, on: R, off: R) -> R;
 }
 
-pub trait ActivateExpr {
+pub trait ActivateMaybeExpr {
     fn activate(self, then: impl FnOnce());
 }
 
-pub trait LoopExpr {
+pub trait LoopMaybeExpr {
     fn while_loop(cond: impl FnMut() -> Self, body: impl FnMut());
 }
 
-pub trait LazyBoolExpr<T = Self> {
+pub trait LazyBoolMaybeExpr<T = Self> {
     type Bool;
     fn and(self, other: impl FnOnce() -> T) -> Self::Bool;
     fn or(self, other: impl FnOnce() -> T) -> Self::Bool;
+}
+
+pub trait EqMaybeExpr<T, const EXPR: bool> {
+    type Bool;
+    fn __eq(self, other: T) -> Self::Bool;
+    fn __ne(self, other: T) -> Self::Bool;
+}
+
+pub trait CmpMaybeExpr<T, const EXPR: bool> {
+    type Bool;
+    fn __lt(self, other: T) -> Self::Bool;
+    fn __le(self, other: T) -> Self::Bool;
+    fn __gt(self, other: T) -> Self::Bool;
+    fn __ge(self, other: T) -> Self::Bool;
 }

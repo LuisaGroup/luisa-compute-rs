@@ -2,7 +2,6 @@ use super::alignment::*;
 use super::core::*;
 use super::*;
 use ir::{VectorElementType, VectorType};
-use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 #[cfg(feature = "glam")]
@@ -34,9 +33,8 @@ impl<T: Debug + VectorAlign<N>, const N: usize> Debug for Vector<T, N> {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Hash, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Vector<T: VectorAlign<N>, const N: usize> {
-    #[serde(skip)]
     _align: T::A,
     elements: [T; N],
 }
@@ -137,16 +135,16 @@ macro_rules! vector_proxies {
         unsafe impl<T: VectorAlign<$N>> HasExprLayout<<Vector<T, $N> as Value>::ExprData> for $ExprName<T> {}
         unsafe impl<T: VectorAlign<$N>> HasVarLayout<<Vector<T, $N> as Value>::VarData> for $VarName<T> {}
 
-        impl<T: VectorAlign<$N>> ExprProxy for $ExprName<T> {
+        impl<T: VectorAlign<$N, VectorExpr = $ExprName<T>>> ExprProxy for $ExprName<T> {
             type Value = Vector<T, $N>;
         }
         impl<T: VectorAlign<$N>> VectorExprProxy for $ExprName<T> {
             type T = T;
         }
-        impl<T: VectorAlign<$N>> VarProxy for $VarName<T> {
+        impl<T: VectorAlign<$N, VectorVar = $VarName<T>>> VarProxy for $VarName<T> {
             type Value = Vector<T, $N>;
         }
-        impl<T: VectorAlign<$N>> Deref for $VarName<T> {
+        impl<T: VectorAlign<$N, VectorVar = $VarName<T>>> Deref for $VarName<T> {
             type Target = Expr<Vector<T, $N>>;
             fn deref(&self) -> &Self::Target {
                 _deref_proxy(self)
@@ -162,7 +160,7 @@ vector_proxies!(4 [x, y, z, w, r, g, b, a]: VectorExprProxy4, VectorVarProxy4);
 impl<T: VectorAlign<N>, const N: usize> TypeOf for Vector<T, N> {
     fn type_() -> CArc<Type> {
         let type_ = Type::Vector(VectorType {
-            element: VectorElementType::Scalar(T::type_()),
+            element: VectorElementType::Scalar(T::primitive()),
             length: N as u32,
         });
         register_type(type_)
@@ -180,13 +178,13 @@ impl<T: VectorElement> Vec2Swizzle for Vector<T, 2> {
     type Vec2 = Self;
     type Vec3 = Vector<T, 3>;
     type Vec4 = Vector<T, 4>;
-    fn permute2(&self, x: i32, y: i32) -> Self::Vec2 {
+    fn permute2(&self, x: u32, y: u32) -> Self::Vec2 {
         self._permute2(x, y)
     }
-    fn permute3(&self, x: i32, y: i32, z: i32) -> Self::Vec3 {
+    fn permute3(&self, x: u32, y: u32, z: u32) -> Self::Vec3 {
         self._permute3(x, y, z)
     }
-    fn permute4(&self, x: i32, y: i32, z: i32, w: i32) -> Self::Vec4 {
+    fn permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Self::Vec4 {
         self._permute4(x, y, z, w)
     }
 }
@@ -194,13 +192,13 @@ impl<T: VectorElement> Vec3Swizzle for Vector<T, 3> {
     type Vec2 = Vector<T, 2>;
     type Vec3 = Self;
     type Vec4 = Vector<T, 4>;
-    fn permute2(&self, x: i32, y: i32) -> Self::Vec2 {
+    fn permute2(&self, x: u32, y: u32) -> Self::Vec2 {
         self._permute2(x, y)
     }
-    fn permute3(&self, x: i32, y: i32, z: i32) -> Self::Vec3 {
+    fn permute3(&self, x: u32, y: u32, z: u32) -> Self::Vec3 {
         self._permute3(x, y, z)
     }
-    fn permute4(&self, x: i32, y: i32, z: i32, w: i32) -> Self::Vec4 {
+    fn permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Self::Vec4 {
         self._permute4(x, y, z, w)
     }
 }
@@ -208,17 +206,17 @@ impl<T: VectorElement> Vec4Swizzle for Vector<T, 4> {
     type Vec2 = Vector<T, 2>;
     type Vec3 = Vector<T, 3>;
     type Vec4 = Self;
-    fn permute2(&self, x: i32, y: i32) -> Self::Vec2 {
+    fn permute2(&self, x: u32, y: u32) -> Self::Vec2 {
         self._permute2(x, y)
     }
-    fn permute3(&self, x: i32, y: i32, z: i32) -> Self::Vec3 {
+    fn permute3(&self, x: u32, y: u32, z: u32) -> Self::Vec3 {
         self._permute3(x, y, z)
     }
-    fn permute4(&self, x: i32, y: i32, z: i32, w: i32) -> Self::Vec4 {
+    fn permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Self::Vec4 {
         self._permute4(x, y, z, w)
     }
 }
-
+/*
 impl<T: VectorAlign<N>, const N: usize> VectorExprData<T, N> {
     fn _permute2(&self, x: u32, y: u32) -> Expr<Vector<T, 2>>
     where
@@ -330,3 +328,4 @@ impl<T: VectorElement> Vec4Swizzle for VectorExprProxy4<T> {
         self._permute4(x, y, z, w)
     }
 }
+ */

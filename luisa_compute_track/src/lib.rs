@@ -5,6 +5,10 @@ use syn::spanned::Spanned;
 use syn::visit_mut::*;
 use syn::*;
 
+// TODO: Impl let mut -> let = .var()
+// TODO: Impl x as f32 -> .cast()
+// TOOD: Impl switch! macro.
+
 #[cfg(test)]
 use pretty_assertions::assert_eq;
 

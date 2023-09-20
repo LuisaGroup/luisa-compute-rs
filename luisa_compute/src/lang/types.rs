@@ -177,6 +177,12 @@ impl<T: Value> Expr<T> {
             }
         })
     }
+    pub unsafe fn bitcast<S: Value>(self) -> Expr<S> {
+        assert_eq!(std::mem::size_of::<T>(), std::mem::size_of::<S>());
+        let ty = S::type_();
+        let node = __current_scope(|s| s.bitcast(self.node(), ty));
+        Expr::<S>::from_node(node)
+    }
 }
 
 impl<T: Value> Var<T> {

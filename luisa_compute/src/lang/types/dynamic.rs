@@ -204,7 +204,7 @@ impl DynVar {
         __current_scope(|b| b.update(self.node, value.node));
     }
     pub fn zero<T: Value>() -> Self {
-        let v = local_zeroed::<T>();
+        let v = Var::<T>::zeroed();
         Self { node: v.node() }
     }
 }

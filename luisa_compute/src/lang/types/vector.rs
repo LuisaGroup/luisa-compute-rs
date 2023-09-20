@@ -13,8 +13,11 @@ mod nalgebra;
 
 pub mod coords;
 mod element;
+pub mod swizzle;
 
-trait VectorElement<const N: usize>: Primitive {
+use swizzle::*;
+
+pub trait VectorElement<const N: usize>: Primitive {
     type A: Alignment;
 }
 
@@ -33,7 +36,7 @@ pub struct Vector<T: VectorElement<N>, const N: usize> {
 }
 
 impl<T: VectorElement<N>, const N: usize> Vector<T, N> {
-    pub fn new(elements: [T; N]) -> Self {
+    pub fn from_elements(elements: [T; N]) -> Self {
         Self {
             _align: T::A::default(),
             elements,
@@ -45,30 +48,58 @@ impl<T: VectorElement<N>, const N: usize> Vector<T, N> {
             elements: [element; N],
         }
     }
+    pub fn splat_expr(element: impl AsExpr<T>) -> Expr<Self> {
+        Func::Vec.call(element.as_expr())
+    }
+    fn _permute2(&self, x: u32, y: u32) -> Vector<T, 2>
+    where
+        T: VectorElement<2>,
+    {
+        Vector::from_elements([self.elements[x as usize], self.elements[y as usize]])
+    }
+    fn _permute3(&self, x: u32, y: u32, z: u32) -> Vector<T, 3>
+    where
+        T: VectorElement<3>,
+    {
+        Vector::from_elements([
+            self.elements[x as usize],
+            self.elements[y as usize],
+            self.elements[z as usize],
+        ])
+    }
+    fn _permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Vector<T, 4>
+    where
+        T: VectorElement<4>,
+    {
+        Vector::from_elements([
+            self.elements[x as usize],
+            self.elements[y as usize],
+            self.elements[z as usize],
+            self.elements[w as usize],
+        ])
+    }
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct VectorExprData<T: VectorElement<N>, const N: usize>([Expr<T>; N]);
-impl<const N: usize, T: VectorElement<N>> FromNode for VectorExprData<T, N> {
+impl<T: VectorElement<N>, const N: usize> FromNode for VectorExprData<T, N> {
     fn from_node(node: NodeRef) -> Self {
         Self(std::array::from_fn(|i| {
             FromNode::from_node(__extract::<T>(node, i))
         }))
     }
 }
-
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct VectorVarData<T: VectorElement<N>, const N: usize>([Var<T>; N]);
-impl<const N: usize, T: VectorElement<N>> FromNode for VectorVarData<T, N> {
+impl<T: VectorElement<N>, const N: usize> FromNode for VectorVarData<T, N> {
     fn from_node(node: NodeRef) -> Self {
         Self(std::array::from_fn(|i| {
             FromNode::from_node(__extract::<T>(node, i))
         }))
     }
 }
-
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct DoubledProxyData<X: FromNode + Copy>(X, X);
@@ -76,6 +107,10 @@ impl<X: FromNode + Copy> FromNode for DoubledProxyData<X> {
     fn from_node(node: NodeRef) -> Self {
         Self(X::from_node(node), X::from_node(node))
     }
+}
+
+pub trait VectorExprProxy {
+    type T: Primitive;
 }
 
 macro_rules! vector_proxies {
@@ -98,6 +133,9 @@ macro_rules! vector_proxies {
 
         impl<T: VectorElement<$N>> ExprProxy for $ExprName<T> {
             type Value = Vector<T, $N>;
+        }
+        impl<T: VectorElement<$N>> VectorExprProxy for $ExprName<T> {
+            type T = T;
         }
         impl<T: VectorElement<$N>> VarProxy for $VarName<T> {
             type Value = Vector<T, $N>;
@@ -142,4 +180,165 @@ impl<T: VectorElement<4>> Value for Vector<T, 4> {
     type Var = VectorVarProxy4<T>;
     type ExprData = DoubledProxyData<VectorExprData<T, 4>>;
     type VarData = DoubledProxyData<VectorVarData<T, 4>>;
+}
+
+impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec2Swizzle for Vector<T, 2> {
+    type Vec2 = Self;
+    type Vec3 = Vector<T, 3>;
+    type Vec4 = Vector<T, 4>;
+    fn permute2(&self, x: i32, y: i32) -> Self::Vec2 {
+        self._permute2(x, y)
+    }
+    fn permute3(&self, x: i32, y: i32, z: i32) -> Self::Vec3 {
+        self._permute3(x, y, z)
+    }
+    fn permute4(&self, x: i32, y: i32, z: i32, w: i32) -> Self::Vec4 {
+        self._permute4(x, y, z, w)
+    }
+}
+impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec3Swizzle for Vector<T, 3> {
+    type Vec2 = Vector<T, 2>;
+    type Vec3 = Self;
+    type Vec4 = Vector<T, 4>;
+    fn permute2(&self, x: i32, y: i32) -> Self::Vec2 {
+        self._permute2(x, y)
+    }
+    fn permute3(&self, x: i32, y: i32, z: i32) -> Self::Vec3 {
+        self._permute3(x, y, z)
+    }
+    fn permute4(&self, x: i32, y: i32, z: i32, w: i32) -> Self::Vec4 {
+        self._permute4(x, y, z, w)
+    }
+}
+impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec4Swizzle for Vector<T, 4> {
+    type Vec2 = Vector<T, 2>;
+    type Vec3 = Vector<T, 3>;
+    type Vec4 = Self;
+    fn permute2(&self, x: i32, y: i32) -> Self::Vec2 {
+        self._permute2(x, y)
+    }
+    fn permute3(&self, x: i32, y: i32, z: i32) -> Self::Vec3 {
+        self._permute3(x, y, z)
+    }
+    fn permute4(&self, x: i32, y: i32, z: i32, w: i32) -> Self::Vec4 {
+        self._permute4(x, y, z, w)
+    }
+}
+
+impl<T: VectorElement<N>, const N: usize> VectorExprData<T, N> {
+    fn _permute2(&self, x: u32, y: u32) -> Expr<Vector<T, 2>>
+    where
+        T: VectorElement<2>,
+    {
+        assert!(x < N as u32);
+        assert!(y < N as u32);
+        let x = x.expr();
+        let y = y.expr();
+        Expr::<Vector<T, 2>>::from_node(__current_scope(|s| {
+            s.call(
+                Func::Permute,
+                &[self.node, ToNode::node(&x), ToNode::node(&y)],
+                Vector::<T, 2>::type_(),
+            )
+        }))
+    }
+    fn _permute3(&self, x: u32, y: u32, z: u32) -> Expr<Vector<T, 3>>
+    where
+        T: VectorElement<3>,
+    {
+        assert!(x < N as u32);
+        assert!(y < N as u32);
+        assert!(z < N as u32);
+        let x = x.expr();
+        let y = y.expr();
+        let z = z.expr();
+        Expr::<Vector<T, 3>>::from_node(__current_scope(|s| {
+            s.call(
+                Func::Permute,
+                &[
+                    self.node,
+                    ToNode::node(&x),
+                    ToNode::node(&y),
+                    ToNode::node(&z),
+                ],
+                Vector::<T, 3>::type_(),
+            )
+        }))
+    }
+    fn _permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Expr<Vector<T, 4>>
+    where
+        T: VectorElement<4>,
+    {
+        assert!(x < N as u32);
+        assert!(y < N as u32);
+        assert!(z < N as u32);
+        assert!(w < N as u32);
+        let x = x.expr();
+        let y = y.expr();
+        let z = z.expr();
+        let w = w.expr();
+        Expr::<Vector<T, 4>>::from_node(__current_scope(|s| {
+            s.call(
+                Func::Permute,
+                &[
+                    self.node,
+                    ToNode::node(&x),
+                    ToNode::node(&y),
+                    ToNode::node(&z),
+                    ToNode::node(&w),
+                ],
+                Vector::<T, 4>::type_(),
+            )
+        }))
+    }
+}
+
+impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec2Swizzle
+    for VectorExprProxy2<T>
+{
+    type Vec2 = Self;
+    type Vec3 = Expr<Vector<T, 3>>;
+    type Vec4 = Expr<Vector<T, 4>>;
+    fn permute2(&self, x: u32, y: u32) -> Self::Vec2 {
+        self._permute2(x, y)
+    }
+    fn permute3(&self, x: u32, y: u32, z: u32) -> Self::Vec3 {
+        self._permute3(x, y, z)
+    }
+    fn permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Self::Vec4 {
+        self._permute4(x, y, z, w)
+    }
+}
+
+impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec3Swizzle
+    for VectorExprProxy3<T>
+{
+    type Vec2 = Expr<Vector<T, 2>>;
+    type Vec3 = Self;
+    type Vec4 = Expr<Vector<T, 4>>;
+    fn permute2(&self, x: u32, y: u32) -> Self::Vec2 {
+        self._permute2(x, y)
+    }
+    fn permute3(&self, x: u32, y: u32, z: u32) -> Self::Vec3 {
+        self._permute3(x, y, z)
+    }
+    fn permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Self::Vec4 {
+        self._permute4(x, y, z, w)
+    }
+}
+impl<T: VectorElement<2> + VectorElement<3> + VectorElement<4>> Vec4Swizzle
+    for VectorExprProxy4<T>
+{
+    type Vec2 = Expr<Vector<T, 2>>;
+    type Vec3 = Expr<Vector<T, 3>>;
+    type Vec4 = Self;
+    fn permute2(&self, x: u32, y: u32) -> Self::Vec2 {
+        self._permute2(x, y)
+    }
+    fn permute3(&self, x: u32, y: u32, z: u32) -> Self::Vec3 {
+        self._permute3(x, y, z)
+    }
+    fn permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Self::Vec4 {
+        self._permute4(x, y, z, w)
+    }
 }

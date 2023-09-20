@@ -29,11 +29,47 @@ pub mod debug;
 pub mod diff;
 pub mod functions;
 pub mod index;
-pub mod maybe_expr;
+// pub mod maybe_expr;
 pub mod ops;
 pub mod poly;
-pub mod swizzle;
 pub mod types;
+
+pub(crate) trait CallFuncTrait {
+    fn call<T: Value, S: Value>(self, x: Expr<T>) -> Expr<S>;
+    fn call2<T: Value, S: Value, U: Value>(self, x: Expr<T>, y: Expr<S>) -> Expr<U>;
+    fn call3<T: Value, S: Value, U: Value, V: Value>(
+        self,
+        x: Expr<T>,
+        y: Expr<S>,
+        z: Expr<U>,
+    ) -> Expr<V>;
+}
+impl CallFuncTrait for Func {
+    fn call<T: Value, S: Value>(self, x: Expr<T>) -> Expr<S> {
+        Expr::<S>::from_node(__current_scope(|b| {
+            b.call(self, &[x.node()], <S as TypeOf>::type_())
+        }))
+    }
+    fn call2<T: Value, S: Value, U: Value>(self, x: Expr<T>, y: Expr<S>) -> Expr<U> {
+        Expr::<U>::from_node(__current_scope(|b| {
+            b.call(self, &[x.node(), y.node()], <U as TypeOf>::type_())
+        }))
+    }
+    fn call3<T: Value, S: Value, U: Value, V: Value>(
+        self,
+        x: Expr<T>,
+        y: Expr<S>,
+        z: Expr<U>,
+    ) -> Expr<V> {
+        Expr::<V>::from_node(__current_scope(|b| {
+            b.call(
+                self,
+                &[x.node(), y.node(), z.node()],
+                <V as TypeOf>::type_(),
+            )
+        }))
+    }
+}
 
 #[allow(dead_code)]
 pub(crate) static KERNEL_ID: AtomicUsize = AtomicUsize::new(0);

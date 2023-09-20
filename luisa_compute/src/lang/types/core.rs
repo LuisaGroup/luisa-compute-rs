@@ -1,7 +1,23 @@
 use super::*;
-use std::ops::Deref;
 
-pub(crate) trait Primitive: Copy + TypeOf + 'static {
+mod private {
+    use super::*;
+    pub trait Sealed {}
+    impl Sealed for bool {}
+    impl Sealed for f16 {}
+    impl Sealed for f32 {}
+    impl Sealed for f64 {}
+    impl Sealed for i8 {}
+    impl Sealed for i16 {}
+    impl Sealed for i32 {}
+    impl Sealed for i64 {}
+    impl Sealed for u8 {}
+    impl Sealed for u16 {}
+    impl Sealed for u32 {}
+    impl Sealed for u64 {}
+}
+
+pub trait Primitive: private::Sealed + Copy + TypeOf + 'static {
     fn const_(&self) -> Const;
     fn primitive(&self) -> ir::Primitive;
 }
@@ -54,11 +70,11 @@ impl Primitive for f64 {
     }
 }
 
-// impl Primitive for i8 {
-//     fn const_(&self) -> Const {
-//         Const::I8(*self)
-//     }
-// }
+impl Primitive for i8 {
+    fn const_(&self) -> Const {
+        todo!() // Const::I8(*self)
+    }
+}
 impl Primitive for i16 {
     fn const_(&self) -> Const {
         Const::I16(*self)
@@ -84,11 +100,11 @@ impl Primitive for i64 {
     }
 }
 
-// impl Primitive for u8 {
-//     fn const_(&self) -> Const {
-//         Const::U8(*self)
-//     }
-// }
+impl Primitive for u8 {
+    fn const_(&self) -> Const {
+        todo!() // Const::U8(*self)
+    }
+}
 impl Primitive for u16 {
     fn const_(&self) -> Const {
         Const::U16(*self)
@@ -113,6 +129,44 @@ impl Primitive for u64 {
         ir::Primitive::UInt64
     }
 }
+
+pub trait Integral: Primitive {}
+impl Integral for bool {}
+impl Integral for i8 {}
+impl Integral for i16 {}
+impl Integral for i32 {}
+impl Integral for i64 {}
+impl Integral for u8 {}
+impl Integral for u16 {}
+impl Integral for u32 {}
+impl Integral for u64 {}
+
+pub trait Numeric: Primitive {}
+impl Numeric for f16 {}
+impl Numeric for f32 {}
+impl Numeric for f64 {}
+impl Numeric for i8 {}
+impl Numeric for i16 {}
+impl Numeric for i32 {}
+impl Numeric for i64 {}
+impl Numeric for u8 {}
+impl Numeric for u16 {}
+impl Numeric for u32 {}
+impl Numeric for u64 {}
+
+pub trait Floating: Numeric {}
+impl Floating for f16 {}
+impl Floating for f32 {}
+impl Floating for f64 {}
+
+pub trait Signed: Numeric {}
+impl Signed for f16 {}
+impl Signed for f32 {}
+impl Signed for f64 {}
+impl Signed for i8 {}
+impl Signed for i16 {}
+impl Signed for i32 {}
+impl Signed for i64 {}
 
 #[deprecated]
 pub type Bool = Expr<bool>;

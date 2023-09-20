@@ -22,7 +22,7 @@ pub mod prelude {
     pub use crate::lang::functions::{block_size, dispatch_id, dispatch_size, set_block_size};
     pub use crate::lang::index::{IndexRead, IndexWrite};
     pub use crate::lang::ops::*;
-    pub use crate::lang::swizzle::*;
+    pub use crate::lang::types::vector::swizzle::*;
     pub use crate::lang::types::vector::Vector;
     pub use crate::lang::types::{Expr, ExprProxy, Value, Var, VarProxy};
     pub use crate::lang::Aggregate;
@@ -45,8 +45,9 @@ mod internal_prelude {
         PhiIncoming, Pooled, Type, TypeOf, INVALID_REF,
     };
     pub(crate) use crate::lang::{
-        ir, Recorder, __compose, __extract, __insert, __module_pools, need_runtime_check, FromNode,
-        NodeLike, NodeRef, ToNode, __current_scope, __pop_scope, RECORDER,
+        ir, CallFuncTrait, Recorder, __compose, __extract, __insert, __module_pools,
+        need_runtime_check, FromNode, NodeLike, NodeRef, ToNode, __current_scope, __pop_scope,
+        RECORDER,
     };
     pub(crate) use crate::prelude::*;
     pub(crate) use crate::runtime::{

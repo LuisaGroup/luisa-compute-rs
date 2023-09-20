@@ -1,5 +1,10 @@
 use super::*;
 
+// Stupid hack to make ops work.
+impl<T: Primitive> VectorElement<1> for T {
+    type A = Align1;
+}
+
 macro_rules! element {
     ($t:ty [ $l:literal ]: $a: ident) => {
         impl VectorElement<$l> for $t {
@@ -11,13 +16,12 @@ macro_rules! element {
 element!(bool[2]: Align2);
 element!(bool[3]: Align4);
 element!(bool[4]: Align4);
-// TODO: Make u8 support ir::TypeOf.
-// element!(u8[2]: Align2);
-// element!(u8[3]: Align4);
-// element!(u8[4]: Align4);
-// element!(i8[2]: Align2);
-// element!(i8[3]: Align4);
-// element!(i8[4]: Align4);
+element!(u8[2]: Align2);
+element!(u8[3]: Align4);
+element!(u8[4]: Align4);
+element!(i8[2]: Align2);
+element!(i8[3]: Align4);
+element!(i8[4]: Align4);
 
 element!(f16[2]: Align4);
 element!(f16[3]: Align8);

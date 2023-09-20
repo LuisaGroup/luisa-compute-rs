@@ -211,12 +211,13 @@ pub fn _deref_proxy<P: VarProxy>(proxy: &P) -> &Expr<P::Value> {
 
 #[macro_export]
 macro_rules! impl_simple_expr_proxy {
-    ([ $($bounds:tt)* ] $name: ident [ $($qualifiers:tt)* ] for $t: ty) => {
+    ($([ $($bounds:tt)* ])? $name: ident $([ $($qualifiers:tt)* ])? for $t: ty $(where $($where_bounds:tt)+)?) => {
         #[derive(Debug, Clone, Copy)]
         #[repr(transparent)]
-        pub struct $name < $($bounds)* > ($crate::lang::types::Expr<$t>);
-        unsafe impl < $($bounds)* > $crate::lang::types::HasExprLayout< <$t as $crate::lang::types::Value>::ExprData > for $name < $($qualifiers)* > {}
-        impl < $($bounds)* > $crate::lang::types::ExprProxy for $name < $($qualifiers)* > {
+        pub struct $name $(< $($bounds)* >)? ($crate::lang::types::Expr<$t>) $(where $($where_bounds)+)?;
+        unsafe impl $(< $($bounds)* >)? $crate::lang::types::HasExprLayout< <$t as $crate::lang::types::Value>::ExprData >
+            for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {}
+        impl $(< $($bounds)* >)? $crate::lang::types::ExprProxy for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {
             type Value = $t;
         }
     }
@@ -224,15 +225,16 @@ macro_rules! impl_simple_expr_proxy {
 
 #[macro_export]
 macro_rules! impl_simple_var_proxy {
-    ([ $($bounds:tt)* ] $name: ident [ $($qualifiers:tt)* ] for $t: ty) => {
+    ($([ $($bounds:tt)* ])? $name: ident $([ $($qualifiers:tt)* ])? for $t: ty $(where $($where_bounds:tt)+)?) => {
         #[derive(Debug, Clone, Copy)]
         #[repr(transparent)]
-        pub struct $name < $($bounds)* > ($crate::lang::types::Var<$t>);
-        unsafe impl < $($bounds)* > $crate::lang::types::HasVarLayout< <$t as $crate::lang::types::Value>::VarData > for $name < $($qualifiers)* > {}
-        impl < $($bounds)* > $crate::lang::types::VarProxy for $name < $($qualifiers)* > {
+        pub struct $name $(< $($bounds)* >)? ($crate::lang::types::Var<$t>) $(where $($where_bounds)+)?;
+        unsafe impl $(< $($bounds)* >)? $crate::lang::types::HasVarLayout< <$t as $crate::lang::types::Value>::VarData >
+            for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {}
+        impl $(< $($bounds)* >)? $crate::lang::types::VarProxy for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {
             type Value = $t;
         }
-        impl < $($bounds)* > std::ops::Deref for $name < $($qualifiers)* > {
+        impl $(< $($bounds)* >)? std::ops::Deref for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {
             type Target = $crate::lang::types::Expr<$t>;
             fn deref(&self) -> &Self::Target {
                 $crate::lang::types::_deref_proxy(self)

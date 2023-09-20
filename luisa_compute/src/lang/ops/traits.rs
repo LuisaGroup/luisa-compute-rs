@@ -1,5 +1,7 @@
 use super::*;
 
+// The double trait implementation is necessary as the compiler infinite loops
+// when trying to resolve the Expr<T>: SpreadOps<Expr<Vector<T, N>>> bound.
 macro_rules! ops_trait {
     (
         $TraitExpr:ident<$($T:ident),*> [ $TraitThis:ident] {

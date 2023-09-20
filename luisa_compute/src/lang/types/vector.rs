@@ -318,3 +318,68 @@ impl<T: VectorElement> Vec4Swizzle for VectorExprProxy4<T> {
 pub type Vec2<T: VectorAlign<2>> = Vector<T, 2>;
 pub type Vec3<T: VectorAlign<3>> = Vector<T, 3>;
 pub type Vec4<T: VectorAlign<4>> = Vector<T, 4>;
+
+// Matrix
+
+impl<const N: usize> Debug for SquareMatrix<N>
+where
+    f32: VectorAlign<N>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.elements.fmt(f)
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct SquareMatrix<const N: usize>
+where
+    f32: VectorAlign<N>,
+{
+    pub elements: [Vector<f32, N>; N],
+}
+
+impl<const N: usize> TypeOf for SquareMatrix<N>
+where
+    f32: VectorAlign<N>,
+{
+    fn type_() -> CArc<Type> {
+        let type_ = Type::Matrix(ir::MatrixType {
+            element: VectorElementType::Scalar(Primitive::Float32),
+            dimension: N,
+        });
+        register_type(type_)
+    }
+}
+
+impl_simple_expr_proxy!(SquareMatrixExpr2 for SquareMatrix<2>);
+impl_simple_var_proxy!(SquareMatrixVar2 for SquareMatrix<2>);
+
+impl_simple_expr_proxy!(SquareMatrixExpr3 for SquareMatrix<3>);
+impl_simple_var_proxy!(SquareMatrixVar3 for SquareMatrix<3>);
+
+impl_simple_expr_proxy!(SquareMatrixExpr4 for SquareMatrix<4>);
+impl_simple_var_proxy!(SquareMatrixVar4 for SquareMatrix<4>);
+
+impl Value for SquareMatrix<2> {
+    type Expr = SquareMatrixExpr2;
+    type Var = SquareMatrixVar2;
+    type ExprData = ();
+    type VarData = ();
+}
+impl Value for SquareMatrix<3> {
+    type Expr = SquareMatrixExpr3;
+    type Var = SquareMatrixVar3;
+    type ExprData = ();
+    type VarData = ();
+}
+impl Value for SquareMatrix<4> {
+    type Expr = SquareMatrixExpr4;
+    type Var = SquareMatrixVar4;
+    type ExprData = ();
+    type VarData = ();
+}
+
+pub type Mat2 = SquareMatrix<2>;
+pub type Mat3 = SquareMatrix<3>;
+pub type Mat4 = SquareMatrix<4>;

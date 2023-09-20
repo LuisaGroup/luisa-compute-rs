@@ -34,7 +34,7 @@ impl AdContext {
 thread_local! {
     static AD_CONTEXT:RefCell<AdContext> = RefCell::new(AdContext::new_rev());
 }
-pub fn requires_grad(var: impl ExprProxy) {
+pub fn requires_grad<V: Value>(var: Expr<V>) {
     AD_CONTEXT.with(|c| {
         let c = c.borrow();
         assert!(c.started, "autodiff section is not started");
@@ -49,15 +49,15 @@ pub fn requires_grad(var: impl ExprProxy) {
     });
 }
 
-pub fn backward<T: ExprProxy>(out: T) {
+pub fn backward<V: Value>(out: Expr<V>) {
     backward_with_grad(
         out,
         FromNode::from_node(__current_scope(|b| {
             let one = new_node(
                 b.pools(),
                 Node::new(
-                    CArc::new(Instruction::Const(Const::One(<T::Value>::type_()))),
-                    <T::Value>::type_(),
+                    CArc::new(Instruction::Const(Const::One(V::type_()))),
+                    V::type_(),
                 ),
             );
             b.append(one);
@@ -66,7 +66,7 @@ pub fn backward<T: ExprProxy>(out: T) {
     );
 }
 
-pub fn backward_with_grad<T: ExprProxy>(out: T, grad: T) {
+pub fn backward_with_grad<V: Value>(out: Expr<V>, grad: Expr<V>) {
     AD_CONTEXT.with(|c| {
         let mut c = c.borrow_mut();
         assert!(c.started, "autodiff section is not started");
@@ -83,19 +83,19 @@ pub fn backward_with_grad<T: ExprProxy>(out: T, grad: T) {
 }
 
 /// Gradient of a value in *Reverse mode* AD
-pub fn gradient<T: ExprProxy>(var: T) -> T {
+pub fn gradient<V: Value>(var: Expr<V>) -> Expr<V> {
     AD_CONTEXT.with(|c| {
         let c = c.borrow();
         assert!(c.started, "autodiff section is not started");
         assert!(!c.is_forward_mode, "gradient() is called in forward mode");
         assert!(c.backward_called, "backward is not called");
     });
-    T::from_node(__current_scope(|b| {
+    Expr::<V>::from_node(__current_scope(|b| {
         b.call(Func::Gradient, &[var.node()], var.node().type_().clone())
     }))
 }
 /// Gradient of a value in *Reverse mode* AD
-pub fn grad<T: ExprProxy>(var: T) -> T {
+pub fn grad<V: Value>(var: Expr<V>) -> Expr<V> {
     gradient(var)
 }
 
@@ -108,8 +108,8 @@ pub fn grad<T: ExprProxy>(var: T) -> T {
 //     let ret = body();
 //     let fwd = pop_scope();
 //     __current_scope(|b| {
-//         let node = new_node(Node::new(CArc::new(Instruction::AdDetach(fwd)), Type::void()));
-//         b.append(node);
+//         let node = new_node(Node::new(CArc::new(Instruction::AdDetach(fwd)),
+// Type::void()));         b.append(node);
 //     });
 //     let nodes = ret.to_vec_nodes();
 //     let nodes: Vec<_> = nodes
@@ -124,7 +124,8 @@ pub fn detach<T: NodeLike>(v: T) -> T {
     T::from_node(node)
 }
 
-/// Start a *Forward mode* AD section that propagates N gradients w.r.t to input variable
+/// Start a *Forward mode* AD section that propagates N gradients w.r.t to input
+/// variable
 pub fn forward_autodiff(n_grads: usize, body: impl Fn()) {
     AD_CONTEXT.with(|c| {
         let mut c = c.borrow_mut();
@@ -152,7 +153,7 @@ pub fn forward_autodiff(n_grads: usize, body: impl Fn()) {
 }
 
 /// Propagate N gradients w.r.t to input variable using *Forward mode* AD
-pub fn propagate_gradient<T: ExprProxy>(v: T, grads: &[T]) {
+pub fn propagate_gradient<V: Value>(v: Expr<V>, grads: &[Expr<V>]) {
     AD_CONTEXT.with(|c| {
         let c = c.borrow();
         assert_eq!(grads.len(), c.n_forward_grads);
@@ -169,7 +170,7 @@ pub fn propagate_gradient<T: ExprProxy>(v: T, grads: &[T]) {
     });
 }
 
-pub fn output_gradients<T: ExprProxy>(v: T) -> Vec<T> {
+pub fn output_gradients<V: Value>(v: Expr<V>) -> Vec<Expr<V>> {
     let n = AD_CONTEXT.with(|c| {
         let c = c.borrow();
         assert!(c.started, "autodiff section is not started");
@@ -183,7 +184,7 @@ pub fn output_gradients<T: ExprProxy>(v: T) -> Vec<T> {
         let mut grads = vec![];
         for i in 0..n {
             let idx = b.const_(Const::Int32(i as i32));
-            grads.push(T::from_node(b.call(
+            grads.push(Expr::<V>::from_node(b.call(
                 Func::OutputGrad,
                 &[v.node(), idx],
                 v.node().type_().clone(),

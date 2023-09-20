@@ -1003,8 +1003,9 @@ impl_storage_texel!(Half4, Half4, f32, Float2, Float4,);
 impl_storage_texel!([f16; 2], Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 impl_storage_texel!([f16; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
-// `T` is the read out type of the texture, which is not necessarily the same as the storage type
-// In fact, the texture can be stored in any format as long as it can be converted to `T`
+// `T` is the read out type of the texture, which is not necessarily the same as
+// the storage type In fact, the texture can be stored in any format as long as
+// it can be converted to `T`
 pub struct Tex2d<T: IoTexel> {
     #[allow(dead_code)]
     pub(crate) width: u32,
@@ -1014,8 +1015,9 @@ pub struct Tex2d<T: IoTexel> {
     pub(crate) marker: PhantomData<T>,
 }
 
-// `T` is the read out type of the texture, which is not necessarily the same as the storage type
-// In fact, the texture can be stored in any format as long as it can be converted to `T`
+// `T` is the read out type of the texture, which is not necessarily the same as
+// the storage type In fact, the texture can be stored in any format as long as
+// it can be converted to `T`
 pub struct Tex3d<T: IoTexel> {
     #[allow(dead_code)]
     pub(crate) width: u32,

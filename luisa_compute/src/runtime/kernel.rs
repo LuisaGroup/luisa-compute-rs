@@ -118,11 +118,7 @@ pub trait KernelParameter {
     fn def_param(builder: &mut KernelBuilder) -> Self;
 }
 
-impl<T: Value, U> KernelParameter for U
-where
-    U: ExprProxy<Value = T>,
-    T: Value<Expr = U>,
-{
+impl<T: Value> KernelParameter for Expr<T> {
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.uniform::<T>()
     }
@@ -507,12 +503,12 @@ unsafe impl CallableRet for () {
     fn _from_return(_: NodeRef) -> Self {}
 }
 
-unsafe impl<T: ExprProxy> CallableRet for T {
+unsafe impl<V: Value> CallableRet for Expr<V> {
     fn _return(&self) -> CArc<Type> {
         __current_scope(|b| {
             b.return_(self.node());
         });
-        T::Value::type_()
+        V::type_()
     }
     fn _from_return(node: NodeRef) -> Self {
         Self::from_node(node)

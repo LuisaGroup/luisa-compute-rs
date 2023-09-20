@@ -154,82 +154,86 @@ impls!(Floating for f16, f32, f64);
 pub trait Signed: Numeric {}
 impls!(Signed for f16, f32, f64, i8, i16, i32, i64);
 
-#[deprecated]
-pub type Bool = Expr<bool>;
-#[deprecated]
-pub type F16 = Expr<f16>;
-#[deprecated]
-pub type F32 = Expr<f32>;
-#[deprecated]
-pub type F64 = Expr<f64>;
-#[deprecated]
-pub type I16 = Expr<i16>;
-#[deprecated]
-pub type I32 = Expr<i32>;
-#[deprecated]
-pub type I64 = Expr<i64>;
-#[deprecated]
-pub type U16 = Expr<u16>;
-#[deprecated]
-pub type U32 = Expr<u32>;
-#[deprecated]
-pub type U64 = Expr<u64>;
+mod legacy {
+    use super::*;
 
-#[deprecated]
-pub type F16Var = Var<f16>;
-#[deprecated]
-pub type F32Var = Var<f32>;
-#[deprecated]
-pub type F64Var = Var<f64>;
-#[deprecated]
-pub type I16Var = Var<i16>;
-#[deprecated]
-pub type I32Var = Var<i32>;
-#[deprecated]
-pub type I64Var = Var<i64>;
-#[deprecated]
-pub type U16Var = Var<u16>;
-#[deprecated]
-pub type U32Var = Var<u32>;
-#[deprecated]
-pub type U64Var = Var<u64>;
+    #[deprecated]
+    pub type Bool = Expr<bool>;
+    #[deprecated]
+    pub type F16 = Expr<f16>;
+    #[deprecated]
+    pub type F32 = Expr<f32>;
+    #[deprecated]
+    pub type F64 = Expr<f64>;
+    #[deprecated]
+    pub type I16 = Expr<i16>;
+    #[deprecated]
+    pub type I32 = Expr<i32>;
+    #[deprecated]
+    pub type I64 = Expr<i64>;
+    #[deprecated]
+    pub type U16 = Expr<u16>;
+    #[deprecated]
+    pub type U32 = Expr<u32>;
+    #[deprecated]
+    pub type U64 = Expr<u64>;
 
-#[deprecated]
-pub type Half = Expr<f16>;
-#[deprecated]
-pub type Float = Expr<f32>;
-#[deprecated]
-pub type Double = Expr<f64>;
-#[deprecated]
-pub type Int = Expr<i32>;
-#[deprecated]
-pub type Long = Expr<i64>;
-#[deprecated]
-pub type Uint = Expr<u32>;
-#[deprecated]
-pub type Ulong = Expr<u64>;
-#[deprecated]
-pub type Short = Expr<i16>;
-#[deprecated]
-pub type Ushort = Expr<u16>;
+    #[deprecated]
+    pub type F16Var = Var<f16>;
+    #[deprecated]
+    pub type F32Var = Var<f32>;
+    #[deprecated]
+    pub type F64Var = Var<f64>;
+    #[deprecated]
+    pub type I16Var = Var<i16>;
+    #[deprecated]
+    pub type I32Var = Var<i32>;
+    #[deprecated]
+    pub type I64Var = Var<i64>;
+    #[deprecated]
+    pub type U16Var = Var<u16>;
+    #[deprecated]
+    pub type U32Var = Var<u32>;
+    #[deprecated]
+    pub type U64Var = Var<u64>;
 
-#[deprecated]
-pub type BoolVar = Var<bool>;
-#[deprecated]
-pub type HalfVar = Var<f16>;
-#[deprecated]
-pub type FloatVar = Var<f32>;
-#[deprecated]
-pub type DoubleVar = Var<f64>;
-#[deprecated]
-pub type IntVar = Var<i32>;
-#[deprecated]
-pub type LongVar = Var<i64>;
-#[deprecated]
-pub type UintVar = Var<u32>;
-#[deprecated]
-pub type UlongVar = Var<u64>;
-#[deprecated]
-pub type ShortVar = Var<i16>;
-#[deprecated]
-pub type UshortVar = Var<u16>;
+    #[deprecated]
+    pub type Half = Expr<f16>;
+    #[deprecated]
+    pub type Float = Expr<f32>;
+    #[deprecated]
+    pub type Double = Expr<f64>;
+    #[deprecated]
+    pub type Int = Expr<i32>;
+    #[deprecated]
+    pub type Long = Expr<i64>;
+    #[deprecated]
+    pub type Uint = Expr<u32>;
+    #[deprecated]
+    pub type Ulong = Expr<u64>;
+    #[deprecated]
+    pub type Short = Expr<i16>;
+    #[deprecated]
+    pub type Ushort = Expr<u16>;
+
+    #[deprecated]
+    pub type BoolVar = Var<bool>;
+    #[deprecated]
+    pub type HalfVar = Var<f16>;
+    #[deprecated]
+    pub type FloatVar = Var<f32>;
+    #[deprecated]
+    pub type DoubleVar = Var<f64>;
+    #[deprecated]
+    pub type IntVar = Var<i32>;
+    #[deprecated]
+    pub type LongVar = Var<i64>;
+    #[deprecated]
+    pub type UintVar = Var<u32>;
+    #[deprecated]
+    pub type UlongVar = Var<u64>;
+    #[deprecated]
+    pub type ShortVar = Var<i16>;
+    #[deprecated]
+    pub type UshortVar = Var<u16>;
+}

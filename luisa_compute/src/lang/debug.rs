@@ -111,7 +111,7 @@ pub fn __cpu_dbg<V: Value + Debug>(arg: Expr<V>, file: &'static str, line: u32) 
     if !is_cpu_backend() {
         return;
     }
-    let f = CpuFn::new(move |x: &mut T::Value| {
+    let f = CpuFn::new(move |x: &mut V| {
         println!("[{}:{}] {:?}", file, line, x);
     });
     let _ = f.call(arg);

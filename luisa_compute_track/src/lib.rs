@@ -142,6 +142,16 @@ impl VisitMut for TraceVisitor {
                         return;
                     }
                 }
+                let left = if let Expr::Paren(ExprParen { expr, .. }) = &**left {
+                    expr
+                } else {
+                    left
+                };
+                let right = if let Expr::Paren(ExprParen { expr, .. }) = &**right {
+                    expr
+                } else {
+                    right
+                };
                 let op_fn_str = match &expr.op {
                     BinOp::Add(_) => "__add",
                     BinOp::Sub(_) => "__sub",

@@ -54,7 +54,7 @@ impl VisitMut for TraceVisitor {
                 }) = &**left
                 {
                     *node = parse_quote_spanned! {span=>
-                        <_ as #trait_path::StoreMaybeExpr>::store(#expr, #right)
+                        <_ as #trait_path::StoreMaybeExpr<_>>::store(#expr, #right)
                     }
                 }
             }

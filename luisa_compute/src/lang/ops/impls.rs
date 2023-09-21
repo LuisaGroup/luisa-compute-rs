@@ -5,7 +5,11 @@ impl<X: Linear> Expr<X> {
     where
         Y::Scalar: CastFrom<X::Scalar>,
     {
-        assert_eq!(X::N, Y::N, "Cannot cast between scalars/vectors of different dimensions.");
+        assert_eq!(
+            X::N,
+            Y::N,
+            "Cannot cast between scalars/vectors of different dimensions."
+        );
         Func::Cast.call(self)
     }
     pub fn cast<S: VectorElement>(self) -> Expr<X::WithScalar<S>>

@@ -205,6 +205,9 @@ impl<T: Value> Var<T> {
             Expr::<T>::from_nodes(&mut ret.into_iter())
         })
     }
+    pub fn store(&self, value: impl AsExpr<Value = T>) {
+        crate::lang::_store(self, &value.as_expr());
+    }
 }
 
 pub fn _deref_proxy<P: VarProxy>(proxy: &P) -> &Expr<P::Value> {
@@ -308,7 +311,7 @@ pub trait AsExpr: Tracked {
 }
 
 impl<T: Value> AsExpr for T {
-    fn as_expr(&self) -> Expr<Self::Value> {
+    fn as_expr(&self) -> Expr<T> {
         self.expr()
     }
 }

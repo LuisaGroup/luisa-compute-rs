@@ -46,6 +46,8 @@ macro_rules! impl_spread {
 
 macro_rules! call_linear_fn_spread {
     ($f:ident [$($bounds:tt)*]($T:ty)) => {
+        $f!(@sym [$($bounds)*] Expr<$T>: |x| x, Expr<$T>: |x| x => Expr<$T>);
+
         $f!([$($bounds)*] $T: |x| x.expr(), Expr<$T>: |x| x => Expr<$T>);
         $f!(['a, $($bounds)*] &'a $T: |x| x.expr(), Expr<$T>: |x| x => Expr<$T>);
         $f!(['b, $($bounds)*] $T: |x| x.expr(), &'b Expr<$T>: |x| x.clone() => Expr<$T>);

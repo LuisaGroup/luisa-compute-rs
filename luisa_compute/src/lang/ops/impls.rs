@@ -37,15 +37,6 @@ macro_rules! impl_ops_trait {
                 }
             )*
         }
-        impl<$($bounds)*> $TraitExpr for $T where $($where)* {
-            type Output = Self;
-
-            $(
-                fn $fn($sl, $($arg: Self),*) -> Self {
-                    <$T as $TraitThis>::$fn_this($sl, $($arg),*)
-                }
-            )*
-        }
     };
     (
         [$($bounds:tt)*] $TraitExpr:ident [$TraitThis:ident] for $T:ty where [$($where:tt)*] {
@@ -60,15 +51,6 @@ macro_rules! impl_ops_trait {
             $(
                 fn $fn_this($sl, $($arg: Self),*) -> Self::Output {
                    $body
-                }
-            )*
-        }
-        impl<$($bounds)*> $TraitExpr for $T where $($where)* {
-            type Output = $Output;
-
-            $(
-                fn $fn($sl, $($arg: Self),*) -> Self::Output {
-                    <$T as $TraitThis>::$fn_this($sl, $($arg),*)
                 }
             )*
         }

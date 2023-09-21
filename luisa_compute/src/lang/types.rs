@@ -53,6 +53,7 @@ pub trait ExprProxy: Copy + 'static {
     type Value: Value<Expr = Self>;
 
     fn from_expr(expr: Expr<Self::Value>) -> Self;
+    fn as_expr_from_proxy(&self) -> &Expr<Self::Value>;
 }
 
 /// A trait for implementing remote impls on top of an [`Var`] using [`Deref`].
@@ -62,6 +63,7 @@ pub trait ExprProxy: Copy + 'static {
 /// impls.
 pub trait VarProxy: Copy + 'static {
     type Value: Value<Var = Self>;
+    fn as_var_from_proxy(&self) -> &Var<Self::Value>;
 
     fn from_var(expr: Var<Self::Value>) -> Self;
 }
@@ -240,15 +242,31 @@ impl<T: Value> Var<T> {
             b.local_zero_init(<T as TypeOf>::type_())
         }))
     }
-    pub fn load(&self) -> Expr<T> {
-        __current_scope(|b| {
-            let nodes = self.to_vec_nodes();
-            let mut ret = vec![];
-            for node in nodes {
-                ret.push(b.call(Func::Load, &[node], node.type_().clone()));
+    pub fn _ref<'a>(self) -> &'a Self {
+        RECORDER.with(|r| {
+            let r = r.borrow();
+            let v: &Var<T> = r.arena.alloc(self);
+            unsafe {
+                let v: &'a Var<T> = std::mem::transmute(v);
+                v
             }
-            Expr::<T>::from_nodes(&mut ret.into_iter())
         })
+    }
+    pub fn load(&self) -> Expr<T> {
+        Expr::<T>::from_nodes(
+            &mut __current_scope(|b| {
+                let nodes = self.to_vec_nodes();
+                let mut ret = vec![];
+                for node in nodes {
+                    ret.push(b.call(Func::Load, &[node], node.type_().clone()));
+                }
+                ret
+            })
+            .into_iter(),
+        )
+    }
+    pub fn store(&self, value: impl AsExpr<Value = T>) {
+        crate::lang::_store(self, &value.as_expr());
     }
 }
 
@@ -269,6 +287,9 @@ macro_rules! impl_simple_expr_proxy {
             fn from_expr(expr: $crate::lang::types::Expr<$t>) -> Self {
                 Self(expr)
             }
+            fn as_expr_from_proxy(&self) -> &$crate::lang::types::Expr<$t> {
+                &self.0
+            }
         }
     }
 }
@@ -283,6 +304,9 @@ macro_rules! impl_simple_var_proxy {
             type Value = $t;
             fn from_var(var: $crate::lang::types::Var<$t>) -> Self {
                 Self(var)
+            }
+            fn as_var_from_proxy(&self) -> &$crate::lang::types::Var<$t> {
+                &self.0
             }
         }
         impl $(< $($bounds)* >)? std::ops::Deref for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {
@@ -355,7 +379,7 @@ pub trait AsExpr: Tracked {
 }
 
 impl<T: Value> AsExpr for T {
-    fn as_expr(&self) -> Expr<Self::Value> {
+    fn as_expr(&self) -> Expr<T> {
         self.expr()
     }
 }

@@ -1,8 +1,8 @@
 use std::env::current_exe;
 
+use luisa::lang::types::vector::alias::*;
 use luisa::prelude::*;
 use luisa_compute as luisa;
-
 fn main() {
     luisa::init_logger();
     let args: Vec<String> = std::env::args().collect();
@@ -23,20 +23,17 @@ fn main() {
     let z = device.create_buffer::<f32>(1024);
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
-    let kernel = device.create_kernel::<fn(Buffer<f32>)>(&|buf_z| {
+    let kernel = device.create_kernel::<fn(Buffer<f32>)>(track!(&|buf_z| {
         // z is pass by arg
         let buf_x = x.var(); // x and y are captured
         let buf_y = y.var();
         let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
-        let v = Float3::expr(1.0, 1.0, 1.0);
-        let iv = v.as_::<Int3>();
         let vx = 2.0_f32.var(); // create a local mutable variable
-        // *vx.get_mut() += *vx + x;
-        vx.store(vx.load() + x); // store to vx
+        *vx += x; // store to vx
         buf_z.write(tid, vx.load() + y);
-    });
+    }));
     kernel.dispatch([1024, 1, 1], &z);
     let z_data = z.view(..).copy_to_vec();
     println!("{:?}", &z_data[0..16]);

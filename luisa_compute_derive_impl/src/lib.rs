@@ -278,6 +278,9 @@ impl Compiler {
                         
                     }
                 }
+                fn as_expr_from_proxy(&self) -> &#lang_path::types::Expr<#name> {
+                    &self.self_
+                }
             }
             // #[allow(unused_parens)]
             // impl #impl_generics #lang_path::FromNode for #var_proxy_name #ty_generics #where_clause {
@@ -302,6 +305,9 @@ impl Compiler {
                         _marker:std::marker::PhantomData,
                         #(#field_names),*
                     }
+                }
+                fn as_var_from_proxy(&self) -> &#lang_path::types::Var<#name> {
+                    &self.self_
                 }
             }
             #[allow(unused_parens)]

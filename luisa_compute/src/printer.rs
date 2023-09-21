@@ -128,14 +128,15 @@ impl Printer {
         let item_id = items.len() as u32;
 
         if_!(
-            offset.lt(data.len().cast::<u32>())
-                & (offset + 1 + args.count as u32).le(data.len().cast::<u32>()),
+            offset
+                .lt(data.len().cast::<u32>())
+                .bitand((offset.add(1 + args.count as u32)).le(data.len().cast::<u32>())),
             {
                 data.atomic_fetch_add(0, 1);
                 data.write(offset, item_id);
                 let mut cnt = 0;
                 for (i, pack_fn) in args.pack_fn.iter().enumerate() {
-                    pack_fn(offset + 1 + cnt, &data);
+                    pack_fn(offset.add(1 + cnt), &data);
                     cnt += args.count_per_arg[i] as u32;
                 }
             }

@@ -1,4 +1,4 @@
-use crate::lang::types::TrackingType;
+use crate::lang::types::{ExprType, TrackingType, ValueType};
 
 use super::*;
 
@@ -6,7 +6,84 @@ use super::*;
 // when trying to resolve the Expr<T>: SpreadOps<Expr<Vector<T, N>>> bound.
 macro_rules! ops_trait {
     (
-        $TraitExpr:ident<$($T:ident),*> [ $TraitThis:ident] {
+        $TraitExpr:ident<$($T:ident),*> [ $TraitThis:ident, $TraitOrig:ident$(($OrigOutput:path))? => $TraitMaybe:ident ] {
+            $(type $o:ident;)?
+            $(
+                fn $fn:ident [$fn_this:ident, $orig_fn:expr => $fn_maybe:ident] ($self:ident, $($arg:ident: $S:ident),*);
+            )+
+        }
+    ) => {
+        ops_trait!(
+            @XVARS(X, $TraitExpr<$($T),*>, $TraitOrig<$($T),*>)
+            $TraitExpr<$($T),*> [ $TraitThis, $TraitOrig$(($OrigOutput))? => $TraitMaybe ] {
+                $(type $o;)?
+                $(
+                    fn $fn [$fn_this, $orig_fn => $fn_maybe] ($self, $($arg: $S),*);
+                )+
+            }
+        );
+    };
+    (
+        @XVARS($X:ident, $EXPANDED_EXPR:path, $EXPANDED_ORIG:path)
+
+        $TraitExpr:ident<$($T:ident),*> [ $TraitThis:ident, $TraitOrig:ident => $TraitMaybe:ident ] {
+            $(type $o:ident;)?
+            $(
+                fn $fn:ident [$fn_this:ident, $orig_fn:expr => $fn_maybe:ident] ($self:ident, $($arg:ident: $S:ident),*);
+            )+
+        }
+    ) => {
+        ops_trait!(
+            @XVARS($X, $EXPANDED_EXPR, $EXPANDED_ORIG)
+            $TraitExpr<$($T),*> [ $TraitThis, $TraitOrig(<$X as $EXPANDED_ORIG>::Output) => $TraitMaybe ] {
+                $(type $o;)?
+                $(
+                    fn $fn [$fn_this, $orig_fn => $fn_maybe] ($self, $($arg: $S),*);
+                )+
+            }
+        );
+    };
+    (
+        @XVARS($X:ident, $EXPANDED_EXPR:path, $EXPANDED_ORIG:path)
+
+        $TraitExpr:ident<$($T:ident),*> [ $TraitThis:ident, $TraitOrig:ident($($OrigOutput:tt)*) => $TraitMaybe:ident ] {
+            $(type $o:ident;)?
+            $(
+                fn $fn:ident [$fn_this:ident, $orig_fn:expr => $fn_maybe:ident] ($self:ident, $($arg:ident: $S:ident),*);
+            )+
+        }
+    ) => {
+        ops_trait!($TraitExpr <$($T),*> [ $TraitThis ] {
+            $(type $o;)?
+            $(
+                fn $fn [$fn_this] ($self, $($arg: $S),*);
+            )+
+        });
+        trait $TraitMaybe<$($T,)* Ty: TrackingType> {
+            type Output;
+            $(
+                fn $fn_maybe($self, $($arg: $S),*) -> Self::Output;
+            )*
+        }
+        impl<$X $(,$T)*> $TraitMaybe<$($T,)* ExprType> for $X where $X: $EXPANDED_EXPR {
+            type Output = <$X as $EXPANDED_EXPR>::Output;
+            $(
+                fn $fn_maybe($self, $($arg: $S),*) -> Self::Output {
+                    <$X as $EXPANDED_EXPR>::$fn($self, $($arg),*)
+                }
+            )*
+        }
+        impl<$X $(,$T)*> $TraitMaybe<$($T,)* ValueType> for $X where $X: $EXPANDED_ORIG {
+            type Output = $($OrigOutput)*;
+            $(
+                fn $fn_maybe($self, $($arg: $S),*) -> Self::Output {
+                    $orig_fn
+                }
+            )*
+        }
+    };
+    (
+        $TraitExpr:ident<$($T:ident),*> [ $TraitThis:ident ] {
             $(
                 fn $fn:ident [$fn_this:ident] (self, $($arg:ident: $S:ident),*);
             )+
@@ -26,7 +103,7 @@ macro_rules! ops_trait {
         }
     };
     (
-        $TraitExpr:ident<$($T:ident),*> [ $TraitThis:ident] {
+        $TraitExpr:ident<$($T:ident),*> [ $TraitThis:ident ] {
             type Output;
             $(
                 fn $fn:ident [$fn_this:ident] (self, $($arg:ident: $S:ident),*);
@@ -49,11 +126,49 @@ macro_rules! ops_trait {
     }
 }
 
-pub trait MinMaxExpr<T = Self> {
-    type Output;
-    fn max(self, other: T) -> Self::Output;
-    fn min(self, other: T) -> Self::Output;
+macro_rules! simple_binop_trait {
+    ($TraitExpr:ident [$TraitThis:ident, $TraitOrig:ident => $TraitMaybe:ident]: $fn:ident [$fn_this: ident, $fn_orig:ident => $fn_maybe:ident]) => {
+        ops_trait!(
+            $TraitExpr<T>[$TraitThis, $TraitOrig => $TraitMaybe] {
+                fn $fn[$fn_this, <Self as $TraitOrig<_>>::$fn_orig(self, rhs) => $fn_maybe](self, rhs: T);
+            }
+        );
+    }
 }
+
+macro_rules! assignop_trait {
+    ($TraitExpr:ident [$TraitOrig:ident => $TraitMaybe:ident]: $fn:ident [$fn_orig:ident => $fn_maybe:ident]) => {
+        pub trait $TraitExpr<T = Self> {
+            fn $fn(self, other: T);
+        }
+        pub trait $TraitMaybe<T, Ty: TrackingType> {
+            fn $fn_maybe(self, other: T);
+        }
+        impl<X, T> $TraitMaybe<T, ExprType> for X
+        where
+            X: $TraitExpr<T>,
+        {
+            fn $fn_maybe(self, other: T) {
+                <X as $TraitExpr<T>>::$fn(self, other)
+            }
+        }
+        impl<X, T> $TraitMaybe<T, ValueType> for &mut X
+        where
+            X: $TraitOrig<T>,
+        {
+            fn $fn_maybe(self, other: T) {
+                <X as $TraitOrig<T>>::$fn_orig(self, other)
+            }
+        }
+    };
+}
+
+ops_trait!(MinMaxExpr<T>[MinMaxThis] {
+    type Output;
+
+    fn max_expr[_max_expr](self, other: T);
+    fn min_expr[_min_expr](self, other: T);
+});
 
 ops_trait!(ClampExpr<A, B>[ClampThis] {
     fn clamp[_clamp](self, min: A, max: B);
@@ -63,22 +178,32 @@ pub trait AbsExpr {
     fn abs(&self) -> Self;
 }
 
-ops_trait!(EqExpr<T>[EqThis] {
+ops_trait!(EqExpr<T>[EqThis, PartialEq(bool) => EqMaybeExpr] {
     type Output;
 
-    fn eq[_eq](self, other: T);
-    fn ne[_ne](self, other: T);
+    fn eq[_eq, self == other => __eq](self, other: T);
+    fn ne[_ne, self != other => __ne](self, other: T);
 });
 
-ops_trait!(CmpExpr<T>[CmpThis] {
+ops_trait!(CmpExpr<T>[CmpThis, PartialOrd(bool) => CmpMaybeExpr] {
     type Output;
 
-    fn lt[_lt](self, other: T);
-    fn le[_le](self, other: T);
-    fn gt[_gt](self, other: T);
-    fn ge[_ge](self, other: T);
+    fn lt[_lt, self < other => __lt](self, other: T);
+    fn le[_le, self <= other => __le](self, other: T);
+    fn gt[_gt, self > other => __gt](self, other: T);
+    fn ge[_ge, self >= other => __ge](self, other: T);
 });
 
+simple_binop_trait!(AddExpr[AddThis, Add => AddMaybeExpr]: add[_add, add => __add]);
+simple_binop_trait!(SubExpr[SubThis, Sub => SubMaybeExpr]: sub[_sub, sub => __sub]);
+simple_binop_trait!(MulExpr[MulThis, Mul => MulMaybeExpr]: mul[_mul, mul => __mul]);
+simple_binop_trait!(DivExpr[DivThis, Div => DivMaybeExpr]: div[_div, div => __div]);
+simple_binop_trait!(RemExpr[RemThis, Rem => RemMaybeExpr]: rem[_rem, rem => __rem]);
+simple_binop_trait!(BitAndExpr[BitAndThis, BitAnd => BitAndMaybeExpr]: bitand[_bitand, bitand => __bitand]);
+simple_binop_trait!(BitOrExpr[BitOrThis, BitOr => BitOrMaybeExpr]: bitor[_bitor, bitor => __bitor]);
+simple_binop_trait!(BitXorExpr[BitXorThis, BitXor => BitXorMaybeExpr]: bitxor[_bitxor, bitxor => __bitxor]);
+simple_binop_trait!(ShlExpr[ShlThis, Shl => ShlMaybeExpr]: shl[_shl, shl => __shl]);
+simple_binop_trait!(ShrExpr[ShrThis, Shr => ShrMaybeExpr]: shr[_shr, shr => __shr]);
 pub trait IntExpr {
     fn rotate_right(&self, n: Expr<u32>) -> Self;
     fn rotate_left(&self, n: Expr<u32>) -> Self;
@@ -159,6 +284,19 @@ ops_trait!(FloatLerpExpr<A, B>[FloatLerpThis] {
     fn lerp[_lerp](self, other: A, frac: B);
 });
 
+assignop_trait!(AddAssignExpr[AddAssign => AddAssignMaybeExpr]: add_assign[add_assign => __add_assign]);
+assignop_trait!(SubAssignExpr[SubAssign => SubAssignMaybeExpr]: sub_assign[sub_assign => __sub_assign]);
+assignop_trait!(MulAssignExpr[MulAssign => MulAssignMaybeExpr]: mul_assign[mul_assign => __mul_assign]);
+assignop_trait!(DivAssignExpr[DivAssign => DivAssignMaybeExpr]: div_assign[div_assign => __div_assign]);
+assignop_trait!(RemAssignExpr[RemAssign => RemAssignMaybeExpr]: rem_assign[rem_assign => __rem_assign]);
+assignop_trait!(BitAndAssignExpr[BitAndAssign => BitAndAssignMaybeExpr]: bitand_assign[bitand_assign => __bitand_assign]);
+assignop_trait!(BitOrAssignExpr[BitOrAssign => BitOrAssignMaybeExpr]: bitor_assign[bitor_assign => __bitor_assign]);
+assignop_trait!(BitXorAssignExpr[BitXorAssign => BitXorAssignMaybeExpr]: bitxor_assign[bitxor_assign => __bitxor_assign]);
+assignop_trait!(ShlAssignExpr[ShlAssign => ShlAssignMaybeExpr]: shl_assign[shl_assign => __shl_assign]);
+assignop_trait!(ShrAssignExpr[ShrAssign => ShrAssignMaybeExpr]: shr_assign[shr_assign => __shr_assign]);
+
+// Traits for track!.
+
 pub trait StoreMaybeExpr<V> {
     fn store(self, value: V);
 }
@@ -176,22 +314,8 @@ pub trait LoopMaybeExpr {
     fn while_loop(cond: impl FnMut() -> Self, body: impl FnMut());
 }
 
-pub trait LazyBoolMaybeExpr<T = Self> {
+pub trait LazyBoolMaybeExpr<T, Ty: TrackingType> {
     type Bool;
-    fn __and(self, other: impl FnOnce() -> T) -> Self::Bool;
-    fn __or(self, other: impl FnOnce() -> T) -> Self::Bool;
-}
-
-pub trait EqMaybeExpr<T, Ty: TrackingType> {
-    type Bool;
-    fn __eq(self, other: T) -> Self::Bool;
-    fn __ne(self, other: T) -> Self::Bool;
-}
-
-pub trait CmpMaybeExpr<T, Ty: TrackingType> {
-    type Bool;
-    fn __lt(self, other: T) -> Self::Bool;
-    fn __le(self, other: T) -> Self::Bool;
-    fn __gt(self, other: T) -> Self::Bool;
-    fn __ge(self, other: T) -> Self::Bool;
+    fn and(self, other: impl FnOnce() -> T) -> Self::Bool;
+    fn or(self, other: impl FnOnce() -> T) -> Self::Bool;
 }

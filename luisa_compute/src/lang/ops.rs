@@ -4,10 +4,11 @@ use std::ops::*;
 use super::types::core::{Floating, Integral, Numeric, Primitive, Signed};
 use super::types::vector::{VectorAlign, VectorElement};
 
-pub mod impls;
-pub mod spread;
-pub mod traits;
+mod impls;
+mod spread;
+mod traits;
 
+pub use spread::*;
 pub use traits::*;
 
 pub unsafe trait CastFrom<T: Primitive>: Primitive {}

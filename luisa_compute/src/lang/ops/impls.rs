@@ -74,18 +74,22 @@ macro_rules! impl_ops_trait {
         }
     }
 }
-impl<X: Linear> MinMaxExpr for Expr<X>
-where
-    X::Scalar: Numeric,
-{
-    type Output = Self;
-    fn max(self, other: Self) -> Self {
-        Func::Max.call2(self, other)
-    }
-    fn min(self, other: Self) -> Self {
-        Func::Min.call2(self, other)
+macro_rules! impl_simple_binop {
+    (
+        [$($bounds:tt)*] $TraitExpr:ident [$TraitThis:ident] for $T:ty where [$($where:tt)*]: $fn:ident [$fn_this:ident] ($func:ident)
+    ) => {
+        impl_ops_trait!([$($bounds)*] $TraitExpr [$TraitThis] for $T where [$($where)*] {
+            fn $fn[$fn_this](self, other) { Func::$func.call2(self, other) }
+        });
     }
 }
+
+impl_ops_trait!([X: Linear] MinMaxExpr[MinMaxThis] for Expr<X> where [X::Scalar: Numeric] {
+    type Output = Expr<X::WithScalar<X::Scalar>>;
+
+    fn max_expr[_max_expr](self, other) { Func::Max.call2(self, other) }
+    fn min_expr[_min_expr](self, other) { Func::Min.call2(self, other) }
+});
 
 impl_ops_trait!([X: Linear] ClampExpr[ClampThis] for Expr<X> where [X::Scalar: Numeric] {
     fn clamp[_clamp](self, min, max) { Func::Clamp.call3(self, min, max) }
@@ -116,97 +120,16 @@ impl_ops_trait!([X: Linear] CmpExpr[CmpThis] for Expr<X> where [X::Scalar: Numer
     fn ge[_ge](self, other) { Func::Ge.call2(self, other) }
 });
 
-impl<X: Linear> Add for Expr<X>
-where
-    X::Scalar: Numeric,
-{
-    type Output = Self;
-    fn add(self, other: Self) -> Self {
-        Func::Add.call2(self, other)
-    }
-}
-impl<X: Linear> Sub for Expr<X>
-where
-    X::Scalar: Numeric,
-{
-    type Output = Self;
-    fn sub(self, other: Self) -> Self {
-        Func::Sub.call2(self, other)
-    }
-}
-impl<X: Linear> Mul for Expr<X>
-where
-    X::Scalar: Numeric,
-{
-    type Output = Self;
-    fn mul(self, other: Self) -> Self {
-        Func::Mul.call2(self, other)
-    }
-}
-impl<X: Linear> Div for Expr<X>
-where
-    X::Scalar: Numeric,
-{
-    type Output = Self;
-    fn div(self, other: Self) -> Self {
-        Func::Div.call2(self, other)
-    }
-}
-impl<X: Linear> Rem for Expr<X>
-where
-    X::Scalar: Numeric,
-{
-    type Output = Self;
-    fn rem(self, other: Self) -> Self {
-        Func::Rem.call2(self, other)
-    }
-}
-
-impl<X: Linear> BitAnd for Expr<X>
-where
-    X::Scalar: Integral,
-{
-    type Output = Self;
-    fn bitand(self, other: Self) -> Self {
-        Func::BitAnd.call2(self, other)
-    }
-}
-impl<X: Linear> BitOr for Expr<X>
-where
-    X::Scalar: Integral,
-{
-    type Output = Self;
-    fn bitor(self, other: Self) -> Self {
-        Func::BitOr.call2(self, other)
-    }
-}
-impl<X: Linear> BitXor for Expr<X>
-where
-    X::Scalar: Integral,
-{
-    type Output = Self;
-    fn bitxor(self, other: Self) -> Self {
-        Func::BitXor.call2(self, other)
-    }
-}
-impl<X: Linear> Shl for Expr<X>
-where
-    X::Scalar: Integral,
-{
-    type Output = Self;
-    fn shl(self, other: Self) -> Self {
-        Func::Shl.call2(self, other)
-    }
-}
-impl<X: Linear> Shr for Expr<X>
-where
-    X::Scalar: Integral,
-{
-    type Output = Self;
-    fn shr(self, other: Self) -> Self {
-        Func::Shr.call2(self, other)
-    }
-}
+impl_simple_binop!([X: Linear] AddExpr[AddThis] for Expr<X> where [X::Scalar: Numeric]: add[_add](Add));
+impl_simple_binop!([X: Linear] SubExpr[SubThis] for Expr<X> where [X::Scalar: Numeric]: sub[_sub](Sub));
+impl_simple_binop!([X: Linear] MulExpr[MulThis] for Expr<X> where [X::Scalar: Numeric]: mul[_mul](Mul));
+impl_simple_binop!([X: Linear] DivExpr[DivThis] for Expr<X> where [X::Scalar: Numeric]: div[_div](Div));
+impl_simple_binop!([X: Linear] RemExpr[RemThis] for Expr<X> where [X::Scalar: Numeric]: rem[_rem](Rem));
+impl_simple_binop!([X: Linear] BitAndExpr[BitAndThis] for Expr<X> where [X::Scalar: Integral]: bitand[_bitand](BitAnd));
+impl_simple_binop!([X: Linear] BitOrExpr[BitOrThis] for Expr<X> where [X::Scalar: Integral]: bitor[_bitor](BitOr));
+impl_simple_binop!([X: Linear] BitXorExpr[BitXorThis] for Expr<X> where [X::Scalar: Integral]: bitxor[_bitxor](BitXor));
+impl_simple_binop!([X: Linear] ShlExpr[ShlThis] for Expr<X> where [X::Scalar: Integral]: shl[_shl](Shl));
+impl_simple_binop!([X: Linear] ShrExpr[ShrThis] for Expr<X> where [X::Scalar: Integral]: shr[_shr](Shr));
 
 impl<X: Linear> Neg for Expr<X>
 where
@@ -280,7 +203,7 @@ where
         log10 => Log10
     }
     fn is_finite(&self) -> Self::Bool {
-        !self.is_infinite() & !self.is_nan()
+        !self.is_infinite().bitand(!self.is_nan())
     }
     fn is_infinite(&self) -> Self::Bool {
         Func::IsInf.call(self.clone())
@@ -289,10 +212,10 @@ where
         Func::IsNan.call(self.clone())
     }
     fn sqr(&self) -> Self {
-        self.clone() * self.clone()
+        self.clone().mul(self.clone())
     }
     fn cube(&self) -> Self {
-        self.clone() * self.clone() * self.clone()
+        self.clone().mul(self.clone()).mul(self.clone())
     }
     fn recip(&self) -> Self {
         todo!()
@@ -323,7 +246,7 @@ impl_ops_trait!([X: Linear] FloatArcTan2Expr[FloatArcTan2This] for Expr<X> where
 });
 
 impl_ops_trait!([X: Linear] FloatLogExpr[FloatLogThis] for Expr<X> where [X::Scalar: Floating] {
-    fn log[_log](self, base) { self.ln() / base.ln()}
+    fn log[_log](self, base) { self.ln().div(base.ln()) }
 });
 
 impl_ops_trait!([X: Linear] FloatPowfExpr[FloatPowfThis] for Expr<X> where [X::Scalar: Floating] {
@@ -415,25 +338,25 @@ impl LoopMaybeExpr for Expr<bool> {
     }
 }
 
-impl LazyBoolMaybeExpr for bool {
+impl LazyBoolMaybeExpr<bool, ValueType> for bool {
     type Bool = bool;
-    fn __and(self, other: impl FnOnce() -> bool) -> bool {
+    fn and(self, other: impl FnOnce() -> bool) -> bool {
         self && other()
     }
-    fn __or(self, other: impl FnOnce() -> bool) -> bool {
+    fn or(self, other: impl FnOnce() -> bool) -> bool {
         self || other()
     }
 }
-impl LazyBoolMaybeExpr<Expr<bool>> for bool {
+impl LazyBoolMaybeExpr<Expr<bool>, ExprType> for bool {
     type Bool = Expr<bool>;
-    fn __and(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+    fn and(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
         if self {
             other()
         } else {
             false.expr()
         }
     }
-    fn __or(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+    fn or(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
         if self {
             true.expr()
         } else {
@@ -441,16 +364,16 @@ impl LazyBoolMaybeExpr<Expr<bool>> for bool {
         }
     }
 }
-impl LazyBoolMaybeExpr<bool> for Expr<bool> {
+impl LazyBoolMaybeExpr<bool, ExprType> for Expr<bool> {
     type Bool = Expr<bool>;
-    fn __and(self, other: impl FnOnce() -> bool) -> Self::Bool {
+    fn and(self, other: impl FnOnce() -> bool) -> Self::Bool {
         if other() {
             self
         } else {
             false.expr()
         }
     }
-    fn __or(self, other: impl FnOnce() -> bool) -> Self::Bool {
+    fn or(self, other: impl FnOnce() -> bool) -> Self::Bool {
         if other() {
             true.expr()
         } else {
@@ -458,74 +381,12 @@ impl LazyBoolMaybeExpr<bool> for Expr<bool> {
         }
     }
 }
-impl LazyBoolMaybeExpr for Expr<bool> {
+impl LazyBoolMaybeExpr<Expr<bool>, ExprType> for Expr<bool> {
     type Bool = Expr<bool>;
-    fn __and(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+    fn and(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
         crate::lang::control_flow::if_then_else(self, other, || false.expr())
     }
-    fn __or(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+    fn or(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
         crate::lang::control_flow::if_then_else(self, || true.expr(), other)
-    }
-}
-
-impl<T, S> EqMaybeExpr<S, ExprType> for T
-where
-    T: EqExpr<S>,
-{
-    type Bool = <T as EqExpr<S>>::Output;
-    fn __eq(self, other: S) -> Self::Bool {
-        self.eq(other)
-    }
-    fn __ne(self, other: S) -> Self::Bool {
-        self.ne(other)
-    }
-}
-impl<T, S> EqMaybeExpr<S, ValueType> for T
-where
-    T: PartialEq<S>,
-{
-    type Bool = bool;
-    fn __eq(self, other: S) -> Self::Bool {
-        self == other
-    }
-    fn __ne(self, other: S) -> Self::Bool {
-        self != other
-    }
-}
-
-impl<T, S> CmpMaybeExpr<S, ExprType> for T
-where
-    T: CmpExpr<S>,
-{
-    type Bool = <T as CmpExpr<S>>::Output;
-    fn __lt(self, other: S) -> Self::Bool {
-        self.lt(other)
-    }
-    fn __le(self, other: S) -> Self::Bool {
-        self.le(other)
-    }
-    fn __gt(self, other: S) -> Self::Bool {
-        self.gt(other)
-    }
-    fn __ge(self, other: S) -> Self::Bool {
-        self.ge(other)
-    }
-}
-impl<T, S> CmpMaybeExpr<S, ValueType> for T
-where
-    T: PartialOrd<S>,
-{
-    type Bool = bool;
-    fn __lt(self, other: S) -> Self::Bool {
-        self < other
-    }
-    fn __le(self, other: S) -> Self::Bool {
-        self <= other
-    }
-    fn __gt(self, other: S) -> Self::Bool {
-        self > other
-    }
-    fn __ge(self, other: S) -> Self::Bool {
-        self >= other
     }
 }

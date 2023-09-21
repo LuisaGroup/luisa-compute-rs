@@ -52,6 +52,9 @@ pub trait Value: Copy + TypeOf + 'static {
 /// exposes an [`Index`](std::ops::Index) impl.
 pub trait ExprProxy: Clone + HasExprLayout<<Self::Value as Value>::ExprData> + 'static {
     type Value: Value<Expr = Self>;
+    fn as_expr_from_proxy(&self) -> &Expr<Self::Value> {
+        unsafe { &*(self as *const Self as *const Expr<Self::Value>) }
+    }
 }
 
 /// A trait for implementing remote impls on top of an [`Var`] using [`Deref`].
@@ -63,6 +66,9 @@ pub trait VarProxy:
     Clone + HasVarLayout<<Self::Value as Value>::VarData> + Deref<Target = Expr<Self::Value>> + 'static
 {
     type Value: Value<Var = Self>;
+    fn as_var_from_proxy(&self) -> &Var<Self::Value> {
+        unsafe { &*(self as *const Self as *const Var<Self::Value>) }
+    }
 }
 /// This marker trait states that `Self` has the same layout as an [`Expr<T>`]
 /// with `T::ExprData = X`.

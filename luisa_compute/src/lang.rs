@@ -49,13 +49,16 @@ pub(crate) trait CallFuncTrait {
 }
 impl CallFuncTrait for Func {
     fn call<T: Value, S: Value>(self, x: Expr<T>) -> Expr<S> {
+        let x = x.node();
         Expr::<S>::from_node(__current_scope(|b| {
-            b.call(self, &[x.node()], <S as TypeOf>::type_())
+            b.call(self, &[x], <S as TypeOf>::type_())
         }))
     }
     fn call2<T: Value, S: Value, U: Value>(self, x: Expr<T>, y: Expr<S>) -> Expr<U> {
+        let x = x.node();
+        let y = y.node();
         Expr::<U>::from_node(__current_scope(|b| {
-            b.call(self, &[x.node(), y.node()], <U as TypeOf>::type_())
+            b.call(self, &[x, y], <U as TypeOf>::type_())
         }))
     }
     fn call3<T: Value, S: Value, U: Value, V: Value>(
@@ -64,27 +67,32 @@ impl CallFuncTrait for Func {
         y: Expr<S>,
         z: Expr<U>,
     ) -> Expr<V> {
+        let x = x.node();
+        let y = y.node();
+        let z = z.node();
         Expr::<V>::from_node(__current_scope(|b| {
-            b.call(
-                self,
-                &[x.node(), y.node(), z.node()],
-                <V as TypeOf>::type_(),
-            )
+            b.call(self, &[x, y, z], <V as TypeOf>::type_())
         }))
     }
     fn call_void<T: Value>(self, x: Expr<T>) {
+        let x = x.node();
         __current_scope(|b| {
-            b.call(self, &[x.node()], Type::void());
+            b.call(self, &[x], Type::void());
         });
     }
     fn call2_void<T: Value, S: Value>(self, x: Expr<T>, y: Expr<S>) {
+        let x = x.node();
+        let y = y.node();
         __current_scope(|b| {
-            b.call(self, &[x.node(), y.node()], Type::void());
+            b.call(self, &[x, y], Type::void());
         });
     }
     fn call3_void<T: Value, S: Value, U: Value>(self, x: Expr<T>, y: Expr<S>, z: Expr<U>) {
+        let x = x.node();
+        let y = y.node();
+        let z = z.node();
         __current_scope(|b| {
-            b.call(self, &[x.node(), y.node(), z.node()], Type::void());
+            b.call(self, &[x, y, z], Type::void());
         });
     }
 }

@@ -1680,13 +1680,9 @@ impl<T: Value> IndexRead for BufferVar<T> {
         if need_runtime_check() {
             lc_assert!(i.lt(self.len()));
         }
-        __current_scope(|b| {
-            FromNode::from_node(b.call(
-                Func::BufferRead,
-                &[self.node, ToNode::node(&i)],
-                T::type_(),
-            ))
-        })
+        Expr::<T>::from_node(__current_scope(|b| {
+            b.call(Func::BufferRead, &[self.node, ToNode::node(&i)], T::type_())
+        }))
     }
 }
 impl<T: Value> IndexWrite for BufferVar<T> {

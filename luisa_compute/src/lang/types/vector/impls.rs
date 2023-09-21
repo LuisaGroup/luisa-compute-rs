@@ -143,3 +143,36 @@ pub trait VectorExprProxy {
         }))
     }
 }
+impl<T: VectorAlign<2>> VectorExprProxy2<T> {
+    pub fn dot(&self, other: impl AsExpr<Value = Vector<T, 2>>) -> Expr<T> {
+        Expr::<T>::from_node(__current_scope(|s| {
+            s.call(
+                Func::Dot,
+                &[self.node(), other.as_expr().node()],
+                T::type_(),
+            )
+        }))
+    }
+}
+impl<T: VectorAlign<3>> VectorExprProxy3<T> {
+    pub fn dot(&self, other: impl AsExpr<Value = Vector<T, 3>>) -> Expr<T> {
+        Expr::<T>::from_node(__current_scope(|s| {
+            s.call(
+                Func::Dot,
+                &[self.node(), other.as_expr().node()],
+                T::type_(),
+            )
+        }))
+    }
+}
+impl<T: VectorAlign<4>> VectorExprProxy4<T> {
+    pub fn dot(&self, other: impl AsExpr<Value = Vector<T, 4>>) -> Expr<T> {
+        Expr::<T>::from_node(__current_scope(|s| {
+            s.call(
+                Func::Dot,
+                &[self.node(), other.as_expr().node()],
+                T::type_(),
+            )
+        }))
+    }
+}

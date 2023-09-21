@@ -186,8 +186,14 @@ impl VisitMut for TraceVisitor {
                 if !op_fn_str.is_empty() {
                     let op_fn = Ident::new(op_fn_str, expr.op.span());
                     let op_trait = Ident::new(op_trait_str, expr.op.span());
-                    *node = parse_quote_spanned! {span=>
-                        <_ as #trait_path::#op_trait<_, _>>::#op_fn(#left, #right)
+                    if let BinOp::And(_) | BinOp::Or(_) = &expr.op {
+                        *node = parse_quote_spanned! {span=>
+                            <_ as #trait_path::#op_trait<_, _>>::#op_fn(#left, || #right)
+                        };
+                    } else {
+                        *node = parse_quote_spanned! {span=>
+                            <_ as #trait_path::#op_trait<_, _>>::#op_fn(#left, #right)
+                        };
                     }
                 }
             }

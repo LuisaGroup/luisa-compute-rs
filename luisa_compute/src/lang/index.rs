@@ -25,7 +25,7 @@ impl IntoIndex for u64 {
 }
 impl IntoIndex for Expr<u32> {
     fn to_u64(&self) -> Expr<u64> {
-        self.ulong()
+        self.cast::<u64>()
     }
 }
 impl IntoIndex for Expr<u64> {
@@ -40,5 +40,5 @@ pub trait IndexRead: ToNode {
 }
 
 pub trait IndexWrite: IndexRead {
-    fn write<I: IntoIndex, V: Into<Expr<Self::Element>>>(&self, i: I, value: V);
+    fn write<I: IntoIndex, V: AsExpr<Value = Self::Element>>(&self, i: I, value: V);
 }

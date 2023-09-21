@@ -906,15 +906,15 @@ macro_rules! impl_io_texel {
         }
     };
 }
-impl_io_texel!(f32, f32, Float4, |x: Float4Expr| x.x(), |x| {
-    Float4Expr::splat(x)
+impl_io_texel!(f32, f32, Float4, |x: Float4Expr| x.x, |x| {
+    Float4::splat_expr(x)
 });
 impl_io_texel!(
     Float2,
     f32,
     Float4,
     |x: Float4Expr| x.xy(),
-    |x: Float2Expr| { Float4::expr(x.x(), x.y(), 0.0, 0.0) }
+    |x: Float2Expr| { Float4::expr(x.x, x.y, 0.0, 0.0) }
 );
 impl_io_texel!(Float4, f32, Float4, |x: Float4Expr| x, |x: Float4Expr| x);
 
@@ -924,15 +924,15 @@ impl_io_texel!(Float4, f32, Float4, |x: Float4Expr| x, |x: Float4Expr| x);
 // impl_io_texel!(Short2,);
 // impl_io_texel!(Ushort4,);
 // impl_io_texel!(Short4,);
-impl_io_texel!(u32, u32, Uint4, |x: Uint4Expr| x.x(), |x| Uint4Expr::splat(
+impl_io_texel!(u32, u32, Uint4, |x: Uint4Expr| x.x, |x| Uint4::splat_expr(
     x
 ));
-impl_io_texel!(i32, i32, Int4, |x: Int4Expr| x.x(), |x| Int4Expr::splat(x));
+impl_io_texel!(i32, i32, Int4, |x: Int4Expr| x.x, |x| Int4::splat_expr(x));
 impl_io_texel!(Uint2, u32, Uint4, |x: Uint4Expr| x.xy(), |x: Uint2Expr| {
-    Uint4::expr(x.x(), x.y(), 0u32, 0u32)
+    Uint4::expr(x.x, x.y, 0u32, 0u32)
 });
 impl_io_texel!(Int2, i32, Int4, |x: Int4Expr| x.xy(), |x: Int2Expr| {
-    Int4::expr(x.x(), x.y(), 0i32, 0i32)
+    Int4::expr(x.x, x.y, 0i32, 0i32)
 });
 impl_io_texel!(Uint4, u32, Uint4, |x: Uint4Expr| x, |x| x);
 impl_io_texel!(Int4, i32, Int4, |x: Int4Expr| x, |x| x);
@@ -1003,8 +1003,9 @@ impl_storage_texel!(Half4, Half4, f32, Float2, Float4,);
 impl_storage_texel!([f16; 2], Byte2, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 impl_storage_texel!([f16; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uint4,);
 
-// `T` is the read out type of the texture, which is not necessarily the same as the storage type
-// In fact, the texture can be stored in any format as long as it can be converted to `T`
+// `T` is the read out type of the texture, which is not necessarily the same as
+// the storage type In fact, the texture can be stored in any format as long as
+// it can be converted to `T`
 pub struct Tex2d<T: IoTexel> {
     #[allow(dead_code)]
     pub(crate) width: u32,
@@ -1014,8 +1015,9 @@ pub struct Tex2d<T: IoTexel> {
     pub(crate) marker: PhantomData<T>,
 }
 
-// `T` is the read out type of the texture, which is not necessarily the same as the storage type
-// In fact, the texture can be stored in any format as long as it can be converted to `T`
+// `T` is the read out type of the texture, which is not necessarily the same as
+// the storage type In fact, the texture can be stored in any format as long as
+// it can be converted to `T`
 pub struct Tex3d<T: IoTexel> {
     #[allow(dead_code)]
     pub(crate) width: u32,
@@ -1214,8 +1216,8 @@ impl<'a, T: IoTexel> Tex2dView<'a, T> {
     }
     pub fn size(&self) -> [u32; 3] {
         [
-            (self.tex.handle.width >> self.level).max(1),
-            (self.tex.handle.height >> self.level).max(1),
+            Ord::max(self.tex.handle.width >> self.level, 1),
+            Ord::max(self.tex.handle.height >> self.level, 1),
             1,
         ]
     }
@@ -1234,9 +1236,9 @@ impl<'a, T: IoTexel> Tex3dView<'a, T> {
     }
     pub fn size(&self) -> [u32; 3] {
         [
-            (self.tex.handle.width >> self.level).max(1),
-            (self.tex.handle.height >> self.level).max(1),
-            (self.tex.handle.depth >> self.level).max(1),
+            Ord::max(self.tex.handle.width >> self.level, 1),
+            Ord::max(self.tex.handle.height >> self.level, 1),
+            Ord::max(self.tex.handle.depth >> self.level, 1),
         ]
     }
     pub fn var(&self) -> Tex3dVar<T> {
@@ -1325,7 +1327,7 @@ impl<T: Value> IndexRead for BindlessBufferVar<T> {
     fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
         let i = i.to_u64();
         if need_runtime_check() {
-            lc_assert!(i.cmplt(self.len()));
+            lc_assert!(i.lt(self.len()));
         }
 
         Expr::<T>::from_node(__current_scope(|b| {
@@ -1614,7 +1616,7 @@ impl BindlessArrayVar {
         } else if is_cpu_backend() {
             if need_runtime_check() {
                 let expected = type_hash(&T::type_());
-                lc_assert!(v.__type().cmpeq(expected));
+                lc_assert!(v.__type().eq(expected));
             }
         }
         v
@@ -1661,7 +1663,7 @@ impl<T: Value> IndexRead for Buffer<T> {
     }
 }
 impl<T: Value> IndexWrite for Buffer<T> {
-    fn write<I: IntoIndex, V: Into<Expr<T>>>(&self, i: I, v: V) {
+    fn write<I: IntoIndex, V: AsExpr<Value = T>>(&self, i: I, v: V) {
         self.var().write(i, v)
     }
 }
@@ -1670,7 +1672,7 @@ impl<T: Value> IndexRead for BufferVar<T> {
     fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
         let i = i.to_u64();
         if need_runtime_check() {
-            lc_assert!(i.cmplt(self.len()));
+            lc_assert!(i.lt(self.len()));
         }
         __current_scope(|b| {
             FromNode::from_node(b.call(
@@ -1682,11 +1684,11 @@ impl<T: Value> IndexRead for BufferVar<T> {
     }
 }
 impl<T: Value> IndexWrite for BufferVar<T> {
-    fn write<I: IntoIndex, V: Into<Expr<T>>>(&self, i: I, v: V) {
+    fn write<I: IntoIndex, V: AsExpr<Value = T>>(&self, i: I, v: V) {
         let i = i.to_u64();
-        let v = v.into();
+        let v = v.as_expr();
         if need_runtime_check() {
-            lc_assert!(i.cmplt(self.len()));
+            lc_assert!(i.lt(self.len()));
         }
         __current_scope(|b| {
             b.call(
@@ -1736,11 +1738,15 @@ impl<T: Value> BufferVar<T> {
 macro_rules! impl_atomic {
     ($t:ty) => {
         impl BufferVar<$t> {
-            pub fn atomic_exchange<I: IntoIndex, V: Into<Expr<$t>>>(&self, i: I, v: V) -> Expr<$t> {
+            pub fn atomic_exchange<I: IntoIndex, V: AsExpr<Value = $t>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
                 let i = i.to_u64();
-                let v = v.into();
+                let v = v.as_expr();
                 if need_runtime_check() {
-                    lc_assert!(i.cmplt(self.len()));
+                    lc_assert!(i.lt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1750,17 +1756,21 @@ macro_rules! impl_atomic {
                     )
                 }))
             }
-            pub fn atomic_compare_exchange<I: IntoIndex, V0: Into<Expr<$t>>, V1: Into<Expr<$t>>>(
+            pub fn atomic_compare_exchange<
+                I: IntoIndex,
+                V0: AsExpr<Value = $t>,
+                V1: AsExpr<Value = $t>,
+            >(
                 &self,
                 i: I,
                 expected: V0,
                 desired: V1,
             ) -> Expr<$t> {
                 let i = i.to_u64();
-                let expected = expected.into();
-                let desired = desired.into();
+                let expected = expected.as_expr();
+                let desired = desired.as_expr();
                 if need_runtime_check() {
-                    lc_assert!(i.cmplt(self.len()));
+                    lc_assert!(i.lt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1770,15 +1780,15 @@ macro_rules! impl_atomic {
                     )
                 }))
             }
-            pub fn atomic_fetch_add<I: IntoIndex, V: Into<Expr<$t>>>(
+            pub fn atomic_fetch_add<I: IntoIndex, V: AsExpr<Value = $t>>(
                 &self,
                 i: I,
                 v: V,
             ) -> Expr<$t> {
                 let i = i.to_u64();
-                let v = v.into();
+                let v = v.as_expr();
                 if need_runtime_check() {
-                    lc_assert!(i.cmplt(self.len()));
+                    lc_assert!(i.lt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1788,15 +1798,15 @@ macro_rules! impl_atomic {
                     )
                 }))
             }
-            pub fn atomic_fetch_sub<I: IntoIndex, V: Into<Expr<$t>>>(
+            pub fn atomic_fetch_sub<I: IntoIndex, V: AsExpr<Value = $t>>(
                 &self,
                 i: I,
                 v: V,
             ) -> Expr<$t> {
                 let i = i.to_u64();
-                let v = v.into();
+                let v = v.as_expr();
                 if need_runtime_check() {
-                    lc_assert!(i.cmplt(self.len()));
+                    lc_assert!(i.lt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1806,15 +1816,15 @@ macro_rules! impl_atomic {
                     )
                 }))
             }
-            pub fn atomic_fetch_min<I: IntoIndex, V: Into<Expr<$t>>>(
+            pub fn atomic_fetch_min<I: IntoIndex, V: AsExpr<Value = $t>>(
                 &self,
                 i: I,
                 v: V,
             ) -> Expr<$t> {
                 let i = i.to_u64();
-                let v = v.into();
+                let v = v.as_expr();
                 if need_runtime_check() {
-                    lc_assert!(i.cmplt(self.len()));
+                    lc_assert!(i.lt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1824,15 +1834,15 @@ macro_rules! impl_atomic {
                     )
                 }))
             }
-            pub fn atomic_fetch_max<I: IntoIndex, V: Into<Expr<$t>>>(
+            pub fn atomic_fetch_max<I: IntoIndex, V: AsExpr<Value = $t>>(
                 &self,
                 i: I,
                 v: V,
             ) -> Expr<$t> {
                 let i = i.to_u64();
-                let v = v.into();
+                let v = v.as_expr();
                 if need_runtime_check() {
-                    lc_assert!(i.cmplt(self.len()));
+                    lc_assert!(i.lt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1848,15 +1858,15 @@ macro_rules! impl_atomic {
 macro_rules! impl_atomic_bit {
     ($t:ty) => {
         impl BufferVar<$t> {
-            pub fn atomic_fetch_and<I: IntoIndex, V: Into<Expr<$t>>>(
+            pub fn atomic_fetch_and<I: IntoIndex, V: AsExpr<Value = $t>>(
                 &self,
                 i: I,
                 v: V,
             ) -> Expr<$t> {
                 let i = i.to_u64();
-                let v = v.into();
+                let v = v.as_expr();
                 if need_runtime_check() {
-                    lc_assert!(i.cmplt(self.len()));
+                    lc_assert!(i.lt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1866,11 +1876,15 @@ macro_rules! impl_atomic_bit {
                     )
                 }))
             }
-            pub fn atomic_fetch_or<I: IntoIndex, V: Into<Expr<$t>>>(&self, i: I, v: V) -> Expr<$t> {
+            pub fn atomic_fetch_or<I: IntoIndex, V: AsExpr<Value = $t>>(
+                &self,
+                i: I,
+                v: V,
+            ) -> Expr<$t> {
                 let i = i.to_u64();
-                let v = v.into();
+                let v = v.as_expr();
                 if need_runtime_check() {
-                    lc_assert!(i.cmplt(self.len()));
+                    lc_assert!(i.lt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(
@@ -1880,15 +1894,15 @@ macro_rules! impl_atomic_bit {
                     )
                 }))
             }
-            pub fn atomic_fetch_xor<I: IntoIndex, V: Into<Expr<$t>>>(
+            pub fn atomic_fetch_xor<I: IntoIndex, V: AsExpr<Value = $t>>(
                 &self,
                 i: I,
                 v: V,
             ) -> Expr<$t> {
                 let i = i.to_u64();
-                let v = v.into();
+                let v = v.as_expr();
                 if need_runtime_check() {
-                    lc_assert!(i.cmplt(self.len()));
+                    lc_assert!(i.lt(self.len()));
                 }
                 Expr::<$t>::from_node(__current_scope(|b| {
                     b.call(

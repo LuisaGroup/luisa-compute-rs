@@ -5,6 +5,10 @@ use syn::spanned::Spanned;
 use syn::visit_mut::*;
 use syn::*;
 
+// TODO: Impl let mut -> let = .var()
+// TODO: Impl x as f32 -> .cast()
+// TOOD: Impl switch! macro.
+
 #[cfg(test)]
 use pretty_assertions::assert_eq;
 
@@ -40,6 +44,20 @@ impl VisitMut for TraceVisitor {
         let trait_path = &self.trait_path;
         let span = node.span();
         match node {
+            Expr::Assign(expr) => {
+                let left = &expr.left;
+                let right = &expr.right;
+                if let Expr::Unary(ExprUnary {
+                    op: UnOp::Deref(_),
+                    expr,
+                    ..
+                }) = &**left
+                {
+                    *node = parse_quote_spanned! {span=>
+                        <_ as #trait_path::StoreMaybeExpr>::deref_set(#expr, #right)
+                    }
+                }
+            }
             Expr::If(expr) => {
                 let cond = &expr.cond;
                 let then_branch = &expr.then_branch;
@@ -47,11 +65,11 @@ impl VisitMut for TraceVisitor {
                 if let Expr::Let(_) = **cond {
                 } else if let Some((_, else_branch)) = else_branch {
                     *node = parse_quote_spanned! {span=>
-                        <_ as #trait_path::BoolIfElseMaybeExpr<_>>::if_then_else(#cond, || #then_branch, || #else_branch)
+                        <_ as #trait_path::SelectMaybeExpr<_>>::select(#cond, || #then_branch, || #else_branch)
                     }
                 } else {
                     *node = parse_quote_spanned! {span=>
-                        <_ as #trait_path::BoolIfMaybeExpr>::if_then(#cond, || #then_branch)
+                        <_ as #trait_path::ActivateMaybeExpr>::activate(#cond, || #then_branch)
                     }
                 }
             }
@@ -59,7 +77,7 @@ impl VisitMut for TraceVisitor {
                 let cond = &expr.cond;
                 let body = &expr.body;
                 *node = parse_quote_spanned! {span=>
-                    <_ as #trait_path::BoolWhileMaybeExpr>::while_loop(|| #cond, || #body)
+                    <_ as #trait_path::LoopMaybeExpr>::while_loop(|| #cond, || #body)
                 }
             }
             Expr::Loop(expr) => {
@@ -99,15 +117,15 @@ impl VisitMut for TraceVisitor {
                     let op_fn = Ident::new(op_fn_str, expr.op.span());
                     if op_fn_str == "eq" || op_fn_str == "ne" {
                         *node = parse_quote_spanned! {span=>
-                            <_ as #trait_path::EqMaybeExpr<_>>::#op_fn(#left, #right)
+                            <_ as #trait_path::EqMaybeExpr<_, _>>::#op_fn(#left, #right)
                         }
                     } else if op_fn_str == "and" || op_fn_str == "or" {
                         *node = parse_quote_spanned! {span=>
-                            <_ as #trait_path::BoolLazyOpsMaybeExpr<_>>::#op_fn(#left, || #right)
+                            <_ as #trait_path::LazyBoolMaybeExpr<_>>::#op_fn(#left, || #right)
                         }
                     } else {
                         *node = parse_quote_spanned! {span=>
-                            <_ as #trait_path::PartialOrdMaybeExpr<_>>::#op_fn(#left, #right)
+                            <_ as #trait_path::CmpMaybeExpr<_, _>>::#op_fn(#left, #right)
                         }
                     }
                 }
@@ -171,9 +189,10 @@ impl VisitMut for TraceVisitor {
 
 #[proc_macro]
 pub fn track(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input: TokenStream = input.into();
-    let block_input: proc_macro::TokenStream = quote!({ #input }).into();
-    track_impl(parse_macro_input!(block_input as Expr)).into()
+    let input = TokenStream::from(input);
+    let input = quote!({ #input });
+    let input = proc_macro::TokenStream::from(input);
+    track_impl(parse_macro_input!(input as Expr)).into()
 }
 
 fn track_impl(mut ast: Expr) -> TokenStream {

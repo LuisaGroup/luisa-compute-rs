@@ -9,14 +9,14 @@ pub struct DynExpr {
     node: NodeRef,
 }
 
-impl<T: ExprProxy> From<T> for DynExpr {
-    fn from(value: T) -> Self {
+impl<V: Value> From<Expr<V>> for DynExpr {
+    fn from(value: Expr<V>) -> Self {
         Self { node: value.node() }
     }
 }
 
-impl<T: VarProxy> From<T> for DynVar {
-    fn from(value: T) -> Self {
+impl<V: Value> From<Var<V>> for DynVar {
+    fn from(value: Var<V>) -> Self {
         Self { node: value.node() }
     }
 }
@@ -62,7 +62,7 @@ impl DynExpr {
             )
         })
     }
-    pub fn new<E: ExprProxy>(expr: E) -> Self {
+    pub fn new<V: Value>(expr: Expr<V>) -> Self {
         Self { node: expr.node() }
     }
 }
@@ -204,7 +204,7 @@ impl DynVar {
         __current_scope(|b| b.update(self.node, value.node));
     }
     pub fn zero<T: Value>() -> Self {
-        let v = local_zeroed::<T>();
+        let v = Var::<T>::zeroed();
         Self { node: v.node() }
     }
 }

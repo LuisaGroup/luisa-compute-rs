@@ -33,13 +33,11 @@ pub struct PrinterArgs {
     count: usize,
 }
 impl PrinterArgs {
-    pub fn append<E: ExprProxy + 'static>(&mut self, v: E)
-    where
-        E::Value: Debug,
-    {
-        let n = packed_size::<E::Value>();
+    pub fn append<V: Value + Debug>(&mut self, v: Expr<V>) {
+        let n = packed_size::<V>();
         self.count_per_arg.push(n);
         self.pack_fn.push(Box::new(move |offset, data| {
+            let v = (&v).clone();
             pack_to(v, data, offset);
         }));
         self.count += n;
@@ -104,8 +102,8 @@ macro_rules! lc_error {
         $crate::lc_log!($printer, log::Level::Error, $fmt, $($arg)*);
     };
 }
-pub fn _unpack_from_expr<E: ExprProxy>(data: *const u32, _: E) -> E::Value {
-    unsafe { std::ptr::read_unaligned(data as *const E::Value) }
+pub fn _unpack_from_expr<V: Value>(data: *const u32, _: Expr<V>) -> V {
+    unsafe { std::ptr::read_unaligned(data as *const V) }
 }
 impl Printer {
     pub fn new(device: &Device, size: usize) -> Self {
@@ -130,8 +128,8 @@ impl Printer {
         let item_id = items.len() as u32;
 
         if_!(
-            offset.cmplt(data.len().uint())
-                & (offset + 1 + args.count as u32).cmple(data.len().uint()),
+            offset.lt(data.len().cast::<u32>())
+                & (offset + 1 + args.count as u32).le(data.len().cast::<u32>()),
             {
                 data.atomic_fetch_add(0, 1);
                 data.write(offset, item_id);

@@ -55,6 +55,7 @@ mod internal_prelude {
         PhiIncoming, Pooled, Type, TypeOf, INVALID_REF,
     };
     pub(crate) use crate::lang::ops::Linear;
+    pub(crate) use crate::lang::types::vector::alias::*;
     pub(crate) use crate::lang::types::vector::*;
     pub(crate) use crate::lang::{
         ir, CallFuncTrait, Recorder, __compose, __extract, __insert, __module_pools,

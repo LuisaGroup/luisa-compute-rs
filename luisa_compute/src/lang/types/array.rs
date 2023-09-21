@@ -26,7 +26,9 @@ impl<T: Value, const N: usize, X: IntoIndex> Index<X> for ArrayExpr<T, N> {
         let i = i.to_u64();
 
         // TODO: Add need_runtime_check()?
-        lc_assert!(i.lt((N as u64).expr()));
+        if need_runtime_check() {
+            lc_assert!(i.lt((N as u64).expr()));
+        }
 
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(Func::ExtractElement, &[self.0.node, i.node()], T::type_())

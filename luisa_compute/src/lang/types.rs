@@ -201,6 +201,16 @@ impl<T: Value> Var<T> {
             b.local_zero_init(<T as TypeOf>::type_())
         }))
     }
+    pub fn _ref<'a>(self) -> &'a Self {
+        RECORDER.with(|r| {
+            let r = r.borrow();
+            let v: &Var<T> = r.arena.alloc(self);
+            unsafe {
+                let v: &'a Var<T> = std::mem::transmute(v);
+                v
+            }
+        })
+    }
     pub fn load(&self) -> Expr<T> {
         __current_scope(|b| {
             let nodes = self.to_vec_nodes();

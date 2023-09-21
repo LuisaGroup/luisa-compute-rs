@@ -14,7 +14,8 @@ mod element;
 mod impls;
 pub mod swizzle;
 
-use swizzle::*;
+pub use impls::*;
+pub use swizzle::*;
 
 pub trait VectorElement: VectorAlign<2> + VectorAlign<3> + VectorAlign<4> {}
 impl<T: VectorAlign<2> + VectorAlign<3> + VectorAlign<4>> VectorElement for T {}
@@ -69,78 +70,18 @@ impl<X: FromNode + Copy> FromNode for DoubledProxyData<X> {
     }
 }
 
-pub trait VectorExprProxy {
-    const N: usize;
-    type T: Primitive;
-    fn node(&self) -> NodeRef;
-    fn _permute2(&self, x: u32, y: u32) -> Expr<Vec2<Self::T>>
-    where
-        Self::T: VectorAlign<2>,
-    {
-        assert!(x < Self::N as u32);
-        assert!(y < Self::N as u32);
-        let x = x.expr();
-        let y = y.expr();
-        Expr::<Vec2<Self::T>>::from_node(__current_scope(|s| {
-            s.call(
-                Func::Permute,
-                &[self.node(), x.node(), y.node()],
-                Vec2::<Self::T>::type_(),
-            )
-        }))
-    }
-    fn _permute3(&self, x: u32, y: u32, z: u32) -> Expr<Vec3<Self::T>>
-    where
-        Self::T: VectorAlign<3>,
-    {
-        assert!(x < Self::N as u32);
-        assert!(y < Self::N as u32);
-        assert!(z < Self::N as u32);
-        let x = x.expr();
-        let y = y.expr();
-        let z = z.expr();
-        Expr::<Vec3<Self::T>>::from_node(__current_scope(|s| {
-            s.call(
-                Func::Permute,
-                &[self.node(), x.node(), y.node(), z.node()],
-                Vec3::<Self::T>::type_(),
-            )
-        }))
-    }
-    fn _permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Expr<Vec4<Self::T>>
-    where
-        Self::T: VectorAlign<4>,
-    {
-        assert!(x < Self::N as u32);
-        assert!(y < Self::N as u32);
-        assert!(z < Self::N as u32);
-        assert!(w < Self::N as u32);
-        let x = x.expr();
-        let y = y.expr();
-        let z = z.expr();
-        let w = w.expr();
-        Expr::<Vec4<Self::T>>::from_node(__current_scope(|s| {
-            s.call(
-                Func::Permute,
-                &[self.node(), x.node(), y.node(), z.node(), w.node()],
-                Vec4::<Self::T>::type_(),
-            )
-        }))
-    }
-}
-
 macro_rules! vector_proxies {
     ($N:literal [ $($c:ident),* ]: $ExprName:ident, $VarName:ident) => {
         #[repr(C)]
         #[derive(Debug, Copy, Clone)]
         pub struct $ExprName<T: VectorAlign<$N>> {
-            _node: NodeRef,
+            self_: Expr<Vector<T, $N>>,
             $(pub $c: Expr<T>),*
         }
         #[repr(C)]
         #[derive(Debug, Copy, Clone)]
         pub struct $VarName<T: VectorAlign<$N>> {
-            _node: NodeRef,
+            self_: Var<Vector<T, $N>>,
             $(pub $c: Var<T>),*
         }
 
@@ -156,16 +97,19 @@ macro_rules! vector_proxies {
                     if i >= $N { i = 0; }
                 )*
                 Self{
-                    _node: e.node(),
+                    self_: e,
                     $($c),*
                 }
+            }
+            fn as_expr_from_proxy(&self)->&Expr<Self::Value> {
+                &self.self_
             }
         }
         impl<T: VectorAlign<$N>> VectorExprProxy for $ExprName<T> {
             const N: usize = $N;
             type T = T;
             fn node(&self) -> NodeRef {
-                self._node
+                self.self_.node()
             }
         }
         impl<T: VectorAlign<$N, VectorVar = $VarName<T>>> VarProxy for $VarName<T> {
@@ -180,9 +124,12 @@ macro_rules! vector_proxies {
                     if i >= $N { i = 0; }
                 )*
                 Self{
-                    _node: e.node(),
+                    self_: e,
                     $($c),*
                 }
+            }
+            fn as_var_from_proxy(&self)->&Var<Self::Value> {
+                &self.self_
             }
         }
         impl<T: VectorAlign<$N, VectorVar = $VarName<T>>> Deref for $VarName<T> {

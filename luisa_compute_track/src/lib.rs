@@ -54,7 +54,7 @@ impl VisitMut for TraceVisitor {
                 }) = &**left
                 {
                     *node = parse_quote_spanned! {span=>
-                        <_ as #trait_path::StoreMaybeExpr>::store(#expr, #right)
+                        <_ as #trait_path::StoreMaybeExpr<_>>::store(#expr, #right)
                     }
                 }
             }
@@ -97,36 +97,113 @@ impl VisitMut for TraceVisitor {
                 }
             }
             Expr::Binary(expr) => {
+                let left = &expr.left;
+                let right = &expr.right;
+
+                if let Expr::Unary(ExprUnary {
+                    op: UnOp::Deref(_),
+                    expr: left,
+                    ..
+                }) = &**left
+                {
+                    let op_fn_str = match &expr.op {
+                        BinOp::AddAssign(_) => "__add_assign",
+                        BinOp::SubAssign(_) => "__sub_assign",
+                        BinOp::MulAssign(_) => "__mul_assign",
+                        BinOp::DivAssign(_) => "__div_assign",
+                        BinOp::RemAssign(_) => "__rem_assign",
+                        BinOp::BitAndAssign(_) => "__bitand_assign",
+                        BinOp::BitOrAssign(_) => "__bitor_assign",
+                        BinOp::BitXorAssign(_) => "__bitxor_assign",
+                        BinOp::ShlAssign(_) => "__shl_assign",
+                        BinOp::ShrAssign(_) => "__shr_assign",
+                        _ => "",
+                    };
+                    let op_trait_str = match &expr.op {
+                        BinOp::AddAssign(_) => "AddAssignMaybeExpr",
+                        BinOp::SubAssign(_) => "SubAssignMaybeExpr",
+                        BinOp::MulAssign(_) => "MulAssignMaybeExpr",
+                        BinOp::DivAssign(_) => "DivAssignMaybeExpr",
+                        BinOp::RemAssign(_) => "RemAssignMaybeExpr",
+                        BinOp::BitAndAssign(_) => "BitAndAssignMaybeExpr",
+                        BinOp::BitOrAssign(_) => "BitOrAssignMaybeExpr",
+                        BinOp::BitXorAssign(_) => "BitXorAssignMaybeExpr",
+                        BinOp::ShlAssign(_) => "ShlAssignMaybeExpr",
+                        BinOp::ShrAssign(_) => "ShrAssignMaybeExpr",
+                        _ => "",
+                    };
+                    if !op_fn_str.is_empty() {
+                        let op_fn = Ident::new(op_fn_str, expr.op.span());
+                        let op_trait = Ident::new(op_trait_str, expr.op.span());
+                        *node = parse_quote_spanned! {span=>
+                            <_ as #trait_path::#op_trait<_, _>>::#op_fn(#left, #right)
+                        };
+                        visit_expr_mut(self, node);
+                        return;
+                    }
+                }
+                let left = if let Expr::Paren(ExprParen { expr, .. }) = &**left {
+                    expr
+                } else {
+                    left
+                };
+                let right = if let Expr::Paren(ExprParen { expr, .. }) = &**right {
+                    expr
+                } else {
+                    right
+                };
                 let op_fn_str = match &expr.op {
-                    BinOp::Eq(_) => "eq",
-                    BinOp::Ne(_) => "ne",
+                    BinOp::Add(_) => "__add",
+                    BinOp::Sub(_) => "__sub",
+                    BinOp::Mul(_) => "__mul",
+                    BinOp::Div(_) => "__div",
+                    BinOp::Rem(_) => "__rem",
+                    BinOp::BitAnd(_) => "__bitand",
+                    BinOp::BitOr(_) => "__bitor",
+                    BinOp::BitXor(_) => "__bitxor",
+                    BinOp::Shl(_) => "__shl",
+                    BinOp::Shr(_) => "__shr",
 
                     BinOp::And(_) => "and",
                     BinOp::Or(_) => "or",
 
-                    BinOp::Lt(_) => "lt",
-                    BinOp::Le(_) => "le",
-                    BinOp::Ge(_) => "ge",
-                    BinOp::Gt(_) => "gt",
+                    BinOp::Eq(_) => "__eq",
+                    BinOp::Ne(_) => "__ne",
+                    BinOp::Lt(_) => "__lt",
+                    BinOp::Le(_) => "__le",
+                    BinOp::Ge(_) => "__ge",
+                    BinOp::Gt(_) => "__gt",
+
+                    _ => "",
+                };
+                let op_trait_str = match &expr.op {
+                    BinOp::Add(_) => "AddMaybeExpr",
+                    BinOp::Sub(_) => "SubMaybeExpr",
+                    BinOp::Mul(_) => "MulMaybeExpr",
+                    BinOp::Div(_) => "DivMaybeExpr",
+                    BinOp::Rem(_) => "RemMaybeExpr",
+                    BinOp::BitAnd(_) => "BitAndMaybeExpr",
+                    BinOp::BitOr(_) => "BitOrMaybeExpr",
+                    BinOp::BitXor(_) => "BitXorMaybeExpr",
+                    BinOp::Shl(_) => "ShlMaybeExpr",
+                    BinOp::Shr(_) => "ShrMaybeExpr",
+                    BinOp::And(_) | BinOp::Or(_) => "LazyBoolMaybeExpr",
+                    BinOp::Eq(_) | BinOp::Ne(_) => "EqMaybeExpr",
+                    BinOp::Lt(_) | BinOp::Le(_) | BinOp::Ge(_) | BinOp::Gt(_) => "CmpMaybeExpr",
                     _ => "",
                 };
 
                 if !op_fn_str.is_empty() {
-                    let left = &expr.left;
-                    let right = &expr.right;
                     let op_fn = Ident::new(op_fn_str, expr.op.span());
-                    if op_fn_str == "eq" || op_fn_str == "ne" {
+                    let op_trait = Ident::new(op_trait_str, expr.op.span());
+                    if let BinOp::And(_) | BinOp::Or(_) = &expr.op {
                         *node = parse_quote_spanned! {span=>
-                            <_ as #trait_path::EqMaybeExpr<_, _>>::#op_fn(#left, #right)
-                        }
-                    } else if op_fn_str == "and" || op_fn_str == "or" {
-                        *node = parse_quote_spanned! {span=>
-                            <_ as #trait_path::LazyBoolMaybeExpr<_>>::#op_fn(#left, || #right)
-                        }
+                            <_ as #trait_path::#op_trait<_, _>>::#op_fn(#left, || #right)
+                        };
                     } else {
                         *node = parse_quote_spanned! {span=>
-                            <_ as #trait_path::CmpMaybeExpr<_, _>>::#op_fn(#left, #right)
-                        }
+                            <_ as #trait_path::#op_trait<_, _>>::#op_fn(#left, #right)
+                        };
                     }
                 }
             }

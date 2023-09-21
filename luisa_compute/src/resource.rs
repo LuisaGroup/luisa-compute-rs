@@ -1274,6 +1274,12 @@ impl<T: IoTexel> Tex2d<T> {
     pub fn format(&self) -> PixelFormat {
         self.handle.format
     }
+    pub fn read(&self, uv: impl Into<Expr<Uint2>>) -> Expr<T> {
+        self.var().read(uv)
+    }
+    pub fn write(&self, uv: impl Into<Expr<Uint2>>, v: impl Into<Expr<T>>) {
+        self.var().write(uv, v)
+    }
 }
 impl<T: IoTexel> Tex3d<T> {
     pub fn view(&self, level: u32) -> Tex3dView<T> {
@@ -1293,6 +1299,12 @@ impl<T: IoTexel> Tex3d<T> {
     }
     pub fn format(&self) -> PixelFormat {
         self.handle.format
+    }
+    pub fn read(&self, uv: impl Into<Expr<Uint3>>) -> Expr<T> {
+        self.var().read(uv)
+    }
+    pub fn write(&self, uv: impl Into<Expr<Uint3>>, v: impl Into<Expr<T>>) {
+        self.var().write(uv, v)
     }
 }
 #[derive(Clone)]
@@ -1680,13 +1692,9 @@ impl<T: Value> IndexRead for BufferVar<T> {
         if need_runtime_check() {
             lc_assert!(i.lt(self.len()));
         }
-        __current_scope(|b| {
-            FromNode::from_node(b.call(
-                Func::BufferRead,
-                &[self.node, ToNode::node(&i)],
-                T::type_(),
-            ))
-        })
+        Expr::<T>::from_node(__current_scope(|b| {
+            b.call(Func::BufferRead, &[self.node, ToNode::node(&i)], T::type_())
+        }))
     }
 }
 impl<T: Value> IndexWrite for BufferVar<T> {

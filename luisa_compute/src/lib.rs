@@ -13,6 +13,8 @@ pub mod resource;
 pub mod rtx;
 pub mod runtime;
 
+pub use crate::lang::ops::{max, min};
+
 pub mod prelude {
     pub use half::f16;
 
@@ -21,12 +23,17 @@ pub mod prelude {
     };
     pub use crate::lang::functions::{block_size, dispatch_id, dispatch_size, set_block_size};
     pub use crate::lang::index::{IndexRead, IndexWrite};
-    pub use crate::lang::ops::*;
-    pub use crate::lang::types::vector::alias::*;
-    pub use crate::lang::types::vector::swizzle::*;
-    pub use crate::lang::types::vector::{
-        Mat2, Mat3, Mat4, SquareMatrix, Vec2, Vec3, Vec4, Vector,
+    pub use crate::lang::ops::{
+        AbsExpr, ActivateMaybeExpr, AddAssignExpr, AddExpr, BitAndAssignExpr, BitAndExpr,
+        BitOrAssignExpr, BitOrExpr, BitXorAssignExpr, BitXorExpr, ClampExpr, CmpExpr,
+        DivAssignExpr, DivExpr, EqExpr, FloatArcTan2Expr, FloatCopySignExpr, FloatExpr,
+        FloatLerpExpr, FloatLogExpr, FloatMulAddExpr, FloatPowfExpr, FloatPowiExpr,
+        FloatSmoothStepExpr, FloatStepExpr, IntExpr, LazyBoolMaybeExpr, LoopMaybeExpr, MinMaxExpr,
+        MulAssignExpr, MulExpr, RemAssignExpr, RemExpr, SelectMaybeExpr, ShlAssignExpr, ShlExpr,
+        ShrAssignExpr, ShrExpr, SubAssignExpr, SubExpr,
     };
+    pub use crate::lang::types::vector::swizzle::*;
+    pub use crate::lang::types::vector::VectorExprProxy;
     pub use crate::lang::types::{AsExpr, Expr, Value, Var};
     pub use crate::lang::Aggregate;
     pub use crate::resource::{IoTexel, StorageTexel, *};
@@ -47,6 +54,8 @@ mod internal_prelude {
         new_node, register_type, BasicBlock, Const, Func, Instruction, IrBuilder, Node,
         PhiIncoming, Pooled, Type, TypeOf, INVALID_REF,
     };
+    pub(crate) use crate::lang::ops::Linear;
+    pub(crate) use crate::lang::types::vector::alias::*;
     pub(crate) use crate::lang::types::vector::*;
     pub(crate) use crate::lang::{
         ir, CallFuncTrait, Recorder, __compose, __extract, __insert, __module_pools,

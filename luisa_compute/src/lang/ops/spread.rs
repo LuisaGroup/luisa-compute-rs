@@ -1,3 +1,6 @@
+use crate::lang::types::core::PrimitiveVar;
+use crate::lang::types::VarProxy;
+
 use super::*;
 use traits::*;
 
@@ -43,10 +46,11 @@ macro_rules! impl_spread {
 
 macro_rules! call_linear_fn_spread {
     ($f:ident [$($bounds:tt)*]($T:ty)) => {
-        // The T to other value impls mess up the `Ord` impls.
-        $f!(@sym [$($bounds)*] Expr<$T>: |x| x, $T: |x| x.expr() => Expr<$T>);
+        $f!(@sym [$($bounds)*] Expr<$T>: |x| x, Expr<$T>: |x| x => Expr<$T>);
+
+        $f!([$($bounds)*] $T: |x| x.expr(), Expr<$T>: |x| x => Expr<$T>);
         $f!(['a, $($bounds)*] &'a $T: |x| x.expr(), Expr<$T>: |x| x => Expr<$T>);
-        $f!(@sym ['b, $($bounds)*] &'b Expr<$T>: |x| x.clone(), $T: |x| x.expr() => Expr<$T>);
+        $f!(['b, $($bounds)*] $T: |x| x.expr(), &'b Expr<$T>: |x| x.clone() => Expr<$T>);
         $f!(['a, 'b, $($bounds)*] &'a $T: |x| x.expr(), &'b Expr<$T>: |x| x.clone() => Expr<$T>);
 
         $f!(['b, $($bounds)*] Expr<$T>: |x| x, &'b Expr<$T>: |x| x.clone() => Expr<$T>);
@@ -55,10 +59,10 @@ macro_rules! call_linear_fn_spread {
         $f!(@sym [$($bounds)*] Var<$T>: |x| x.load(), Var<$T>: |x| x.load() => Expr<$T>);
         $f!(@sym ['a, 'b, $($bounds)*] &'a Var<$T>: |x| x.load(), &'b Var<$T>: |x| x.load() => Expr<$T>);
 
-        $f!(@sym [$($bounds)*] Var<$T>: |x| x.load(), $T: |x| x.expr() => Expr<$T>);
+        $f!([$($bounds)*] $T: |x| x.expr(), Var<$T>: |x| x.load() => Expr<$T>);
         $f!(['a, $($bounds)*] &'a $T: |x| x.expr(), Var<$T>: |x| x.load() => Expr<$T>);
-        $f!(@sym ['b, $($bounds)*] &'b Var<$T>: |x| x.load(), $T: |x| x.expr() => Expr<$T>);
-         $f!(['a, 'b, $($bounds)*] &'a $T: |x| x.expr(), &'b Var<$T>: |x| x.load() => Expr<$T>);
+        $f!(['b, $($bounds)*] $T: |x| x.expr(), &'b Var<$T>: |x| x.load() => Expr<$T>);
+        $f!(['a, 'b, $($bounds)*] &'a $T: |x| x.expr(), &'b Var<$T>: |x| x.load() => Expr<$T>);
 
         $f!(['a, $($bounds)*] &'a Expr<$T>: |x| x.clone(), Var<$T>: |x| x.load() => Expr<$T>);
         $f!(['a, 'b, $($bounds)*] &'a Expr<$T>: |x| x.clone(), &'b Var<$T>: |x| x.load() => Expr<$T>);
@@ -74,11 +78,11 @@ call_linear_fn_spread!(impl_spread[T]);
 
 macro_rules! call_vector_fn_spread {
     ($f:ident [$($bounds:tt)*]($N:tt, $T:ty) $Vt:ty, $Vsplat:path) => {
-        $f!(@sym [$($bounds)*] Expr<$Vt>: |x| x, $T: |x| $Vsplat(x) => Expr<$Vt>);
+        $f!([$($bounds)*] $T: |x| $Vsplat(x), Expr<$Vt>: |x| x => Expr<$Vt>);
         $f!(['a, $($bounds)*] &'a $T: |x| $Vsplat(*x), Expr<$Vt>: |x| x => Expr<$Vt>);
         $f!([$($bounds)*] Expr<$T>: |x| $Vsplat(x), Expr<$Vt>: |x| x => Expr<$Vt>);
         $f!(['a, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), Expr<$Vt>: |x| x => Expr<$Vt>);
-        $f!(@sym ['b, $($bounds)*] &'b Expr<$Vt>: |x| x.clone(), $T: |x| $Vsplat(x) => Expr<$Vt>);
+        $f!(['b, $($bounds)*] $T: |x| $Vsplat(x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a $T: |x| $Vsplat(*x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
         $f!(['b, $($bounds)*] Expr<$T>: |x| $Vsplat(x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
@@ -88,11 +92,11 @@ macro_rules! call_vector_fn_spread {
         $f!(['b, $($bounds)*] Expr<$T>: |x| $Vsplat(x), &'b $Vt: |x| x.expr() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), &'b $Vt: |x| x.expr() => Expr<$Vt>);
 
-        $f!(@sym [$($bounds)*] Var<$Vt>: |x| x.load(), $T: |x| $Vsplat(x) => Expr<$Vt>);
+        $f!([$($bounds)*] $T: |x| $Vsplat(x), Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!(['a, $($bounds)*] &'a $T: |x| $Vsplat(*x), Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!([$($bounds)*] Expr<$T>: |x| $Vsplat(x), Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!(['a, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), Var<$Vt>: |x| x.load() => Expr<$Vt>);
-        $f!(@sym ['b, $($bounds)*] &'b Var<$Vt>: |x| x.load(), $T: |x| $Vsplat(x) => Expr<$Vt>);
+        $f!(['b, $($bounds)*] $T: |x| $Vsplat(x), &'b Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a $T: |x| $Vsplat(*x), &'b Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!(['b, $($bounds)*] Expr<$T>: |x| $Vsplat(x), &'b Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), &'b Var<$Vt>: |x| x.load() => Expr<$Vt>);
@@ -112,218 +116,239 @@ macro_rules! call_vector_fn_spread {
 
 call_vector_fn_spread!(impl_spread[N, T]);
 
-mod trait_impls {
-    use super::*;
-    impl<T, S> MinMaxExpr<S> for T
-    where
-        T: SpreadOps<S>,
-        Expr<T::Join>: MinMaxThis,
-    {
-        type Output = Expr<T::Join>;
-        fn max(self, other: S) -> Self::Output {
-            Expr::<T::Join>::_max(Self::lift_self(self), Self::lift_other(other))
+macro_rules! impl_simple_binop_spread {
+    ($TraitExpr:ident [$TraitThis:ident]: $fn:ident[$fn_this:ident]) => {
+        impl<T, S> $TraitExpr<S> for T
+        where
+            T: SpreadOps<S>,
+            Expr<T::Join>: $TraitThis,
+        {
+            type Output = Expr<T::Join>;
+            fn $fn(self, other: S) -> Self::Output {
+                Expr::<T::Join>::$fn_this(Self::lift_self(self), Self::lift_other(other))
+            }
         }
-        fn min(self, other: S) -> Self::Output {
-            Expr::<T::Join>::_min(Self::lift_self(self), Self::lift_other(other))
-        }
-    }
-    impl<T: Value, S, U> ClampExpr<S, U> for Expr<T>
-    where
-        S: SpreadOps<U, Join = T>,
-        Expr<T>: ClampThis,
-    {
-        type Output = Expr<T>;
-        fn clamp(self, min: S, max: U) -> Self::Output {
-            Expr::<T>::_clamp(self, S::lift_self(min), S::lift_other(max))
-        }
-    }
-    impl<T, S> EqExpr<S> for T
-    where
-        T: SpreadOps<S>,
-        Expr<T::Join>: EqThis,
-    {
-        type Output = <Expr<T::Join> as EqThis>::Output;
-        fn eq(self, other: S) -> Self::Output {
-            Expr::<T::Join>::_eq(Self::lift_self(self), Self::lift_other(other))
-        }
-        fn ne(self, other: S) -> Self::Output {
-            Expr::<T::Join>::_ne(Self::lift_self(self), Self::lift_other(other))
-        }
-    }
-    impl<T, S> CmpExpr<S> for T
-    where
-        T: SpreadOps<S>,
-        Expr<T::Join>: CmpThis,
-    {
-        type Output = <Expr<T::Join> as CmpThis>::Output;
-        fn lt(self, other: S) -> Self::Output {
-            Expr::<T::Join>::_lt(Self::lift_self(self), Self::lift_other(other))
-        }
-        fn le(self, other: S) -> Self::Output {
-            Expr::<T::Join>::_le(Self::lift_self(self), Self::lift_other(other))
-        }
-        fn gt(self, other: S) -> Self::Output {
-            Expr::<T::Join>::_gt(Self::lift_self(self), Self::lift_other(other))
-        }
-        fn ge(self, other: S) -> Self::Output {
-            Expr::<T::Join>::_ge(Self::lift_self(self), Self::lift_other(other))
-        }
-    }
-    impl<T: Value, S, U> FloatMulAddExpr<S, U> for Expr<T>
-    where
-        S: SpreadOps<U, Join = T>,
-        Expr<T>: FloatMulAddThis,
-    {
-        type Output = Expr<T>;
-        fn mul_add(self, mul: S, add: U) -> Self::Output {
-            Expr::<T>::_mul_add(self, S::lift_self(mul), S::lift_other(add))
-        }
-    }
-    impl<T, S> FloatCopySignExpr<S> for T
-    where
-        T: SpreadOps<S>,
-        Expr<T::Join>: FloatCopySignThis,
-    {
-        type Output = Expr<T::Join>;
-        fn copy_sign(self, sign: S) -> Self::Output {
-            Expr::<T::Join>::_copy_sign(Self::lift_self(self), Self::lift_other(sign))
-        }
-    }
-    impl<T, S> FloatStepExpr<S> for T
-    where
-        T: SpreadOps<S>,
-        Expr<T::Join>: FloatStepThis,
-    {
-        type Output = Expr<T::Join>;
-        fn step(self, edge: S) -> Self::Output {
-            Expr::<T::Join>::_step(Self::lift_self(self), Self::lift_other(edge))
-        }
-    }
-    impl<T: Value, S, U> FloatSmoothStepExpr<S, U> for Expr<T>
-    where
-        S: SpreadOps<U, Join = T>,
-        Expr<T>: FloatSmoothStepThis,
-    {
-        type Output = Expr<T>;
-        fn smooth_step(self, edge0: S, edge1: U) -> Self::Output {
-            Expr::<T>::_smooth_step(self, S::lift_self(edge0), S::lift_other(edge1))
-        }
-    }
-    impl<T, S> FloatArcTan2Expr<S> for T
-    where
-        T: SpreadOps<S>,
-        Expr<T::Join>: FloatArcTan2This,
-    {
-        type Output = Expr<T::Join>;
-        fn atan2(self, other: S) -> Self::Output {
-            Expr::<T::Join>::_atan2(Self::lift_self(self), Self::lift_other(other))
-        }
-    }
-    impl<T, S> FloatLogExpr<S> for T
-    where
-        T: SpreadOps<S>,
-        Expr<T::Join>: FloatLogThis,
-    {
-        type Output = Expr<T::Join>;
-        fn log(self, base: S) -> Self::Output {
-            Expr::<T::Join>::_log(Self::lift_self(self), Self::lift_other(base))
-        }
-    }
-    impl<T, S> FloatPowfExpr<S> for T
-    where
-        T: SpreadOps<S>,
-        Expr<T::Join>: FloatPowfThis,
-    {
-        type Output = Expr<T::Join>;
-        fn powf(self, exponent: S) -> Self::Output {
-            Expr::<T::Join>::_powf(Self::lift_self(self), Self::lift_other(exponent))
-        }
-    }
-    impl<T: Value, S, U> FloatLerpExpr<S, U> for Expr<T>
-    where
-        S: SpreadOps<U, Join = T>,
-        Expr<T>: FloatLerpThis,
-    {
-        type Output = Expr<T>;
-        fn lerp(self, other: S, frac: U) -> Self::Output {
-            Expr::<T>::_lerp(self, S::lift_self(other), S::lift_other(frac))
-        }
-    }
+    };
 }
-macro_rules! impl_spread_op {
-    ([ $($bounds:tt)* ]: $Op:ident::$op_fn:ident for $T:ty, $S:ty) => {
-        impl<$($bounds)*> $Op <$S> for $T where $T: SpreadOps<$S>, Expr<<$T as SpreadOps<$S>>::Join>: $Op {
-            type Output = <Expr<<$T as SpreadOps<$S>>::Join> as $Op>::Output;
-            fn $op_fn (self, other: $S) -> Self::Output {
-                <Expr<<$T as SpreadOps<$S>>::Join> as $Op>::$op_fn (<$T as SpreadOps<$S>>::lift_self(self), <$T as SpreadOps<$S>>::lift_other(other))
+
+macro_rules! impl_var_assign {
+    ($TraitExpr:ident: $fn:ident) => {
+        impl<T: Value, S> $TraitExpr<S> for Var<T>
+        where
+            T::Var: $TraitExpr<S>,
+        {
+            fn $fn(self, other: S) {
+                <T::Var as $TraitExpr<S>>::$fn(self.deref().clone(), other);
+            }
+        }
+    };
+}
+
+macro_rules! impl_assignop_spread {
+    ([$($bounds:tt)*] $TraitExpr:ident [$TraitOrigExpr:ident] for $X:ty[$V:ty]: $assign_fn:ident [$fn:ident]) => {
+        impl<_Other, $($bounds)*> $TraitExpr<_Other> for $X
+        where
+            Expr<$V>: $TraitOrigExpr,
+            Expr<$V>: SpreadOps<_Other, Join = $V> + Sized,
+        {
+            fn $assign_fn(self, other: _Other) {
+                self.as_var_from_proxy().store(
+                    <Expr::<$V> as $TraitOrigExpr>::$fn(
+                        self.deref().clone(),
+                        <Expr::<$V> as SpreadOps<_Other>>::lift_other(other)
+                    )
+                );
             }
         }
     }
 }
+impl_var_assign!(AddAssignExpr: add_assign);
+impl_var_assign!(SubAssignExpr: sub_assign);
+impl_var_assign!(MulAssignExpr: mul_assign);
+impl_var_assign!(DivAssignExpr: div_assign);
+impl_var_assign!(RemAssignExpr: rem_assign);
+impl_var_assign!(BitAndAssignExpr: bitand_assign);
+impl_var_assign!(BitOrAssignExpr: bitor_assign);
+impl_var_assign!(BitXorAssignExpr: bitxor_assign);
+impl_var_assign!(ShlAssignExpr: shl_assign);
+impl_var_assign!(ShrAssignExpr: shr_assign);
 
-macro_rules! impl_num_spread_single {
-    ([ $($bounds:tt)* ] $T:ty, $S:ty) => {
-        impl_spread_op!( [ $($bounds)* ]: Add::add for $T, $S);
-        impl_spread_op!( [ $($bounds)* ]: Sub::sub for $T, $S);
-        impl_spread_op!( [ $($bounds)* ]: Mul::mul for $T, $S);
-        impl_spread_op!( [ $($bounds)* ]: Div::div for $T, $S);
-        impl_spread_op!( [ $($bounds)* ]: Rem::rem for $T, $S);
+macro_rules! impl_assignops {
+    ([$($bounds:tt)*] $X:ty[$V:ty]) => {
+        impl_assignop_spread!([$($bounds)*] AddAssignExpr[AddThis] for $X[$V]: add_assign[_add]);
+        impl_assignop_spread!([$($bounds)*] SubAssignExpr[SubThis] for $X[$V]: sub_assign[_sub]);
+        impl_assignop_spread!([$($bounds)*] MulAssignExpr[MulThis] for $X[$V]: mul_assign[_mul]);
+        impl_assignop_spread!([$($bounds)*] DivAssignExpr[DivThis] for $X[$V]: div_assign[_div]);
+        impl_assignop_spread!([$($bounds)*] RemAssignExpr[RemThis] for $X[$V]: rem_assign[_rem]);
+        impl_assignop_spread!([$($bounds)*] BitAndAssignExpr[BitAndThis] for $X[$V]: bitand_assign[_bitand]);
+        impl_assignop_spread!([$($bounds)*] BitOrAssignExpr[BitOrThis] for $X[$V]: bitor_assign[_bitor]);
+        impl_assignop_spread!([$($bounds)*] BitXorAssignExpr[BitXorThis] for $X[$V]: bitxor_assign[_bitxor]);
+        impl_assignop_spread!([$($bounds)*] ShlAssignExpr[ShlThis] for $X[$V]: shl_assign[_shl]);
+        impl_assignop_spread!([$($bounds)*] ShrAssignExpr[ShrThis] for $X[$V]: shr_assign[_shr]);
     }
 }
-macro_rules! impl_int_spread_single {
-    ([ $($bounds:tt)* ] $T:ty, $S:ty) => {
-        impl_spread_op!([ $($bounds)* ]: BitAnd::bitand for $T, $S);
-        impl_spread_op!([ $($bounds)* ]: BitOr::bitor for $T, $S);
-        impl_spread_op!([ $($bounds)* ]: BitXor::bitxor for $T, $S);
-        impl_spread_op!([ $($bounds)* ]: Shl::shl for $T, $S);
-        impl_spread_op!([ $($bounds)* ]: Shr::shr for $T, $S);
+impl_assignops!([T: Primitive] PrimitiveVar<T>[T]);
+impl_assignops!([T: VectorAlign<2, VectorVar = VectorVarProxy2<T>>] VectorVarProxy2<T>[Vector<T, 2>]);
+impl_assignops!([T: VectorAlign<3, VectorVar = VectorVarProxy3<T>>] VectorVarProxy3<T>[Vector<T, 3>]);
+impl_assignops!([T: VectorAlign<4, VectorVar = VectorVarProxy4<T>>] VectorVarProxy4<T>[Vector<T, 4>]);
+
+impl_simple_binop_spread!(AddExpr[AddThis]: add[_add]);
+impl_simple_binop_spread!(SubExpr[SubThis]: sub[_sub]);
+impl_simple_binop_spread!(MulExpr[MulThis]: mul[_mul]);
+impl_simple_binop_spread!(DivExpr[DivThis]: div[_div]);
+impl_simple_binop_spread!(RemExpr[RemThis]: rem[_rem]);
+impl_simple_binop_spread!(BitAndExpr[BitAndThis]: bitand[_bitand]);
+impl_simple_binop_spread!(BitOrExpr[BitOrThis]: bitor[_bitor]);
+impl_simple_binop_spread!(BitXorExpr[BitXorThis]: bitxor[_bitxor]);
+impl_simple_binop_spread!(ShlExpr[ShlThis]: shl[_shl]);
+impl_simple_binop_spread!(ShrExpr[ShrThis]: shr[_shr]);
+
+impl<T, S> MinMaxExpr<S> for T
+where
+    T: SpreadOps<S>,
+    Expr<T::Join>: MinMaxThis,
+{
+    type Output = <Expr<T::Join> as MinMaxThis>::Output;
+    fn min_expr(self, other: S) -> Self::Output {
+        Expr::<T::Join>::_min_expr(Self::lift_self(self), Self::lift_other(other))
+    }
+    fn max_expr(self, other: S) -> Self::Output {
+        Expr::<T::Join>::_max_expr(Self::lift_self(self), Self::lift_other(other))
     }
 }
 
-macro_rules! impl_num_spread {
-    (@sym [$($bounds:tt)*] $T:ty : |$x:ident| $f:expr, $S:ty : |$y:ident| $g:expr => Expr<$J:ty>) => {
-        impl_num_spread_single!([$($bounds)*] $T, $S);
-    };
-    ([$($bounds:tt)*] $T:ty : |$x:ident| $f:expr, $S:ty : |$y:ident| $g:expr => Expr<$J:ty>) => {
-        impl_num_spread_single!([$($bounds)*] $T, $S);
-        impl_num_spread_single!([$($bounds)*] $S, $T);
+pub fn min<T, S>(x: T, y: S) -> <T as MinMaxExpr<S>>::Output
+where
+    T: MinMaxExpr<S>,
+{
+    x.min_expr(y)
+}
+pub fn max<T, S>(x: T, y: S) -> <T as MinMaxExpr<S>>::Output
+where
+    T: MinMaxExpr<S>,
+{
+    x.max_expr(y)
+}
+
+impl<T: Value, S, U> ClampExpr<S, U> for Expr<T>
+where
+    S: SpreadOps<U, Join = T>,
+    Expr<T>: ClampThis,
+{
+    type Output = Expr<T>;
+    fn clamp(self, min: S, max: U) -> Self::Output {
+        Expr::<T>::_clamp(self, S::lift_self(min), S::lift_other(max))
     }
 }
-macro_rules! impl_int_spread {
-    (@sym [$($bounds:tt)*] $T:ty : |$x:ident| $f:expr, $S:ty : |$y:ident| $g:expr => Expr<$J:ty>) => {
-        impl_int_spread_single!([$($bounds)*] $T, $S);
-    };
-    ([$($bounds:tt)*] $T:ty : |$x:ident| $f:expr, $S:ty : |$y:ident| $g:expr => Expr<$J:ty>) => {
-        impl_int_spread_single!([$($bounds)*] $T, $S);
-        impl_int_spread_single!([$($bounds)*] $S, $T);
+impl<T, S> EqExpr<S> for T
+where
+    T: SpreadOps<S>,
+    Expr<T::Join>: EqThis,
+{
+    type Output = <Expr<T::Join> as EqThis>::Output;
+    fn eq(self, other: S) -> Self::Output {
+        Expr::<T::Join>::_eq(Self::lift_self(self), Self::lift_other(other))
+    }
+    fn ne(self, other: S) -> Self::Output {
+        Expr::<T::Join>::_ne(Self::lift_self(self), Self::lift_other(other))
     }
 }
-macro_rules! call_spreads {
-    ($f:ident: $($T:ty),+) => {
-        $(
-        call_linear_fn_spread!($f []($T));
-        call_vector_fn_spread!($f [](2, $T));
-        call_vector_fn_spread!($f [](3, $T));
-        call_vector_fn_spread!($f [](4, $T));
-        )+
-    };
+impl<T, S> CmpExpr<S> for T
+where
+    T: SpreadOps<S>,
+    Expr<T::Join>: CmpThis,
+{
+    type Output = <Expr<T::Join> as CmpThis>::Output;
+    fn lt(self, other: S) -> Self::Output {
+        Expr::<T::Join>::_lt(Self::lift_self(self), Self::lift_other(other))
+    }
+    fn le(self, other: S) -> Self::Output {
+        Expr::<T::Join>::_le(Self::lift_self(self), Self::lift_other(other))
+    }
+    fn gt(self, other: S) -> Self::Output {
+        Expr::<T::Join>::_gt(Self::lift_self(self), Self::lift_other(other))
+    }
+    fn ge(self, other: S) -> Self::Output {
+        Expr::<T::Join>::_ge(Self::lift_self(self), Self::lift_other(other))
+    }
 }
-call_spreads!(impl_num_spread: f16, f32, f64, i8, i16, i32, i64, u8, u16, u32, u64);
-call_spreads!(impl_int_spread: bool, i8, i16, i32, i64, u8, u16, u32, u64);
-
-#[allow(dead_code)]
-mod tests {
-    use super::*;
-    fn test() {
-        let x = 10.0f32;
-        let y = Vector::<_, 2>::splat(20.0f32);
-        let x = x.expr();
-
-        let w = (&x.var()).min(&0.0_f32.expr());
-        let z = 10_f32.max(5_f32);
-        let i = 15_u32;
-        let j = z.log(10.0);
-        let _ = 1_u32.max(2_u32);
-        println!("{:?}", w);
+impl<T: Value, S, U> FloatMulAddExpr<S, U> for Expr<T>
+where
+    S: SpreadOps<U, Join = T>,
+    Expr<T>: FloatMulAddThis,
+{
+    type Output = Expr<T>;
+    fn mul_add(self, mul: S, add: U) -> Self::Output {
+        Expr::<T>::_mul_add(self, S::lift_self(mul), S::lift_other(add))
+    }
+}
+impl<T, S> FloatCopySignExpr<S> for T
+where
+    T: SpreadOps<S>,
+    Expr<T::Join>: FloatCopySignThis,
+{
+    type Output = Expr<T::Join>;
+    fn copy_sign(self, sign: S) -> Self::Output {
+        Expr::<T::Join>::_copy_sign(Self::lift_self(self), Self::lift_other(sign))
+    }
+}
+impl<T, S> FloatStepExpr<S> for T
+where
+    T: SpreadOps<S>,
+    Expr<T::Join>: FloatStepThis,
+{
+    type Output = Expr<T::Join>;
+    fn step(self, edge: S) -> Self::Output {
+        Expr::<T::Join>::_step(Self::lift_self(self), Self::lift_other(edge))
+    }
+}
+impl<T: Value, S, U> FloatSmoothStepExpr<S, U> for Expr<T>
+where
+    S: SpreadOps<U, Join = T>,
+    Expr<T>: FloatSmoothStepThis,
+{
+    type Output = Expr<T>;
+    fn smooth_step(self, edge0: S, edge1: U) -> Self::Output {
+        Expr::<T>::_smooth_step(self, S::lift_self(edge0), S::lift_other(edge1))
+    }
+}
+impl<T, S> FloatArcTan2Expr<S> for T
+where
+    T: SpreadOps<S>,
+    Expr<T::Join>: FloatArcTan2This,
+{
+    type Output = Expr<T::Join>;
+    fn atan2(self, other: S) -> Self::Output {
+        Expr::<T::Join>::_atan2(Self::lift_self(self), Self::lift_other(other))
+    }
+}
+impl<T, S> FloatLogExpr<S> for T
+where
+    T: SpreadOps<S>,
+    Expr<T::Join>: FloatLogThis,
+{
+    type Output = Expr<T::Join>;
+    fn log(self, base: S) -> Self::Output {
+        Expr::<T::Join>::_log(Self::lift_self(self), Self::lift_other(base))
+    }
+}
+impl<T, S> FloatPowfExpr<S> for T
+where
+    T: SpreadOps<S>,
+    Expr<T::Join>: FloatPowfThis,
+{
+    type Output = Expr<T::Join>;
+    fn powf(self, exponent: S) -> Self::Output {
+        Expr::<T::Join>::_powf(Self::lift_self(self), Self::lift_other(exponent))
+    }
+}
+impl<T: Value, S, U> FloatLerpExpr<S, U> for Expr<T>
+where
+    S: SpreadOps<U, Join = T>,
+    Expr<T>: FloatLerpThis,
+{
+    type Output = Expr<T>;
+    fn lerp(self, other: S, frac: U) -> Self::Output {
+        Expr::<T>::_lerp(self, S::lift_self(other), S::lift_other(frac))
     }
 }

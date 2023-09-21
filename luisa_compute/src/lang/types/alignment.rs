@@ -1,4 +1,3 @@
-use super::*;
 use std::hash::Hash;
 
 pub trait Alignment: Default + Copy + Hash + Eq + 'static {

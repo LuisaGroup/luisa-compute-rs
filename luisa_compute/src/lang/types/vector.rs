@@ -12,7 +12,6 @@ mod nalgebra;
 pub mod coords;
 mod element;
 mod impls;
-pub mod legacy;
 pub mod swizzle;
 
 use swizzle::*;
@@ -310,6 +309,41 @@ impl<T: VectorElement> Vec4Swizzle for VectorExprProxy4<T> {
 pub type Vec2<T> = Vector<T, 2>;
 pub type Vec3<T> = Vector<T, 3>;
 pub type Vec4<T> = Vector<T, 4>;
+
+pub type Half2 = Vec2<f16>;
+pub type Half3 = Vec3<f16>;
+pub type Half4 = Vec4<f16>;
+pub type Float2 = Vec2<f32>;
+pub type Float3 = Vec3<f32>;
+pub type Float4 = Vec4<f32>;
+pub type Double2 = Vec2<f64>;
+pub type Double3 = Vec3<f64>;
+pub type Double4 = Vec4<f64>;
+pub type Byte2 = Vec2<i8>;
+pub type Byte3 = Vec3<i8>;
+pub type Byte4 = Vec4<i8>;
+pub type Short2 = Vec2<i16>;
+pub type Short3 = Vec3<i16>;
+pub type Short4 = Vec4<i16>;
+pub type Int2 = Vec2<i32>;
+pub type Int3 = Vec3<i32>;
+pub type Int4 = Vec4<i32>;
+pub type Long2 = Vec2<i64>;
+pub type Long3 = Vec3<i64>;
+pub type Long4 = Vec4<i64>;
+pub type Ubyte2 = Vec2<u8>;
+pub type Ubyte3 = Vec3<u8>;
+pub type Ubyte4 = Vec4<u8>;
+pub type Ushort2 = Vec2<u16>;
+pub type Ushort3 = Vec3<u16>;
+pub type Ushort4 = Vec4<u16>;
+pub type Uint2 = Vec2<u32>;
+pub type Uint3 = Vec3<u32>;
+pub type Uint4 = Vec4<u32>;
+pub type Ulong2 = Vec2<u64>;
+pub type Bool2 = Vec2<bool>;
+pub type Bool3 = Vec3<bool>;
+pub type Bool4 = Vec4<bool>;
 
 // Matrix
 

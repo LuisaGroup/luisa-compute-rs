@@ -213,7 +213,7 @@ pub fn tracked(
 fn track_impl(mut ast: Expr) -> TokenStream {
     (TraceVisitor {
         flow_path: quote!(::luisa_compute::lang::control_flow),
-        trait_path: quote!(::luisa_compute::lang::maybe_expr),
+        trait_path: quote!(::luisa_compute::lang::ops),
     })
     .visit_expr_mut(&mut ast);
 

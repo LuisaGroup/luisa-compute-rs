@@ -212,14 +212,17 @@ impl<T: Value> Var<T> {
         })
     }
     pub fn load(&self) -> Expr<T> {
-        __current_scope(|b| {
-            let nodes = self.to_vec_nodes();
-            let mut ret = vec![];
-            for node in nodes {
-                ret.push(b.call(Func::Load, &[node], node.type_().clone()));
-            }
-            Expr::<T>::from_nodes(&mut ret.into_iter())
-        })
+        Expr::<T>::from_nodes(
+            &mut __current_scope(|b| {
+                let nodes = self.to_vec_nodes();
+                let mut ret = vec![];
+                for node in nodes {
+                    ret.push(b.call(Func::Load, &[node], node.type_().clone()));
+                }
+                ret
+            })
+            .into_iter(),
+        )
     }
     pub fn store(&self, value: impl AsExpr<Value = T>) {
         crate::lang::_store(self, &value.as_expr());

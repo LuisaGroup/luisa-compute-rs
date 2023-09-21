@@ -1,5 +1,12 @@
 use luisa_compute_derive_impl::*;
 use quote::ToTokens;
+#[repr(C)]
+struct Foo {
+    a: u32,
+    b: u32,
+}
+
+
 
 fn main() {
     let compiler = Compiler;

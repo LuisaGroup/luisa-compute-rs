@@ -138,59 +138,33 @@ impl Compiler {
         let name = &struct_.ident;
         let vis = &struct_.vis;
         let fields: Vec<_> = struct_.fields.iter().map(|f| f).collect();
+        let field_vis: Vec<_> = fields.iter().map(|f| &f.vis).collect();
         let field_types: Vec<_> = fields.iter().map(|f| &f.ty).collect();
         let field_names: Vec<_> = fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
 
-        let expr_proxy_field_methods: Vec<_> = fields
+        let extract_expr_fields: Vec<_> = fields
             .iter()
             .enumerate()
             .map(|(i, f)| {
                 let ident = f.ident.as_ref().unwrap();
-                let vis = &f.vis;
                 let ty = &f.ty;
-                let set_ident = syn::Ident::new(&format!("set_{}", ident), ident.span());
                 quote_spanned!(span=>
-                    #[allow(dead_code, non_snake_case)]
-                    #[allow(unused_parens)]
-                    #vis fn #ident (&self) -> #lang_path::types::Expr<#ty> {
-                        use #lang_path::*;
-                        <Expr::<#ty> as FromNode>::from_node(__extract::<#ty>(
-                            self.node, #i,
-                        ))
-                    }
-                    #[allow(dead_code, non_snake_case)]
-                    #[allow(unused_parens)]
-                    #vis fn #set_ident<__T:Into<#lang_path::types::Expr<#ty>>>(&self, value: __T) -> Self {
-                        use #lang_path::*;
-                        let value = value.into();
-                        Self::from_node(#lang_path::__insert::<#name #ty_generics>(self.node, #i, ToNode::node(&value)))
-                    }
+                    let #ident = < #lang_path::types::Expr::<#ty> as FromNode>::from_node(__extract::<#ty>(
+                        __node, #i,
+                    ));
                 )
             })
             .collect();
-        let var_proxy_field_methods: Vec<_> = fields
+        let extract_var_fields: Vec<_> = fields
             .iter()
             .enumerate()
             .map(|(i, f)| {
                 let ident = f.ident.as_ref().unwrap();
-                let vis = &f.vis;
                 let ty = &f.ty;
-                let set_ident = syn::Ident::new(&format!("set_{}", ident), ident.span());
                 quote_spanned!(span=>
-                    #[allow(dead_code, non_snake_case)]
-                    #[allow(unused_parens)]
-                    #vis fn #ident (&self) -> #lang_path::types::Var<#ty> {
-                        use #lang_path::*;
-                        <Var::<#ty> as FromNode>::from_node(__extract::<#ty>(
-                            self.node, #i,
-                        ))
-                    }
-                    #[allow(dead_code, non_snake_case)]
-                    #[allow(unused_parens)]
-                    #vis fn #set_ident<__T:Into<#lang_path::types::Expr<#ty>>>(&self, value: __T) {
-                        let value = value.into();
-                        self.#ident().store(value);
-                    }
+                    let #ident = < #lang_path::types::Var::<#ty> as FromNode>::from_node(__extract::<#ty>(
+                        __node, #i,
+                    ));
                 )
             })
             .collect();
@@ -240,73 +214,95 @@ impl Compiler {
             #[derive(Clone, Copy, Debug)]
             #[allow(unused_parens)]
             #vis struct #expr_proxy_name #generics{
-                node: #lang_path::NodeRef,
                 _marker: std::marker::PhantomData<(#marker_args)>,
+                #[allow(dead_code)]
+                self_: #lang_path::types::Expr<#name>,
+                #(#field_vis #field_names: #lang_path::types::Expr<#field_types>),*
+
             }
             #[derive(Clone, Copy, Debug)]
             #[allow(unused_parens)]
             #vis struct #var_proxy_name #generics{
-                node: #lang_path::NodeRef,
                 _marker: std::marker::PhantomData<(#marker_args)>,
+                #[allow(dead_code)]
+                self_: #lang_path::types::Var<#name>,
+                #(#field_vis #field_names: #lang_path::types::Var<#field_types>),*,
             }
-            unsafe impl #impl_generics #lang_path::types::HasExprLayout< <#name as Value>::ExprData  > for #expr_proxy_name #ty_generics #where_clause {}
-            unsafe impl #impl_generics #lang_path::types::HasVarLayout< <#name as Value>::VarData > for #var_proxy_name #ty_generics #where_clause {}
-            #[allow(unused_parens)]
-            impl #impl_generics #lang_path::Aggregate for #expr_proxy_name #ty_generics #where_clause {
-                fn to_nodes(&self, nodes: &mut Vec<#lang_path::NodeRef>) {
-                    nodes.push(self.node);
-                }
-                fn from_nodes<__I: Iterator<Item = #lang_path::NodeRef>>(iter: &mut __I) -> Self {
-                    Self{
-                        node: iter.next().unwrap(),
-                        _marker:std::marker::PhantomData
-                    }
-                }
-            }
-            #[allow(unused_parens)]
-            impl #impl_generics #lang_path::Aggregate for #var_proxy_name #ty_generics #where_clause {
-                fn to_nodes(&self, nodes: &mut Vec<#lang_path::NodeRef>) {
-                    nodes.push(self.node);
-                }
-                fn from_nodes<__I: Iterator<Item = #lang_path::NodeRef>>(iter: &mut __I) -> Self {
-                    Self{
-                        node: iter.next().unwrap(),
-                        _marker:std::marker::PhantomData
-                    }
-                }
-            }
-            #[allow(unused_parens)]
-            impl #impl_generics #lang_path::FromNode  for #expr_proxy_name #ty_generics #where_clause {
-                #[allow(unused_assignments)]
-                fn from_node(node: #lang_path::NodeRef) -> Self {
-                    Self { node, _marker:std::marker::PhantomData }
-                }
-            }
-            #[allow(unused_parens)]
-            impl #impl_generics #lang_path::ToNode  for #expr_proxy_name #ty_generics #where_clause {
-                fn node(&self) -> #lang_path::NodeRef {
-                    self.node
-                }
-            }
+            // #[allow(unused_parens)]
+            // impl #impl_generics #lang_path::Aggregate for #expr_proxy_name #ty_generics #where_clause {
+            //     fn to_nodes(&self, nodes: &mut Vec<#lang_path::NodeRef>) {
+            //         nodes.push(self.node);
+            //     }
+            //     fn from_nodes<__I: Iterator<Item = #lang_path::NodeRef>>(iter: &mut __I) -> Self {
+            //         Self{
+            //             node: iter.next().unwrap(),
+            //             _marker:std::marker::PhantomData
+            //         }
+            //     }
+            // }
+            // #[allow(unused_parens)]
+            // impl #impl_generics #lang_path::Aggregate for #var_proxy_name #ty_generics #where_clause {
+            //     fn to_nodes(&self, nodes: &mut Vec<#lang_path::NodeRef>) {
+            //         nodes.push(self.node);
+            //     }
+            //     fn from_nodes<__I: Iterator<Item = #lang_path::NodeRef>>(iter: &mut __I) -> Self {
+            //         Self{
+            //             node: iter.next().unwrap(),
+            //             _marker:std::marker::PhantomData
+            //         }
+            //     }
+            // }
+            // #[allow(unused_parens)]
+            // impl #impl_generics #lang_path::FromNode  for #expr_proxy_name #ty_generics #where_clause {
+            //     #[allow(unused_assignments)]
+            //     fn from_node(node: #lang_path::NodeRef) -> Self {
+            //         Self { node, _marker:std::marker::PhantomData }
+            //     }
+            // }
+            // #[allow(unused_parens)]
+            // impl #impl_generics #lang_path::ToNode  for #expr_proxy_name #ty_generics #where_clause {
+            //     fn node(&self) -> #lang_path::NodeRef {
+            //         self.node
+            //     }
+            // }
             #[allow(unused_parens)]
             impl #impl_generics #lang_path::types::ExprProxy for #expr_proxy_name #ty_generics #where_clause {
                 type Value = #name #ty_generics;
-            }
-            #[allow(unused_parens)]
-            impl #impl_generics #lang_path::FromNode for #var_proxy_name #ty_generics #where_clause {
-                #[allow(unused_assignments)]
-                fn from_node(node: #lang_path::NodeRef) -> Self {
-                    Self { node, _marker:std::marker::PhantomData }
+                fn from_expr(expr: #lang_path::types::Expr<#name #ty_generics>) -> Self {
+                    let __node = expr.node();
+                    #(#extract_expr_fields)*
+                    Self{
+                        self_:expr,
+                        _marker:std::marker::PhantomData,
+                        #(#field_names),*
+                        
+                    }
                 }
             }
-            impl #impl_generics #lang_path::ToNode for #var_proxy_name #ty_generics #where_clause {
-                fn node(&self) -> #lang_path::NodeRef {
-                    self.node
-                }
-            }
+            // #[allow(unused_parens)]
+            // impl #impl_generics #lang_path::FromNode for #var_proxy_name #ty_generics #where_clause {
+            //     #[allow(unused_assignments)]
+            //     fn from_node(node: #lang_path::NodeRef) -> Self {
+            //         Self { node, _marker:std::marker::PhantomData }
+            //     }
+            // }
+            // impl #impl_generics #lang_path::ToNode for #var_proxy_name #ty_generics #where_clause {
+            //     fn node(&self) -> #lang_path::NodeRef {
+            //         self.self_.node()
+            //     }
+            // }
             #[allow(unused_parens)]
             impl #impl_generics #lang_path::types::VarProxy for #var_proxy_name #ty_generics #where_clause {
                 type Value = #name #ty_generics;
+                fn from_var(var: #lang_path::types::Var<#name #ty_generics>) -> Self {
+                    let __node = var.node();
+                    #(#extract_var_fields)*
+                    Self{
+                        self_:var,
+                        _marker:std::marker::PhantomData,
+                        #(#field_names),*
+                    }
+                }
             }
             #[allow(unused_parens)]
             impl #impl_generics std::ops::Deref for #var_proxy_name #ty_generics #where_clause {
@@ -348,22 +344,18 @@ impl Compiler {
             impl #impl_generics #lang_path::types::Value for #name #ty_generics #where_clause{
                 type Expr = #expr_proxy_name #ty_generics;
                 type Var = #var_proxy_name #ty_generics;
-                type ExprData = ();
-                type VarData = ();
             }
             impl #impl_generics #lang_path::StructInitiaizable for #name #ty_generics #where_clause{
                 type Init = #ctor_proxy_name #ty_generics;
             }
             impl #impl_generics #expr_proxy_name #ty_generics #where_clause {
-                #(#expr_proxy_field_methods)*
                 #vis fn new(#(#field_names: impl Into<#lang_path::types::Expr<#field_types>>),*) -> Self {
                     use #lang_path::*;
                     let node = #lang_path::__compose::<#name #ty_generics>(&[ #( ToNode::node(&#field_names.into()) ),* ]);
-                    Self { node, _marker:std::marker::PhantomData }
+                    let expr = <#lang_path::types::Expr::<#name> as FromNode>::from_node(node);
+                    use #lang_path::types::ExprProxy;
+                    Self::from_expr(expr)
                 }
-            }
-            impl #impl_generics  #var_proxy_name #ty_generics #where_clause {
-                #(#var_proxy_field_methods)*
             }
         }
     }

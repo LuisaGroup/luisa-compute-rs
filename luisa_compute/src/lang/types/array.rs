@@ -7,8 +7,6 @@ use ir::ArrayType;
 impl<T: Value, const N: usize> Value for [T; N] {
     type Expr = ArrayExpr<T, N>;
     type Var = ArrayVar<T, N>;
-    type ExprData = ();
-    type VarData = ();
 }
 
 impl_simple_expr_proxy!([T: Value, const N: usize] ArrayExpr[T, N] for [T; N]);

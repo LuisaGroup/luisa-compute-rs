@@ -144,11 +144,22 @@ macro_rules! vector_proxies {
             $(pub $c: Var<T>),*
         }
 
-        unsafe impl<T: VectorAlign<$N>> HasExprLayout<<Vector<T, $N> as Value>::ExprData> for $ExprName<T> {}
-        unsafe impl<T: VectorAlign<$N>> HasVarLayout<<Vector<T, $N> as Value>::VarData> for $VarName<T> {}
-
         impl<T: VectorAlign<$N, VectorExpr = $ExprName<T>>> ExprProxy for $ExprName<T> {
             type Value = Vector<T, $N>;
+            #[allow(unused_assignments)]
+            fn from_expr(e:Expr<Self::Value>) -> Self {
+                let data = VectorExprData::<T, $N>::from_node(e.node());
+                let mut i = 0;
+                $(
+                    let $c = data.0[i].clone();
+                    i += 1;
+                    if i >= $N { i = 0; }
+                )*
+                Self{
+                    _node: e.node(),
+                    $($c),*
+                }
+            }
         }
         impl<T: VectorAlign<$N>> VectorExprProxy for $ExprName<T> {
             const N: usize = $N;
@@ -159,6 +170,20 @@ macro_rules! vector_proxies {
         }
         impl<T: VectorAlign<$N, VectorVar = $VarName<T>>> VarProxy for $VarName<T> {
             type Value = Vector<T, $N>;
+            #[allow(unused_assignments)]
+            fn from_var(e:Var<Self::Value>) -> Self {
+                let data = VectorVarData::<T, $N>::from_node(e.node());
+                let mut i = 0;
+                $(
+                    let $c = data.0[i].clone();
+                    i += 1;
+                    if i >= $N { i = 0; }
+                )*
+                Self{
+                    _node: e.node(),
+                    $($c),*
+                }
+            }
         }
         impl<T: VectorAlign<$N, VectorVar = $VarName<T>>> Deref for $VarName<T> {
             type Target = Expr<Vector<T, $N>>;
@@ -186,8 +211,6 @@ impl<T: VectorAlign<N>, const N: usize> TypeOf for Vector<T, N> {
 impl<T: VectorAlign<N>, const N: usize> Value for Vector<T, N> {
     type Expr = T::VectorExpr;
     type Var = T::VectorVar;
-    type ExprData = T::VectorExprData;
-    type VarData = T::VectorVarData;
 }
 
 impl<T: VectorAlign<N>, const N: usize> Vector<T, N> {
@@ -393,20 +416,14 @@ impl_simple_var_proxy!(SquareMatrixVar4 for SquareMatrix<4>);
 impl Value for SquareMatrix<2> {
     type Expr = SquareMatrixExpr2;
     type Var = SquareMatrixVar2;
-    type ExprData = ();
-    type VarData = ();
 }
 impl Value for SquareMatrix<3> {
     type Expr = SquareMatrixExpr3;
     type Var = SquareMatrixVar3;
-    type ExprData = ();
-    type VarData = ();
 }
 impl Value for SquareMatrix<4> {
     type Expr = SquareMatrixExpr4;
     type Var = SquareMatrixVar4;
-    type ExprData = ();
-    type VarData = ();
 }
 
 impl SquareMatrix<4> {

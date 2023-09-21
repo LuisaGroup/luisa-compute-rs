@@ -24,8 +24,7 @@ pub trait Primitive: private::Sealed + Copy + TypeOf + 'static {
 impl<T: Primitive> Value for T {
     type Expr = PrimitiveExpr<T>;
     type Var = PrimitiveVar<T>;
-    type ExprData = ();
-    type VarData = ();
+
 
     fn expr(self) -> Expr<Self> {
         let node = __current_scope(|s| -> NodeRef { s.const_(self.const_()) });

@@ -369,13 +369,13 @@ pub struct CommittedHit {
 }
 impl CommittedHitExpr {
     pub fn miss(&self) -> Expr<bool> {
-        self.hit_type().eq(HitType::Miss as u32)
+        self.hit_type.eq(HitType::Miss as u32)
     }
     pub fn triangle_hit(&self) -> Expr<bool> {
-        self.hit_type().eq(HitType::Triangle as u32)
+        self.hit_type.eq(HitType::Triangle as u32)
     }
     pub fn procedural_hit(&self) -> Expr<bool> {
-        self.hit_type().eq(HitType::Procedural as u32)
+        self.hit_type.eq(HitType::Procedural as u32)
     }
 }
 #[derive(Clone, Copy)]
@@ -431,22 +431,22 @@ mod test {
 
 impl HitExpr {
     pub fn valid(&self) -> Expr<bool> {
-        self.inst_id().ne(u32::MAX)
+        self.inst_id.ne(u32::MAX)
     }
     pub fn miss(&self) -> Expr<bool> {
-        self.inst_id().eq(u32::MAX)
+        self.inst_id.eq(u32::MAX)
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct TriangleCandidate {
     query: NodeRef,
-    hit: TriangleHitExpr,
+    hit: Expr<TriangleHit>,
 }
 #[derive(Clone, Copy)]
 pub struct ProceduralCandidate {
     query: NodeRef,
-    hit: ProceduralHitExpr,
+    hit: Expr<ProceduralHit>,
 }
 impl TriangleCandidate {
     pub fn commit(&self) {

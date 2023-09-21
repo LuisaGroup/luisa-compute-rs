@@ -196,11 +196,11 @@ pub trait FromNode {
     fn from_node(node: NodeRef) -> Self;
 }
 
-impl<T: Default> FromNode for T {
-    fn from_node(_: NodeRef) -> Self {
-        Default::default()
-    }
-}
+// impl<T: Default> FromNode for T {
+//     fn from_node(_: NodeRef) -> Self {
+//         Default::default()
+//     }
+// }
 
 fn _store<T1: Aggregate, T2: Aggregate>(var: &T1, value: &T2) {
     let value_nodes = value.to_vec_nodes();
@@ -399,6 +399,11 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
                     let mut indices = args.to_vec();
                     indices.push(i);
                     return b.call(Func::AtomicRef, &indices, <T as TypeOf>::type_());
+                }
+                Func::GetElementPtr => {
+                    let mut indices = args.to_vec();
+                    indices.push(i);
+                    return b.call(Func::GetElementPtr, &indices, <T as TypeOf>::type_());
                 }
                 _ => Func::ExtractElement,
             },

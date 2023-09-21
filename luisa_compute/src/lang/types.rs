@@ -1,4 +1,7 @@
-use std::ops::Deref;
+use std::{
+    cell::{Cell, RefCell, UnsafeCell},
+    ops::Deref,
+};
 
 use crate::internal_prelude::*;
 
@@ -18,10 +21,6 @@ pub trait Value: Copy + TypeOf + 'static {
     type Expr: ExprProxy<Value = Self>;
     /// A proxy for additional impls on [`Var<Self>`].
     type Var: VarProxy<Value = Self>;
-    /// The type of the custom data within an [`Expr<Self>`].
-    type ExprData: Clone + FromNode + 'static;
-    /// The type of the custom data within an [`Var<Self>`].
-    type VarData: Clone + FromNode + 'static;
 
     fn expr(self) -> Expr<Self> {
         let node = __current_scope(|s| -> NodeRef {
@@ -50,8 +49,10 @@ pub trait Value: Copy + TypeOf + 'static {
 ///
 /// For example, `Expr<[f32; 4]>` dereferences to `ArrayExpr<f32, 4>`, which
 /// exposes an [`Index`](std::ops::Index) impl.
-pub trait ExprProxy: Clone + HasExprLayout<<Self::Value as Value>::ExprData> + 'static {
+pub trait ExprProxy: Copy + 'static {
     type Value: Value<Expr = Self>;
+
+    fn from_expr(expr: Expr<Self::Value>) -> Self;
 }
 
 /// A trait for implementing remote impls on top of an [`Var`] using [`Deref`].
@@ -59,18 +60,54 @@ pub trait ExprProxy: Clone + HasExprLayout<<Self::Value as Value>::ExprData> + '
 /// For example, `Var<[f32; 4]>` dereferences to `ArrayVar<f32, 4>`, which
 /// exposes [`Index`](std::ops::Index) and [`IndexMut`](std::ops::IndexMut)
 /// impls.
-pub trait VarProxy:
-    Clone + HasVarLayout<<Self::Value as Value>::VarData> + Deref<Target = Expr<Self::Value>> + 'static
-{
+pub trait VarProxy: Copy + 'static {
     type Value: Value<Var = Self>;
-}
-/// This marker trait states that `Self` has the same layout as an [`Expr<T>`]
-/// with `T::ExprData = X`.
-pub unsafe trait HasExprLayout<X: Clone + FromNode + 'static> {}
-/// This marker trait states that `Self` has the same layout as an [`Var<T>`]
-/// with `T::VarData = X`.
-pub unsafe trait HasVarLayout<X: Clone + FromNode + 'static> {}
 
+    fn from_var(expr: Var<Self::Value>) -> Self;
+}
+
+pub(crate) struct ExprProxyData<T: Value> {
+    pub(crate) data: UnsafeCell<Option<T::Expr>>,
+}
+impl<T: Value> ExprProxyData<T> {
+    pub(crate) fn new() -> Self {
+        Self {
+            data: UnsafeCell::new(None),
+        }
+    }
+    pub(crate) fn deref_(&self, e: Expr<T>) -> &'static T::Expr {
+        unsafe {
+            let data = self.data.get().as_mut().unwrap();
+            if let Some(data) = data {
+                return std::mem::transmute(data);
+            }
+            let v = T::Expr::from_expr(e);
+            data.replace(v);
+            std::mem::transmute(data.as_ref().unwrap())
+        }
+    }
+}
+pub(crate) struct VarProxyData<T: Value> {
+    pub(crate) data: UnsafeCell<Option<T::Var>>,
+}
+impl<T: Value> VarProxyData<T> {
+    pub(crate) fn new() -> Self {
+        Self {
+            data: UnsafeCell::new(None),
+        }
+    }
+    pub(crate) fn deref_(&self, e: Var<T>) -> &'static T::Var {
+        unsafe {
+            let data = self.data.get().as_mut().unwrap();
+            if let Some(data) = data {
+                return std::mem::transmute(data);
+            }
+            let v = T::Var::from_var(e);
+            data.replace(v);
+            std::mem::transmute(data.as_ref().unwrap())
+        }
+    }
+}
 /// An expression within a [`Kernel`] or [`Callable`]. Created from a raw value
 /// using [`Value::expr`].
 ///
@@ -81,8 +118,7 @@ pub unsafe trait HasVarLayout<X: Clone + FromNode + 'static> {}
 pub struct Expr<T: Value> {
     pub(crate) node: NodeRef,
     _marker: PhantomData<T>,
-    /// Custom data stored within the expression.
-    pub data: T::ExprData,
+    proxy: *mut ExprProxyData<T>,
 }
 
 /// A variable within a [`Kernel`] or [`Callable`]. Created using [`Expr::var`]
@@ -96,12 +132,11 @@ pub struct Expr<T: Value> {
 pub struct Var<T: Value> {
     pub(crate) node: NodeRef,
     _marker: PhantomData<T>,
-    /// Custom data stored within the variable.
-    pub data: T::VarData,
+    proxy: *mut VarProxyData<T>,
 }
 
-impl<T: Value> Copy for Expr<T> where T::ExprData: Copy {}
-impl<T: Value> Copy for Var<T> where T::VarData: Copy {}
+impl<T: Value> Copy for Expr<T> {}
+impl<T: Value> Copy for Var<T> {}
 
 impl<T: Value> Aggregate for Expr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
@@ -114,10 +149,15 @@ impl<T: Value> Aggregate for Expr<T> {
 }
 impl<T: Value> FromNode for Expr<T> {
     fn from_node(node: NodeRef) -> Self {
+        let proxy = RECORDER.with(|r| {
+            let r = r.borrow();
+            let proxy = r.arena.alloc(ExprProxyData::<T>::new());
+            proxy as *mut _
+        });
         Self {
             node,
             _marker: PhantomData,
-            data: T::ExprData::from_node(node),
+            proxy,
         }
     }
 }
@@ -138,10 +178,15 @@ impl<T: Value> Aggregate for Var<T> {
 }
 impl<T: Value> FromNode for Var<T> {
     fn from_node(node: NodeRef) -> Self {
+        let proxy = RECORDER.with(|r| {
+            let r = r.borrow();
+            let proxy = r.arena.alloc(VarProxyData::<T>::new());
+            proxy as *mut _
+        });
         Self {
             node,
             _marker: PhantomData,
-            data: T::VarData::from_node(node),
+            proxy,
         }
     }
 }
@@ -154,13 +199,13 @@ impl<T: Value> ToNode for Var<T> {
 impl<T: Value> Deref for Expr<T> {
     type Target = T::Expr;
     fn deref(&self) -> &Self::Target {
-        unsafe { &*(self as *const Self as *const T::Expr) }
+        unsafe { self.proxy.as_mut().unwrap().deref_(*self) }
     }
 }
 impl<T: Value> Deref for Var<T> {
     type Target = T::Var;
     fn deref(&self) -> &Self::Target {
-        unsafe { &*(self as *const Self as *const T::Var) }
+        unsafe { self.proxy.as_mut().unwrap().deref_(*self) }
     }
 }
 
@@ -219,10 +264,11 @@ macro_rules! impl_simple_expr_proxy {
         #[derive(Debug, Clone, Copy)]
         #[repr(transparent)]
         pub struct $name $(< $($bounds)* >)? ($crate::lang::types::Expr<$t>) $(where $($where_bounds)+)?;
-        unsafe impl $(< $($bounds)* >)? $crate::lang::types::HasExprLayout< <$t as $crate::lang::types::Value>::ExprData >
-            for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {}
         impl $(< $($bounds)* >)? $crate::lang::types::ExprProxy for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {
             type Value = $t;
+            fn from_expr(expr: $crate::lang::types::Expr<$t>) -> Self {
+                Self(expr)
+            }
         }
     }
 }
@@ -233,10 +279,11 @@ macro_rules! impl_simple_var_proxy {
         #[derive(Debug, Clone, Copy)]
         #[repr(transparent)]
         pub struct $name $(< $($bounds)* >)? ($crate::lang::types::Var<$t>) $(where $($where_bounds)+)?;
-        unsafe impl $(< $($bounds)* >)? $crate::lang::types::HasVarLayout< <$t as $crate::lang::types::Value>::VarData >
-            for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {}
         impl $(< $($bounds)* >)? $crate::lang::types::VarProxy for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {
             type Value = $t;
+            fn from_var(var: $crate::lang::types::Var<$t>) -> Self {
+                Self(var)
+            }
         }
         impl $(< $($bounds)* >)? std::ops::Deref for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {
             type Target = $crate::lang::types::Expr<$t>;

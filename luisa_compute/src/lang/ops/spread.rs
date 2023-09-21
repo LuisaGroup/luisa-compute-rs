@@ -1,5 +1,5 @@
 use crate::lang::types::core::PrimitiveVar;
-use crate::lang::types::{ExprProxy, VarProxy};
+use crate::lang::types::VarProxy;
 
 use super::*;
 use traits::*;
@@ -129,9 +129,22 @@ macro_rules! impl_simple_binop_spread {
     };
 }
 
+macro_rules! impl_var_assign {
+    ($TraitExpr:ident: $fn:ident) => {
+        impl<T: Value, S> $TraitExpr<S> for Var<T>
+        where
+            T::Var: $TraitExpr<S>,
+        {
+            fn $fn(self, other: S) {
+                <T::Var as $TraitExpr<S>>::$fn(self.deref().clone(), other);
+            }
+        }
+    };
+}
+
 macro_rules! impl_assignop_spread {
     ([$($bounds:tt)*] $TraitExpr:ident [$TraitOrigExpr:ident] for $X:ty[$V:ty]: $assign_fn:ident [$fn:ident]) => {
-        impl<_Other, $($bounds)*> $TraitExpr<_Other> for &$X
+        impl<_Other, $($bounds)*> $TraitExpr<_Other> for $X
         where
             Expr<$V>: $TraitOrigExpr,
             Expr<$V>: SpreadOps<_Other, Join = $V> + Sized,
@@ -147,6 +160,16 @@ macro_rules! impl_assignop_spread {
         }
     }
 }
+impl_var_assign!(AddAssignExpr: add_assign);
+impl_var_assign!(SubAssignExpr: sub_assign);
+impl_var_assign!(MulAssignExpr: mul_assign);
+impl_var_assign!(DivAssignExpr: div_assign);
+impl_var_assign!(RemAssignExpr: rem_assign);
+impl_var_assign!(BitAndAssignExpr: bitand_assign);
+impl_var_assign!(BitOrAssignExpr: bitor_assign);
+impl_var_assign!(BitXorAssignExpr: bitxor_assign);
+impl_var_assign!(ShlAssignExpr: shl_assign);
+impl_var_assign!(ShrAssignExpr: shr_assign);
 
 macro_rules! impl_assignops {
     ([$($bounds:tt)*] $X:ty[$V:ty]) => {

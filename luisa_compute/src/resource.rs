@@ -1274,6 +1274,12 @@ impl<T: IoTexel> Tex2d<T> {
     pub fn format(&self) -> PixelFormat {
         self.handle.format
     }
+    pub fn read(&self, uv: impl Into<Expr<Uint2>>) -> Expr<T> {
+        self.var().read(uv)
+    }
+    pub fn write(&self, uv: impl Into<Expr<Uint2>>, v: impl Into<Expr<T>>) {
+        self.var().write(uv, v)
+    }
 }
 impl<T: IoTexel> Tex3d<T> {
     pub fn view(&self, level: u32) -> Tex3dView<T> {
@@ -1293,6 +1299,12 @@ impl<T: IoTexel> Tex3d<T> {
     }
     pub fn format(&self) -> PixelFormat {
         self.handle.format
+    }
+    pub fn read(&self, uv: impl Into<Expr<Uint3>>) -> Expr<T> {
+        self.var().read(uv)
+    }
+    pub fn write(&self, uv: impl Into<Expr<Uint3>>, v: impl Into<Expr<T>>) {
+        self.var().write(uv, v)
     }
 }
 #[derive(Clone)]

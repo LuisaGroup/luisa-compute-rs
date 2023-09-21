@@ -43,9 +43,10 @@ macro_rules! impl_spread {
 
 macro_rules! call_linear_fn_spread {
     ($f:ident [$($bounds:tt)*]($T:ty)) => {
-        $f!([$($bounds)*] $T: |x| x.expr(), Expr<$T>: |x| x => Expr<$T>);
+        // The T to other value impls mess up the `Ord` impls.
+        $f!(@sym [$($bounds)*] Expr<$T>: |x| x, $T: |x| x.expr() => Expr<$T>);
         $f!(['a, $($bounds)*] &'a $T: |x| x.expr(), Expr<$T>: |x| x => Expr<$T>);
-        $f!(['b, $($bounds)*] $T: |x| x.expr(), &'b Expr<$T>: |x| x.clone() => Expr<$T>);
+        $f!(@sym ['b, $($bounds)*] &'b Expr<$T>: |x| x.clone(), $T: |x| x.expr() => Expr<$T>);
         $f!(['a, 'b, $($bounds)*] &'a $T: |x| x.expr(), &'b Expr<$T>: |x| x.clone() => Expr<$T>);
 
         $f!(['b, $($bounds)*] Expr<$T>: |x| x, &'b Expr<$T>: |x| x.clone() => Expr<$T>);
@@ -54,10 +55,10 @@ macro_rules! call_linear_fn_spread {
         $f!(@sym [$($bounds)*] Var<$T>: |x| x.load(), Var<$T>: |x| x.load() => Expr<$T>);
         $f!(@sym ['a, 'b, $($bounds)*] &'a Var<$T>: |x| x.load(), &'b Var<$T>: |x| x.load() => Expr<$T>);
 
-        $f!([$($bounds)*] $T: |x| x.expr(), Var<$T>: |x| x.load() => Expr<$T>);
+        $f!(@sym [$($bounds)*] Var<$T>: |x| x.load(), $T: |x| x.expr() => Expr<$T>);
         $f!(['a, $($bounds)*] &'a $T: |x| x.expr(), Var<$T>: |x| x.load() => Expr<$T>);
-        $f!(['b, $($bounds)*] $T: |x| x.expr(), &'b Var<$T>: |x| x.load() => Expr<$T>);
-        $f!(['a, 'b, $($bounds)*] &'a $T: |x| x.expr(), &'b Var<$T>: |x| x.load() => Expr<$T>);
+        $f!(@sym ['b, $($bounds)*] &'b Var<$T>: |x| x.load(), $T: |x| x.expr() => Expr<$T>);
+         $f!(['a, 'b, $($bounds)*] &'a $T: |x| x.expr(), &'b Var<$T>: |x| x.load() => Expr<$T>);
 
         $f!(['a, $($bounds)*] &'a Expr<$T>: |x| x.clone(), Var<$T>: |x| x.load() => Expr<$T>);
         $f!(['a, 'b, $($bounds)*] &'a Expr<$T>: |x| x.clone(), &'b Var<$T>: |x| x.load() => Expr<$T>);
@@ -73,11 +74,11 @@ call_linear_fn_spread!(impl_spread[T]);
 
 macro_rules! call_vector_fn_spread {
     ($f:ident [$($bounds:tt)*]($N:tt, $T:ty) $Vt:ty, $Vsplat:path) => {
-        $f!([$($bounds)*] $T: |x| $Vsplat(x), Expr<$Vt>: |x| x => Expr<$Vt>);
+        $f!(@sym [$($bounds)*] Expr<$Vt>: |x| x, $T: |x| $Vsplat(x) => Expr<$Vt>);
         $f!(['a, $($bounds)*] &'a $T: |x| $Vsplat(*x), Expr<$Vt>: |x| x => Expr<$Vt>);
         $f!([$($bounds)*] Expr<$T>: |x| $Vsplat(x), Expr<$Vt>: |x| x => Expr<$Vt>);
         $f!(['a, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), Expr<$Vt>: |x| x => Expr<$Vt>);
-        $f!(['b, $($bounds)*] $T: |x| $Vsplat(x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
+        $f!(@sym ['b, $($bounds)*] &'b Expr<$Vt>: |x| x.clone(), $T: |x| $Vsplat(x) => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a $T: |x| $Vsplat(*x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
         $f!(['b, $($bounds)*] Expr<$T>: |x| $Vsplat(x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
@@ -87,11 +88,11 @@ macro_rules! call_vector_fn_spread {
         $f!(['b, $($bounds)*] Expr<$T>: |x| $Vsplat(x), &'b $Vt: |x| x.expr() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), &'b $Vt: |x| x.expr() => Expr<$Vt>);
 
-        $f!([$($bounds)*] $T: |x| $Vsplat(x), Var<$Vt>: |x| x.load() => Expr<$Vt>);
+        $f!(@sym [$($bounds)*] Var<$Vt>: |x| x.load(), $T: |x| $Vsplat(x) => Expr<$Vt>);
         $f!(['a, $($bounds)*] &'a $T: |x| $Vsplat(*x), Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!([$($bounds)*] Expr<$T>: |x| $Vsplat(x), Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!(['a, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), Var<$Vt>: |x| x.load() => Expr<$Vt>);
-        $f!(['b, $($bounds)*] $T: |x| $Vsplat(x), &'b Var<$Vt>: |x| x.load() => Expr<$Vt>);
+        $f!(@sym ['b, $($bounds)*] &'b Var<$Vt>: |x| x.load(), $T: |x| $Vsplat(x) => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a $T: |x| $Vsplat(*x), &'b Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!(['b, $($bounds)*] Expr<$T>: |x| $Vsplat(x), &'b Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), &'b Var<$Vt>: |x| x.load() => Expr<$Vt>);
@@ -126,31 +127,14 @@ mod trait_impls {
             Expr::<T::Join>::_min(Self::lift_self(self), Self::lift_other(other))
         }
     }
-    impl<T, S, U> ClampExpr<S, U> for T
+    impl<T: Value, S, U> ClampExpr<S, U> for Expr<T>
     where
-        S: SpreadOps<U>,
-        T: SpreadOps<Expr<S::Join>>,
-        Expr<T::Join>: ClampThis,
+        S: SpreadOps<U, Join = T>,
+        Expr<T>: ClampThis,
     {
-        ///           T::Join
-        ///          /        \
-        ///         /          \
-        ///        /            \
-        ///       /              \
-        ///      /            S::Join
-        ///     /            /       \
-        ///    /            /         \
-        ///   /            /           \
-        ///  /            /             \
-        /// T            S               U
-
-        type Output = Expr<T::Join>;
+        type Output = Expr<T>;
         fn clamp(self, min: S, max: U) -> Self::Output {
-            Expr::<T::Join>::_clamp(
-                Self::lift_self(self),
-                Self::lift_other(S::lift_self(min)),
-                Self::lift_other(S::lift_other(max)),
-            )
+            Expr::<T>::_clamp(self, S::lift_self(min), S::lift_other(max))
         }
     }
     impl<T, S> EqExpr<S> for T
@@ -185,19 +169,14 @@ mod trait_impls {
             Expr::<T::Join>::_ge(Self::lift_self(self), Self::lift_other(other))
         }
     }
-    impl<T, S, U> FloatMulAddExpr<S, U> for T
+    impl<T: Value, S, U> FloatMulAddExpr<S, U> for Expr<T>
     where
-        S: SpreadOps<U>,
-        T: SpreadOps<Expr<S::Join>>,
-        Expr<T::Join>: FloatMulAddThis,
+        S: SpreadOps<U, Join = T>,
+        Expr<T>: FloatMulAddThis,
     {
-        type Output = Expr<T::Join>;
+        type Output = Expr<T>;
         fn mul_add(self, mul: S, add: U) -> Self::Output {
-            Expr::<T::Join>::_mul_add(
-                Self::lift_self(self),
-                Self::lift_other(S::lift_self(mul)),
-                Self::lift_other(S::lift_other(add)),
-            )
+            Expr::<T>::_mul_add(self, S::lift_self(mul), S::lift_other(add))
         }
     }
     impl<T, S> FloatCopySignExpr<S> for T
@@ -220,19 +199,14 @@ mod trait_impls {
             Expr::<T::Join>::_step(Self::lift_self(self), Self::lift_other(edge))
         }
     }
-    impl<T, S, U> FloatSmoothStepExpr<S, U> for T
+    impl<T: Value, S, U> FloatSmoothStepExpr<S, U> for Expr<T>
     where
-        S: SpreadOps<U>,
-        T: SpreadOps<Expr<S::Join>>,
-        Expr<T::Join>: FloatSmoothStepThis,
+        S: SpreadOps<U, Join = T>,
+        Expr<T>: FloatSmoothStepThis,
     {
-        type Output = Expr<T::Join>;
+        type Output = Expr<T>;
         fn smooth_step(self, edge0: S, edge1: U) -> Self::Output {
-            Expr::<T::Join>::_smooth_step(
-                Self::lift_self(self),
-                Self::lift_other(S::lift_self(edge0)),
-                Self::lift_other(S::lift_other(edge1)),
-            )
+            Expr::<T>::_smooth_step(self, S::lift_self(edge0), S::lift_other(edge1))
         }
     }
     impl<T, S> FloatArcTan2Expr<S> for T
@@ -265,19 +239,14 @@ mod trait_impls {
             Expr::<T::Join>::_powf(Self::lift_self(self), Self::lift_other(exponent))
         }
     }
-    impl<T, S, U> FloatLerpExpr<S, U> for T
+    impl<T: Value, S, U> FloatLerpExpr<S, U> for Expr<T>
     where
-        S: SpreadOps<U>,
-        T: SpreadOps<Expr<S::Join>>,
-        Expr<T::Join>: FloatLerpThis,
+        S: SpreadOps<U, Join = T>,
+        Expr<T>: FloatLerpThis,
     {
-        type Output = Expr<T::Join>;
+        type Output = Expr<T>;
         fn lerp(self, other: S, frac: U) -> Self::Output {
-            Expr::<T::Join>::_lerp(
-                Self::lift_self(self),
-                Self::lift_other(S::lift_self(other)),
-                Self::lift_other(S::lift_other(frac)),
-            )
+            Expr::<T>::_lerp(self, S::lift_self(other), S::lift_other(frac))
         }
     }
 }
@@ -351,6 +320,10 @@ mod tests {
         let x = x.expr();
 
         let w = (&x.var()).min(&0.0_f32.expr());
+        let z = 10_f32.max(5_f32);
+        let i = 15_u32;
+        let j = z.log(10.0);
+        let _ = 1_u32.max(2_u32);
         println!("{:?}", w);
     }
 }

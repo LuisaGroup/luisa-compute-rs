@@ -12,13 +12,13 @@ use ir::SwitchCase;
 #[macro_export]
 macro_rules! if_ {
     ($cond:expr, $then:block, else $else_:block) => {
-        <_ as $crate::lang::ops::SelectMaybeExpr<_>>::select($cond, || $then, || $else_)
+        <_ as $crate::lang::ops::SelectMaybeExpr<_>>::if_then_else($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block, else, $else_:block) => {
-        <_ as $crate::lang::ops::SelectMaybeExpr<_>>::select($cond, || $then, || $else_)
+        <_ as $crate::lang::ops::SelectMaybeExpr<_>>::if_then_else($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block, $else_:block) => {
-        <_ as $crate::lang::ops::SelectMaybeExpr<_>>::select($cond, || $then, || $else_)
+        <_ as $crate::lang::ops::SelectMaybeExpr<_>>::if_then_else($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block) => {
         <_ as $crate::lang::ops::ActivateMaybeExpr>::activate($cond, || $then)

@@ -909,14 +909,14 @@ macro_rules! impl_io_texel {
 impl_io_texel!(f32, f32, Float4, |x: Expr<Float4>| x.x, |x| {
     Float4::splat_expr(x)
 });
-impl_io_texel!(
+impl_io_texel!(Float2, f32, Float4, |x: Expr<Float4>| x.xy(), |x: Expr<
     Float2,
-    f32,
+>| {
+    Float4::expr(x.x, x.y, 0.0, 0.0)
+});
+impl_io_texel!(Float4, f32, Float4, |x: Expr<Float4>| x, |x: Expr<
     Float4,
-    |x: Expr<Float4>| x.xy(),
-    |x: Expr<Float2>| { Float4::expr(x.x, x.y, 0.0, 0.0) }
-);
-impl_io_texel!(Float4, f32, Float4, |x: Expr<Float4>| x, |x: Expr<Float4>| x);
+>| x);
 
 // impl_io_texel!(u16,);
 // impl_io_texel!(i16,);
@@ -924,11 +924,17 @@ impl_io_texel!(Float4, f32, Float4, |x: Expr<Float4>| x, |x: Expr<Float4>| x);
 // impl_io_texel!(Short2,);
 // impl_io_texel!(Ushort4,);
 // impl_io_texel!(Short4,);
-impl_io_texel!(u32, u32, Uint4, |x: Expr<Uint4>| x.x, |x| Uint4::splat_expr(
-    x
-));
+impl_io_texel!(
+    u32,
+    u32,
+    Uint4,
+    |x: Expr<Uint4>| x.x,
+    |x| Uint4::splat_expr(x)
+);
 impl_io_texel!(i32, i32, Int4, |x: Expr<Int4>| x.x, |x| Int4::splat_expr(x));
-impl_io_texel!(Uint2, u32, Uint4, |x: Expr<Uint4>| x.xy(), |x: Expr<Uint2>| {
+impl_io_texel!(Uint2, u32, Uint4, |x: Expr<Uint4>| x.xy(), |x: Expr<
+    Uint2,
+>| {
     Uint4::expr(x.x, x.y, 0u32, 0u32)
 });
 impl_io_texel!(Int2, i32, Int4, |x: Expr<Int4>| x.xy(), |x: Expr<Int2>| {
@@ -1216,8 +1222,8 @@ impl<'a, T: IoTexel> Tex2dView<'a, T> {
     }
     pub fn size(&self) -> [u32; 3] {
         [
-            Ord::max(self.tex.handle.width >> self.level, 1),
-            Ord::max(self.tex.handle.height >> self.level, 1),
+            (self.tex.handle.width >> self.level).max(1),
+            (self.tex.handle.height >> self.level).max(1),
             1,
         ]
     }
@@ -1236,9 +1242,9 @@ impl<'a, T: IoTexel> Tex3dView<'a, T> {
     }
     pub fn size(&self) -> [u32; 3] {
         [
-            Ord::max(self.tex.handle.width >> self.level, 1),
-            Ord::max(self.tex.handle.height >> self.level, 1),
-            Ord::max(self.tex.handle.depth >> self.level, 1),
+            (self.tex.handle.width >> self.level).max(1),
+            (self.tex.handle.height >> self.level).max(1),
+            (self.tex.handle.depth >> self.level).max(1),
         ]
     }
     pub fn var(&self) -> Tex3dVar<T> {

@@ -24,9 +24,7 @@ pub mod prelude {
     pub use crate::lang::ops::*;
     pub use crate::lang::types::vector::alias::*;
     pub use crate::lang::types::vector::swizzle::*;
-    pub use crate::lang::types::vector::{
-        Mat2, Mat3, Mat4, SquareMatrix, Vec2, Vec3, Vec4, Vector,
-    };
+    pub use crate::lang::types::vector::VectorExprProxy;
     pub use crate::lang::types::{AsExpr, Expr, Value, Var};
     pub use crate::lang::Aggregate;
     pub use crate::resource::{IoTexel, StorageTexel, *};

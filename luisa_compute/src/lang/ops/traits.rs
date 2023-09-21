@@ -1,3 +1,5 @@
+use crate::lang::types::TrackingType;
+
 use super::*;
 
 // The double trait implementation is necessary as the compiler infinite loops
@@ -47,10 +49,11 @@ macro_rules! ops_trait {
     }
 }
 
-ops_trait!(MinMaxExpr<T>[MinMaxThis] {
-    fn max[_max](self, other: T);
-    fn min[_min](self, other: T);
-});
+pub trait MinMaxExpr<T = Self> {
+    type Output;
+    fn max(self, other: T) -> Self::Output;
+    fn min(self, other: T) -> Self::Output;
+}
 
 ops_trait!(ClampExpr<A, B>[ClampThis] {
     fn clamp[_clamp](self, min: A, max: B);
@@ -175,17 +178,17 @@ pub trait LoopMaybeExpr {
 
 pub trait LazyBoolMaybeExpr<T = Self> {
     type Bool;
-    fn and(self, other: impl FnOnce() -> T) -> Self::Bool;
-    fn or(self, other: impl FnOnce() -> T) -> Self::Bool;
+    fn __and(self, other: impl FnOnce() -> T) -> Self::Bool;
+    fn __or(self, other: impl FnOnce() -> T) -> Self::Bool;
 }
 
-pub trait EqMaybeExpr<T, const EXPR: bool> {
+pub trait EqMaybeExpr<T, Ty: TrackingType> {
     type Bool;
     fn __eq(self, other: T) -> Self::Bool;
     fn __ne(self, other: T) -> Self::Bool;
 }
 
-pub trait CmpMaybeExpr<T, const EXPR: bool> {
+pub trait CmpMaybeExpr<T, Ty: TrackingType> {
     type Bool;
     fn __lt(self, other: T) -> Self::Bool;
     fn __le(self, other: T) -> Self::Bool;

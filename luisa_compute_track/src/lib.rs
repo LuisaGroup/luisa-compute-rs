@@ -98,16 +98,16 @@ impl VisitMut for TraceVisitor {
             }
             Expr::Binary(expr) => {
                 let op_fn_str = match &expr.op {
-                    BinOp::Eq(_) => "eq",
-                    BinOp::Ne(_) => "ne",
+                    BinOp::Eq(_) => "__eq",
+                    BinOp::Ne(_) => "__ne",
 
-                    BinOp::And(_) => "and",
-                    BinOp::Or(_) => "or",
+                    BinOp::And(_) => "__and",
+                    BinOp::Or(_) => "__or",
 
-                    BinOp::Lt(_) => "lt",
-                    BinOp::Le(_) => "le",
-                    BinOp::Ge(_) => "ge",
-                    BinOp::Gt(_) => "gt",
+                    BinOp::Lt(_) => "__lt",
+                    BinOp::Le(_) => "__le",
+                    BinOp::Ge(_) => "__ge",
+                    BinOp::Gt(_) => "__gt",
                     _ => "",
                 };
 
@@ -115,11 +115,11 @@ impl VisitMut for TraceVisitor {
                     let left = &expr.left;
                     let right = &expr.right;
                     let op_fn = Ident::new(op_fn_str, expr.op.span());
-                    if op_fn_str == "eq" || op_fn_str == "ne" {
+                    if op_fn_str == "__eq" || op_fn_str == "__ne" {
                         *node = parse_quote_spanned! {span=>
                             <_ as #trait_path::EqMaybeExpr<_, _>>::#op_fn(#left, #right)
                         }
-                    } else if op_fn_str == "and" || op_fn_str == "or" {
+                    } else if op_fn_str == "__and" || op_fn_str == "__or" {
                         *node = parse_quote_spanned! {span=>
                             <_ as #trait_path::LazyBoolMaybeExpr<_>>::#op_fn(#left, || #right)
                         }

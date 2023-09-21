@@ -14,7 +14,8 @@ mod element;
 mod impls;
 pub mod swizzle;
 
-use swizzle::*;
+pub use impls::*;
+pub use swizzle::*;
 
 pub trait VectorElement: VectorAlign<2> + VectorAlign<3> + VectorAlign<4> {}
 impl<T: VectorAlign<2> + VectorAlign<3> + VectorAlign<4>> VectorElement for T {}
@@ -66,66 +67,6 @@ pub struct DoubledProxyData<X: FromNode + Copy>(X, X);
 impl<X: FromNode + Copy> FromNode for DoubledProxyData<X> {
     fn from_node(node: NodeRef) -> Self {
         Self(X::from_node(node), X::from_node(node))
-    }
-}
-
-pub trait VectorExprProxy {
-    const N: usize;
-    type T: Primitive;
-    fn node(&self) -> NodeRef;
-    fn _permute2(&self, x: u32, y: u32) -> Expr<Vec2<Self::T>>
-    where
-        Self::T: VectorAlign<2>,
-    {
-        assert!(x < Self::N as u32);
-        assert!(y < Self::N as u32);
-        let x = x.expr();
-        let y = y.expr();
-        Expr::<Vec2<Self::T>>::from_node(__current_scope(|s| {
-            s.call(
-                Func::Permute,
-                &[self.node(), x.node(), y.node()],
-                Vec2::<Self::T>::type_(),
-            )
-        }))
-    }
-    fn _permute3(&self, x: u32, y: u32, z: u32) -> Expr<Vec3<Self::T>>
-    where
-        Self::T: VectorAlign<3>,
-    {
-        assert!(x < Self::N as u32);
-        assert!(y < Self::N as u32);
-        assert!(z < Self::N as u32);
-        let x = x.expr();
-        let y = y.expr();
-        let z = z.expr();
-        Expr::<Vec3<Self::T>>::from_node(__current_scope(|s| {
-            s.call(
-                Func::Permute,
-                &[self.node(), x.node(), y.node(), z.node()],
-                Vec3::<Self::T>::type_(),
-            )
-        }))
-    }
-    fn _permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Expr<Vec4<Self::T>>
-    where
-        Self::T: VectorAlign<4>,
-    {
-        assert!(x < Self::N as u32);
-        assert!(y < Self::N as u32);
-        assert!(z < Self::N as u32);
-        assert!(w < Self::N as u32);
-        let x = x.expr();
-        let y = y.expr();
-        let z = z.expr();
-        let w = w.expr();
-        Expr::<Vec4<Self::T>>::from_node(__current_scope(|s| {
-            s.call(
-                Func::Permute,
-                &[self.node(), x.node(), y.node(), z.node(), w.node()],
-                Vec4::<Self::T>::type_(),
-            )
-        }))
     }
 }
 

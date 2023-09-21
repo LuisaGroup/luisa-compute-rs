@@ -1,3 +1,5 @@
+use crate::lang::types::{ExprType, ValueType};
+
 use super::*;
 
 impl<X: Linear> Expr<X> {
@@ -72,10 +74,18 @@ macro_rules! impl_ops_trait {
         }
     }
 }
-impl_ops_trait!([X: Linear] MinMaxExpr[MinMaxThis] for Expr<X> where [X::Scalar: Numeric] {
-    fn max[_max](self, other) { Func::Max.call2(self, other) }
-    fn min[_min](self, other) { Func::Min.call2(self, other) }
-});
+impl<X: Linear> MinMaxExpr for Expr<X>
+where
+    X::Scalar: Numeric,
+{
+    type Output = Self;
+    fn max(self, other: Self) -> Self {
+        Func::Max.call2(self, other)
+    }
+    fn min(self, other: Self) -> Self {
+        Func::Min.call2(self, other)
+    }
+}
 
 impl_ops_trait!([X: Linear] ClampExpr[ClampThis] for Expr<X> where [X::Scalar: Numeric] {
     fn clamp[_clamp](self, min, max) { Func::Clamp.call3(self, min, max) }
@@ -407,23 +417,23 @@ impl LoopMaybeExpr for Expr<bool> {
 
 impl LazyBoolMaybeExpr for bool {
     type Bool = bool;
-    fn and(self, other: impl FnOnce() -> bool) -> bool {
+    fn __and(self, other: impl FnOnce() -> bool) -> bool {
         self && other()
     }
-    fn or(self, other: impl FnOnce() -> bool) -> bool {
+    fn __or(self, other: impl FnOnce() -> bool) -> bool {
         self || other()
     }
 }
 impl LazyBoolMaybeExpr<Expr<bool>> for bool {
     type Bool = Expr<bool>;
-    fn and(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+    fn __and(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
         if self {
             other()
         } else {
             false.expr()
         }
     }
-    fn or(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+    fn __or(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
         if self {
             true.expr()
         } else {
@@ -433,14 +443,14 @@ impl LazyBoolMaybeExpr<Expr<bool>> for bool {
 }
 impl LazyBoolMaybeExpr<bool> for Expr<bool> {
     type Bool = Expr<bool>;
-    fn and(self, other: impl FnOnce() -> bool) -> Self::Bool {
+    fn __and(self, other: impl FnOnce() -> bool) -> Self::Bool {
         if other() {
             self
         } else {
             false.expr()
         }
     }
-    fn or(self, other: impl FnOnce() -> bool) -> Self::Bool {
+    fn __or(self, other: impl FnOnce() -> bool) -> Self::Bool {
         if other() {
             true.expr()
         } else {
@@ -450,15 +460,15 @@ impl LazyBoolMaybeExpr<bool> for Expr<bool> {
 }
 impl LazyBoolMaybeExpr for Expr<bool> {
     type Bool = Expr<bool>;
-    fn and(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+    fn __and(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
         crate::lang::control_flow::if_then_else(self, other, || false.expr())
     }
-    fn or(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+    fn __or(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
         crate::lang::control_flow::if_then_else(self, || true.expr(), other)
     }
 }
 
-impl<T, S> EqMaybeExpr<S, true> for T
+impl<T, S> EqMaybeExpr<S, ExprType> for T
 where
     T: EqExpr<S>,
 {
@@ -470,7 +480,7 @@ where
         self.ne(other)
     }
 }
-impl<T, S> EqMaybeExpr<S, false> for T
+impl<T, S> EqMaybeExpr<S, ValueType> for T
 where
     T: PartialEq<S>,
 {
@@ -483,7 +493,7 @@ where
     }
 }
 
-impl<T, S> CmpMaybeExpr<S, true> for T
+impl<T, S> CmpMaybeExpr<S, ExprType> for T
 where
     T: CmpExpr<S>,
 {
@@ -501,7 +511,7 @@ where
         self.ge(other)
     }
 }
-impl<T, S> CmpMaybeExpr<S, false> for T
+impl<T, S> CmpMaybeExpr<S, ValueType> for T
 where
     T: PartialOrd<S>,
 {

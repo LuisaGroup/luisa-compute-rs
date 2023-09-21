@@ -43,10 +43,9 @@ macro_rules! impl_spread {
 
 macro_rules! call_linear_fn_spread {
     ($f:ident [$($bounds:tt)*]($T:ty)) => {
-        // The T to other value impls mess up the `Ord` impls.
-        $f!(@sym [$($bounds)*] Expr<$T>: |x| x, $T: |x| x.expr() => Expr<$T>);
+        $f!([$($bounds)*] $T: |x| x.expr(), Expr<$T>: |x| x => Expr<$T>);
         $f!(['a, $($bounds)*] &'a $T: |x| x.expr(), Expr<$T>: |x| x => Expr<$T>);
-        $f!(@sym ['b, $($bounds)*] &'b Expr<$T>: |x| x.clone(), $T: |x| x.expr() => Expr<$T>);
+        $f!(['b, $($bounds)*] $T: |x| x.expr(), &'b Expr<$T>: |x| x.clone() => Expr<$T>);
         $f!(['a, 'b, $($bounds)*] &'a $T: |x| x.expr(), &'b Expr<$T>: |x| x.clone() => Expr<$T>);
 
         $f!(['b, $($bounds)*] Expr<$T>: |x| x, &'b Expr<$T>: |x| x.clone() => Expr<$T>);
@@ -55,10 +54,10 @@ macro_rules! call_linear_fn_spread {
         $f!(@sym [$($bounds)*] Var<$T>: |x| x.load(), Var<$T>: |x| x.load() => Expr<$T>);
         $f!(@sym ['a, 'b, $($bounds)*] &'a Var<$T>: |x| x.load(), &'b Var<$T>: |x| x.load() => Expr<$T>);
 
-        $f!(@sym [$($bounds)*] Var<$T>: |x| x.load(), $T: |x| x.expr() => Expr<$T>);
+        $f!([$($bounds)*] $T: |x| x.expr(), Var<$T>: |x| x.load() => Expr<$T>);
         $f!(['a, $($bounds)*] &'a $T: |x| x.expr(), Var<$T>: |x| x.load() => Expr<$T>);
-        $f!(@sym ['b, $($bounds)*] &'b Var<$T>: |x| x.load(), $T: |x| x.expr() => Expr<$T>);
-         $f!(['a, 'b, $($bounds)*] &'a $T: |x| x.expr(), &'b Var<$T>: |x| x.load() => Expr<$T>);
+        $f!(['b, $($bounds)*] $T: |x| x.expr(), &'b Var<$T>: |x| x.load() => Expr<$T>);
+        $f!(['a, 'b, $($bounds)*] &'a $T: |x| x.expr(), &'b Var<$T>: |x| x.load() => Expr<$T>);
 
         $f!(['a, $($bounds)*] &'a Expr<$T>: |x| x.clone(), Var<$T>: |x| x.load() => Expr<$T>);
         $f!(['a, 'b, $($bounds)*] &'a Expr<$T>: |x| x.clone(), &'b Var<$T>: |x| x.load() => Expr<$T>);
@@ -74,11 +73,11 @@ call_linear_fn_spread!(impl_spread[T]);
 
 macro_rules! call_vector_fn_spread {
     ($f:ident [$($bounds:tt)*]($N:tt, $T:ty) $Vt:ty, $Vsplat:path) => {
-        $f!(@sym [$($bounds)*] Expr<$Vt>: |x| x, $T: |x| $Vsplat(x) => Expr<$Vt>);
+        $f!([$($bounds)*] $T: |x| $Vsplat(x), Expr<$Vt>: |x| x => Expr<$Vt>);
         $f!(['a, $($bounds)*] &'a $T: |x| $Vsplat(*x), Expr<$Vt>: |x| x => Expr<$Vt>);
         $f!([$($bounds)*] Expr<$T>: |x| $Vsplat(x), Expr<$Vt>: |x| x => Expr<$Vt>);
         $f!(['a, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), Expr<$Vt>: |x| x => Expr<$Vt>);
-        $f!(@sym ['b, $($bounds)*] &'b Expr<$Vt>: |x| x.clone(), $T: |x| $Vsplat(x) => Expr<$Vt>);
+        $f!(['b, $($bounds)*] $T: |x| $Vsplat(x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a $T: |x| $Vsplat(*x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
         $f!(['b, $($bounds)*] Expr<$T>: |x| $Vsplat(x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
@@ -88,11 +87,11 @@ macro_rules! call_vector_fn_spread {
         $f!(['b, $($bounds)*] Expr<$T>: |x| $Vsplat(x), &'b $Vt: |x| x.expr() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), &'b $Vt: |x| x.expr() => Expr<$Vt>);
 
-        $f!(@sym [$($bounds)*] Var<$Vt>: |x| x.load(), $T: |x| $Vsplat(x) => Expr<$Vt>);
+        $f!([$($bounds)*] $T: |x| $Vsplat(x), Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!(['a, $($bounds)*] &'a $T: |x| $Vsplat(*x), Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!([$($bounds)*] Expr<$T>: |x| $Vsplat(x), Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!(['a, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), Var<$Vt>: |x| x.load() => Expr<$Vt>);
-        $f!(@sym ['b, $($bounds)*] &'b Var<$Vt>: |x| x.load(), $T: |x| $Vsplat(x) => Expr<$Vt>);
+        $f!(['b, $($bounds)*] $T: |x| $Vsplat(x), &'b Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a $T: |x| $Vsplat(*x), &'b Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!(['b, $($bounds)*] Expr<$T>: |x| $Vsplat(x), &'b Var<$Vt>: |x| x.load() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), &'b Var<$Vt>: |x| x.load() => Expr<$Vt>);
@@ -114,19 +113,6 @@ call_vector_fn_spread!(impl_spread[N, T]);
 
 mod trait_impls {
     use super::*;
-    impl<T, S> MinMaxExpr<S> for T
-    where
-        T: SpreadOps<S>,
-        Expr<T::Join>: MinMaxThis,
-    {
-        type Output = Expr<T::Join>;
-        fn max(self, other: S) -> Self::Output {
-            Expr::<T::Join>::_max(Self::lift_self(self), Self::lift_other(other))
-        }
-        fn min(self, other: S) -> Self::Output {
-            Expr::<T::Join>::_min(Self::lift_self(self), Self::lift_other(other))
-        }
-    }
     impl<T: Value, S, U> ClampExpr<S, U> for Expr<T>
     where
         S: SpreadOps<U, Join = T>,
@@ -263,6 +249,19 @@ macro_rules! impl_spread_op {
 
 macro_rules! impl_num_spread_single {
     ([ $($bounds:tt)* ] $T:ty, $S:ty) => {
+        // impl<$($bounds)*> MinMaxExpr<$S> for $T
+        // where
+        //     $T: SpreadOps<$S>,
+        //     Expr<<$T as SpreadOps<$S>>::Join>: MinMaxExpr,
+        // {
+        //     type Output = <Expr<<$T as SpreadOps<$S>>::Join> as MinMaxExpr>::Output;
+        //     fn max(self, other: $S) -> <Expr<<$T as SpreadOps<$S>>::Join> as MinMaxExpr>::Output {
+        //         Expr::<<$T as SpreadOps<$S>>::Join>::max(<$T as SpreadOps<$S>>::lift_self(self), <$T as SpreadOps<$S>>::lift_other(other))
+        //     }
+        //     fn min(self, other: $S) -> <Expr<<$T as SpreadOps<$S>>::Join> as MinMaxExpr>::Output {
+        //         Expr::<<$T as SpreadOps<$S>>::Join>::min(<$T as SpreadOps<$S>>::lift_self(self), <$T as SpreadOps<$S>>::lift_other(other))
+        //     }
+        // }
         impl_spread_op!( [ $($bounds)* ]: Add::add for $T, $S);
         impl_spread_op!( [ $($bounds)* ]: Sub::sub for $T, $S);
         impl_spread_op!( [ $($bounds)* ]: Mul::mul for $T, $S);
@@ -302,6 +301,9 @@ macro_rules! call_spreads {
     ($f:ident: $($T:ty),+) => {
         $(
         call_linear_fn_spread!($f []($T));
+        call_linear_fn_spread!($f [](Vector<$T, 2>));
+        call_linear_fn_spread!($f [](Vector<$T, 3>));
+        call_linear_fn_spread!($f [](Vector<$T, 4>));
         call_vector_fn_spread!($f [](2, $T));
         call_vector_fn_spread!($f [](3, $T));
         call_vector_fn_spread!($f [](4, $T));
@@ -310,20 +312,3 @@ macro_rules! call_spreads {
 }
 call_spreads!(impl_num_spread: f16, f32, f64, i8, i16, i32, i64, u8, u16, u32, u64);
 call_spreads!(impl_int_spread: bool, i8, i16, i32, i64, u8, u16, u32, u64);
-
-#[allow(dead_code)]
-mod tests {
-    use super::*;
-    fn test() {
-        let x = 10.0f32;
-        let y = Vector::<_, 2>::splat(20.0f32);
-        let x = x.expr();
-
-        let w = (&x.var()).min(&0.0_f32.expr());
-        let z = 10_f32.max(5_f32);
-        let i = 15_u32;
-        let j = z.log(10.0);
-        let _ = 1_u32.max(2_u32);
-        println!("{:?}", w);
-    }
-}

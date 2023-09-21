@@ -32,7 +32,6 @@ pub mod prelude {
         MulAssignExpr, MulExpr, RemAssignExpr, RemExpr, SelectMaybeExpr, ShlAssignExpr, ShlExpr,
         ShrAssignExpr, ShrExpr, SubAssignExpr, SubExpr,
     };
-    pub use crate::lang::types::vector::alias::*;
     pub use crate::lang::types::vector::swizzle::*;
     pub use crate::lang::types::vector::VectorExprProxy;
     pub use crate::lang::types::{AsExpr, Expr, Value, Var};

@@ -31,8 +31,8 @@ pub mod functions;
 pub mod index;
 pub mod ops;
 pub mod poly;
-pub mod types;
 pub mod soa;
+pub mod types;
 
 pub(crate) trait CallFuncTrait {
     fn call<T: Value, S: Value>(self, x: Expr<T>) -> Expr<S>;
@@ -459,8 +459,7 @@ macro_rules! struct_ {
         {
             type Init = <$t as $crate::lang::StructInitiaizable>::Init;
             let init = Init { $($it : $value), *  };
-            type Expr = <$t as $crate::lang::types::Value>::Expr;
-            let e:Expr = init.into();
+            let e: Expr<$t> = init.into();
             e
         }
     }

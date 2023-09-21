@@ -195,13 +195,13 @@ impl<T: VectorAlign<N>, const N: usize> Vector<T, N> {
     where
         T: VectorAlign<2>,
     {
-        Vector::from_elements([self.elements[x as usize], self.elements[y as usize]])
+        Vector::from([self.elements[x as usize], self.elements[y as usize]])
     }
     fn _permute3(&self, x: u32, y: u32, z: u32) -> Vec3<T>
     where
         T: VectorAlign<3>,
     {
-        Vector::from_elements([
+        Vector::from([
             self.elements[x as usize],
             self.elements[y as usize],
             self.elements[z as usize],
@@ -211,7 +211,7 @@ impl<T: VectorAlign<N>, const N: usize> Vector<T, N> {
     where
         T: VectorAlign<4>,
     {
-        Vector::from_elements([
+        Vector::from([
             self.elements[x as usize],
             self.elements[y as usize],
             self.elements[z as usize],

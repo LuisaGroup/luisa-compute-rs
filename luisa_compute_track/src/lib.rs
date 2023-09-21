@@ -54,7 +54,7 @@ impl VisitMut for TraceVisitor {
                 }) = &**left
                 {
                     *node = parse_quote_spanned! {span=>
-                        <_ as #trait_path::StoreMaybeExpr>::deref_set(#expr, #right)
+                        <_ as #trait_path::StoreMaybeExpr>::store(#expr, #right)
                     }
                 }
             }
@@ -65,7 +65,7 @@ impl VisitMut for TraceVisitor {
                 if let Expr::Let(_) = **cond {
                 } else if let Some((_, else_branch)) = else_branch {
                     *node = parse_quote_spanned! {span=>
-                        <_ as #trait_path::SelectMaybeExpr<_>>::select(#cond, || #then_branch, || #else_branch)
+                        <_ as #trait_path::SelectMaybeExpr<_>>::if_then_else(#cond, || #then_branch, || #else_branch)
                     }
                 } else {
                     *node = parse_quote_spanned! {span=>
@@ -213,7 +213,7 @@ pub fn tracked(
 fn track_impl(mut ast: Expr) -> TokenStream {
     (TraceVisitor {
         flow_path: quote!(::luisa_compute::lang::control_flow),
-        trait_path: quote!(::luisa_compute::lang::maybe_expr),
+        trait_path: quote!(::luisa_compute::lang::ops),
     })
     .visit_expr_mut(&mut ast);
 

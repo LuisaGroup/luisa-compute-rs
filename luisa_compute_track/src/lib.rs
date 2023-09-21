@@ -97,6 +97,51 @@ impl VisitMut for TraceVisitor {
                 }
             }
             Expr::Binary(expr) => {
+                let left = &expr.left;
+                let right = &expr.right;
+
+                if let Expr::Unary(ExprUnary {
+                    op: UnOp::Deref(_),
+                    expr: left,
+                    ..
+                }) = &**left
+                {
+                    let op_fn_str = match &expr.op {
+                        BinOp::AddAssign(_) => "__add_assign",
+                        BinOp::SubAssign(_) => "__sub_assign",
+                        BinOp::MulAssign(_) => "__mul_assign",
+                        BinOp::DivAssign(_) => "__div_assign",
+                        BinOp::RemAssign(_) => "__rem_assign",
+                        BinOp::BitAndAssign(_) => "__bitand_assign",
+                        BinOp::BitOrAssign(_) => "__bitor_assign",
+                        BinOp::BitXorAssign(_) => "__bitxor_assign",
+                        BinOp::ShlAssign(_) => "__shl_assign",
+                        BinOp::ShrAssign(_) => "__shr_assign",
+                        _ => "",
+                    };
+                    let op_trait_str = match &expr.op {
+                        BinOp::AddAssign(_) => "AddAssignMaybeExpr",
+                        BinOp::SubAssign(_) => "SubAssignMaybeExpr",
+                        BinOp::MulAssign(_) => "MulAssignMaybeExpr",
+                        BinOp::DivAssign(_) => "DivAssignMaybeExpr",
+                        BinOp::RemAssign(_) => "RemAssignMaybeExpr",
+                        BinOp::BitAndAssign(_) => "BitAndAssignMaybeExpr",
+                        BinOp::BitOrAssign(_) => "BitOrAssignMaybeExpr",
+                        BinOp::BitXorAssign(_) => "BitXorAssignMaybeExpr",
+                        BinOp::ShlAssign(_) => "ShlAssignMaybeExpr",
+                        BinOp::ShrAssign(_) => "ShrAssignMaybeExpr",
+                        _ => "",
+                    };
+                    if !op_fn_str.is_empty() {
+                        let op_fn = Ident::new(op_fn_str, expr.op.span());
+                        let op_trait = Ident::new(op_trait_str, expr.op.span());
+                        *node = parse_quote_spanned! {span=>
+                            <_ as #trait_path::#op_trait<_, _>>::#op_fn(#left, #right)
+                        };
+                        visit_expr_mut(self, node);
+                        return;
+                    }
+                }
                 let op_fn_str = match &expr.op {
                     BinOp::Add(_) => "__add",
                     BinOp::Sub(_) => "__sub",
@@ -119,16 +164,6 @@ impl VisitMut for TraceVisitor {
                     BinOp::Ge(_) => "__ge",
                     BinOp::Gt(_) => "__gt",
 
-                    BinOp::AddAssign(_) => "__add_assign",
-                    BinOp::SubAssign(_) => "__sub_assign",
-                    BinOp::MulAssign(_) => "__mul_assign",
-                    BinOp::DivAssign(_) => "__div_assign",
-                    BinOp::RemAssign(_) => "__rem_assign",
-                    BinOp::BitAndAssign(_) => "__bitand_assign",
-                    BinOp::BitOrAssign(_) => "__bitor_assign",
-                    BinOp::BitXorAssign(_) => "__bitxor_assign",
-                    BinOp::ShlAssign(_) => "__shl_assign",
-                    BinOp::ShrAssign(_) => "__shr_assign",
                     _ => "",
                 };
                 let op_trait_str = match &expr.op {
@@ -145,22 +180,10 @@ impl VisitMut for TraceVisitor {
                     BinOp::And(_) | BinOp::Or(_) => "LazyBoolMaybeExpr",
                     BinOp::Eq(_) | BinOp::Ne(_) => "EqMaybeExpr",
                     BinOp::Lt(_) | BinOp::Le(_) | BinOp::Ge(_) | BinOp::Gt(_) => "CmpMaybeExpr",
-                    BinOp::AddAssign(_) => "AddAssignMaybeExpr",
-                    BinOp::SubAssign(_) => "SubAssignMaybeExpr",
-                    BinOp::MulAssign(_) => "MulAssignMaybeExpr",
-                    BinOp::DivAssign(_) => "DivAssignMaybeExpr",
-                    BinOp::RemAssign(_) => "RemAssignMaybeExpr",
-                    BinOp::BitAndAssign(_) => "BitAndAssignMaybeExpr",
-                    BinOp::BitOrAssign(_) => "BitOrAssignMaybeExpr",
-                    BinOp::BitXorAssign(_) => "BitXorAssignMaybeExpr",
-                    BinOp::ShlAssign(_) => "ShlAssignMaybeExpr",
-                    BinOp::ShrAssign(_) => "ShrAssignMaybeExpr",
                     _ => "",
                 };
 
                 if !op_fn_str.is_empty() {
-                    let left = &expr.left;
-                    let right = &expr.right;
                     let op_fn = Ident::new(op_fn_str, expr.op.span());
                     let op_trait = Ident::new(op_trait_str, expr.op.span());
                     *node = parse_quote_spanned! {span=>

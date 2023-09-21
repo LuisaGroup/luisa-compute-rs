@@ -59,7 +59,7 @@ macro_rules! ops_trait {
                 fn $fn [$fn_this] ($self, $($arg: $S),*);
             )+
         });
-        trait $TraitMaybe<$($T,)* Ty: TrackingType> {
+        pub trait $TraitMaybe<$($T,)* Ty: TrackingType> {
             type Output;
             $(
                 fn $fn_maybe($self, $($arg: $S),*) -> Self::Output;

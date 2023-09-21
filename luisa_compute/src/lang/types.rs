@@ -40,6 +40,10 @@ pub trait Value: Copy + TypeOf + 'static {
     fn var(self) -> Var<Self> {
         self.expr().var()
     }
+
+    fn var_zeroed() -> Var<Self> {
+        Var::<Self>::from_node(__current_scope(|b| b.local_zero_init(Self::type_())))
+    }
 }
 
 /// A trait for implementing remote impls on top of an [`Expr`] using [`Deref`].

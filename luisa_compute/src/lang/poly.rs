@@ -92,7 +92,7 @@ impl TagIndex {
 }
 impl TagIndexExpr {
     pub fn valid(&self) -> Expr<bool> {
-        self.tag().cmpne(u32::MAX)
+        self.tag().ne(u32::MAX)
     }
 }
 
@@ -228,7 +228,7 @@ pub struct PolymorphicRef<'a, DevirtualizationKey, Trait: ?Sized + 'static> {
 impl<'a, K: Eq + Clone + Hash, T: ?Sized + 'static> PolymorphicRef<'a, K, T> {
     #[inline]
     pub fn dispatch<R: Aggregate>(&self, f: impl Fn(u32, &K, &T) -> R) -> R {
-        let mut sw = switch::<R>(self.tag_index.tag().int());
+        let mut sw = switch::<R>(self.tag_index.tag().as_::<i32>());
         for array in &self.parent.arrays {
             sw = sw.case(array.tag, || {
                 let obj = (array.get)(array, self.tag_index.index());
@@ -239,7 +239,7 @@ impl<'a, K: Eq + Clone + Hash, T: ?Sized + 'static> PolymorphicRef<'a, K, T> {
     }
     #[inline]
     pub fn unwrap<R: Aggregate>(&self, tag: u32, f: impl Fn(&K, &T) -> R) -> R {
-        let mut sw = switch::<R>(self.tag_index.tag().int());
+        let mut sw = switch::<R>(self.tag_index.tag().as_::<i32>());
         let mut found = false;
         for array in &self.parent.arrays {
             if array.tag as u32 == tag {

@@ -310,40 +310,43 @@ pub type Vec2<T> = Vector<T, 2>;
 pub type Vec3<T> = Vector<T, 3>;
 pub type Vec4<T> = Vector<T, 4>;
 
-pub type Half2 = Vec2<f16>;
-pub type Half3 = Vec3<f16>;
-pub type Half4 = Vec4<f16>;
-pub type Float2 = Vec2<f32>;
-pub type Float3 = Vec3<f32>;
-pub type Float4 = Vec4<f32>;
-pub type Double2 = Vec2<f64>;
-pub type Double3 = Vec3<f64>;
-pub type Double4 = Vec4<f64>;
-pub type Byte2 = Vec2<i8>;
-pub type Byte3 = Vec3<i8>;
-pub type Byte4 = Vec4<i8>;
-pub type Short2 = Vec2<i16>;
-pub type Short3 = Vec3<i16>;
-pub type Short4 = Vec4<i16>;
-pub type Int2 = Vec2<i32>;
-pub type Int3 = Vec3<i32>;
-pub type Int4 = Vec4<i32>;
-pub type Long2 = Vec2<i64>;
-pub type Long3 = Vec3<i64>;
-pub type Long4 = Vec4<i64>;
-pub type Ubyte2 = Vec2<u8>;
-pub type Ubyte3 = Vec3<u8>;
-pub type Ubyte4 = Vec4<u8>;
-pub type Ushort2 = Vec2<u16>;
-pub type Ushort3 = Vec3<u16>;
-pub type Ushort4 = Vec4<u16>;
-pub type Uint2 = Vec2<u32>;
-pub type Uint3 = Vec3<u32>;
-pub type Uint4 = Vec4<u32>;
-pub type Ulong2 = Vec2<u64>;
-pub type Bool2 = Vec2<bool>;
-pub type Bool3 = Vec3<bool>;
-pub type Bool4 = Vec4<bool>;
+pub mod alias {
+    use super::*;
+    pub type Half2 = Vec2<f16>;
+    pub type Half3 = Vec3<f16>;
+    pub type Half4 = Vec4<f16>;
+    pub type Float2 = Vec2<f32>;
+    pub type Float3 = Vec3<f32>;
+    pub type Float4 = Vec4<f32>;
+    pub type Double2 = Vec2<f64>;
+    pub type Double3 = Vec3<f64>;
+    pub type Double4 = Vec4<f64>;
+    pub type Byte2 = Vec2<i8>;
+    pub type Byte3 = Vec3<i8>;
+    pub type Byte4 = Vec4<i8>;
+    pub type Short2 = Vec2<i16>;
+    pub type Short3 = Vec3<i16>;
+    pub type Short4 = Vec4<i16>;
+    pub type Int2 = Vec2<i32>;
+    pub type Int3 = Vec3<i32>;
+    pub type Int4 = Vec4<i32>;
+    pub type Long2 = Vec2<i64>;
+    pub type Long3 = Vec3<i64>;
+    pub type Long4 = Vec4<i64>;
+    pub type Ubyte2 = Vec2<u8>;
+    pub type Ubyte3 = Vec3<u8>;
+    pub type Ubyte4 = Vec4<u8>;
+    pub type Ushort2 = Vec2<u16>;
+    pub type Ushort3 = Vec3<u16>;
+    pub type Ushort4 = Vec4<u16>;
+    pub type Uint2 = Vec2<u32>;
+    pub type Uint3 = Vec3<u32>;
+    pub type Uint4 = Vec4<u32>;
+    pub type Ulong2 = Vec2<u64>;
+    pub type Bool2 = Vec2<bool>;
+    pub type Bool3 = Vec3<bool>;
+    pub type Bool4 = Vec4<bool>;
+}
 
 // Matrix
 
@@ -352,7 +355,7 @@ where
     f32: VectorAlign<N>,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.elements.fmt(f)
+        self.cols.fmt(f)
     }
 }
 
@@ -362,7 +365,7 @@ pub struct SquareMatrix<const N: usize>
 where
     f32: VectorAlign<N>,
 {
-    pub elements: [Vector<f32, N>; N],
+    pub cols: [Vector<f32, N>; N],
 }
 
 impl<const N: usize> TypeOf for SquareMatrix<N>
@@ -406,6 +409,25 @@ impl Value for SquareMatrix<4> {
     type VarData = ();
 }
 
+impl SquareMatrix<4> {
+    #[inline]
+    pub fn into_affine3x4(self) -> [f32; 12] {
+        [
+            self.cols[0].x,
+            self.cols[1].x,
+            self.cols[2].x,
+            self.cols[3].x,
+            self.cols[0].y,
+            self.cols[1].y,
+            self.cols[2].y,
+            self.cols[3].y,
+            self.cols[0].z,
+            self.cols[1].z,
+            self.cols[2].z,
+            self.cols[3].z,
+        ]
+    }
+}
 pub type Mat2 = SquareMatrix<2>;
 pub type Mat3 = SquareMatrix<3>;
 pub type Mat4 = SquareMatrix<4>;

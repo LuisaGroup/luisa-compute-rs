@@ -104,6 +104,11 @@ impl CallableParameter for BindlessArrayVar {
         encoder.bindless_array(self)
     }
 }
+impl KernelParameter for rtx::AccelVar {
+    fn def_param(builder: &mut KernelBuilder) -> Self {
+        builder.accel()
+    }
+}
 
 pub trait KernelParameter {
     fn def_param(builder: &mut KernelBuilder) -> Self;
@@ -260,6 +265,14 @@ impl KernelBuilder {
         );
         self.args.push(node);
         BindlessArrayVar { node, handle: None }
+    }
+    pub fn accel(&mut self) -> rtx::AccelVar {
+        let node = new_node(
+            __module_pools(),
+            Node::new(CArc::new(Instruction::Accel), Type::void()),
+        );
+        self.args.push(node);
+        rtx::AccelVar { node, handle: None }
     }
     fn collect_module_info(&self) -> (ResourceTracker, Vec<CArc<CpuCustomOp>>, Vec<Capture>) {
         RECORDER.with(|r| {

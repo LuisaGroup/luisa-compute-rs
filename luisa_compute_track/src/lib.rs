@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use proc_macro_error::emit_error;
-use quote::quote;
+use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;
 use syn::visit_mut::*;
 use syn::*;
@@ -193,6 +193,21 @@ pub fn track(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = quote!({ #input });
     let input = proc_macro::TokenStream::from(input);
     track_impl(parse_macro_input!(input as Expr)).into()
+}
+
+#[proc_macro_attribute]
+pub fn tracked(
+    _attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let item = syn::parse_macro_input!(item as ItemFn);
+    let body = &item.block;
+    let body = proc_macro::TokenStream::from(quote!({ #body }));
+    let body = track_impl(parse_macro_input!(body as Expr));
+    let attrs = &item.attrs;
+    let sig = &item.sig;
+    let vis = &item.vis;
+    quote_spanned!(item.span()=> #(#attrs)* #vis #sig { #body }).into()
 }
 
 fn track_impl(mut ast: Expr) -> TokenStream {

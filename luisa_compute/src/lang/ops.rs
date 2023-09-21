@@ -10,9 +10,9 @@ pub mod traits;
 
 pub use traits::*;
 
-trait CastFrom<T: Primitive>: Primitive {}
-impl<T: Numeric, S: Numeric> CastFrom<S> for T {}
-impl<T: Integral> CastFrom<bool> for T {}
+pub unsafe trait CastFrom<T: Primitive>: Primitive {}
+unsafe impl<T: Numeric, S: Numeric> CastFrom<S> for T {}
+unsafe impl<T: Integral> CastFrom<bool> for T {}
 
 pub trait Linear: Value {
     // Note that without #![feature(generic_const_exprs)], I can't use this within

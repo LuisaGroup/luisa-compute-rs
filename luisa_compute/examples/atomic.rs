@@ -13,7 +13,7 @@ fn main() {
     let shader = device.create_kernel::<fn()>(&track!(|| {
         let buf_x = x.var();
         let buf_sum = sum.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         buf_sum.atomic_fetch_add(0, buf_x.read(tid));
     }));
     shader.dispatch([x.len() as u32, 1, 1]);

@@ -27,11 +27,14 @@ fn main() {
         // z is pass by arg
         let buf_x = x.var(); // x and y are captured
         let buf_y = y.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
+        let v = Float3::expr(1.0, 1.0, 1.0);
+        let iv = v.as_::<Int3>();
         let vx = 2.0_f32.var(); // create a local mutable variable
-        *vx.get_mut() += *vx + x;
+        // *vx.get_mut() += *vx + x;
+        vx.store(vx.load() + x); // store to vx
         buf_z.write(tid, vx.load() + y);
     });
     kernel.dispatch([1024, 1, 1], &z);

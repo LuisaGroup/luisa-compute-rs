@@ -24,7 +24,7 @@ pub mod prelude {
     pub use crate::lang::ops::*;
     pub use crate::lang::types::vector::swizzle::*;
     pub use crate::lang::types::vector::{
-        Mat2, Mat3, Mat4, SquareMatrix, Vec2, Vec3, Vec4, Vector,
+        alias::*, Mat2, Mat3, Mat4, SquareMatrix, Vec2, Vec3, Vec4, Vector,
     };
     pub use crate::lang::types::{AsExpr, Expr, Value, Var};
     pub use crate::lang::Aggregate;
@@ -46,7 +46,7 @@ mod internal_prelude {
         new_node, register_type, BasicBlock, Const, Func, Instruction, IrBuilder, Node,
         PhiIncoming, Pooled, Type, TypeOf, INVALID_REF,
     };
-    pub(crate) use crate::lang::types::vector::legacy::*;
+    pub(crate) use crate::lang::types::vector::*;
     pub(crate) use crate::lang::{
         ir, CallFuncTrait, Recorder, __compose, __extract, __insert, __module_pools,
         need_runtime_check, FromNode, NodeLike, NodeRef, ToNode, __current_scope, __pop_scope,

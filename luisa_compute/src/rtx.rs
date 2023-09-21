@@ -330,16 +330,16 @@ pub struct AccelVar {
 #[repr(align(16))]
 #[derive(Clone, Copy, Value, Debug)]
 pub struct Ray {
-    pub orig: PackedFloat3,
+    pub orig: [f32; 3],
     pub tmin: f32,
-    pub dir: PackedFloat3,
+    pub dir: [f32; 3],
     pub tmax: f32,
 }
 #[repr(C)]
 #[derive(Clone, Copy, Value, Debug)]
 pub struct Aabb {
-    pub min: PackedFloat3,
-    pub max: PackedFloat3,
+    pub min: [f32; 3],
+    pub max: [f32; 3],
 }
 
 #[repr(C)]
@@ -369,13 +369,13 @@ pub struct CommittedHit {
 }
 impl CommittedHitExpr {
     pub fn miss(&self) -> Expr<bool> {
-        self.hit_type().cmpeq(HitType::Miss as u32)
+        self.hit_type().eq(HitType::Miss as u32)
     }
     pub fn triangle_hit(&self) -> Expr<bool> {
-        self.hit_type().cmpeq(HitType::Triangle as u32)
+        self.hit_type().eq(HitType::Triangle as u32)
     }
     pub fn procedural_hit(&self) -> Expr<bool> {
-        self.hit_type().cmpeq(HitType::Procedural as u32)
+        self.hit_type().eq(HitType::Procedural as u32)
     }
 }
 #[derive(Clone, Copy)]
@@ -390,21 +390,20 @@ pub fn offset_ray_origin(p: Expr<Float3>, n: Expr<Float3>) -> Expr<Float3> {
     lazy_static! {
         static ref F: Callable<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>> =
             create_static_callable::<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>>(|p, n| {
-                const ORIGIN: f32 = 1.0f32 / 32.0f32;
-                const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
-                const INT_SCALE: f32 = 256.0f32;
-                let of_i = (INT_SCALE * n).int();
-                let p_i = p.bitcast::<Int3>() + Int3Expr::select(p.cmplt(0.0f32), -of_i, of_i);
-                Float3Expr::select(
-                    p.abs().cmplt(ORIGIN),
-                    p + FLOAT_SCALE * n,
-                    p_i.bitcast::<Float3>(),
-                )
+                // const ORIGIN: f32 = 1.0f32 / 32.0f32;
+                // const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
+                // const INT_SCALE: f32 = 256.0f32;
+                // let of_i = (INT_SCALE * n).as_::<i32>();
+                // let p_i = p.bitcast::<Int3>() + p.lt(0.0f32).select(-of_i, of_i);
+                // p.abs()
+                //     .lt(ORIGIN)
+                //     .select(p + FLOAT_SCALE * n, p_i.bitcast::<Float3>())
+                todo!()
             });
     }
     F.call(p, n)
 }
-pub type Index = PackedUint3;
+pub type Index = [u32; 3];
 
 #[repr(C)]
 #[repr(align(8))]
@@ -432,10 +431,10 @@ mod test {
 
 impl HitExpr {
     pub fn valid(&self) -> Expr<bool> {
-        self.inst_id().cmpne(u32::MAX)
+        self.inst_id().ne(u32::MAX)
     }
     pub fn miss(&self) -> Expr<bool> {
-        self.inst_id().cmpeq(u32::MAX)
+        self.inst_id().eq(u32::MAX)
     }
 }
 
@@ -552,11 +551,11 @@ impl AccelVar {
     }
     #[inline]
     pub fn trace_closest(&self, ray: impl Into<Expr<Ray>>) -> Expr<Hit> {
-        self.trace_closest_masked(ray, 0xff)
+        self.trace_closest_masked(ray, u32::MAX.expr())
     }
     #[inline]
     pub fn trace_any(&self, ray: impl Into<Expr<Ray>>) -> Expr<bool> {
-        self.trace_any_masked(ray, 0xff)
+        self.trace_any_masked(ray, u32::MAX.expr())
     }
     #[inline]
     pub fn query_all<T, P>(

@@ -1,7 +1,7 @@
 use super::*;
 use std::hash::Hash;
 
-pub(crate) trait Alignment: Default + Copy + Hash + Eq + 'static {
+pub trait Alignment: Default + Copy + Hash + Eq + 'static {
     const ALIGNMENT: usize;
 }
 

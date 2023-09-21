@@ -249,6 +249,8 @@ impl Compiler {
                 node: #lang_path::NodeRef,
                 _marker: std::marker::PhantomData<(#marker_args)>,
             }
+            unsafe impl #impl_generics #lang_path::types::HasExprLayout< <#name as Value>::ExprData  > for #expr_proxy_name #ty_generics #where_clause {}
+            unsafe impl #impl_generics #lang_path::types::HasVarLayout< <#name as Value>::VarData > for #var_proxy_name #ty_generics #where_clause {}
             #[allow(unused_parens)]
             impl #impl_generics #lang_path::Aggregate for #expr_proxy_name #ty_generics #where_clause {
                 fn to_nodes(&self, nodes: &mut Vec<#lang_path::NodeRef>) {
@@ -308,35 +310,35 @@ impl Compiler {
             }
             #[allow(unused_parens)]
             impl #impl_generics std::ops::Deref for #var_proxy_name #ty_generics #where_clause {
-                type Target = #expr_proxy_name #ty_generics;
+                type Target = #lang_path::types::Expr<#name> #ty_generics;
                 fn deref(&self) -> &Self::Target {
-                    self._deref()
+                    #lang_path::types::_deref_proxy(self)
                 }
             }
-            #[allow(unused_parens)]
-            impl #impl_generics From<#var_proxy_name #ty_generics> for #expr_proxy_name #ty_generics #where_clause {
-                fn from(var: #var_proxy_name #ty_generics) -> Self {
-                    var.load()
-                }
-            }
-            #[allow(unused_parens)]
-            impl #impl_generics #runtime_path::CallableParameter for #expr_proxy_name #ty_generics #where_clause {
-                fn def_param(_:Option<std::rc::Rc<dyn std::any::Any>>, builder: &mut #runtime_path::KernelBuilder) -> Self {
-                    builder.value::<#name #ty_generics>()
-                }
-                fn encode(&self, encoder: &mut #runtime_path::CallableArgEncoder) {
-                    encoder.var(*self)
-                }
-            }
-            #[allow(unused_parens)]
-            impl #impl_generics #runtime_path::CallableParameter for #var_proxy_name #ty_generics #where_clause  {
-                fn def_param(_:Option<std::rc::Rc<dyn std::any::Any>>, builder: &mut #runtime_path::KernelBuilder) -> Self {
-                    builder.var::<#name #ty_generics>()
-                }
-                fn encode(&self, encoder: &mut #runtime_path::CallableArgEncoder) {
-                    encoder.var(*self)
-                }
-            }
+            // #[allow(unused_parens)]
+            // impl #impl_generics From<#var_proxy_name #ty_generics> for #expr_proxy_name #ty_generics #where_clause {
+            //     fn from(var: #var_proxy_name #ty_generics) -> Self {
+            //         var.load()
+            //     }
+            // }
+            // #[allow(unused_parens)]
+            // impl #impl_generics #runtime_path::CallableParameter for #expr_proxy_name #ty_generics #where_clause {
+            //     fn def_param(_:Option<std::rc::Rc<dyn std::any::Any>>, builder: &mut #runtime_path::KernelBuilder) -> #lang_path::types::Expr<#name> #ty_generics {
+            //         builder.value::<#name #ty_generics>()
+            //     }
+            //     fn encode(&self, encoder: &mut #runtime_path::CallableArgEncoder) {
+            //         encoder.var(*self)
+            //     }
+            // }
+            // #[allow(unused_parens)]
+            // impl #impl_generics #runtime_path::CallableParameter for #var_proxy_name #ty_generics #where_clause  {
+            //     fn def_param(_:Option<std::rc::Rc<dyn std::any::Any>>, builder: &mut #runtime_path::KernelBuilder) -> #lang_path::types::Var<#name> #ty_generics {
+            //         builder.var::<#name #ty_generics>()
+            //     }
+            //     fn encode(&self, encoder: &mut #runtime_path::CallableArgEncoder) {
+            //         encoder.var(*self)
+            //     }
+            // }
 
         );
         quote_spanned! {
@@ -346,9 +348,8 @@ impl Compiler {
             impl #impl_generics #lang_path::types::Value for #name #ty_generics #where_clause{
                 type Expr = #expr_proxy_name #ty_generics;
                 type Var = #var_proxy_name #ty_generics;
-                fn fields() -> Vec<String> {
-                    vec![#(stringify!(#field_names).into(),)*]
-                }
+                type ExprData = ();
+                type VarData = ();
             }
             impl #impl_generics #lang_path::StructInitiaizable for #name #ty_generics #where_clause{
                 type Init = #ctor_proxy_name #ty_generics;

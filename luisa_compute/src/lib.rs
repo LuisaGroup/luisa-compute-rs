@@ -22,22 +22,16 @@ pub mod prelude {
     pub use crate::lang::functions::{block_size, dispatch_id, dispatch_size, set_block_size};
     pub use crate::lang::index::{IndexRead, IndexWrite};
     pub use crate::lang::ops::*;
-    pub use crate::lang::swizzle::*;
+    pub use crate::lang::types::vector::swizzle::*;
     pub use crate::lang::types::vector::{
-        Bool2, Bool3, Bool4, Byte2, Byte3, Byte4, Double2, Double3, Double4, Float2, Float3,
-        Float4, Half2, Half3, Half4, Int2, Int3, Int4, Long2, Long3, Long4, Mat2, Mat3, Mat4,
-        PackedBool2, PackedBool3, PackedBool4, PackedFloat2, PackedFloat3, PackedFloat4,
-        PackedInt2, PackedInt3, PackedInt4, PackedLong2, PackedLong3, PackedLong4, PackedShort2,
-        PackedShort3, PackedShort4, PackedUint2, PackedUint3, PackedUint4, PackedUlong2,
-        PackedUlong3, PackedUlong4, PackedUshort2, PackedUshort3, PackedUshort4, Short2, Short3,
-        Short4, Ubyte2, Ubyte3, Ubyte4, Uint2, Uint3, Uint4, Ulong2, Ulong3, Ulong4, Ushort2,
-        Ushort3, Ushort4,
+        Mat2, Mat3, Mat4, SquareMatrix, Vec2, Vec3, Vec4, Vector,
     };
-    pub use crate::lang::types::{Expr, ExprProxy, Value, Var, VarProxy};
+    pub use crate::lang::types::{AsExpr, Expr, Value, Var};
     pub use crate::lang::Aggregate;
     pub use crate::resource::{IoTexel, StorageTexel, *};
+    pub use crate::runtime::api::StreamTag;
     pub use crate::runtime::{
-        api::StreamTag, create_static_callable, Command, Device, KernelBuildOptions, Scope, Stream,
+        create_static_callable, Command, Device, KernelBuildOptions, Scope, Stream,
     };
     pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, struct_, while_, Context};
 
@@ -46,22 +40,25 @@ pub mod prelude {
 }
 
 mod internal_prelude {
-    pub(crate) use crate::lang::debug::{CpuFn, __env_need_backtrace, is_cpu_backend};
+    pub(crate) use crate::lang::debug::{__env_need_backtrace, is_cpu_backend, CpuFn};
     pub(crate) use crate::lang::ir::ffi::*;
     pub(crate) use crate::lang::ir::{
         new_node, register_type, BasicBlock, Const, Func, Instruction, IrBuilder, Node,
         PhiIncoming, Pooled, Type, TypeOf, INVALID_REF,
     };
-    pub(crate) use crate::lang::types::vector::*;
+    pub(crate) use crate::lang::types::vector::legacy::*;
     pub(crate) use crate::lang::{
-        ir, Recorder, __compose, __extract, __insert, __module_pools, need_runtime_check, FromNode,
-        NodeRef, ToNode, __current_scope, __pop_scope, RECORDER,
+        ir, CallFuncTrait, Recorder, __compose, __extract, __insert, __module_pools,
+        need_runtime_check, FromNode, NodeLike, NodeRef, ToNode, __current_scope, __pop_scope,
+        RECORDER,
     };
     pub(crate) use crate::prelude::*;
     pub(crate) use crate::runtime::{
         CallableArgEncoder, CallableParameter, CallableRet, KernelBuilder,
     };
-    pub(crate) use crate::{get_backtrace, impl_callable_param, ResourceTracker};
+    pub(crate) use crate::{
+        get_backtrace, impl_simple_expr_proxy, impl_simple_var_proxy, ResourceTracker,
+    };
     pub(crate) use luisa_compute_backend::Backend;
     pub(crate) use std::marker::PhantomData;
 }
@@ -99,7 +96,8 @@ lazy_static! {
 }
 impl Context {
     /// path to libluisa-*
-    /// if the current_exe() is in the same directory as libluisa-*, then passing current_exe() is enough
+    /// if the current_exe() is in the same directory as libluisa-*, then
+    /// passing current_exe() is enough
     pub fn new(lib_path: impl AsRef<Path>) -> Self {
         let mut lib_path = lib_path.as_ref().to_path_buf();
         lib_path = lib_path.canonicalize().unwrap();

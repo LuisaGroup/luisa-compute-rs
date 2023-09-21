@@ -22,9 +22,9 @@ for n in range(2,5):
     s += '    type Vec2;\n'
     s += '    type Vec3;\n'
     s += '    type Vec4;\n'
-    s += '    fn permute2(&self, x: i32, y: i32) -> Self::Vec2;\n'
-    s += '    fn permute3(&self, x: i32, y: i32, z: i32) -> Self::Vec3;\n'
-    s += '    fn permute4(&self, x: i32, y: i32, z: i32, w: i32) -> Self::Vec4;\n'
+    s += '    fn permute2(&self, x: u32, y: u32) -> Self::Vec2;\n'
+    s += '    fn permute3(&self, x: u32, y: u32, z: u32) -> Self::Vec3;\n'
+    s += '    fn permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Self::Vec4;\n'
     for sw in sw_m_to_n[(n, 2)]:
         s += '    fn {}(&self) -> Self::Vec2 {{\n'.format(swizzle_name(sw))
         s += '        self.permute2({}, {})\n'.format(sw[0], sw[1])

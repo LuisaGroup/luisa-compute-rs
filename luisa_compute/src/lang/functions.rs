@@ -1,5 +1,7 @@
 use crate::internal_prelude::*;
 
+use super::types::core::{Integral, Numeric};
+
 pub fn thread_id() -> Expr<Uint3> {
     Expr::<Uint3>::from_node(__current_scope(|b| {
         b.call(Func::ThreadId, &[], Uint3::type_())
@@ -51,10 +53,10 @@ pub fn sync_block() {
 
 pub fn warp_is_first_active_lane() -> Expr<bool> {
     Expr::<bool>::from_node(__current_scope(|b| {
-        b.call(Func::WarpIsFirstActiveLane, &[], Expr::<bool>::type_())
+        b.call(Func::WarpIsFirstActiveLane, &[], bool::type_())
     }))
 }
-pub fn warp_active_all_equal(v: impl ScalarOrVector) -> Expr<bool> {
+pub fn warp_active_all_equal(v: Expr<impl Linear>) -> Expr<bool> {
     Expr::<bool>::from_node(__current_scope(|b| {
         b.call(
             Func::WarpActiveAllEqual,
@@ -63,8 +65,11 @@ pub fn warp_active_all_equal(v: impl ScalarOrVector) -> Expr<bool> {
         )
     }))
 }
-pub fn warp_active_bit_and<T: ScalarOrVector<Element = E>, E: IntVarTrait>(v: T) -> T {
-    T::from_node(__current_scope(|b| {
+pub fn warp_active_bit_and<T: Linear>(v: Expr<T>) -> Expr<T>
+where
+    T::Scalar: Integral + Numeric,
+{
+    Expr::<T>::from_node(__current_scope(|b| {
         b.call(
             Func::WarpActiveBitAnd,
             &[v.node()],
@@ -73,8 +78,11 @@ pub fn warp_active_bit_and<T: ScalarOrVector<Element = E>, E: IntVarTrait>(v: T)
     }))
 }
 
-pub fn warp_active_bit_or<T: ScalarOrVector<Element = E>, E: IntVarTrait>(v: T) -> T {
-    T::from_node(__current_scope(|b| {
+pub fn warp_active_bit_or<T: Linear>(v: Expr<T>) -> Expr<T>
+where
+    T::Scalar: Integral + Numeric,
+{
+    Expr::<T>::from_node(__current_scope(|b| {
         b.call(
             Func::WarpActiveBitOr,
             &[v.node()],
@@ -83,8 +91,11 @@ pub fn warp_active_bit_or<T: ScalarOrVector<Element = E>, E: IntVarTrait>(v: T) 
     }))
 }
 
-pub fn warp_active_bit_xor<T: ScalarOrVector<Element = E>, E: IntVarTrait>(v: T) -> T {
-    T::from_node(__current_scope(|b| {
+pub fn warp_active_bit_xor<T: Linear>(v: Expr<T>) -> Expr<T>
+where
+    T::Scalar: Integral + Numeric,
+{
+    Expr::<T>::from_node(__current_scope(|b| {
         b.call(
             Func::WarpActiveBitXor,
             &[v.node()],
@@ -93,37 +104,33 @@ pub fn warp_active_bit_xor<T: ScalarOrVector<Element = E>, E: IntVarTrait>(v: T)
     }))
 }
 
-pub fn warp_active_count_bits(v: impl Into<Expr<bool>>) -> Expr<u32> {
+pub fn warp_active_count_bits(v: impl AsExpr<Value = bool>) -> Expr<u32> {
     Expr::<u32>::from_node(__current_scope(|b| {
         b.call(
             Func::WarpActiveCountBits,
-            &[v.into().node()],
+            &[v.as_expr().node()],
             <u32 as TypeOf>::type_(),
         )
     }))
 }
-pub fn warp_active_max<T: ScalarOrVector>(v: T) -> T::Element {
-    <T::Element>::from_node(__current_scope(|b| {
-        b.call(Func::WarpActiveMax, &[v.node()], <T::ElementHost>::type_())
+pub fn warp_active_max<T: Linear>(v: Expr<T>) -> Expr<T::Scalar> {
+    Expr::<T::Scalar>::from_node(__current_scope(|b| {
+        b.call(Func::WarpActiveMax, &[v.node()], <T::Scalar>::type_())
     }))
 }
-pub fn warp_active_min<T: ScalarOrVector>(v: T) -> T::Element {
-    <T::Element>::from_node(__current_scope(|b| {
-        b.call(Func::WarpActiveMin, &[v.node()], <T::ElementHost>::type_())
+pub fn warp_active_min<T: Linear>(v: Expr<T>) -> Expr<T::Scalar> {
+    Expr::<T::Scalar>::from_node(__current_scope(|b| {
+        b.call(Func::WarpActiveMin, &[v.node()], <T::Scalar>::type_())
     }))
 }
-pub fn warp_active_product<T: ScalarOrVector>(v: T) -> T::Element {
-    <T::Element>::from_node(__current_scope(|b| {
-        b.call(
-            Func::WarpActiveProduct,
-            &[v.node()],
-            <T::ElementHost>::type_(),
-        )
+pub fn warp_active_product<T: Linear>(v: Expr<T>) -> Expr<T::Scalar> {
+    Expr::<T::Scalar>::from_node(__current_scope(|b| {
+        b.call(Func::WarpActiveProduct, &[v.node()], <T::Scalar>::type_())
     }))
 }
-pub fn warp_active_sum<T: ScalarOrVector>(v: T) -> T::Element {
-    <T::Element>::from_node(__current_scope(|b| {
-        b.call(Func::WarpActiveSum, &[v.node()], <T::ElementHost>::type_())
+pub fn warp_active_sum<T: Linear>(v: Expr<T>) -> Expr<T::Scalar> {
+    Expr::<T::Scalar>::from_node(__current_scope(|b| {
+        b.call(Func::WarpActiveSum, &[v.node()], <T::Scalar>::type_())
     }))
 }
 pub fn warp_active_all(v: Expr<bool>) -> Expr<bool> {
@@ -150,13 +157,13 @@ pub fn warp_prefix_count_bits(v: Expr<bool>) -> Expr<u32> {
         )
     }))
 }
-pub fn warp_prefix_sum_exclusive<T: ScalarOrVector>(v: T) -> T {
-    T::from_node(__current_scope(|b| {
+pub fn warp_prefix_sum_exclusive<T: Linear>(v: Expr<T>) -> Expr<T> {
+    Expr::<T>::from_node(__current_scope(|b| {
         b.call(Func::WarpPrefixSum, &[v.node()], v.node().type_().clone())
     }))
 }
-pub fn warp_prefix_product_exclusive<T: ScalarOrVector>(v: T) -> T {
-    T::from_node(__current_scope(|b| {
+pub fn warp_prefix_product_exclusive<T: Linear>(v: Expr<T>) -> Expr<T> {
+    Expr::<T>::from_node(__current_scope(|b| {
         b.call(
             Func::WarpPrefixProduct,
             &[v.node()],
@@ -164,9 +171,10 @@ pub fn warp_prefix_product_exclusive<T: ScalarOrVector>(v: T) -> T {
         )
     }))
 }
-pub fn warp_read_lane_at<T: BuiltinVarTrait>(v: T, index: impl Into<Expr<u32>>) -> T {
-    let index = index.into();
-    T::from_node(__current_scope(|b| {
+// TODO: Difference between `Linear` and BuiltinVarTrait?
+pub fn warp_read_lane_at<T: Linear>(v: Expr<T>, index: impl AsExpr<Value = u32>) -> Expr<T> {
+    let index = index.as_expr();
+    Expr::<T>::from_node(__current_scope(|b| {
         b.call(
             Func::WarpReadLaneAt,
             &[v.node(), index.node()],
@@ -174,8 +182,8 @@ pub fn warp_read_lane_at<T: BuiltinVarTrait>(v: T, index: impl Into<Expr<u32>>) 
         )
     }))
 }
-pub fn warp_read_first_active_lane<T: BuiltinVarTrait>(v: T) -> T {
-    T::from_node(__current_scope(|b| {
+pub fn warp_read_first_active_lane<T: Linear>(v: Expr<T>) -> Expr<T> {
+    Expr::<T>::from_node(__current_scope(|b| {
         b.call(
             Func::WarpReadFirstLane,
             &[v.node()],

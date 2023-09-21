@@ -2,9 +2,9 @@ pub trait Vec2Swizzle {
     type Vec2;
     type Vec3;
     type Vec4;
-    fn permute2(&self, x: i32, y: i32) -> Self::Vec2;
-    fn permute3(&self, x: i32, y: i32, z: i32) -> Self::Vec3;
-    fn permute4(&self, x: i32, y: i32, z: i32, w: i32) -> Self::Vec4;
+    fn permute2(&self, x: u32, y: u32) -> Self::Vec2;
+    fn permute3(&self, x: u32, y: u32, z: u32) -> Self::Vec3;
+    fn permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Self::Vec4;
     fn xx(&self) -> Self::Vec2 {
         self.permute2(0, 0)
     }
@@ -94,9 +94,9 @@ pub trait Vec3Swizzle {
     type Vec2;
     type Vec3;
     type Vec4;
-    fn permute2(&self, x: i32, y: i32) -> Self::Vec2;
-    fn permute3(&self, x: i32, y: i32, z: i32) -> Self::Vec3;
-    fn permute4(&self, x: i32, y: i32, z: i32, w: i32) -> Self::Vec4;
+    fn permute2(&self, x: u32, y: u32) -> Self::Vec2;
+    fn permute3(&self, x: u32, y: u32, z: u32) -> Self::Vec3;
+    fn permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Self::Vec4;
     fn xx(&self) -> Self::Vec2 {
         self.permute2(0, 0)
     }
@@ -453,9 +453,9 @@ pub trait Vec4Swizzle {
     type Vec2;
     type Vec3;
     type Vec4;
-    fn permute2(&self, x: i32, y: i32) -> Self::Vec2;
-    fn permute3(&self, x: i32, y: i32, z: i32) -> Self::Vec3;
-    fn permute4(&self, x: i32, y: i32, z: i32, w: i32) -> Self::Vec4;
+    fn permute2(&self, x: u32, y: u32) -> Self::Vec2;
+    fn permute3(&self, x: u32, y: u32, z: u32) -> Self::Vec3;
+    fn permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Self::Vec4;
     fn xx(&self) -> Self::Vec2 {
         self.permute2(0, 0)
     }

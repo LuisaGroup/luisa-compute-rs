@@ -29,12 +29,65 @@ pub mod debug;
 pub mod diff;
 pub mod functions;
 pub mod index;
-pub mod maybe_expr;
 pub mod ops;
 pub mod poly;
-pub mod swizzle;
 pub mod types;
 pub mod soa;
+
+pub(crate) trait CallFuncTrait {
+    fn call<T: Value, S: Value>(self, x: Expr<T>) -> Expr<S>;
+    fn call2<T: Value, S: Value, U: Value>(self, x: Expr<T>, y: Expr<S>) -> Expr<U>;
+    fn call3<T: Value, S: Value, U: Value, V: Value>(
+        self,
+        x: Expr<T>,
+        y: Expr<S>,
+        z: Expr<U>,
+    ) -> Expr<V>;
+    fn call_void<T: Value>(self, x: Expr<T>);
+    fn call2_void<T: Value, S: Value>(self, x: Expr<T>, y: Expr<S>);
+    fn call3_void<T: Value, S: Value, U: Value>(self, x: Expr<T>, y: Expr<S>, z: Expr<U>);
+}
+impl CallFuncTrait for Func {
+    fn call<T: Value, S: Value>(self, x: Expr<T>) -> Expr<S> {
+        Expr::<S>::from_node(__current_scope(|b| {
+            b.call(self, &[x.node()], <S as TypeOf>::type_())
+        }))
+    }
+    fn call2<T: Value, S: Value, U: Value>(self, x: Expr<T>, y: Expr<S>) -> Expr<U> {
+        Expr::<U>::from_node(__current_scope(|b| {
+            b.call(self, &[x.node(), y.node()], <U as TypeOf>::type_())
+        }))
+    }
+    fn call3<T: Value, S: Value, U: Value, V: Value>(
+        self,
+        x: Expr<T>,
+        y: Expr<S>,
+        z: Expr<U>,
+    ) -> Expr<V> {
+        Expr::<V>::from_node(__current_scope(|b| {
+            b.call(
+                self,
+                &[x.node(), y.node(), z.node()],
+                <V as TypeOf>::type_(),
+            )
+        }))
+    }
+    fn call_void<T: Value>(self, x: Expr<T>) {
+        __current_scope(|b| {
+            b.call(self, &[x.node()], Type::void());
+        });
+    }
+    fn call2_void<T: Value, S: Value>(self, x: Expr<T>, y: Expr<S>) {
+        __current_scope(|b| {
+            b.call(self, &[x.node(), y.node()], Type::void());
+        });
+    }
+    fn call3_void<T: Value, S: Value, U: Value>(self, x: Expr<T>, y: Expr<S>, z: Expr<U>) {
+        __current_scope(|b| {
+            b.call(self, &[x.node(), y.node(), z.node()], Type::void());
+        });
+    }
+}
 
 #[allow(dead_code)]
 pub(crate) static KERNEL_ID: AtomicUsize = AtomicUsize::new(0);
@@ -136,8 +189,17 @@ pub trait ToNode {
     fn node(&self) -> NodeRef;
 }
 
-pub trait FromNode: ToNode {
+pub trait NodeLike: FromNode + ToNode {}
+impl<T> NodeLike for T where T: FromNode + ToNode {}
+
+pub trait FromNode {
     fn from_node(node: NodeRef) -> Self;
+}
+
+impl<T: Default> FromNode for T {
+    fn from_node(_: NodeRef) -> Self {
+        Default::default()
+    }
 }
 
 fn _store<T1: Aggregate, T2: Aggregate>(var: &T1, value: &T2) {
@@ -408,12 +470,11 @@ pub const fn packed_size<T: Value>() -> usize {
     (std::mem::size_of::<T>() + 3) / 4
 }
 
-pub fn pack_to<E, B>(expr: E, buffer: &B, index: impl Into<Expr<u32>>)
+pub fn pack_to<V: Value, B>(expr: Expr<V>, buffer: &B, index: impl AsExpr<Value = u32>)
 where
-    E: ExprProxy,
     B: IndexWrite<Element = u32>,
 {
-    let index = index.into();
+    let index = index.as_expr();
     __current_scope(|b| {
         b.call(
             Func::Pack,

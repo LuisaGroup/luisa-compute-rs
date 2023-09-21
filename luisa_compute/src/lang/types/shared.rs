@@ -47,7 +47,7 @@ impl<T: Value> Shared<T> {
         let value = value.into();
 
         if need_runtime_check() {
-            lc_assert!(i.cmplt(self.len()), "VLArrayVar::read out of bounds");
+            lc_assert!(i.lt(self.len()), "VLArrayVar::read out of bounds");
         }
 
         __current_scope(|b| {

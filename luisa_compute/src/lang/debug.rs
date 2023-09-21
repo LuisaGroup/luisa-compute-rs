@@ -31,7 +31,7 @@ impl<T: Value> CpuFn<T> {
             _marker: PhantomData,
         }
     }
-    pub fn call(&self, arg: impl ExprProxy<Value = T>) -> Expr<T> {
+    pub fn call(&self, arg: impl AsExpr<Value = T>) -> Expr<T> {
         RECORDER.with(|r| {
             let mut r = r.borrow_mut();
             assert!(r.lock);
@@ -58,7 +58,7 @@ impl<T: Value> CpuFn<T> {
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(
                 Func::CpuCustomOp(self.op.clone()),
-                &[arg.node()],
+                &[arg.as_expr().node()],
                 T::type_(),
             )
         }))
@@ -107,14 +107,11 @@ macro_rules! lc_assert {
         $crate::lang::debug::__assert($arg, $msg, file!(), line!(), column!())
     };
 }
-pub fn __cpu_dbg<T: ExprProxy>(arg: T, file: &'static str, line: u32)
-where
-    T::Value: Debug,
-{
+pub fn __cpu_dbg<V: Value + Debug>(arg: Expr<V>, file: &'static str, line: u32) {
     if !is_cpu_backend() {
         return;
     }
-    let f = CpuFn::new(move |x: &mut T::Value| {
+    let f = CpuFn::new(move |x: &mut V| {
         println!("[{}:{}] {:?}", file, line, x);
     });
     let _ = f.call(arg);

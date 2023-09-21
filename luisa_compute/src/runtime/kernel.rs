@@ -1,31 +1,20 @@
 use super::*;
 
-#[macro_export]
-macro_rules! impl_callable_param {
-    ($t:ty, $e:ty, $v:ty) => {
-        impl CallableParameter for $e {
-            fn def_param(
-                _: Option<std::rc::Rc<dyn std::any::Any>>,
-                builder: &mut KernelBuilder,
-            ) -> Self {
-                builder.value::<$t>()
-            }
-            fn encode(&self, encoder: &mut CallableArgEncoder) {
-                encoder.var(*self)
-            }
-        }
-        impl CallableParameter for $v {
-            fn def_param(
-                _: Option<std::rc::Rc<dyn std::any::Any>>,
-                builder: &mut KernelBuilder,
-            ) -> Self {
-                builder.var::<$t>()
-            }
-            fn encode(&self, encoder: &mut CallableArgEncoder) {
-                encoder.var(*self)
-            }
-        }
-    };
+impl<T: Value> CallableParameter for Expr<T> {
+    fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
+        builder.value::<T>()
+    }
+    fn encode(&self, encoder: &mut CallableArgEncoder) {
+        encoder.var(self.clone())
+    }
+}
+impl<T: Value> CallableParameter for Var<T> {
+    fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
+        builder.var::<T>()
+    }
+    fn encode(&self, encoder: &mut CallableArgEncoder) {
+        encoder.var(self.clone())
+    }
 }
 
 // Not recommended to use this directly
@@ -116,24 +105,11 @@ impl CallableParameter for BindlessArrayVar {
     }
 }
 
-impl CallableParameter for rtx::AccelVar {
-    fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
-        builder.accel()
-    }
-    fn encode(&self, encoder: &mut CallableArgEncoder) {
-        encoder.accel(self)
-    }
-}
-
 pub trait KernelParameter {
     fn def_param(builder: &mut KernelBuilder) -> Self;
 }
 
-impl<T: Value, U> KernelParameter for U
-where
-    U: ExprProxy<Value = T>,
-    T: Value<Expr = U>,
-{
+impl<T: Value> KernelParameter for Expr<T> {
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.uniform::<T>()
     }
@@ -167,11 +143,6 @@ impl KernelParameter for BindlessArrayVar {
     }
 }
 
-impl KernelParameter for rtx::AccelVar {
-    fn def_param(builder: &mut KernelBuilder) -> Self {
-        builder.accel()
-    }
-}
 macro_rules! impl_kernel_param_for_tuple {
     ($first:ident  $($rest:ident)*) => {
         impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelParameter for ($first, $($rest,)*) {
@@ -289,14 +260,6 @@ impl KernelBuilder {
         );
         self.args.push(node);
         BindlessArrayVar { node, handle: None }
-    }
-    pub fn accel(&mut self) -> rtx::AccelVar {
-        let node = new_node(
-            __module_pools(),
-            Node::new(CArc::new(Instruction::Accel), Type::void()),
-        );
-        self.args.push(node);
-        rtx::AccelVar { node, handle: None }
     }
     fn collect_module_info(&self) -> (ResourceTracker, Vec<CArc<CpuCustomOp>>, Vec<Capture>) {
         RECORDER.with(|r| {
@@ -518,12 +481,12 @@ unsafe impl CallableRet for () {
     fn _from_return(_: NodeRef) -> Self {}
 }
 
-unsafe impl<T: ExprProxy> CallableRet for T {
+unsafe impl<V: Value> CallableRet for Expr<V> {
     fn _return(&self) -> CArc<Type> {
         __current_scope(|b| {
             b.return_(self.node());
         });
-        T::Value::type_()
+        V::type_()
     }
     fn _from_return(node: NodeRef) -> Self {
         Self::from_node(node)

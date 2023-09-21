@@ -7,20 +7,12 @@ version = "0.1.1-alpha.1"
 base64ct = { version = "1.5.0", features = ["alloc"] }
 bumpalo = "3.12.0"
 env_logger = "0.10.0"
-glam = "0.24.0"
 half = "2.2.1"
 
 lazy_static = "1.4.0"
 libc = "0.2"
 libloading = "0.8"
 log = "0.4"
-luisa_compute_api_types = { path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_api_types", version = "0.1.1-alpha.1" }
-luisa_compute_backend = { path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_backend", version = "0.1.1-alpha.1" }
-luisa_compute_derive = { path = "../luisa_compute_derive", version = "0.1.1-alpha.1" }
-luisa_compute_derive_impl = { path = "../luisa_compute_derive_impl", version = "0.1.1-alpha.1" }
-luisa_compute_track = { path = "../luisa_compute_track", version = "0.1.1-alpha.1" }
-luisa_compute_ir = { path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_ir", version = "0.1.1-alpha.1" }
-luisa_compute_sys = { path = "../luisa_compute_sys", version = "0.1.1-alpha.1" }
 parking_lot = "0.12.1"
 rayon = "1.6.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -28,12 +20,23 @@ serde_json = "1.0"
 sha2 = "0.10"
 winit = "0.28.3"
 raw-window-handle = "0.5.1"
-indexmap = "1.9.3"
+indexmap = "2.0.0"
+
+luisa_compute_api_types = { path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_api_types", version = "0.1.1-alpha.1" }
+luisa_compute_backend = { path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_backend", version = "0.1.1-alpha.1" }
+luisa_compute_derive = { path = "../luisa_compute_derive", version = "0.1.1-alpha.1" }
+luisa_compute_derive_impl = { path = "../luisa_compute_derive_impl", version = "0.1.1-alpha.1" }
+luisa_compute_track = { path = "../luisa_compute_track", version = "0.1.1-alpha.1" }
+luisa_compute_ir = { path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_ir", version = "0.1.1-alpha.1" }
+luisa_compute_sys = { path = "../luisa_compute_sys", version = "0.1.1-alpha.1" }
+
+glam = { version = "0.24.0", optional = true }
+nalgebra = { version = "0.32.3", optional = true }
 
 [dev-dependencies]
 rand = "0.8.5"
 image = "0.24.5"
-tobj = "3.2.5"
+tobj = "4.0.0"
 
 [features]
 default = ["remote", "cuda", "cpu", "metal", "dx"]
@@ -43,5 +46,5 @@ dx = ["luisa_compute_sys/dx"]
 strict = ["luisa_compute_sys/strict"]
 remote = ["luisa_compute_sys/remote"]
 cpu = ["luisa_compute_sys/cpu"]
-
-
+glam = ["dep:glam"]
+nalgebra = ["dep:nalgebra"]

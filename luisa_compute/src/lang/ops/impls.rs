@@ -1,338 +1,517 @@
 use super::*;
-use crate::lang::types::core::*;
-use crate::lang::types::VarDerefProxy;
 
-macro_rules! impl_var_trait {
-    ($t:ty) => {
-        impl VarTrait for prim::Expr<$t> {
-            type Value = $t;
-            type Short = prim::Expr<i16>;
-            type Ushort = prim::Expr<u16>;
-            type Int = prim::Expr<i32>;
-            type Uint = prim::Expr<u32>;
-            type Long = prim::Expr<i64>;
-            type Ulong = prim::Expr<u64>;
-            type Half = prim::Expr<f16>;
-            type Float = prim::Expr<f32>;
-            type Double = prim::Expr<f64>;
-            type Bool = prim::Expr<bool>;
-        }
-        impl ScalarVarTrait for prim::Expr<$t> {}
-        impl ScalarOrVector for prim::Expr<$t> {
-            type Element = prim::Expr<$t>;
-            type ElementHost = $t;
-        }
-        impl BuiltinVarTrait for prim::Expr<$t> {}
-    };
-}
-impl_var_trait!(f16);
-impl_var_trait!(f32);
-impl_var_trait!(f64);
-impl_var_trait!(i16);
-impl_var_trait!(u16);
-impl_var_trait!(i32);
-impl_var_trait!(u32);
-impl_var_trait!(i64);
-impl_var_trait!(u64);
-impl_var_trait!(bool);
-
-impl VarCmpEq for prim::Expr<f16> {}
-impl VarCmpEq for prim::Expr<f32> {}
-impl VarCmpEq for prim::Expr<f64> {}
-impl VarCmpEq for prim::Expr<i16> {}
-impl VarCmpEq for prim::Expr<i32> {}
-impl VarCmpEq for prim::Expr<i64> {}
-impl VarCmpEq for prim::Expr<u16> {}
-impl VarCmpEq for prim::Expr<u32> {}
-impl VarCmpEq for prim::Expr<u64> {}
-
-impl VarCmpEq for prim::Expr<bool> {}
-
-impl VarCmp for prim::Expr<f16> {}
-impl VarCmp for prim::Expr<f32> {}
-impl VarCmp for prim::Expr<f64> {}
-impl VarCmp for prim::Expr<i16> {}
-impl VarCmp for prim::Expr<i32> {}
-impl VarCmp for prim::Expr<i64> {}
-impl VarCmp for prim::Expr<u16> {}
-impl VarCmp for prim::Expr<u32> {}
-impl VarCmp for prim::Expr<u64> {}
-
-impl CommonVarOp for prim::Expr<f16> {}
-impl CommonVarOp for prim::Expr<f32> {}
-impl CommonVarOp for prim::Expr<f64> {}
-impl CommonVarOp for prim::Expr<i16> {}
-impl CommonVarOp for prim::Expr<i32> {}
-impl CommonVarOp for prim::Expr<i64> {}
-impl CommonVarOp for prim::Expr<u16> {}
-impl CommonVarOp for prim::Expr<u32> {}
-impl CommonVarOp for prim::Expr<u64> {}
-
-impl CommonVarOp for prim::Expr<bool> {}
-
-impl FloatVarTrait for prim::Expr<f16> {}
-impl FloatVarTrait for prim::Expr<f32> {}
-impl FloatVarTrait for prim::Expr<f64> {}
-
-impl IntVarTrait for prim::Expr<i16> {}
-impl IntVarTrait for prim::Expr<i32> {}
-impl IntVarTrait for prim::Expr<i64> {}
-impl IntVarTrait for prim::Expr<u16> {}
-impl IntVarTrait for prim::Expr<u32> {}
-impl IntVarTrait for prim::Expr<u64> {}
-
-macro_rules! impl_from {
-    ($from:ty, $to:ty) => {
-        impl From<$from> for prim::Expr<$to> {
-            fn from(x: $from) -> Self {
-                let y: $to = (x.try_into().unwrap());
-                y.expr()
-            }
-        }
-    };
-}
-
-impl_from!(i16, u16);
-impl_from!(i16, i32);
-impl_from!(i16, u32);
-impl_from!(i16, i64);
-impl_from!(i16, u64);
-
-impl_from!(u16, i16);
-impl_from!(u16, i32);
-impl_from!(u16, u32);
-impl_from!(u16, i64);
-impl_from!(u16, u64);
-
-impl_from!(i32, u16);
-impl_from!(i32, i16);
-impl_from!(i32, u32);
-impl_from!(i32, i64);
-impl_from!(i32, u64);
-
-impl_from!(i64, u16);
-impl_from!(i64, i16);
-impl_from!(i64, u64);
-impl_from!(i64, i32);
-impl_from!(i64, u32);
-
-impl_from!(u32, u16);
-impl_from!(u32, i16);
-impl_from!(u32, i32);
-impl_from!(u32, i64);
-impl_from!(u32, u64);
-
-impl_from!(u64, u16);
-impl_from!(u64, i16);
-impl_from!(u64, i64);
-impl_from!(u64, i32);
-impl_from!(u64, u32);
-
-impl From<f64> for prim::Expr<f32> {
-    fn from(x: f64) -> Self {
-        (x as f32).into()
+impl<X: Linear> Expr<X> {
+    pub fn as_<Y: Linear>(self) -> Expr<Y>
+    where
+        Y::Scalar: CastFrom<X::Scalar>,
+    {
+        assert_eq!(X::N, Y::N);
+        Func::Cast.call(self)
     }
-}
-impl From<f32> for prim::Expr<f64> {
-    fn from(x: f32) -> Self {
-        (x as f64).into()
-    }
-}
-impl From<f64> for prim::Expr<f16> {
-    fn from(x: f64) -> Self {
-        f16::from_f64(x).into()
-    }
-}
-impl From<f32> for prim::Expr<f16> {
-    fn from(x: f32) -> Self {
-        f16::from_f32(x).into()
+    pub fn cast<S: VectorElement>(self) -> Expr<X::WithScalar<S>>
+    where
+        S: CastFrom<X::Scalar>,
+    {
+        self.as_::<<X as Linear>::WithScalar<S>>()
     }
 }
 
-macro_rules! impl_binop {
-    ($t:ty, $proxy:ty, $tr_assign:ident, $method_assign:ident, $tr:ident, $method:ident) => {
-        impl $tr_assign<prim::Expr<$t>> for $proxy {
-            fn $method_assign(&mut self, rhs: prim::Expr<$t>) {
-                *self = self.clone().$method(rhs);
-            }
+macro_rules! impl_ops_trait {
+    (
+        [$($bounds:tt)*] $TraitExpr:ident [$TraitThis:ident] for $T:ty where [$($where:tt)*] {
+            $(
+                fn $fn:ident [$fn_this:ident] ($sl:ident, $($arg:ident),*) { $body:expr }
+            )*
         }
-        impl $tr_assign<$t> for $proxy {
-            fn $method_assign(&mut self, rhs: $t) {
-                *self = self.clone().$method(rhs);
-            }
+    ) => {
+        impl<$($bounds)*> $TraitThis for $T where $($where)* {
+            $(
+                fn $fn_this($sl, $($arg: Self),*) -> Self {
+                   $body
+                }
+            )*
         }
-        impl $tr<prim::Expr<$t>> for $proxy {
-            type Output = prim::Expr<$t>;
-            fn $method(self, rhs: prim::Expr<$t>) -> Self::Output {
-                __current_scope(|s| {
-                    let lhs = ToNode::node(&self);
-                    let rhs = ToNode::node(&rhs);
-                    let ret = s.call(Func::$tr, &[lhs, rhs], Self::Output::type_());
-                    Expr::<$t>::from_node(ret)
-                })
-            }
-        }
+        impl<$($bounds)*> $TraitExpr for $T where $($where)* {
+            type Output = Self;
 
-        impl $tr<$t> for $proxy {
-            type Output = prim::Expr<$t>;
-            fn $method(self, rhs: $t) -> Self::Output {
-                $tr::$method(self, rhs.expr())
-            }
-        }
-        impl $tr<$proxy> for $t {
-            type Output = prim::Expr<$t>;
-            fn $method(self, rhs: $proxy) -> Self::Output {
-                $tr::$method(self.expr(), rhs)
-            }
+            $(
+                fn $fn($sl, $($arg: Self),*) -> Self {
+                    <$T as $TraitThis>::$fn_this($sl, $($arg),*)
+                }
+            )*
         }
     };
-}
-macro_rules! impl_common_binop {
-    ($t:ty,$proxy:ty) => {
-        impl_binop!($t, $proxy, AddAssign, add_assign, Add, add);
-        impl_binop!($t, $proxy, SubAssign, sub_assign, Sub, sub);
-        impl_binop!($t, $proxy, MulAssign, mul_assign, Mul, mul);
-        impl_binop!($t, $proxy, DivAssign, div_assign, Div, div);
-        impl_binop!($t, $proxy, RemAssign, rem_assign, Rem, rem);
-    };
-}
-macro_rules! impl_int_binop {
-    ($t:ty,$proxy:ty) => {
-        impl_binop!($t, $proxy, ShlAssign, shl_assign, Shl, shl);
-        impl_binop!($t, $proxy, ShrAssign, shr_assign, Shr, shr);
-        impl_binop!($t, $proxy, BitAndAssign, bitand_assign, BitAnd, bitand);
-        impl_binop!($t, $proxy, BitOrAssign, bitor_assign, BitOr, bitor);
-        impl_binop!($t, $proxy, BitXorAssign, bitxor_assign, BitXor, bitxor);
-    };
-}
+    (
+        [$($bounds:tt)*] $TraitExpr:ident [$TraitThis:ident] for $T:ty where [$($where:tt)*] {
+            type Output = $Output:ty;
+            $(
+                fn $fn:ident [$fn_this:ident] ($sl:ident, $($arg:ident),*) { $body:expr }
+            )*
+        }
+    ) => {
+        impl<$($bounds)*> $TraitThis for $T where $($where)* {
+            type Output = $Output;
+            $(
+                fn $fn_this($sl, $($arg: Self),*) -> Self::Output {
+                   $body
+                }
+            )*
+        }
+        impl<$($bounds)*> $TraitExpr for $T where $($where)* {
+            type Output = $Output;
 
-macro_rules! impl_not {
-    ($t:ty,$proxy:ty) => {
-        impl Not for $proxy {
-            type Output = prim::Expr<$t>;
-            fn not(self) -> Self::Output {
-                __current_scope(|s| {
-                    let ret = s.call(Func::BitNot, &[ToNode::node(&self)], Self::Output::type_());
-                    Expr::<$t>::from_node(ret)
-                })
-            }
+            $(
+                fn $fn($sl, $($arg: Self),*) -> Self::Output {
+                    <$T as $TraitThis>::$fn_this($sl, $($arg),*)
+                }
+            )*
         }
-    };
-}
-macro_rules! impl_neg {
-    ($t:ty,$proxy:ty) => {
-        impl Neg for $proxy {
-            type Output = prim::Expr<$t>;
-            fn neg(self) -> Self::Output {
-                __current_scope(|s| {
-                    let ret = s.call(Func::Neg, &[ToNode::node(&self)], Self::Output::type_());
-                    Expr::<$t>::from_node(ret)
-                })
-            }
-        }
-    };
-}
-macro_rules! impl_fneg {
-    ($t:ty, $proxy:ty) => {
-        impl Neg for $proxy {
-            type Output = prim::Expr<$t>;
-            fn neg(self) -> Self::Output {
-                __current_scope(|s| {
-                    let ret = s.call(Func::Neg, &[ToNode::node(&self)], Self::Output::type_());
-                    Expr::<$t>::from_node(ret)
-                })
-            }
-        }
-    };
-}
-impl Not for prim::Expr<bool> {
-    type Output = prim::Expr<bool>;
-    fn not(self) -> Self::Output {
-        __current_scope(|s| {
-            let ret = s.call(Func::BitNot, &[ToNode::node(&self)], Self::Output::type_());
-            FromNode::from_node(ret)
-        })
     }
 }
-impl_common_binop!(f16, prim::Expr<f16>);
-impl_common_binop!(f32, prim::Expr<f32>);
-impl_common_binop!(f64, prim::Expr<f64>);
-impl_common_binop!(i16, prim::Expr<i16>);
-impl_common_binop!(i32, prim::Expr<i32>);
-impl_common_binop!(i64, prim::Expr<i64>);
-impl_common_binop!(u16, prim::Expr<u16>);
-impl_common_binop!(u32, prim::Expr<u32>);
-impl_common_binop!(u64, prim::Expr<u64>);
+impl_ops_trait!([X: Linear] MinMaxExpr[MinMaxThis] for Expr<X> where [X::Scalar: Numeric] {
+    fn max[_max](self, other) { Func::Max.call2(self, other) }
+    fn min[_min](self, other) { Func::Min.call2(self, other) }
+});
 
-impl_binop!(
-    bool,
-    prim::Expr<bool>,
-    BitAndAssign,
-    bitand_assign,
-    BitAnd,
-    bitand
-);
-impl_binop!(
-    bool,
-    prim::Expr<bool>,
-    BitOrAssign,
-    bitor_assign,
-    BitOr,
-    bitor
-);
-impl_binop!(
-    bool,
-    prim::Expr<bool>,
-    BitXorAssign,
-    bitxor_assign,
-    BitXor,
-    bitxor
-);
-impl_int_binop!(i16, prim::Expr<i16>);
-impl_int_binop!(i32, prim::Expr<i32>);
-impl_int_binop!(i64, prim::Expr<i64>);
-impl_int_binop!(u16, prim::Expr<u16>);
-impl_int_binop!(u32, prim::Expr<u32>);
-impl_int_binop!(u64, prim::Expr<u64>);
+impl_ops_trait!([X: Linear] ClampExpr[ClampThis] for Expr<X> where [X::Scalar: Numeric] {
+    fn clamp[_clamp](self, min, max) { Func::Clamp.call3(self, min, max) }
+});
 
-impl_not!(i16, prim::Expr<i16>);
-impl_not!(i32, prim::Expr<i32>);
-impl_not!(i64, prim::Expr<i64>);
-impl_not!(u16, prim::Expr<u16>);
-impl_not!(u32, prim::Expr<u32>);
-impl_not!(u64, prim::Expr<u64>);
-
-impl_neg!(i16, prim::Expr<i16>);
-impl_neg!(i32, prim::Expr<i32>);
-impl_neg!(i64, prim::Expr<i64>);
-impl_neg!(u16, prim::Expr<u16>);
-impl_neg!(u32, prim::Expr<u32>);
-impl_neg!(u64, prim::Expr<u64>);
-
-impl_fneg!(f16, prim::Expr<f16>);
-impl_fneg!(f32, prim::Expr<f32>);
-impl_fneg!(f64, prim::Expr<f64>);
-
-macro_rules! impl_assign_ops {
-    ($ass:ident, $ass_m:ident, $o:ident, $o_m:ident) => {
-        impl<P, T: Value, Rhs> std::ops::$ass<Rhs> for VarDerefProxy<P, T>
-        where
-            P: VarProxy<Value = T>,
-            Expr<T>: std::ops::$o<Rhs, Output = Expr<T>>,
-        {
-            fn $ass_m(&mut self, rhs: Rhs) {
-                *self.deref_mut() = std::ops::$o::$o_m(**self, rhs);
-            }
-        }
-    };
+impl<X: Linear> AbsExpr for Expr<X>
+where
+    X::Scalar: Signed,
+{
+    fn abs(&self) -> Self {
+        Func::Abs.call(self.clone())
+    }
 }
-impl_assign_ops!(AddAssign, add_assign, Add, add);
-impl_assign_ops!(SubAssign, sub_assign, Sub, sub);
-impl_assign_ops!(MulAssign, mul_assign, Mul, mul);
-impl_assign_ops!(DivAssign, div_assign, Div, div);
-impl_assign_ops!(RemAssign, rem_assign, Rem, rem);
-impl_assign_ops!(BitAndAssign, bitand_assign, BitAnd, bitand);
-impl_assign_ops!(BitOrAssign, bitor_assign, BitOr, bitor);
-impl_assign_ops!(BitXorAssign, bitxor_assign, BitXor, bitxor);
-impl_assign_ops!(ShlAssign, shl_assign, Shl, shl);
-impl_assign_ops!(ShrAssign, shr_assign, Shr, shr);
+
+impl_ops_trait!([X: Linear] EqExpr[EqThis] for Expr<X> where [X::Scalar: VectorElement] {
+    type Output = Expr<X::WithScalar<bool>>;
+
+    fn eq[_eq](self, other) { Func::Eq.call2(self, other) }
+    fn ne[_ne](self, other) { Func::Ne.call2(self, other) }
+});
+
+impl_ops_trait!([X: Linear] CmpExpr[CmpThis] for Expr<X> where [X::Scalar: Numeric] {
+    type Output = Expr<X::WithScalar<bool>>;
+
+    fn lt[_lt](self, other) { Func::Lt.call2(self, other) }
+    fn le[_le](self, other) { Func::Le.call2(self, other) }
+    fn gt[_gt](self, other) { Func::Gt.call2(self, other) }
+    fn ge[_ge](self, other) { Func::Ge.call2(self, other) }
+});
+
+impl<X: Linear> Add for Expr<X>
+where
+    X::Scalar: Numeric,
+{
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Func::Add.call2(self, other)
+    }
+}
+impl<X: Linear> Sub for Expr<X>
+where
+    X::Scalar: Numeric,
+{
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        Func::Sub.call2(self, other)
+    }
+}
+impl<X: Linear> Mul for Expr<X>
+where
+    X::Scalar: Numeric,
+{
+    type Output = Self;
+    fn mul(self, other: Self) -> Self {
+        Func::Mul.call2(self, other)
+    }
+}
+impl<X: Linear> Div for Expr<X>
+where
+    X::Scalar: Numeric,
+{
+    type Output = Self;
+    fn div(self, other: Self) -> Self {
+        Func::Div.call2(self, other)
+    }
+}
+impl<X: Linear> Rem for Expr<X>
+where
+    X::Scalar: Numeric,
+{
+    type Output = Self;
+    fn rem(self, other: Self) -> Self {
+        Func::Rem.call2(self, other)
+    }
+}
+
+impl<X: Linear> BitAnd for Expr<X>
+where
+    X::Scalar: Integral,
+{
+    type Output = Self;
+    fn bitand(self, other: Self) -> Self {
+        Func::BitAnd.call2(self, other)
+    }
+}
+impl<X: Linear> BitOr for Expr<X>
+where
+    X::Scalar: Integral,
+{
+    type Output = Self;
+    fn bitor(self, other: Self) -> Self {
+        Func::BitOr.call2(self, other)
+    }
+}
+impl<X: Linear> BitXor for Expr<X>
+where
+    X::Scalar: Integral,
+{
+    type Output = Self;
+    fn bitxor(self, other: Self) -> Self {
+        Func::BitXor.call2(self, other)
+    }
+}
+impl<X: Linear> Shl for Expr<X>
+where
+    X::Scalar: Integral,
+{
+    type Output = Self;
+    fn shl(self, other: Self) -> Self {
+        Func::Shl.call2(self, other)
+    }
+}
+impl<X: Linear> Shr for Expr<X>
+where
+    X::Scalar: Integral,
+{
+    type Output = Self;
+    fn shr(self, other: Self) -> Self {
+        Func::Shr.call2(self, other)
+    }
+}
+
+impl<X: Linear> Neg for Expr<X>
+where
+    X::Scalar: Signed,
+{
+    type Output = Self;
+    fn neg(self) -> Self {
+        Func::Neg.call(self)
+    }
+}
+impl<X: Linear> Not for Expr<X>
+where
+    X::Scalar: Integral,
+{
+    type Output = Self;
+    fn not(self) -> Self {
+        Func::BitNot.call(self)
+    }
+}
+
+impl<X: Linear> IntExpr for Expr<X>
+where
+    X::Scalar: Integral + Numeric,
+{
+    fn rotate_left(&self, n: Expr<u32>) -> Self {
+        Func::RotRight.call2(self.clone(), n)
+    }
+    fn rotate_right(&self, n: Expr<u32>) -> Self {
+        Func::RotLeft.call2(self.clone(), n)
+    }
+}
+
+macro_rules! impl_simple_fns {
+    ($($fname:ident => $func:ident),+) => {$(
+        fn $fname(&self) -> Self {
+            Func::$func.call(self.clone())
+        }
+    )+};
+}
+
+impl<X: Linear> FloatExpr for Expr<X>
+where
+    X::Scalar: Floating,
+{
+    type Bool = Expr<X::WithScalar<bool>>;
+    impl_simple_fns! {
+        ceil => Ceil,
+        floor => Floor,
+        round => Round,
+        trunc => Trunc,
+        sqrt => Sqrt,
+        rsqrt => Rsqrt,
+        fract => Fract,
+        saturate => Saturate,
+        sin => Sin,
+        cos => Cos,
+        tan => Tan,
+        asin => Asin,
+        acos => Acos,
+        atan => Atan,
+        sinh => Sinh,
+        cosh => Cosh,
+        tanh => Tanh,
+        asinh => Asinh,
+        acosh => Acosh,
+        atanh => Atanh,
+        exp => Exp,
+        exp2 => Exp2,
+        ln => Log,
+        log2 => Log2,
+        log10 => Log10
+    }
+    fn is_finite(&self) -> Self::Bool {
+        !self.is_infinite() & !self.is_nan()
+    }
+    fn is_infinite(&self) -> Self::Bool {
+        Func::IsInf.call(self.clone())
+    }
+    fn is_nan(&self) -> Self::Bool {
+        Func::IsNan.call(self.clone())
+    }
+    fn sqr(&self) -> Self {
+        self.clone() * self.clone()
+    }
+    fn cube(&self) -> Self {
+        self.clone() * self.clone() * self.clone()
+    }
+    fn recip(&self) -> Self {
+        todo!()
+        // 1.0 / self.clone()
+    }
+    fn sin_cos(&self) -> (Self, Self) {
+        (self.sin(), self.cos())
+    }
+}
+impl_ops_trait!([X: Linear] FloatMulAddExpr[FloatMulAddThis] for Expr<X> where [X::Scalar: Floating] {
+    fn mul_add[_mul_add](self, a, b) { Func::Fma.call3(self, a, b) }
+});
+
+impl_ops_trait!([X: Linear] FloatCopySignExpr[FloatCopySignThis] for Expr<X> where [X::Scalar: Floating] {
+    fn copy_sign[_copy_sign](self, sign) { Func::Copysign.call2(self, sign) }
+});
+
+impl_ops_trait!([X: Linear] FloatStepExpr[FloatStepThis] for Expr<X> where [X::Scalar: Floating] {
+    fn step[_step](self, edge) { Func::Step.call2(edge, self) }
+});
+
+impl_ops_trait!([X: Linear] FloatSmoothStepExpr[FloatSmoothStepThis] for Expr<X> where [X::Scalar: Floating] {
+    fn smooth_step[_smooth_step](self, edge0, edge1) { Func::SmoothStep.call3(edge0, edge1, self) }
+});
+
+impl_ops_trait!([X: Linear] FloatArcTan2Expr[FloatArcTan2This] for Expr<X> where [X::Scalar: Floating] {
+    fn atan2[_atan2](self, other) { Func::Atan2.call2(self, other) }
+});
+
+impl_ops_trait!([X: Linear] FloatLogExpr[FloatLogThis] for Expr<X> where [X::Scalar: Floating] {
+    fn log[_log](self, base) { self.ln() / base.ln()}
+});
+
+impl_ops_trait!([X: Linear] FloatPowfExpr[FloatPowfThis] for Expr<X> where [X::Scalar: Floating] {
+    fn powf[_powf](self, exponent) { Func::Powf.call2(self, exponent) }
+});
+
+impl<X: Linear, Y: Linear<Scalar = i32>> FloatPowiExpr<Expr<Y>> for Expr<X>
+where
+    X::Scalar: Floating,
+{
+    type Output = Self;
+
+    fn powi(self, exponent: Expr<Y>) -> Self::Output {
+        Func::Powi.call2(self, exponent)
+    }
+}
+
+impl_ops_trait!([X: Linear] FloatLerpExpr[FloatLerpThis] for Expr<X> where [X::Scalar: Floating] {
+    fn lerp[_lerp](self, other, frac) { Func::Lerp.call3(self, other, frac) }
+});
+
+// Traits for `track!`.
+
+impl<T: Sized> StoreMaybeExpr<T> for &mut T {
+    fn store(self, value: T) {
+        *self = value;
+    }
+}
+impl<V: Value, E: AsExpr<Value = V>> StoreMaybeExpr<E> for &Var<V> {
+    fn store(self, value: E) {
+        crate::lang::_store(self, &value.as_expr());
+    }
+}
+impl<V: Value, E: AsExpr<Value = V>> StoreMaybeExpr<E> for Var<V> {
+    fn store(self, value: E) {
+        crate::lang::_store(&self, &value.as_expr());
+    }
+}
+
+impl<R> SelectMaybeExpr<R> for bool {
+    fn if_then_else(self, on: impl FnOnce() -> R, off: impl FnOnce() -> R) -> R {
+        if self {
+            on()
+        } else {
+            off()
+        }
+    }
+    fn select(self, on: R, off: R) -> R {
+        if self {
+            on
+        } else {
+            off
+        }
+    }
+}
+impl<R: Aggregate> SelectMaybeExpr<R> for Expr<bool> {
+    fn if_then_else(self, on: impl FnOnce() -> R, off: impl FnOnce() -> R) -> R {
+        crate::lang::control_flow::if_then_else(self, on, off)
+    }
+    fn select(self, on: R, off: R) -> R {
+        crate::lang::control_flow::select(self, on, off)
+    }
+}
+
+impl ActivateMaybeExpr for bool {
+    fn activate(self, then: impl FnOnce()) {
+        if self {
+            then()
+        }
+    }
+}
+impl ActivateMaybeExpr for Expr<bool> {
+    fn activate(self, then: impl FnOnce()) {
+        crate::lang::control_flow::if_then_else(self, then, || {})
+    }
+}
+
+impl LoopMaybeExpr for bool {
+    fn while_loop(mut cond: impl FnMut() -> Self, mut body: impl FnMut()) {
+        while cond() {
+            body()
+        }
+    }
+}
+
+impl LoopMaybeExpr for Expr<bool> {
+    fn while_loop(cond: impl FnMut() -> Self, body: impl FnMut()) {
+        crate::lang::control_flow::generic_loop(cond, body, || {})
+    }
+}
+
+impl LazyBoolMaybeExpr for bool {
+    type Bool = bool;
+    fn and(self, other: impl FnOnce() -> bool) -> bool {
+        self && other()
+    }
+    fn or(self, other: impl FnOnce() -> bool) -> bool {
+        self || other()
+    }
+}
+impl LazyBoolMaybeExpr<Expr<bool>> for bool {
+    type Bool = Expr<bool>;
+    fn and(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+        if self {
+            other()
+        } else {
+            false.expr()
+        }
+    }
+    fn or(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+        if self {
+            true.expr()
+        } else {
+            other()
+        }
+    }
+}
+impl LazyBoolMaybeExpr<bool> for Expr<bool> {
+    type Bool = Expr<bool>;
+    fn and(self, other: impl FnOnce() -> bool) -> Self::Bool {
+        if other() {
+            self
+        } else {
+            false.expr()
+        }
+    }
+    fn or(self, other: impl FnOnce() -> bool) -> Self::Bool {
+        if other() {
+            true.expr()
+        } else {
+            self
+        }
+    }
+}
+impl LazyBoolMaybeExpr for Expr<bool> {
+    type Bool = Expr<bool>;
+    fn and(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+        crate::lang::control_flow::if_then_else(self, other, || false.expr())
+    }
+    fn or(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+        crate::lang::control_flow::if_then_else(self, || true.expr(), other)
+    }
+}
+
+impl<T, S> EqMaybeExpr<S, true> for T
+where
+    T: EqExpr<S>,
+{
+    type Bool = <T as EqExpr<S>>::Output;
+    fn __eq(self, other: S) -> Self::Bool {
+        self.eq(other)
+    }
+    fn __ne(self, other: S) -> Self::Bool {
+        self.ne(other)
+    }
+}
+impl<T, S> EqMaybeExpr<S, false> for T
+where
+    T: PartialEq<S>,
+{
+    type Bool = bool;
+    fn __eq(self, other: S) -> Self::Bool {
+        self == other
+    }
+    fn __ne(self, other: S) -> Self::Bool {
+        self != other
+    }
+}
+
+impl<T, S> CmpMaybeExpr<S, true> for T
+where
+    T: CmpExpr<S>,
+{
+    type Bool = <T as CmpExpr<S>>::Output;
+    fn __lt(self, other: S) -> Self::Bool {
+        self.lt(other)
+    }
+    fn __le(self, other: S) -> Self::Bool {
+        self.le(other)
+    }
+    fn __gt(self, other: S) -> Self::Bool {
+        self.gt(other)
+    }
+    fn __ge(self, other: S) -> Self::Bool {
+        self.ge(other)
+    }
+}
+impl<T, S> CmpMaybeExpr<S, false> for T
+where
+    T: PartialOrd<S>,
+{
+    type Bool = bool;
+    fn __lt(self, other: S) -> Self::Bool {
+        self < other
+    }
+    fn __le(self, other: S) -> Self::Bool {
+        self <= other
+    }
+    fn __gt(self, other: S) -> Self::Bool {
+        self > other
+    }
+    fn __ge(self, other: S) -> Self::Bool {
+        self >= other
+    }
+}

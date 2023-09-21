@@ -4,45 +4,30 @@ use crate::internal_prelude::*;
 use ir::SwitchCase;
 
 /**
- * If you want rustfmt to format your code, use if_!(cond, { .. }, { .. }) or if_!(cond, { .. }, else, {...})
- * instead of if_!(cond, { .. }, else {...}).
+ * If you want rustfmt to format your code, use if_!(cond, { .. }, { .. })
+ * or if_!(cond, { .. }, else, {...}) instead of if_!(cond, { .. }, else
+ * {...}).
  *
  */
 #[macro_export]
 macro_rules! if_ {
     ($cond:expr, $then:block, else $else_:block) => {
-        <_ as $crate::lang::maybe_expr::BoolIfElseMaybeExpr<_>>::if_then_else(
-            $cond,
-            || $then,
-            || $else_,
-        )
+        <_ as $crate::lang::ops::SelectMaybeExpr<_>>::select($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block, else, $else_:block) => {
-        <_ as $crate::lang::maybe_expr::BoolIfElseMaybeExpr<_>>::if_then_else(
-            $cond,
-            || $then,
-            || $else_,
-        )
+        <_ as $crate::lang::ops::SelectMaybeExpr<_>>::select($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block, $else_:block) => {
-        <_ as $crate::lang::maybe_expr::BoolIfElseMaybeExpr<_>>::if_then_else(
-            $cond,
-            || $then,
-            || $else_,
-        )
+        <_ as $crate::lang::ops::SelectMaybeExpr<_>>::select($cond, || $then, || $else_)
     };
     ($cond:expr, $then:block) => {
-        <_ as $crate::lang::maybe_expr::BoolIfElseMaybeExpr<_>>::if_then_else(
-            $cond,
-            || $then,
-            || {},
-        )
+        <_ as $crate::lang::ops::ActivateMaybeExpr>::activate($cond, || $then)
     };
 }
 #[macro_export]
 macro_rules! while_ {
     ($cond:expr,$body:block) => {
-        <_ as $crate::lang::maybe_expr::BoolWhileMaybeExpr>::while_loop(|| $cond, || $body)
+        <_ as $crate::lang::ops::LoopMaybeExpr>::while_loop(|| $cond, || $body)
     };
 }
 #[macro_export]
@@ -66,7 +51,7 @@ pub fn continue_() {
     });
 }
 
-pub fn return_v<T: FromNode>(v: T) {
+pub fn return_v<T: NodeLike>(v: T) {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
         if r.callable_ret_type.is_none() {
@@ -296,7 +281,9 @@ impl_range!(u32);
 impl_range!(u64);
 
 pub fn loop_(body: impl Fn()) {
-    while_!(true.expr(), { body(); });
+    while_!(true.expr(), {
+        body();
+    });
 }
 
 pub fn for_range<R: ForLoopRange>(r: R, body: impl Fn(Expr<R::Element>)) {

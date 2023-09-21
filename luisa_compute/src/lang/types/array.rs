@@ -1,140 +1,37 @@
+use std::ops::Index;
+
 use super::*;
 use crate::lang::index::IntoIndex;
 use ir::ArrayType;
 
-#[derive(Clone, Copy, Debug)]
-pub struct ArrayExpr<T: Value, const N: usize> {
-    marker: PhantomData<T>,
-    node: NodeRef,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct ArrayVar<T: Value, const N: usize> {
-    marker: PhantomData<T>,
-    node: NodeRef,
-}
-
-impl<T: Value, const N: usize> FromNode for ArrayExpr<T, N> {
-    fn from_node(node: NodeRef) -> Self {
-        Self {
-            marker: PhantomData,
-            node,
-        }
-    }
-}
-
-impl<T: Value, const N: usize> ToNode for ArrayExpr<T, N> {
-    fn node(&self) -> NodeRef {
-        self.node
-    }
-}
-
-impl<T: Value, const N: usize> Aggregate for ArrayExpr<T, N> {
-    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
-        nodes.push(self.node);
-    }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
-        Self::from_node(iter.next().unwrap())
-    }
-}
-
-impl<T: Value, const N: usize> FromNode for ArrayVar<T, N> {
-    fn from_node(node: NodeRef) -> Self {
-        Self {
-            marker: PhantomData,
-            node,
-        }
-    }
-}
-
-impl<T: Value, const N: usize> ToNode for ArrayVar<T, N> {
-    fn node(&self) -> NodeRef {
-        self.node
-    }
-}
-
-impl<T: Value, const N: usize> Aggregate for ArrayVar<T, N> {
-    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
-        nodes.push(self.node);
-    }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
-        Self::from_node(iter.next().unwrap())
-    }
-}
-
-impl<T: Value, const N: usize> ExprProxy for ArrayExpr<T, N> {
-    type Value = [T; N];
-}
-
-impl<T: Value, const N: usize> VarProxy for ArrayVar<T, N> {
-    type Value = [T; N];
-}
-
-impl<T: Value, const N: usize> ArrayVar<T, N> {
-    pub fn len(&self) -> Expr<u32> {
-        (N as u32).expr()
-    }
-}
-
-impl<T: Value, const N: usize> ArrayExpr<T, N> {
-    pub fn zero() -> Self {
-        let node = __current_scope(|b| b.call(Func::ZeroInitializer, &[], <[T; N]>::type_()));
-        Self::from_node(node)
-    }
-    pub fn len(&self) -> Expr<u32> {
-        (N as u32).expr()
-    }
-}
-
-impl<T: Value, const N: usize> IndexRead for ArrayExpr<T, N> {
-    type Element = T;
-    fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
-        let i = i.to_u64();
-
-        lc_assert!(i.cmplt((N as u64).expr()));
-
-        Expr::<T>::from_node(__current_scope(|b| {
-            b.call(Func::ExtractElement, &[self.node, i.node()], T::type_())
-        }))
-    }
-}
-
-impl<T: Value, const N: usize> IndexRead for ArrayVar<T, N> {
-    type Element = T;
-    fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
-        let i = i.to_u64();
-        if need_runtime_check() {
-            lc_assert!(i.cmplt((N as u64).expr()));
-        }
-
-        Expr::<T>::from_node(__current_scope(|b| {
-            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
-            b.call(Func::Load, &[gep], T::type_())
-        }))
-    }
-}
-
-impl<T: Value, const N: usize> IndexWrite for ArrayVar<T, N> {
-    fn write<I: IntoIndex, V: Into<Expr<T>>>(&self, i: I, value: V) {
-        let i = i.to_u64();
-        let value = value.into();
-
-        if need_runtime_check() {
-            lc_assert!(i.cmplt((N as u64).expr()));
-        }
-
-        __current_scope(|b| {
-            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
-            b.update(gep, value.node());
-        });
-    }
-}
-
-impl<T: Value + TypeOf, const N: usize> Value for [T; N] {
+impl<T: Value, const N: usize> Value for [T; N] {
     type Expr = ArrayExpr<T, N>;
     type Var = ArrayVar<T, N>;
-    fn fields() -> Vec<String> {
-        todo!("why this method exists?")
+    type ExprData = ();
+    type VarData = ();
+}
+
+impl_simple_expr_proxy!([T: Value, const N: usize] ArrayExpr[T, N] for [T; N]);
+impl_simple_var_proxy!([T: Value, const N: usize] ArrayVar[T, N] for [T; N]);
+
+impl<T: Value, const N: usize> ArrayExpr<T, N> {
+    pub fn len(&self) -> Expr<u32> {
+        (N as u32).expr()
+    }
+}
+
+impl<T: Value, const N: usize, X: IntoIndex> Index<X> for ArrayExpr<T, N> {
+    type Output = Expr<T>;
+    fn index(&self, i: X) -> &Self::Output {
+        let i = i.to_u64();
+
+        // TODO: Add need_runtime_check()?
+        lc_assert!(i.lt((N as u64).expr()));
+
+        Expr::<T>::from_node(__current_scope(|b| {
+            b.call(Func::ExtractElement, &[self.0.node, i.node()], T::type_())
+        }))
+        ._ref()
     }
 }
 
@@ -202,7 +99,7 @@ impl<T: Value> VLArrayVar<T> {
     pub fn read<I: Into<Expr<u32>>>(&self, i: I) -> Expr<T> {
         let i = i.into();
         if need_runtime_check() {
-            lc_assert!(i.cmplt(self.len()), "VLArrayVar::read out of bounds");
+            lc_assert!(i.lt(self.len()), "VLArrayVar::read out of bounds");
         }
 
         Expr::<T>::from_node(__current_scope(|b| {
@@ -227,7 +124,7 @@ impl<T: Value> VLArrayVar<T> {
         let value = value.into();
 
         if need_runtime_check() {
-            lc_assert!(i.cmplt(self.len()), "VLArrayVar::read out of bounds");
+            lc_assert!(i.lt(self.len()), "VLArrayVar::read out of bounds");
         }
 
         __current_scope(|b| {
@@ -278,7 +175,7 @@ impl<T: Value> VLArrayExpr<T> {
     pub fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
         let i = i.to_u64();
         if need_runtime_check() {
-            lc_assert!(i.cmplt(self.len()));
+            lc_assert!(i.lt(self.len()));
         }
 
         Expr::<T>::from_node(__current_scope(|b| {

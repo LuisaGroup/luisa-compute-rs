@@ -82,10 +82,14 @@ macro_rules! call_vector_fn_spread {
         $f!(['a, $($bounds)*] &'a $T: |x| $Vsplat(*x), Expr<$Vt>: |x| x => Expr<$Vt>);
         $f!([$($bounds)*] Expr<$T>: |x| $Vsplat(x), Expr<$Vt>: |x| x => Expr<$Vt>);
         $f!(['a, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), Expr<$Vt>: |x| x => Expr<$Vt>);
+        $f!([$($bounds)*] Var<$T>: |x| $Vsplat(x), Expr<$Vt>: |x| x => Expr<$Vt>);
+        $f!(['a, $($bounds)*] &'a Var<$T>: |x| $Vsplat(x), Expr<$Vt>: |x| x => Expr<$Vt>);
         $f!(['b, $($bounds)*] $T: |x| $Vsplat(x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a $T: |x| $Vsplat(*x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
         $f!(['b, $($bounds)*] Expr<$T>: |x| $Vsplat(x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
         $f!(['a, 'b, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
+        $f!(['b, $($bounds)*] Var<$T>: |x| $Vsplat(x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
+        $f!(['a, 'b, $($bounds)*] &'a Var<$T>: |x| $Vsplat(x), &'b Expr<$Vt>: |x| x.clone() => Expr<$Vt>);
 
         $f!([$($bounds)*] Expr<$T>: |x| $Vsplat(x), $Vt: |x| x.expr() => Expr<$Vt>);
         $f!(['a, $($bounds)*] &'a Expr<$T>: |x| $Vsplat(x), $Vt: |x| x.expr() => Expr<$Vt>);

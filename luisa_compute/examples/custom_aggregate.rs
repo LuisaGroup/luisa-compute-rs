@@ -1,4 +1,4 @@
-use luisa::prelude::*;
+use luisa::{prelude::*, lang::types::vector::alias::Float3};
 use luisa_compute as luisa;
 #[derive(Aggregate)]
 pub struct Spectrum {

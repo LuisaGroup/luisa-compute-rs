@@ -2,7 +2,7 @@ name: Rust
 
 on:
   push:
-    branches: [ "main", "next" ]
+    branches: [ "main", "next", "refactor  ]
   pull_request:
     branches: [ "main", "next", "refactor  ]
 
@@ -37,7 +37,5 @@ jobs:
     - name: "Run Tests"
       run: |
         RUST_BACKTRACE=full CC=clang-14 CXX=clang++-14 cargo test --verbose -- --nocapture
-        RUST_BACKTRACE=full CC=clang-14 CXX=clang++-14 cargo test --verbose --release -- --nocapture
-        # RUST_BACKTRACE=full bash run_tests.sh
 #     - name: "Run CUDA Tests"
 #       run: CC=clang-14 CXX=clang++-14 LUISA_TEST_DEVICE=cuda cargo test --features cuda --verbose --release 

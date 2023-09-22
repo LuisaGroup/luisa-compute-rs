@@ -32,5 +32,6 @@ for p in prims:
         for q in prims:
             if p != q:
                 print('    pub fn as_{2}{1}(self) -> Expr<{0}{1}> {{ self.as_::<{0}{1}>() }}'.format(make_typename(v_name[q]),n, v_name[q]), file=file)
+                print('    pub fn cast_{3}(self) -> Expr<{0}{1}> {{ self.as_::<{0}{1}>() }}'.format(make_typename(v_name[q]),n, v_name[q], q), file=file)
         print('}', file=file)
 print('}', file=file)

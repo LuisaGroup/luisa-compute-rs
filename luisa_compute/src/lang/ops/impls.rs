@@ -131,6 +131,24 @@ where
         Func::BitNot.call(self)
     }
 }
+impl<X: Linear> Neg for Var<X>
+where
+    X::Scalar: Signed,
+{
+    type Output = Expr<X>;
+    fn neg(self) -> Expr<X> {
+        Func::Neg.call(self.load())
+    }
+}
+impl<X: Linear> Not for Var<X>
+where
+    X::Scalar: Integral,
+{
+    type Output = Expr<X>;
+    fn not(self) -> Expr<X> {
+        Func::BitNot.call(self.load())
+    }
+}
 
 impl<X: Linear> IntExpr for Expr<X>
 where

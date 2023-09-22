@@ -122,7 +122,7 @@ fn main() {
     let rt_kernel = device.create_kernel::<fn()>(&track!(|| {
         let accel = accel.var();
         let px = dispatch_id().xy();
-        let xy = px.as_::<Float2>() / Float2::expr(img_w as f32, img_h as f32);
+        let xy = px.as_float2() / Float2::expr(img_w as f32, img_h as f32);
         let xy = 2.0 * xy - 1.0;
         let o = Float3::expr(0.0, 0.0, -2.0);
         let d = Float3::expr(xy.x, xy.y, 0.0) - o;

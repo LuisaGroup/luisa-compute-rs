@@ -7,6 +7,7 @@ use super::types::vector::{VectorAlign, VectorElement};
 mod impls;
 mod spread;
 mod traits;
+mod cast_impls;
 
 pub use spread::*;
 pub use traits::*;

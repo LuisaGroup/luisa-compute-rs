@@ -303,6 +303,9 @@ pub mod alias {
     pub type Long2 = Vec2<i64>;
     pub type Long3 = Vec3<i64>;
     pub type Long4 = Vec4<i64>;
+    pub type Ulong2 = Vec2<u64>;
+    pub type Ulong3 = Vec3<u64>;
+    pub type Ulong4 = Vec4<u64>;
     pub type Ubyte2 = Vec2<u8>;
     pub type Ubyte3 = Vec3<u8>;
     pub type Ubyte4 = Vec4<u8>;
@@ -312,7 +315,6 @@ pub mod alias {
     pub type Uint2 = Vec2<u32>;
     pub type Uint3 = Vec3<u32>;
     pub type Uint4 = Vec4<u32>;
-    pub type Ulong2 = Vec2<u64>;
     pub type Bool2 = Vec2<bool>;
     pub type Bool3 = Vec3<bool>;
     pub type Bool4 = Vec4<bool>;
@@ -395,3 +397,34 @@ impl SquareMatrix<4> {
 pub type Mat2 = SquareMatrix<2>;
 pub type Mat3 = SquareMatrix<3>;
 pub type Mat4 = SquareMatrix<4>;
+impl Mat2 {
+    pub fn identity() -> Self {
+        Self {
+            cols: [Vector::from([1.0, 0.0]), Vector::from([0.0, 1.0])],
+        }
+    }
+}
+impl Mat3 {
+    pub fn identity() -> Self {
+        Self {
+            cols: [
+                Vector::from([1.0, 0.0, 0.0]),
+                Vector::from([0.0, 1.0, 0.0]),
+                Vector::from([0.0, 0.0, 1.0]),
+            ],
+        }
+    }
+}
+
+impl Mat4 {
+    pub fn identity() -> Self {
+        Self {
+            cols: [
+                Vector::from([1.0, 0.0, 0.0, 0.0]),
+                Vector::from([0.0, 1.0, 0.0, 0.0]),
+                Vector::from([0.0, 0.0, 1.0, 0.0]),
+                Vector::from([0.0, 0.0, 0.0, 1.0]),
+            ],
+        }
+    }
+}

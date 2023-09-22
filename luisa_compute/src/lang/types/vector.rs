@@ -42,7 +42,7 @@ pub struct Vector<T: VectorAlign<N>, const N: usize> {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct VectorExprData<T: VectorAlign<N>, const N: usize>([Expr<T>; N]);
 impl<T: VectorAlign<N>, const N: usize> FromNode for VectorExprData<T, N> {
     fn from_node(node: NodeRef) -> Self {
@@ -52,7 +52,7 @@ impl<T: VectorAlign<N>, const N: usize> FromNode for VectorExprData<T, N> {
     }
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct VectorVarData<T: VectorAlign<N>, const N: usize>([Var<T>; N]);
 impl<T: VectorAlign<N>, const N: usize> FromNode for VectorVarData<T, N> {
     fn from_node(node: NodeRef) -> Self {
@@ -73,13 +73,13 @@ impl<X: FromNode + Copy> FromNode for DoubledProxyData<X> {
 macro_rules! vector_proxies {
     ($N:literal [ $($c:ident),* ]: $ExprName:ident, $VarName:ident) => {
         #[repr(C)]
-        #[derive(Debug, Copy, Clone)]
+        #[derive(Copy, Clone)]
         pub struct $ExprName<T: VectorAlign<$N>> {
             self_: Expr<Vector<T, $N>>,
             $(pub $c: Expr<T>),*
         }
         #[repr(C)]
-        #[derive(Debug, Copy, Clone)]
+        #[derive(Copy, Clone)]
         pub struct $VarName<T: VectorAlign<$N>> {
             self_: Var<Vector<T, $N>>,
             $(pub $c: Var<T>),*

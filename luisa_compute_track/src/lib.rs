@@ -5,9 +5,9 @@ use syn::spanned::Spanned;
 use syn::visit_mut::*;
 use syn::*;
 
-// TODO: Impl let mut -> let = .var()
-// TODO: Impl x as f32 -> .cast()
-// TOOD: Impl switch! macro.
+// TODO: Impl let mut -> let = .var() <- Don't
+// TODO: Impl x as f32 -> .cast()  <- Don't
+// TOOD: Impl switch! macro.  <- Don't
 
 #[cfg(test)]
 use pretty_assertions::assert_eq;
@@ -101,7 +101,8 @@ impl VisitMut for TraceVisitor {
                     op: UnOp::Deref(_),
                     expr,
                     ..
-                } = op {
+                } = op
+                {
                     *node = parse_quote_spanned! {span=>
                         #expr.load()
                     }
@@ -254,6 +255,7 @@ impl VisitMut for TraceVisitor {
                 }
             }
             Expr::Macro(expr) => {
+            
                 let path = &expr.mac.path;
                 if path.leading_colon.is_none()
                     && path.segments.len() == 1
@@ -283,6 +285,10 @@ pub fn track(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     track_impl(parse_macro_input!(input as Expr)).into()
 }
 
+// #[proc_macro]
+// pub fn escape(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+//     input
+// }
 #[proc_macro_attribute]
 pub fn tracked(
     _attr: proc_macro::TokenStream,

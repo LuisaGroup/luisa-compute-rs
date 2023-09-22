@@ -6,6 +6,7 @@ use std::time::Instant;
 use winit::event::{Event as WinitEvent, WindowEvent};
 use winit::event_loop::EventLoop;
 
+use luisa::lang::types::vector::{alias::*, *};
 use luisa::prelude::*;
 use luisa::rtx::{offset_ray_origin, Accel, AccelBuildRequest, AccelOption, AccelVar, Index, Ray};
 use luisa_compute as luisa;
@@ -19,8 +20,9 @@ pub struct Onb {
 }
 
 impl OnbExpr {
+    #[tracked]
     fn to_world(&self, v: Expr<Float3>) -> Expr<Float3> {
-        self.tangent() * v.x() + self.binormal() * v.y() + self.normal() * v.z()
+        self.tangent * v.x + self.binormal * v.y + self.normal * v.z
     }
 }
 
@@ -200,7 +202,7 @@ fn main() {
 
     let vertex_heap = device.create_bindless_array(65536);
     let index_heap = device.create_bindless_array(65536);
-    let mut vertex_buffers: Vec<Buffer<PackedFloat3>> = vec![];
+    let mut vertex_buffers: Vec<Buffer<[f32; 3]>> = vec![];
     let mut index_buffers: Vec<Buffer<Index>> = vec![];
     let accel = device.create_accel(AccelOption::default());
     let stream = device.create_stream(StreamTag::Graphics);
@@ -217,7 +219,7 @@ fn main() {
             cmds.push(vertex_buffer.view(..).copy_from_async(unsafe {
                 let vertex_ptr = model.mesh.positions.as_ptr();
                 std::slice::from_raw_parts(
-                    vertex_ptr as *const PackedFloat3,
+                    vertex_ptr as *const [f32; 3],
                     model.mesh.positions.len() / 3,
                 )
             }));
@@ -231,7 +233,7 @@ fn main() {
             vertex_heap.emplace_buffer_async(index, vertex_buffers.last().unwrap());
             index_heap.emplace_buffer_async(index, index_buffers.last().unwrap());
             cmds.push(mesh.build_async(AccelBuildRequest::ForceBuild));
-            accel.push_mesh(&mesh, glam::Mat4::IDENTITY.into(), 255, true);
+            accel.push_mesh(&mesh, Mat4::identity(), 255, true);
         }
         cmds.push(vertex_heap.update_async());
         cmds.push(index_heap.update_async());
@@ -241,215 +243,224 @@ fn main() {
     });
 
     // use create_kernel_async to compile multiple kernels in parallel
-    let path_tracer = device
-        .create_kernel_async::<fn(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>(
-            &|image: Tex2dVar<Float4>,
-              seed_image: Tex2dVar<u32>,
-              accel: AccelVar,
-              resolution: Expr<Uint2>| {
-                set_block_size([16u32, 16u32, 1u32]);
-                let cbox_materials = ([
-                        Float3::new(0.725f32, 0.710f32, 0.680f32), // floor
-                        Float3::new(0.725f32, 0.710f32, 0.680f32), // ceiling
-                        Float3::new(0.725f32, 0.710f32, 0.680f32), // back wall
-                        Float3::new(0.140f32, 0.450f32, 0.091f32), // right wall
-                        Float3::new(0.630f32, 0.065f32, 0.050f32), // left wall
-                        Float3::new(0.725f32, 0.710f32, 0.680f32), // short box
-                        Float3::new(0.725f32, 0.710f32, 0.680f32), // tall box
-                        Float3::new(0.000f32, 0.000f32, 0.000f32), // light
-                    ]).expr();
+    let path_tracer = device.create_kernel_async::<fn(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>(
+        track!(&|image: Tex2dVar<Float4>,
+                 seed_image: Tex2dVar<u32>,
+                 accel: AccelVar,
+                 resolution: Expr<Uint2>| {
+            set_block_size([16u32, 16u32, 1u32]);
+            let cbox_materials = ([
+                Float3::new(0.725f32, 0.710f32, 0.680f32), // floor
+                Float3::new(0.725f32, 0.710f32, 0.680f32), // ceiling
+                Float3::new(0.725f32, 0.710f32, 0.680f32), // back wall
+                Float3::new(0.140f32, 0.450f32, 0.091f32), // right wall
+                Float3::new(0.630f32, 0.065f32, 0.050f32), // left wall
+                Float3::new(0.725f32, 0.710f32, 0.680f32), // short box
+                Float3::new(0.725f32, 0.710f32, 0.680f32), // tall box
+                Float3::new(0.000f32, 0.000f32, 0.000f32), // light
+            ])
+            .expr();
 
-                let lcg = |state: Var<u32>| -> Expr<f32> {
-                    let lcg = create_static_callable::<fn(Var<u32>)-> Expr<f32>>(|state:Var<u32>|{
-                         const LCG_A: u32 = 1664525u32;
-                        const LCG_C: u32 = 1013904223u32;
-                        *state.get_mut() = LCG_A * *state + LCG_C;
-                        (*state & 0x00ffffffu32).float() * (1.0f32 / 0x01000000u32 as f32)
-                    });
-                    lcg.call(state)
-                };
+            let lcg = |state: Var<u32>| -> Expr<f32> {
+                let lcg = create_static_callable::<fn(Var<u32>) -> Expr<f32>>(|state: Var<u32>| {
+                    const LCG_A: u32 = 1664525u32;
+                    const LCG_C: u32 = 1013904223u32;
+                    *state = LCG_A * *state + LCG_C;
+                    (*state & 0x00ffffffu32).as_f32() * (1.0f32 / 0x01000000u32 as f32)
+                });
+                lcg.call(state)
+            };
 
-                let make_ray = |o: Expr<Float3>, d: Expr<Float3>, tmin: Expr<f32>, tmax: Expr<f32>| -> Expr<Ray> {
+            let make_ray =
+                |o: Expr<Float3>, d: Expr<Float3>, tmin: Expr<f32>, tmax: Expr<f32>| -> Expr<Ray> {
                     struct_!(Ray {
                         orig: o.into(),
                         tmin: tmin,
-                        dir:d.into(),
+                        dir: d.into(),
                         tmax: tmax
                     })
                 };
 
-                let generate_ray = |p: Expr<Float2>| -> Expr<Ray> {
-                    const FOV: f32 = 27.8f32 * std::f32::consts::PI / 180.0f32;
-                    let origin = Float3::expr(-0.01f32, 0.995f32, 5.0f32);
+            let generate_ray = |p: Expr<Float2>| -> Expr<Ray> {
+                let fov = escape!({ const FOV: f32 = 27.8f32 * std::f32::consts::PI / 180.0f32; FOV});
+                let origin = Float3::expr(-0.01f32, 0.995f32, 5.0f32);
 
-                    let pixel = origin
-                        + Float3::expr(
-                        p.x() * f32::tan(0.5f32 * FOV),
-                        p.y() * f32::tan(0.5f32 * FOV),
+                let pixel = origin
+                    + Float3::expr(
+                        p.x * escape!(f32::tan(0.5f32 * fov)),
+                        p.y * escape!(f32::tan(0.5f32 * fov)),
                         -1.0f32,
                     );
-                    let direction = (pixel - origin).normalize();
-                    make_ray(origin, direction, 0.0f32.into(), f32::MAX.into())
+                let direction = (pixel - origin).normalize();
+                make_ray(origin, direction, 0.0f32.expr(), f32::MAX.expr())
+            };
+
+            let balanced_heuristic =
+                |pdf_a: Expr<f32>, pdf_b: Expr<f32>| pdf_a / luisa::max(pdf_a + pdf_b, 1e-4f32);
+
+            let make_onb = |normal: Expr<Float3>| -> Expr<Onb> {
+                let binormal = if normal.x.abs() > normal.z.abs() {
+                    Float3::expr(-normal.y, normal.x, 0.0f32)
+                } else {
+                    Float3::expr(0.0f32, -normal.z, normal.y)
                 };
 
-                let balanced_heuristic = |pdf_a: Expr<f32>, pdf_b: Expr<f32>| {
-                    pdf_a / (pdf_a + pdf_b).max(1e-4f32)
-                };
+                let tangent = binormal.cross(normal).normalize();
+                Onb::new_expr(tangent, binormal, normal)
+            };
 
-                let make_onb = |normal: Expr<Float3>| -> Expr<Onb> {
-                    let binormal = if_!(
-                        normal.x().abs().cmpgt(normal.z().abs()), {
-                            Float3::expr(-normal.y(), normal.x(), 0.0f32)
-                        }, else {
-                            Float3::expr(0.0f32, -normal.z(), normal.y())
+            let cosine_sample_hemisphere = |u: Expr<Float2>| {
+                let r = u.x.sqrt();
+                let phi = 2.0f32 * std::f32::consts::PI * u.y;
+                Float3::expr(r * phi.cos(), r * phi.sin(), (1.0f32 - u.x).sqrt())
+            };
+
+            let coord = dispatch_id().xy();
+            let frame_size = luisa::min(resolution.x, resolution.y).as_f32();
+            let state = Var::<u32>::zeroed();
+            state.store(seed_image.read(coord));
+
+            let rx = lcg(state);
+            let ry = lcg(state);
+
+            let pixel = (coord.as_float2() + Float2::expr(rx, ry)) / frame_size * 2.0f32 - 1.0f32;
+
+            let radiance = Var::<Float3>::zeroed();
+            radiance.store(Float3::expr(0.0f32, 0.0f32, 0.0f32));
+            for _ in 0..SPP_PER_DISPATCH as u32 {
+                let init_ray = generate_ray(pixel * Float2::expr(1.0f32, -1.0f32));
+                let ray = Var::<Ray>::zeroed();
+                ray.store(init_ray);
+
+                let beta = Var::<Float3>::zeroed();
+                beta.store(Float3::expr(1.0f32, 1.0f32, 1.0f32));
+                let pdf_bsdf = Var::<f32>::zeroed();
+                pdf_bsdf.store(0.0f32);
+
+                let light_position = Float3::expr(-0.24f32, 1.98f32, 0.16f32);
+                let light_u = Float3::expr(-0.24f32, 1.98f32, -0.22f32) - light_position;
+                let light_v = Float3::expr(0.23f32, 1.98f32, 0.16f32) - light_position;
+                let light_emission = Float3::expr(17.0f32, 12.0f32, 4.0f32);
+                let light_area = light_u.cross(light_v).length();
+                let light_normal = light_u.cross(light_v).normalize();
+
+                let depth = Var::<u32>::zeroed();
+                while depth < 10u32 {
+                    let hit = accel.trace_closest(*ray);
+
+                    if !hit.valid() {
+                        break;
+                    }
+
+                    let vertex_buffer = vertex_heap.var().buffer::<[f32; 3]>(hit.inst_id);
+                    let triangle = index_heap
+                        .var()
+                        .buffer::<Index>(hit.inst_id)
+                        .read(hit.prim_id);
+
+                    let p0: Expr<Float3> = vertex_buffer.read(triangle[0]).into();
+                    let p1: Expr<Float3> = vertex_buffer.read(triangle[1]).into();
+                    let p2: Expr<Float3> = vertex_buffer.read(triangle[2]).into();
+
+                    let p = p0 * (1.0f32 - hit.u - hit.v) + p1 * hit.u + p2 * hit.v;
+                    let n = (p1 - p0).cross(p2 - p0).normalize();
+
+                    let origin: Expr<Float3> = (*ray.orig).into();
+                    let direction: Expr<Float3> = (*ray.dir).into();
+                    let cos_wi = -direction.dot(n);
+                    if cos_wi < 1e-4f32 {
+                        break;
+                    }
+                    let pp = offset_ray_origin(p, n);
+                    let albedo = cbox_materials.read(hit.inst_id);
+                    // hit light
+                    if hit.inst_id == 7u32 {
+                        if depth == 0u32 {
+                            radiance.store(radiance + light_emission);
+                        } else {
+                            let pdf_light = (p - origin).length_squared() / (light_area * cos_wi);
+                            let mis_weight = balanced_heuristic(*pdf_bsdf, pdf_light);
+                            radiance.store(radiance + mis_weight * *beta * light_emission);
                         }
-                    );
-                    let tangent = binormal.cross(normal).normalize();
-                    OnbExpr::new(tangent, binormal, normal)
-                };
+                        break;
+                    } else {
+                        // sample light
+                        let ux_light = lcg(state);
+                        let uy_light = lcg(state);
+                        let p_light = light_position + ux_light * light_u + uy_light * light_v;
 
-                let cosine_sample_hemisphere = |u: Expr<Float2>| {
-                    let r = u.x().sqrt();
-                    let phi = 2.0f32 * std::f32::consts::PI * u.y();
-                    Float3::expr(r * phi.cos(), r * phi.sin(), (1.0f32 - u.x()).sqrt())
-                };
+                        let pp_light = offset_ray_origin(p_light, light_normal);
+                        let d_light = (pp - pp_light).length();
+                        let wi_light = (pp_light - pp).normalize();
+                        let shadow_ray =
+                            make_ray(offset_ray_origin(pp, n), wi_light, 0.0f32.expr(), d_light);
+                        let occluded = accel.trace_any(shadow_ray);
+                        let cos_wi_light = wi_light.dot(n);
+                        let cos_light = -light_normal.dot(wi_light);
 
-                let coord = dispatch_id().xy();
-                let frame_size = resolution.x().min(resolution.y()).float();
-                let state = Var::<u32>::zeroed();
-                state.store(seed_image.read(coord));
+                        if !occluded && cos_wi_light > 1e-4f32 && cos_light > 1e-4f32 {
+                            let pdf_light = (d_light * d_light) / (light_area * cos_light);
+                            let pdf_bsdf = cos_wi_light * std::f32::consts::FRAC_1_PI;
+                            let mis_weight = balanced_heuristic(pdf_light, pdf_bsdf);
+                            let bsdf = albedo * std::f32::consts::FRAC_1_PI * cos_wi_light;
+                            *radiance += *beta * bsdf * mis_weight * light_emission
+                                / luisa::max(pdf_light, 1e-4f32);
+                        }
+                    }
+                    // sample BSDF
+                    let onb = make_onb(n);
+                    let ux = lcg(state);
+                    let uy = lcg(state);
+                    let new_direction =
+                        onb.to_world(cosine_sample_hemisphere(Float2::expr(ux, uy)));
+                    *ray = make_ray(pp, new_direction, 0.0f32.expr(), std::f32::MAX.expr());
+                    *beta *= albedo;
+                    pdf_bsdf.store(cos_wi * std::f32::consts::FRAC_1_PI);
 
-                let rx = lcg(state);
-                let ry = lcg(state);
+                    // russian roulette
+                    let l = Float3::expr(0.212671f32, 0.715160f32, 0.072169f32).dot(*beta);
+                    if l == 0.0f32 {
+                        break;
+                    }
+                    let q = luisa::max(l, 0.05f32);
+                    let r = lcg(state);
+                    if r > q {
+                        break;
+                    }
+                    *beta = *beta / q;
 
-                let pixel = (coord.float() + Float2::expr(rx, ry)) / frame_size * 2.0f32 - 1.0f32;
-
-                let radiance = Var::<Float3>::zeroed();
+                    *depth += 1;
+                }
+            }
+            radiance.store(radiance / SPP_PER_DISPATCH as f32);
+            seed_image.write(coord, *state);
+            if radiance.is_nan().any() {
                 radiance.store(Float3::expr(0.0f32, 0.0f32, 0.0f32));
-                for_range(0..SPP_PER_DISPATCH as u32, |_| {
-                    let init_ray = generate_ray(pixel * Float2::expr(1.0f32, -1.0f32));
-                    let ray = Var::<Ray>::zeroed();
-                    ray.store(init_ray);
-
-                    let beta = Var::<Float3>::zeroed();
-                    beta.store(Float3::expr(1.0f32, 1.0f32, 1.0f32));
-                    let pdf_bsdf = Var::<f32>::zeroed();
-                    pdf_bsdf.store(0.0f32);
-
-                    let light_position = Float3::expr(-0.24f32, 1.98f32, 0.16f32);
-                    let light_u = Float3::expr(-0.24f32, 1.98f32, -0.22f32) - light_position;
-                    let light_v = Float3::expr(0.23f32, 1.98f32, 0.16f32) - light_position;
-                    let light_emission = Float3::expr(17.0f32, 12.0f32, 4.0f32);
-                    let light_area = light_u.cross(light_v).length();
-                    let light_normal = light_u.cross(light_v).normalize();
-
-                    let depth = Var::<u32>::zeroed();
-                    while_!(depth.load().cmplt(10u32), {
-                        let hit = accel.trace_closest(ray);
-
-                        if_!(!hit.valid(), {
-                            break_();
-                        });
-
-                        let vertex_buffer = vertex_heap.var().buffer::<PackedFloat3>(hit.inst_id());
-                        let triangle = index_heap
-                            .var()
-                            .buffer::<Index>(hit.inst_id())
-                            .read(hit.prim_id());
-
-                        let p0: Expr<Float3> = vertex_buffer.read(triangle.x()).into();
-                        let p1: Expr<Float3> = vertex_buffer.read(triangle.y()).into();
-                        let p2: Expr<Float3> = vertex_buffer.read(triangle.z()).into();
-
-                        let p = p0 * (1.0f32 - hit.u() - hit.v()) + p1 * hit.u() + p2 * hit.v();
-                        let n = (p1 - p0).cross(p2 - p0).normalize();
-
-                        let origin: Expr<Float3> = ray.load().orig().into();
-                        let direction: Expr<Float3> = ray.load().dir().into();
-                        let cos_wi = -direction.dot(n);
-                        if_!(cos_wi.cmplt(1e-4f32), {
-                            break_();
-                        });
-                        let pp = offset_ray_origin(p, n);
-                        let albedo = cbox_materials.read(hit.inst_id());
-                        // hit light
-                        if_!(hit.inst_id().cmpeq(7u32), {
-                            if_!(depth.load().cmpeq(0u32), {
-                                radiance.store(radiance.load() + light_emission);
-                            }, else {
-                                let pdf_light = (p - origin).length_squared() / (light_area * cos_wi);
-                                let mis_weight = balanced_heuristic(pdf_bsdf.load(), pdf_light);
-                                radiance.store(radiance.load() + mis_weight * *beta* light_emission);
-                            });
-                            break_();
-                        }, else{
-
-                            // sample light
-                            let ux_light = lcg(state);
-                            let uy_light = lcg(state);
-                            let p_light = light_position + ux_light * light_u + uy_light * light_v;
-
-                            let pp_light = offset_ray_origin(p_light, light_normal);
-                            let d_light = (pp - pp_light).length();
-                            let wi_light = (pp_light - pp).normalize();
-                            let shadow_ray = make_ray(offset_ray_origin(pp, n), wi_light, 0.0f32.into(), d_light);
-                            let occluded = accel.trace_any(shadow_ray);
-                            let cos_wi_light = wi_light.dot(n);
-                            let cos_light = -light_normal.dot(wi_light);
-
-                            if_!(!occluded & cos_wi_light.cmpgt(1e-4f32) & cos_light.cmpgt(1e-4f32), {
-                                let pdf_light = (d_light * d_light) / (light_area * cos_light);
-                                let pdf_bsdf = cos_wi_light * std::f32::consts::FRAC_1_PI;
-                                let mis_weight = balanced_heuristic(pdf_light, pdf_bsdf);
-                                let bsdf = albedo * std::f32::consts::FRAC_1_PI * cos_wi_light;
-                                radiance.store(*radiance+ *beta * bsdf * mis_weight * light_emission / pdf_light.max(1e-4f32));
-                            });
-                        });
-                        // sample BSDF
-                        let onb = make_onb(n);
-                        let ux = lcg(state);
-                        let uy = lcg(state);
-                        let new_direction = onb.to_world(cosine_sample_hemisphere(Float2::expr(ux, uy)));
-                        *ray.get_mut() = make_ray(pp, new_direction, 0.0f32.into(), std::f32::MAX.into());
-                        *beta.get_mut() *= albedo;
-                        pdf_bsdf.store(cos_wi * std::f32::consts::FRAC_1_PI);
-
-                        // russian roulette
-                        let l = Float3::expr(0.212671f32, 0.715160f32, 0.072169f32).dot(*beta);
-                        if_!(l.cmpeq(0.0f32), { break_(); });
-                        let q = l.max(0.05f32);
-                        let r = lcg(state);
-                        if_!(r.cmpgt(q), { break_(); });
-                        *beta.get_mut() = *beta / q;
-
-                        *depth.get_mut() += 1;
-                    });
-                });
-                radiance.store(radiance.load() / SPP_PER_DISPATCH as f32);
-                seed_image.write(coord, *state);
-                if_!(radiance.load().is_nan().any(), { radiance.store(Float3::expr(0.0f32, 0.0f32, 0.0f32)); });
-                let radiance = radiance.load().clamp(0.0f32, 30.0f32);
-                let old = image.read(dispatch_id().xy());
-                let spp = old.w();
-                let radiance = radiance + old.xyz();
-                image.write(dispatch_id().xy(), Float4::expr(radiance.x(), radiance.y(), radiance.z(), spp + 1.0f32));
-            },
-        )
-        ;
+            }
+            let radiance = radiance.clamp(Float3::splat_expr(0.0f32.expr()),Float3::splat_expr(30.0f32.expr()));
+            let old = image.read(dispatch_id().xy());
+            let spp = old.w;
+            let radiance = radiance + old.xyz();
+            image.write(
+                dispatch_id().xy(),
+                Float4::expr(radiance.x, radiance.y, radiance.z, spp + 1.0f32),
+            );
+        }),
+    );
     let display =
-        device.create_kernel_async::<fn(Tex2d<Float4>, Tex2d<Float4>)>(&|acc, display| {
+        device.create_kernel_async::<fn(Tex2d<Float4>, Tex2d<Float4>)>(track!(&|acc, display| {
             set_block_size([16, 16, 1]);
             let coord = dispatch_id().xy();
             let radiance = acc.read(coord);
-            let spp = radiance.w();
+            let spp = radiance.w;
             let radiance = radiance.xyz() / spp;
 
             // workaround a rust-analyzer bug
-            let r = 1.055f32 * radiance.powf(1.0 / 2.4) - 0.055;
+            let r = 1.055f32 * radiance.powf(1.0 / 2.4f32) - 0.055;
 
-            let srgb = Expr::<Float3>::select(radiance.cmplt(0.0031308), radiance * 12.92, r);
-            display.write(coord, Float4::expr(srgb.x(), srgb.y(), srgb.z(), 1.0f32));
-        });
+            let srgb = radiance.lt(0.0031308).select(radiance * 12.92, r);
+            display.write(coord, Float4::expr(srgb.x, srgb.y, srgb.z, 1.0f32));
+        }));
     let img_w = 1024;
     let img_h = 1024;
     let acc_img = device.create_tex2d::<Float4>(PixelStorage::Float4, img_w, img_h, 1);

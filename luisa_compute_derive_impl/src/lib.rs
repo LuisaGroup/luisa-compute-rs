@@ -211,7 +211,7 @@ impl Compiler {
         );
         let proxy_def = quote_spanned!(span=>
             #ctor_proxy
-            #[derive(Clone, Copy, Debug)]
+            #[derive(Clone, Copy)]
             #[allow(unused_parens)]
             #vis struct #expr_proxy_name #generics{
                 _marker: std::marker::PhantomData<(#marker_args)>,
@@ -220,7 +220,7 @@ impl Compiler {
                 #(#field_vis #field_names: #lang_path::types::Expr<#field_types>),*
 
             }
-            #[derive(Clone, Copy, Debug)]
+            #[derive(Clone, Copy)]
             #[allow(unused_parens)]
             #vis struct #var_proxy_name #generics{
                 _marker: std::marker::PhantomData<(#marker_args)>,

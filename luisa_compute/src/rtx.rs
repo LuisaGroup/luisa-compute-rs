@@ -390,15 +390,14 @@ pub fn offset_ray_origin(p: Expr<Float3>, n: Expr<Float3>) -> Expr<Float3> {
     lazy_static! {
         static ref F: Callable<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>> =
             create_static_callable::<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>>(|p, n| {
-                // const ORIGIN: f32 = 1.0f32 / 32.0f32;
-                // const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
-                // const INT_SCALE: f32 = 256.0f32;
-                // let of_i = (INT_SCALE * n).as_::<i32>();
-                // let p_i = p.bitcast::<Int3>() + p.lt(0.0f32).select(-of_i, of_i);
-                // p.abs()
-                //     .lt(ORIGIN)
-                //     .select(p + FLOAT_SCALE * n, p_i.bitcast::<Float3>())
-                todo!()
+                const ORIGIN: f32 = 1.0f32 / 32.0f32;
+                const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
+                const INT_SCALE: f32 = 256.0f32;
+                track!(unsafe {
+                    let of_i = (INT_SCALE * n).as_int3();
+                    let p_i = p.bitcast::<Int3>() + p.lt(0.0f32).select(-of_i, of_i);
+                    (p.abs() < ORIGIN).select(p + FLOAT_SCALE * n, p_i.bitcast::<Float3>())
+                })
             });
     }
     F.call(p, n)

@@ -115,7 +115,7 @@ impl<T: Value> VarProxyData<T> {
 ///
 /// Note that this does not store the value, and in order to get the result of a
 /// function returning an `Expr`, you must call [`Kernel::dispatch`].
-#[derive(Debug, Clone)]
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Expr<T: Value> {
     pub(crate) node: NodeRef,
@@ -129,16 +129,13 @@ pub struct Expr<T: Value> {
 /// Note that setting a `Var` using direct assignment will not work. Instead,
 /// either use the [`store`](Var::store) method or the `track!` macro and `*var
 /// = expr` syntax.
-#[derive(Debug, Clone)]
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Var<T: Value> {
     pub(crate) node: NodeRef,
     _marker: PhantomData<T>,
     proxy: *mut VarProxyData<T>,
 }
-
-impl<T: Value> Copy for Expr<T> {}
-impl<T: Value> Copy for Var<T> {}
 
 impl<T: Value> Aggregate for Expr<T> {
     fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
@@ -279,7 +276,7 @@ pub fn _deref_proxy<P: VarProxy>(proxy: &P) -> &Expr<P::Value> {
 #[macro_export]
 macro_rules! impl_simple_expr_proxy {
     ($([ $($bounds:tt)* ])? $name: ident $([ $($qualifiers:tt)* ])? for $t: ty $(where $($where_bounds:tt)+)?) => {
-        #[derive(Debug, Clone, Copy)]
+        #[derive(Clone, Copy)]
         #[repr(transparent)]
         pub struct $name $(< $($bounds)* >)? ($crate::lang::types::Expr<$t>) $(where $($where_bounds)+)?;
         impl $(< $($bounds)* >)? $crate::lang::types::ExprProxy for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {
@@ -297,7 +294,7 @@ macro_rules! impl_simple_expr_proxy {
 #[macro_export]
 macro_rules! impl_simple_var_proxy {
     ($([ $($bounds:tt)* ])? $name: ident $([ $($qualifiers:tt)* ])? for $t: ty $(where $($where_bounds:tt)+)?) => {
-        #[derive(Debug, Clone, Copy)]
+        #[derive(Clone, Copy)]
         #[repr(transparent)]
         pub struct $name $(< $($bounds)* >)? ($crate::lang::types::Var<$t>) $(where $($where_bounds)+)?;
         impl $(< $($bounds)* >)? $crate::lang::types::VarProxy for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {

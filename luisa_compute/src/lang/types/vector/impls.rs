@@ -70,17 +70,6 @@ macro_rules! impl_sized {
                 Self::expr_from_elements([$($xs.as_expr()),+])
             }
         }
-        impl<T: VectorAlign<$N>> $Vexpr<T> {
-            pub fn dot(&self, other: impl AsExpr<Value = $Vn<T>>) -> Expr<T> {
-                Expr::<T>::from_node(__current_scope(|s| {
-                    s.call(
-                        Func::Dot,
-                        &[self.node(), other.as_expr().node()],
-                        T::type_(),
-                    )
-                }))
-            }
-        }
         impl<T: VectorAlign<$N>, X: IntoIndex> Index<X> for $Vexpr<T> {
             type Output = Expr<T>;
             fn index(&self, i: X) -> &Self::Output {

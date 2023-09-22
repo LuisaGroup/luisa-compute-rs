@@ -511,13 +511,13 @@ impl<T: Value> BufferHeap<T> {
         self.inner.update();
     }
     #[inline]
-    pub fn buffer(&self, index: impl Into<Expr<u32>>) -> BindlessBufferVar<T> {
+    pub fn buffer(&self, index: impl AsExpr<Value = u32>) -> BindlessBufferVar<T> {
         self.inner.buffer(index)
     }
 }
 impl<T: Value> BufferHeapVar<T> {
     #[inline]
-    pub fn buffer(&self, index: impl Into<Expr<u32>>) -> BindlessBufferVar<T> {
+    pub fn buffer(&self, index: impl AsExpr<Value = u32>) -> BindlessBufferVar<T> {
         self.inner.buffer(index)
     }
 }
@@ -794,13 +794,13 @@ impl BindlessArray {
             })),
         }
     }
-    pub fn tex2d(&self, tex2d_index: impl Into<Expr<u32>>) -> BindlessTex2dVar {
+    pub fn tex2d(&self, tex2d_index: impl AsExpr<Value = u32>) -> BindlessTex2dVar {
         self.var().tex2d(tex2d_index)
     }
-    pub fn tex3d(&self, tex3d_index: impl Into<Expr<u32>>) -> BindlessTex3dVar {
+    pub fn tex3d(&self, tex3d_index: impl AsExpr<Value = u32>) -> BindlessTex3dVar {
         self.var().tex3d(tex3d_index)
     }
-    pub fn buffer<T: Value>(&self, buffer_index: impl Into<Expr<u32>>) -> BindlessBufferVar<T> {
+    pub fn buffer<T: Value>(&self, buffer_index: impl AsExpr<Value = u32>) -> BindlessBufferVar<T> {
         self.var().buffer::<T>(buffer_index)
     }
 }
@@ -1586,31 +1586,34 @@ impl BindlessTex3dVar {
 }
 
 impl BindlessArrayVar {
-    pub fn tex2d(&self, tex2d_index: impl Into<Expr<u32>>) -> BindlessTex2dVar {
+    pub fn tex2d(&self, tex2d_index: impl AsExpr<Value = u32>) -> BindlessTex2dVar {
         let v = BindlessTex2dVar {
             array: self.node,
-            tex2d_index: tex2d_index.into(),
+            tex2d_index: tex2d_index.as_expr(),
         };
         v
     }
-    pub fn tex3d(&self, tex3d_index: impl Into<Expr<u32>>) -> BindlessTex3dVar {
+    pub fn tex3d(&self, tex3d_index: impl AsExpr<Value = u32>) -> BindlessTex3dVar {
         let v = BindlessTex3dVar {
             array: self.node,
-            tex3d_index: tex3d_index.into(),
+            tex3d_index: tex3d_index.as_expr(),
         };
         v
     }
-    pub fn byte_address_buffer(&self, buffer_index: impl Into<Expr<u32>>) -> BindlessByteBufferVar {
+    pub fn byte_address_buffer(
+        &self,
+        buffer_index: impl AsExpr<Value = u32>,
+    ) -> BindlessByteBufferVar {
         let v = BindlessByteBufferVar {
             array: self.node,
-            buffer_index: buffer_index.into(),
+            buffer_index: buffer_index.as_expr(),
         };
         v
     }
-    pub fn buffer<T: Value>(&self, buffer_index: impl Into<Expr<u32>>) -> BindlessBufferVar<T> {
+    pub fn buffer<T: Value>(&self, buffer_index: impl AsExpr<Value = u32>) -> BindlessBufferVar<T> {
         let v = BindlessBufferVar {
             array: self.node,
-            buffer_index: buffer_index.into(),
+            buffer_index: buffer_index.as_expr(),
             _marker: PhantomData,
         };
         if __env_need_backtrace() && is_cpu_backend() {

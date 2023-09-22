@@ -158,7 +158,7 @@ fn vec_cast() {
             let i = i.var();
             let tid = dispatch_id().x;
             let v = f.read(tid);
-            i.write(tid, v.int());
+            i.write(tid, v.as_int2());
         },
         KernelBuildOptions {
             name: Some("vec_cast".to_string()),
@@ -186,7 +186,7 @@ fn bool_op() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = device.create_kernel::<fn()>(&track!(|| {
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = x.var().read(tid);
         let y = y.var().read(tid);
         let and = and.var();
@@ -226,8 +226,8 @@ fn bvec_op() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| Bool2::new(rng.gen(), rng.gen()));
     y.view(..).fill_fn(|_| Bool2::new(rng.gen(), rng.gen()));
-    let kernel = device.create_kernel::<fn()>(&|| {
-        let tid = dispatch_id().x();
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
+        let tid = dispatch_id().x;
         let x = x.var().read(tid);
         let y = y.var().read(tid);
         let and = and.var();
@@ -238,7 +238,7 @@ fn bvec_op() {
         or.write(tid, x | y);
         xor.write(tid, x ^ y);
         not.write(tid, !x);
-    });
+    }));
     kernel.dispatch([1024, 1, 1]);
     let x = x.view(..).copy_to_vec();
     let y = y.view(..).copy_to_vec();
@@ -276,8 +276,8 @@ fn vec_bit_minmax() {
     x.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
     y.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
     z.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
-    let kernel = device.create_kernel::<fn()>(&|| {
-        let tid = dispatch_id().x();
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
+        let tid = dispatch_id().x;
         let x = x.var().read(tid);
         let y = y.var().read(tid);
         let z = z.var().read(tid);
@@ -292,10 +292,10 @@ fn vec_bit_minmax() {
         or.write(tid, x | y);
         xor.write(tid, x ^ y);
         not.write(tid, !x);
-        min.write(tid, x.min(y));
-        max.write(tid, x.max(y));
-        clamp.write(tid, z.clamp(x.min(y), x.max(y)));
-    });
+        min.write(tid, luisa::min(x, y));
+        max.write(tid, luisa::max(x, y));
+        clamp.write(tid, z.clamp(luisa::min(x, y), luisa::max(x, y)));
+    }));
     kernel.dispatch([1024, 1, 1]);
     let x = x.view(..).copy_to_vec();
     let y = y.view(..).copy_to_vec();
@@ -338,12 +338,12 @@ fn vec_permute() {
     let kernel = device.create_kernel::<fn()>(&|| {
         let v2 = v2.var();
         let v3 = v3.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let v = v2.read(tid);
         v3.write(tid, v.xyx());
     });
     kernel.dispatch([1024, 1, 1]);
-    let mut i_data = vec![glam::IVec3::ZERO.into(); 1024];
+    let mut i_data = vec![Int3::new(0, 0, 0); 1024];
     v3.view(..).copy_to(&mut i_data);
     for i in 0..1024 {
         assert_eq!(i_data[i].x, i as i32);
@@ -358,14 +358,18 @@ fn if_phi() {
     let x: Buffer<i32> = device.create_buffer(1024);
     let even: Buffer<bool> = device.create_buffer(1024);
     x.view(..).fill_fn(|i| i as i32);
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let x = x.var();
         let even = even.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let v = x.read(tid);
-        let result = if_!((v % 2).cmpeq(0), { Bool::from(true) }, else { Bool::from(false) });
+        let result = if v % 2 == 0 {
+            true.expr()
+        } else {
+            false.expr()
+        };
         even.write(tid, result);
-    });
+    }));
     kernel.dispatch([1024, 1, 1]);
     let mut i_data = vec![false; 1024];
     even.view(..).copy_to(&mut i_data);
@@ -385,13 +389,13 @@ fn switch_phi() {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_z = z.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let (y, z) = switch::<(Expr<i32>, Expr<f32>)>(x)
-            .case(0, || (Int::from(0), Float::from(1.0)))
-            .case(1, || (Int::from(1), Float::from(2.0)))
-            .case(2, || (Int::from(2), Float::from(3.0)))
-            .default(|| (Int::from(3), Float::from(4.0)))
+            .case(0, || (0i32.expr(), 1.0.expr()))
+            .case(1, || (1i32.expr(), 2.0.expr()))
+            .case(2, || (2i32.expr(), 3.0.expr()))
+            .default(|| (3.expr(), 4.0.expr()))
             .finish();
         buf_y.write(tid, y);
         buf_z.write(tid, z);
@@ -432,12 +436,12 @@ fn switch_unreachable() {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_z = z.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let (y, z) = switch::<(Expr<i32>, Expr<f32>)>(x)
-            .case(0, || (Int::from(0), Float::from(1.0)))
-            .case(1, || (Int::from(1), Float::from(2.0)))
-            .case(2, || (Int::from(2), Float::from(3.0)))
+            .case(0, || (0.expr(), 1.0.expr()))
+            .case(1, || (1.expr(), 2.0.expr()))
+            .case(2, || (2.expr(), 3.0.expr()))
             .finish();
         buf_y.write(tid, y);
         buf_z.write(tid, z);
@@ -470,17 +474,17 @@ fn switch_unreachable() {
 fn array_read_write() {
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_x = x.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let arr = Var::<[i32; 4]>::zeroed();
-        let i = IntVar::zeroed();
-        while_!(i.load().cmplt(4), {
-            arr.write(i.load().uint(), tid.int() + i.load());
-            i.store(i.load() + 1);
-        });
-        buf_x.write(tid, arr.load());
-    });
+        let i = i32::var_zeroed();
+        while i < 4 {
+            arr.write(i.as_u32(), tid.as_i32() + *i);
+            *i += 1;
+        }
+        buf_x.write(tid, *arr);
+    }));
     kernel.dispatch([1024, 1, 1]);
     let x_data = x.view(..).copy_to_vec();
     for i in 0..1024 {
@@ -494,15 +498,15 @@ fn array_read_write() {
 fn array_read_write3() {
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_x = x.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let arr = Var::<[i32; 4]>::zeroed();
         for_range(0..4u32, |i| {
-            arr.write(i, tid.int() + i.int());
+            arr.write(i, tid.as_i32() + i.as_i32());
         });
-        buf_x.write(tid, arr.load());
-    });
+        buf_x.write(tid, *arr);
+    }));
     kernel.dispatch([1024, 1, 1]);
     let x_data = x.view(..).copy_to_vec();
     for i in 0..1024 {
@@ -516,17 +520,17 @@ fn array_read_write3() {
 fn array_read_write4() {
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_x = x.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let arr = Var::<[i32; 4]>::zeroed();
         for_range(0..6u32, |_| {
             for_range(0..4u32, |i| {
-                arr.write(i, arr.read(i) + tid.int() + i.int());
+                arr.write(i, arr.read(i) + tid.as_i32() + i.as_i32());
             });
         });
-        buf_x.write(tid, arr.load());
-    });
+        buf_x.write(tid, *arr);
+    }));
     kernel.dispatch([1024, 1, 1]);
     let x_data = x.view(..).copy_to_vec();
     for i in 0..1024 {
@@ -553,10 +557,10 @@ fn array_read_write2() {
         let arr = Var::<[i32; 4]>::zeroed();
         let i = i32::var_zeroed();
         while i < 4 {
-            arr.write(i.load().uint(), tid.int() + i.load());
+            arr.write(i.as_u32(), tid.as_i32() + *i);
             *i += 1;
         }
-        let arr = arr.load();
+        let arr = *arr;
         buf_x.write(tid, arr);
         buf_y.write(tid, arr.read(0));
     }));
@@ -576,26 +580,26 @@ fn array_read_write_vla() {
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
     let y: Buffer<i32> = device.create_buffer(1024);
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_x = x.var();
         let buf_y = y.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let vl = VLArrayVar::<i32>::zero(4);
-        let i = IntVar::zeroed();
-        while_!(i.load().cmplt(4), {
-            vl.write(i.load().uint(), tid.int() + i.load());
-            i.store(i.load() + 1);
-        });
+        let i = i32::var_zeroed();
+        while i < 4 {
+            vl.write(i.as_u32(), tid.as_i32() + *i);
+            *i += 1;
+        }
         let arr = Var::<[i32; 4]>::zeroed();
-        let i = IntVar::zeroed();
-        while_!(i.load().cmplt(4), {
-            arr.write(i.load().uint(), vl.read(i.load().uint()));
-            i.store(i.load() + 1);
-        });
-        let arr = arr.load();
+        let i = i32::var_zeroed();
+        while i < 4 {
+            arr.write(i.as_u32(), vl.read(i.as_u32()));
+            *i += 1;
+        }
+        let arr = *arr;
         buf_x.write(tid, arr);
         buf_y.write(tid, arr.read(0));
-    });
+    }));
     kernel.dispatch([1024, 1, 1]);
     let x_data = x.view(..).copy_to_vec();
     let y_data = y.view(..).copy_to_vec();
@@ -611,17 +615,17 @@ fn array_read_write_vla() {
 fn array_read_write_async_compile() {
     let device = get_device();
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_x = x.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let arr = Var::<[i32; 4]>::zeroed();
-        let i = IntVar::zeroed();
-        while_!(i.load().cmplt(4), {
-            arr.write(i.load().uint(), tid.int() + i.load());
-            i.store(i.load() + 1);
-        });
-        buf_x.write(tid, arr.load());
-    });
+        let i = i32::var_zeroed();
+        while i < 4 {
+            arr.write(i.as_u32(), tid.as_i32() + *i);
+            *i += 1;
+        }
+        buf_x.write(tid, *arr);
+    }));
     kernel.dispatch([1024, 1, 1]);
     let x_data = x.view(..).copy_to_vec();
     for i in 0..1024 {
@@ -638,19 +642,19 @@ fn capture_same_buffer_multiple_view() {
     let sum = device.create_buffer::<f32>(1);
     x.view(..).fill_fn(|i| i as f32);
     sum.view(..).fill(0.0);
-    let shader = device.create_kernel::<fn()>(&|| {
-        let tid = dispatch_id().x();
+    let shader = device.create_kernel::<fn()>(&track!(|| {
+        let tid = dispatch_id().x;
         let buf_x_lo = x.view(0..64).var();
         let buf_x_hi = x.view(64..).var();
-        let x = if_!(tid.cmplt(64), {
+        let x = if tid < 64 {
             buf_x_lo.read(tid)
-        },else {
+        } else {
             buf_x_hi.read(tid - 64)
-        });
+        };
         let buf_sum = sum.var();
 
         buf_sum.atomic_fetch_add(0, x);
-    });
+    }));
     shader.dispatch([x.len() as u32, 1, 1]);
     let mut sum_data = vec![0.0];
     sum.view(..).copy_to(&mut sum_data);
@@ -666,19 +670,19 @@ fn uniform() {
     let sum = device.create_buffer::<f32>(1);
     x.view(..).fill_fn(|i| i as f32);
     sum.view(..).fill(0.0);
-    let shader = device.create_kernel::<fn(Float3)>(&|v: Expr<Float3>| {
-        let tid = dispatch_id().x();
+    let shader = device.create_kernel::<fn(Float3)>(&track!(|v: Expr<Float3>| {
+        let tid = dispatch_id().x;
         let buf_x_lo = x.view(0..64).var();
         let buf_x_hi = x.view(64..).var();
-        let x = if_!(tid.cmplt(64), {
+        let x = if tid < 64 {
             buf_x_lo.read(tid)
-        },else {
+        } else {
             buf_x_hi.read(tid - 64)
-        });
+        };
         let buf_sum = sum.var();
         let x = x * v.reduce_prod();
         buf_sum.atomic_fetch_add(0, x);
-    });
+    }));
     shader.dispatch([x.len() as u32, 1, 1], &Float3::new(1.0, 2.0, 3.0));
     let mut sum_data = vec![0.0];
     sum.view(..).copy_to(&mut sum_data);
@@ -716,7 +720,7 @@ fn byte_buffer() {
     let i2 = push!(i32, 0i32);
     let i3 = push!(f32, 1f32);
     device
-        .create_kernel::<fn()>(&|| {
+        .create_kernel::<fn()>(&track!(|| {
             let buf = buf.var();
             let i0 = i0 as u64;
             let i1 = i1 as u64;
@@ -726,17 +730,17 @@ fn byte_buffer() {
             let v1 = buf.read::<Big>(i1).var();
             let v2 = buf.read::<i32>(i2).var();
             let v3 = buf.read::<f32>(i3).var();
-            *v0.get_mut() = Float3::expr(1.0, 2.0, 3.0);
+            *v0 = Float3::expr(1.0, 2.0, 3.0);
             for_range(0u32..32u32, |i| {
-                v1.a().write(i, i.float() * 2.0);
+                v1.a.write(i, i.as_f32() * 2.0);
             });
-            *v2.get_mut() = 1i32.into();
-            *v3.get_mut() = 2.0.into();
+            *v2 = 1i32.expr();
+            *v3 = 2.0.expr();
             buf.write::<Float3>(i0, v0.load());
             buf.write::<Big>(i1, v1.load());
             buf.write::<i32>(i2, v2.load());
             buf.write::<f32>(i3, v3.load());
-        })
+        }))
         .dispatch([1, 1, 1]);
     let data = buf.copy_to_vec();
     macro_rules! pop {
@@ -791,9 +795,9 @@ fn bindless_byte_buffer() {
     let i2 = push!(i32, 0i32);
     let i3 = push!(f32, 1f32);
     device
-        .create_kernel::<fn(ByteBuffer)>(&|out: ByteBufferVar| {
+        .create_kernel::<fn(ByteBuffer)>(&track!(|out: ByteBufferVar| {
             let heap = heap.var();
-            let buf = heap.byte_address_buffer(0);
+            let buf = heap.byte_address_buffer(0u32);
             let i0 = i0 as u64;
             let i1 = i1 as u64;
             let i2 = i2 as u64;
@@ -802,17 +806,17 @@ fn bindless_byte_buffer() {
             let v1 = buf.read::<Big>(i1).var();
             let v2 = buf.read::<i32>(i2).var();
             let v3 = buf.read::<f32>(i3).var();
-            *v0.get_mut() = Float3::expr(1.0, 2.0, 3.0);
+            *v0 = Float3::expr(1.0, 2.0, 3.0);
             for_range(0u32..32u32, |i| {
-                v1.a().write(i, i.float() * 2.0);
+                v1.a.write(i, i.as_f32() * 2.0);
             });
-            *v2.get_mut() = 1i32.into();
-            *v3.get_mut() = 2.0.into();
+            *v2 = 1i32.expr();
+            *v3 = 2.0.expr();
             out.write::<Float3>(i0, v0.load());
             out.write::<Big>(i1, v1.load());
             out.write::<i32>(i2, v2.load());
             out.write::<f32>(i3, v3.load());
-        })
+        }))
         .dispatch([1, 1, 1], &out);
     let data = out.copy_to_vec();
     macro_rules! pop {

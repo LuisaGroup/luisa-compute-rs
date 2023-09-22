@@ -61,6 +61,44 @@ macro_rules! impl_array_vec_conversion{
         }
     }
 }
+impl<T: Value, const N: usize> IndexRead for Expr<[T; N]> {
+    type Element = T;
+    fn read<I: IntoIndex>(&self, i: I) -> Expr<Self::Element> {
+        let i = i.to_u64();
+        if need_runtime_check() {
+            lc_assert!(i.lt(N as u64));
+        }
+        Expr::<T>::from_node(__current_scope(|b| {
+            b.call(Func::ExtractElement, &[self.node(), i.node()], T::type_())
+        }))
+    }
+}
+impl<T: Value, const N: usize> IndexRead for Var<[T; N]> {
+    type Element = T;
+    fn read<I: IntoIndex>(&self, i: I) -> Expr<Self::Element> {
+        let i = i.to_u64();
+        if need_runtime_check() {
+            lc_assert!(i.lt(N as u64));
+        }
+        Expr::<T>::from_node(__current_scope(|b| {
+            let gep = b.call(Func::GetElementPtr, &[self.node(), i.node()], T::type_());
+            b.load(gep)
+        }))
+    }
+}
+impl<T: Value, const N: usize> IndexWrite for Var<[T; N]> {
+    fn write<I: IntoIndex, V: AsExpr<Value = Self::Element>>(&self, i: I, value: V) {
+        let i = i.to_u64();
+        let value = value.as_expr();
+        if need_runtime_check() {
+            lc_assert!(i.lt(N as u64));
+        }
+        __current_scope(|b| {
+            let gep = b.call(Func::GetElementPtr, &[self.node(), i.node()], T::type_());
+            b.update(gep, value.node());
+        });
+    }
+}
 impl_array_vec_conversion!(2, 0, 1,);
 impl_array_vec_conversion!(3, 0, 1, 2,);
 impl_array_vec_conversion!(4, 0, 1, 2, 3,);

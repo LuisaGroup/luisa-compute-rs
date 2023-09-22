@@ -80,6 +80,7 @@ impl<K: 'static, T: ?Sized + 'static> PolyVec<K, T> {
 
 #[derive(Clone, Copy, Debug, Value, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(C)]
+#[value_new(pub)]
 pub struct TagIndex {
     pub tag: u32,
     pub index: u32,

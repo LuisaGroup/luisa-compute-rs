@@ -190,11 +190,46 @@ where
         Expr::<Self>::from_node(__compose::<Self>(&elements.map(|x| x.node())))
     }
 }
+impl SquareMatrix<2> {
+    #[tracked]
+    pub fn diag_expr(diag: impl AsExpr<Value = Float2>) -> Expr<Self> {
+        let diag = diag.as_expr();
+        Self::expr(Float2::expr(diag.x, 0.0), Float2::expr(0.0, diag.y))
+    }
+}
+impl SquareMatrix<3> {
+    #[tracked]
+    pub fn diag_expr(diag: impl AsExpr<Value = Float3>) -> Expr<Self> {
+        let diag = diag.as_expr();
+        Self::expr(
+            Float3::expr(diag.x, 0.0, 0.0),
+            Float3::expr(0.0, diag.y, 0.0),
+            Float3::expr(0.0, 0.0, diag.z),
+        )
+    }
+}
+impl SquareMatrix<4> {
+    #[tracked]
+    pub fn diag_expr(diag: impl AsExpr<Value = Float4>) -> Expr<Self> {
+        let diag = diag.as_expr();
+        Self::expr(
+            Float4::expr(diag.x, 0.0, 0.0, 0.0),
+            Float4::expr(0.0, diag.y, 0.0, 0.0),
+            Float4::expr(0.0, 0.0, diag.z, 0.0),
+            Float4::expr(0.0, 0.0, 0.0, diag.w),
+        )
+    }
+}
 macro_rules! impl_mat_proxy {
-    ($M:ident, $V:ty : $($xs:ident),+) => {
+    ($M:ident, $V:ty, $N:literal: $($xs:ident),+) => {
         impl $M {
             pub fn expr($($xs: impl AsExpr<Value = $V>),+) -> Expr<Self> {
                 Self::from_elems_expr([$($xs.as_expr()),+])
+            }
+            pub fn full_expr(scalar: impl AsExpr<Value = f32>) -> Expr<Self> {
+                Expr::<Self>::from_node(__current_scope(|b|{
+                    b.call(Func::Mat, &[scalar.as_expr().node()], Self::type_())
+                }))
             }
         }
         impl AddExpr<Expr<$M>> for Expr<$M> {
@@ -213,6 +248,30 @@ macro_rules! impl_mat_proxy {
             type Output = Self;
             fn mul(self, rhs: Self) -> Self::Output {
                 Func::Mul.call2(self, rhs)
+            }
+        }
+        impl MulExpr<Expr<f32>> for Expr<$M> {
+            type Output = Self;
+            fn mul(self, rhs: Expr<f32>) -> Self::Output {
+                Func::Mul.call2(self, $M::full_expr(rhs))
+            }
+        }
+        impl MulExpr<f32> for Expr<$M> {
+            type Output = Self;
+            fn mul(self, rhs: f32) -> Self::Output {
+                Func::Mul.call2(self, $M::full_expr(rhs))
+            }
+        }
+        impl MulExpr<Expr<$M>> for Expr<f32> {
+            type Output = Expr<$M>;
+            fn mul(self, rhs: Expr<$M>) -> Self::Output {
+                Func::Mul.call2($M::full_expr(self), rhs)
+            }
+        }
+        impl MulExpr<Expr<$M>> for f32 {
+            type Output = Expr<$M>;
+            fn mul(self, rhs: Expr<$M>) -> Self::Output {
+                Func::Mul.call2($M::full_expr(self), rhs)
             }
         }
         impl MulExpr<Expr<$V>> for Expr<$M> {
@@ -237,8 +296,67 @@ macro_rules! impl_mat_proxy {
                 Func::Inverse.call(*self)
             }
         }
+        impl Expr<$M> {
+            pub fn col<I: IntoIndex>(&self, i: I) -> Expr<$V> {
+                self.read(i)
+            }
+            pub fn row<I: IntoIndex>(&self, i: I) -> Expr<$V> {
+                self.transpose().read(i)
+            }
+        }
+        impl<X:IntoIndex> Index<X> for Expr<$M> {
+            type Output = Expr<$V>;
+            fn index(&self, i: X) -> &Self::Output {
+                let i = i.to_u64();
+                if need_runtime_check() {
+                    lc_assert!(i.lt(($N as u64).expr()));
+                }
+                Expr::<$V>::from_node(__current_scope(|b| {
+                    b.call(Func::ExtractElement, &[self.0.node, i.node()], <$V>::type_())
+                }))
+                ._ref()
+            }
+        }
+        impl IndexRead for Expr<$M> {
+            type Element = $V;
+            fn read<I: IntoIndex>(&self, i: I) -> Expr<Self::Element> {
+                let i = i.to_u64();
+                if need_runtime_check() {
+                    lc_assert!(i.lt($N as u64));
+                }
+                Expr::<$V>::from_node(__current_scope(|b| {
+                    b.call(Func::ExtractElement, &[self.node(), i.node()], <$V>::type_())
+                }))
+            }
+        }
+        impl IndexRead for Var<$M> {
+            type Element = $V;
+            fn read<I: IntoIndex>(&self, i: I) -> Expr<Self::Element> {
+                let i = i.to_u64();
+                if need_runtime_check() {
+                    lc_assert!(i.lt($N as u64));
+                }
+                Expr::<$V>::from_node(__current_scope(|b| {
+                    let gep = b.call(Func::GetElementPtr, &[self.node(), i.node()], <$V>::type_());
+                    b.load(gep)
+                }))
+            }
+        }
+        impl IndexWrite for Var<$M> {
+            fn write<I: IntoIndex, V: AsExpr<Value = Self::Element>>(&self, i: I, value: V) {
+                let i = i.to_u64();
+                let value = value.as_expr();
+                if need_runtime_check() {
+                    lc_assert!(i.lt($N as u64));
+                }
+                __current_scope(|b| {
+                    let gep = b.call(Func::GetElementPtr, &[self.node(), i.node()], <$V>::type_());
+                    b.update(gep, value.node());
+                });
+            }
+        }
     }
 }
-impl_mat_proxy!(Mat2, Vec2<f32>: x, y);
-impl_mat_proxy!(Mat3, Vec3<f32>: x, y, z);
-impl_mat_proxy!(Mat4, Vec4<f32>: x, y, z, w);
+impl_mat_proxy!(Mat2, Vec2<f32>,2: x, y);
+impl_mat_proxy!(Mat3, Vec3<f32>,3: x, y, z);
+impl_mat_proxy!(Mat4, Vec4<f32>,4: x, y, z, w);

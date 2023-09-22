@@ -26,6 +26,7 @@ for p in prims:
     for q in prims:
         if p != q:
             print('    pub fn as_{0}(self) -> Expr<{0}> {{ self.as_::<{0}>() }}'.format(q), file=file)
+            print('    pub fn cast_{0}(self) -> Expr<{0}> {{ self.as_::<{0}>() }}'.format(q), file=file)
     print('}', file=file)
     for n in [2,3,4]:
         print('impl Expr<{}{}> {{'.format(make_typename(v_name[p]),n), file=file)

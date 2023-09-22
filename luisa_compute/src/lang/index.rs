@@ -33,6 +33,16 @@ impl IntoIndex for Expr<u64> {
         *self
     }
 }
+impl IntoIndex for Var<u32> {
+    fn to_u64(&self) -> Expr<u64> {
+        self.load().cast::<u64>()
+    }
+}
+impl IntoIndex for Var<u64> {
+    fn to_u64(&self) -> Expr<u64> {
+        self.load()
+    }
+}
 
 pub trait IndexRead: ToNode {
     type Element: Value;

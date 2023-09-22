@@ -1,4 +1,5 @@
 use image::Rgb;
+use luisa::lang::types::vector::alias::*;
 use luisa_compute_api_types::StreamTag;
 use rand::Rng;
 use std::env::current_exe;
@@ -23,8 +24,9 @@ pub struct Onb {
 }
 
 impl OnbExpr {
+    #[tracked]
     fn to_world(&self, v: Expr<Float3>) -> Expr<Float3> {
-        self.tangent() * v.x() + self.binormal() * v.y() + self.normal() * v.z()
+        self.tangent * v.x + self.binormal * v.y + self.normal * v.z
     }
 }
 

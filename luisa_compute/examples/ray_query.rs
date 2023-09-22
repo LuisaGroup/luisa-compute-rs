@@ -163,15 +163,15 @@ fn main() {
                     let t = Var::<f32>::zeroed();
 
                     for _ in 0..100 {
-                        let dist = (o + d * *t - (sphere.center + translate.expr())).length()
+                        let dist = (o + d * t.load() - (sphere.center + translate.expr())).length()
                             - sphere.radius;
                         if dist < 0.001 {
                             if (px == Uint2::expr(400, 400)).all() {
-                                debug_hit_t.write(2, *t);
+                                debug_hit_t.write(2, t);
                                 debug_hit_t.write(3, candidate.ray().tmax);
                             }
                             if t < ray.tmax {
-                                candidate.commit(*t);
+                                candidate.commit(t);
                             }
                             break;
                         }

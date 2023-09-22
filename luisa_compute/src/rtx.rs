@@ -473,7 +473,8 @@ impl Deref for TriangleCandidate {
     }
 }
 impl ProceduralCandidate {
-    pub fn commit(&self, t: Expr<f32>) {
+    pub fn commit(&self, t: impl AsExpr<Value=f32>) {
+        let t = t.as_expr();
         __current_scope(|b| {
             b.call(
                 Func::RayQueryCommitProcedural,

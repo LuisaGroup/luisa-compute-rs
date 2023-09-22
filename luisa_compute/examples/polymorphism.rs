@@ -14,8 +14,9 @@ pub struct Circle {
     radius: f32,
 }
 impl Area for CircleExpr {
+    #[tracked]
     fn area(&self) -> Expr<f32> {
-        PI * self.radius() * self.radius()
+        PI * self.radius * self.radius
     }
 }
 impl_polymorphic!(Area, Circle);
@@ -25,8 +26,9 @@ pub struct Square {
     side: f32,
 }
 impl Area for SquareExpr {
+    #[tracked]
     fn area(&self) -> Expr<f32> {
-        self.side() * self.side()
+        self.side * self.side
     }
 }
 impl_polymorphic!(Area, Square);
@@ -48,15 +50,15 @@ fn main() {
     poly_area.register((), &circles);
     poly_area.register((), &squares);
     let areas = device.create_buffer::<f32>(4);
-    let shader = device.create_kernel::<fn()>(&|| {
-        let tid = dispatch_id().x();
+    let shader = device.create_kernel::<fn()>(&track!(|| {
+        let tid = dispatch_id().x;
         let tag = tid / 2;
         let index = tid % 2;
         let area = poly_area
-            .get(TagIndexExpr::new(tag, index))
+            .get(TagIndex::new_expr(tag, index))
             .dispatch(|_tag, _key, obj| obj.area());
         areas.var().write(tid, area);
-    });
+    }));
     shader.dispatch([4, 1, 1]);
     let areas = areas.view(..).copy_to_vec();
     println!("{:?}", areas);

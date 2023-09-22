@@ -51,6 +51,15 @@ impl VisitMut for TraceVisitor {
                     }
                 }
             }
+            Stmt::Item(item) => match item {
+                Item::Const(c) => match c.expr.as_ref() {
+                    Expr::Lit(_) => {}
+                    _ => {
+                        panic!("Please wrap CONST statments with `escape!`");
+                    }
+                },
+                _ => {}
+            },
             _ => {}
         }
         visit_stmt_mut(self, node);
@@ -112,18 +121,18 @@ impl VisitMut for TraceVisitor {
                     }
                 }
             }
-            Expr::Unary(op) => {
-                if let ExprUnary {
-                    op: UnOp::Deref(_),
-                    expr,
-                    ..
-                } = op
-                {
-                    *node = parse_quote_spanned! {span=>
-                        #expr.load()
-                    }
-                }
-            }
+            // Expr::Unary(op) => {
+            //     if let ExprUnary {
+            //         op: UnOp::Deref(_),
+            //         expr,
+            //         ..
+            //     } = op
+            //     {
+            //         *node = parse_quote_spanned! {span=>
+            //             #expr.load()
+            //         }
+            //     }
+            // }
             Expr::Binary(expr) => {
                 let left = &expr.left;
                 let right = &expr.right;
@@ -271,7 +280,6 @@ impl VisitMut for TraceVisitor {
                 }
             }
             Expr::Macro(expr) => {
-            
                 let path = &expr.mac.path;
                 if path.leading_colon.is_none()
                     && path.segments.len() == 1

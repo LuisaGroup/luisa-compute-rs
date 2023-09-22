@@ -79,7 +79,7 @@ fn callable_return_void_mismatch() {
         if x > 0.0 {
             return true.expr();
         }
-        *x = -*x;
+        *x = -**x;
     }));
 }
 #[test]
@@ -135,7 +135,7 @@ fn callable() {
         let y = buf_y.read(tid);
         let z = add.call(x, y).var();
         write.call(buf_z, tid, z);
-        buf_w.write(tid, *z);
+        buf_w.write(tid, z);
     }));
     kernel.dispatch([1024, 1, 1], &z);
     let z_data = z.view(..).copy_to_vec();
@@ -480,10 +480,10 @@ fn array_read_write() {
         let arr = Var::<[i32; 4]>::zeroed();
         let i = i32::var_zeroed();
         while i < 4 {
-            arr.write(i.as_u32(), tid.as_i32() + *i);
+            arr.write(i.as_u32(), tid.as_i32() + i);
             *i += 1;
         }
-        buf_x.write(tid, *arr);
+        buf_x.write(tid, arr);
     }));
     kernel.dispatch([1024, 1, 1]);
     let x_data = x.view(..).copy_to_vec();
@@ -505,7 +505,7 @@ fn array_read_write3() {
         for_range(0..4u32, |i| {
             arr.write(i, tid.as_i32() + i.as_i32());
         });
-        buf_x.write(tid, *arr);
+        buf_x.write(tid, arr);
     }));
     kernel.dispatch([1024, 1, 1]);
     let x_data = x.view(..).copy_to_vec();
@@ -529,7 +529,7 @@ fn array_read_write4() {
                 arr.write(i, arr.read(i) + tid.as_i32() + i.as_i32());
             });
         });
-        buf_x.write(tid, *arr);
+        buf_x.write(tid, arr);
     }));
     kernel.dispatch([1024, 1, 1]);
     let x_data = x.view(..).copy_to_vec();
@@ -557,10 +557,9 @@ fn array_read_write2() {
         let arr = Var::<[i32; 4]>::zeroed();
         let i = i32::var_zeroed();
         while i < 4 {
-            arr.write(i.as_u32(), tid.as_i32() + *i);
+            arr.write(i.as_u32(), tid.as_i32() + i);
             *i += 1;
         }
-        let arr = *arr;
         buf_x.write(tid, arr);
         buf_y.write(tid, arr.read(0));
     }));
@@ -587,7 +586,7 @@ fn array_read_write_vla() {
         let vl = VLArrayVar::<i32>::zero(4);
         let i = i32::var_zeroed();
         while i < 4 {
-            vl.write(i.as_u32(), tid.as_i32() + *i);
+            vl.write(i.as_u32(), tid.as_i32() + i);
             *i += 1;
         }
         let arr = Var::<[i32; 4]>::zeroed();
@@ -596,7 +595,6 @@ fn array_read_write_vla() {
             arr.write(i.as_u32(), vl.read(i.as_u32()));
             *i += 1;
         }
-        let arr = *arr;
         buf_x.write(tid, arr);
         buf_y.write(tid, arr.read(0));
     }));
@@ -621,10 +619,10 @@ fn array_read_write_async_compile() {
         let arr = Var::<[i32; 4]>::zeroed();
         let i = i32::var_zeroed();
         while i < 4 {
-            arr.write(i.as_u32(), tid.as_i32() + *i);
+            arr.write(i.as_u32(), tid.as_i32() + i);
             *i += 1;
         }
-        buf_x.write(tid, *arr);
+        buf_x.write(tid, arr);
     }));
     kernel.dispatch([1024, 1, 1]);
     let x_data = x.view(..).copy_to_vec();

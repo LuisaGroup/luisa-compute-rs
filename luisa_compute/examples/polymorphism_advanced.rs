@@ -29,8 +29,9 @@ pub struct ConstShader {
     value: f32,
 }
 impl ShaderNode for ConstShaderExpr {
+    #[tracked]
     fn evaluate(&self, _: Expr<f32>, _ctx: &ShaderEvalContext<'_>) -> Expr<f32> {
-        self.value()
+        self.value
     }
 }
 impl_polymorphic!(ShaderNode, ConstShader);
@@ -67,8 +68,8 @@ impl ShaderNode for AddShaderExpr {
         let key = ctx.key;
         match key {
             ShaderDevirtualizationKey::AddShader(a, b) => {
-                let shader_a = ctx.poly_shader.get(self.shader_a());
-                let shader_b = ctx.poly_shader.get(self.shader_b());
+                let shader_a = ctx.poly_shader.get(self.shader_a);
+                let shader_b = ctx.poly_shader.get(self.shader_b);
                 let value_a = eval_recursive_shader(
                     shader_a,
                     x,
@@ -85,7 +86,7 @@ impl ShaderNode for AddShaderExpr {
                         key: b.as_ref(),
                     },
                 );
-                value_a + value_b
+                track!(value_a + value_b)
             }
             _ => unreachable!(),
         }
@@ -131,19 +132,19 @@ fn main() {
     );
     let poly_shader = builder.build();
     let result = device.create_buffer::<f32>(100);
-    let kernel = device.create_kernel::<fn()>(&|| {
-        let i = dispatch_id().x();
-        let x = i.float() / 100.0 * PI;
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
+        let i = dispatch_id().x;
+        let x = i.as_f32() / 100.0 * PI;
         let ctx = ShaderEvalContext {
             poly_shader: &poly_shader,
             key: &shader_final_key,
         };
-        let tag_index = TagIndexExpr::new(shader_final.tag, shader_final.index);
+        let tag_index = TagIndex::new_expr(shader_final.tag, shader_final.index);
         let v = poly_shader
             .get(tag_index)
             .dispatch(|_, _, shader| shader.evaluate(x, &ctx));
         result.var().write(i, v);
-    });
+    }));
     kernel.dispatch([100, 1, 1]);
     let result = result.copy_to_vec();
     for i in 0..100 {

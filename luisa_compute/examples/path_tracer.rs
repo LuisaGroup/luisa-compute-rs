@@ -265,8 +265,8 @@ fn main() {
                 let lcg = create_static_callable::<fn(Var<u32>) -> Expr<f32>>(|state: Var<u32>| {
                     const LCG_A: u32 = 1664525u32;
                     const LCG_C: u32 = 1013904223u32;
-                    *state = LCG_A * *state + LCG_C;
-                    (*state & 0x00ffffffu32).as_f32() * (1.0f32 / 0x01000000u32 as f32)
+                    *state = LCG_A * state + LCG_C;
+                    (state & 0x00ffffffu32).as_f32() * (1.0f32 / 0x01000000u32 as f32)
                 });
                 lcg.call(state)
             };
@@ -282,7 +282,10 @@ fn main() {
                 };
 
             let generate_ray = |p: Expr<Float2>| -> Expr<Ray> {
-                let fov = escape!({ const FOV: f32 = 27.8f32 * std::f32::consts::PI / 180.0f32; FOV});
+                let fov = escape!({
+                    const FOV: f32 = 27.8f32 * std::f32::consts::PI / 180.0f32;
+                    FOV
+                });
                 let origin = Float3::expr(-0.01f32, 0.995f32, 5.0f32);
 
                 let pixel = origin
@@ -346,7 +349,7 @@ fn main() {
 
                 let depth = Var::<u32>::zeroed();
                 while depth < 10u32 {
-                    let hit = accel.trace_closest(*ray);
+                    let hit = accel.trace_closest(**ray);
 
                     if !hit.valid() {
                         break;
@@ -365,8 +368,8 @@ fn main() {
                     let p = p0 * (1.0f32 - hit.u - hit.v) + p1 * hit.u + p2 * hit.v;
                     let n = (p1 - p0).cross(p2 - p0).normalize();
 
-                    let origin: Expr<Float3> = (*ray.orig).into();
-                    let direction: Expr<Float3> = (*ray.dir).into();
+                    let origin: Expr<Float3> = (**ray.orig).into();
+                    let direction: Expr<Float3> = (**ray.dir).into();
                     let cos_wi = -direction.dot(n);
                     if cos_wi < 1e-4f32 {
                         break;
@@ -379,8 +382,8 @@ fn main() {
                             radiance.store(radiance + light_emission);
                         } else {
                             let pdf_light = (p - origin).length_squared() / (light_area * cos_wi);
-                            let mis_weight = balanced_heuristic(*pdf_bsdf, pdf_light);
-                            radiance.store(radiance + mis_weight * *beta * light_emission);
+                            let mis_weight = balanced_heuristic(**pdf_bsdf, pdf_light);
+                            radiance.store(radiance + mis_weight * beta * light_emission);
                         }
                         break;
                     } else {
@@ -403,7 +406,7 @@ fn main() {
                             let pdf_bsdf = cos_wi_light * std::f32::consts::FRAC_1_PI;
                             let mis_weight = balanced_heuristic(pdf_light, pdf_bsdf);
                             let bsdf = albedo * std::f32::consts::FRAC_1_PI * cos_wi_light;
-                            *radiance += *beta * bsdf * mis_weight * light_emission
+                            *radiance += beta * bsdf * mis_weight * light_emission
                                 / luisa::max(pdf_light, 1e-4f32);
                         }
                     }
@@ -411,6 +414,7 @@ fn main() {
                     let onb = make_onb(n);
                     let ux = lcg(state);
                     let uy = lcg(state);
+
                     let new_direction =
                         onb.to_world(cosine_sample_hemisphere(Float2::expr(ux, uy)));
                     *ray = make_ray(pp, new_direction, 0.0f32.expr(), std::f32::MAX.expr());
@@ -418,7 +422,7 @@ fn main() {
                     pdf_bsdf.store(cos_wi * std::f32::consts::FRAC_1_PI);
 
                     // russian roulette
-                    let l = Float3::expr(0.212671f32, 0.715160f32, 0.072169f32).dot(*beta);
+                    let l = Float3::expr(0.212671f32, 0.715160f32, 0.072169f32).dot(beta);
                     if l == 0.0f32 {
                         break;
                     }
@@ -427,17 +431,20 @@ fn main() {
                     if r > q {
                         break;
                     }
-                    *beta = *beta / q;
+                    *beta = beta / q;
 
                     *depth += 1;
                 }
             }
             radiance.store(radiance / SPP_PER_DISPATCH as f32);
-            seed_image.write(coord, *state);
+            seed_image.write(coord, state);
             if radiance.is_nan().any() {
                 radiance.store(Float3::expr(0.0f32, 0.0f32, 0.0f32));
             }
-            let radiance = radiance.clamp(Float3::splat_expr(0.0f32.expr()),Float3::splat_expr(30.0f32.expr()));
+            let radiance = radiance.clamp(
+                Float3::splat_expr(0.0f32.expr()),
+                Float3::splat_expr(30.0f32.expr()),
+            );
             let old = image.read(dispatch_id().xy());
             let spp = old.w;
             let radiance = radiance + old.xyz();

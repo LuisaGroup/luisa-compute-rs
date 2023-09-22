@@ -425,8 +425,8 @@ fn autodiff_vec3_cross_x() {
             let by = inputs[4];
             let bz = inputs[5];
             let b = Float3::expr(bx, by, bz).var();
-            let v = a.cross(*b).var();
-            *v.x
+            let v = a.cross(b).var();
+            **v.x
         }),
     );
 }
@@ -445,8 +445,8 @@ fn autodiff_vec3_cross_y() {
             let by = inputs[4];
             let bz = inputs[5];
             let b = Float3::expr(bx, by, bz).var();
-            let v = a.cross(*b).var();
-            *v.x
+            let v = a.cross(b).var();
+            **v.x
         }),
     );
 }
@@ -496,7 +496,7 @@ fn autodiff_vec3_replace() {
             let ay = inputs[1];
             let az = inputs[2];
             let a = Float3::expr(ax, ay, az).var();
-            let c = *a;
+            let c = **a;
             let b = inputs[3];
             *a.y = b;
             a.dot(c)
@@ -547,9 +547,9 @@ fn autodiff_matmul_transpose() {
             let by = inputs[1usize + 3];
             let bz = inputs[2usize + 3];
             let b = Float3::expr(bx, by, bz);
-            let cx = inputs[0usize+ 6];
-            let cy = inputs[1usize+ 6];
-            let cz = inputs[2usize+ 6];
+            let cx = inputs[0usize + 6];
+            let cy = inputs[1usize + 6];
+            let cz = inputs[2usize + 6];
             let c = Float3::expr(cx, cy, cz);
             let dx = inputs[0usize + 9];
             let dy = inputs[1usize + 9];
@@ -1012,10 +1012,10 @@ fn autodiff_if_phi3() {
             let c = (x > const_three).as_::<i32>();
             let z = if x > y {
                 switch::<Expr<f32>>(c)
-                    .case(0, || x * *const_two)
-                    .default(|| x * *const_four)
+                    .case(0, || x * const_two)
+                    .default(|| x * const_four)
                     .finish()
-                    * *const_two
+                    * const_two
             } else {
                 y * 0.5
             };
@@ -1072,13 +1072,13 @@ fn autodiff_if_phi4() {
             let const_two = consts.x;
             let const_three = consts.y;
             let const_four = consts.z;
-            let c = (x > *const_three).as_::<i32>();
+            let c = (x > const_three).as_::<i32>();
             let z = if x > y {
                 switch::<Expr<f32>>(c)
-                    .case(0, || x * *const_two)
-                    .default(|| x * *const_four)
+                    .case(0, || x * const_two)
+                    .default(|| x * const_four)
                     .finish()
-                    * *const_two
+                    * const_two
             } else {
                 y * 0.5
             };
@@ -1181,8 +1181,8 @@ fn autodiff_callable() {
     y.view(..).fill_fn(|_| rng.gen());
     let callable =
         device.create_callable::<fn(Var<f32>, Var<f32>, Expr<i32>)>(track!(&|vx, vy, t| {
-            let x = *vx;
-            let y = *vy;
+            let x = **vx;
+            let y = **vy;
             autodiff(|| {
                 requires_grad(x);
                 requires_grad(y);
@@ -1209,8 +1209,8 @@ fn autodiff_callable() {
         let dx = x.var();
         let dy = y.var();
         callable.call(dx, dy, t);
-        buf_dx.write(tid, *dx);
-        buf_dy.write(tid, *dy);
+        buf_dx.write(tid, **dx);
+        buf_dy.write(tid, **dy);
     }));
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();

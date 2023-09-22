@@ -223,8 +223,9 @@ macro_rules! impl_mat_proxy {
         }
         impl MatExpr for Expr<$M> {
             type Scalar = Expr<f32>;
-            fn comp_mul(&self, rhs: Self) -> Self {
-                Func::MatCompMul.call2(*self, rhs)
+            type Value = $M;
+            fn comp_mul(&self, rhs: impl AsExpr<Value=$M>) -> Self {
+                Func::MatCompMul.call2(*self, rhs.as_expr())
             }
             fn transpose(&self) -> Self {
                 Func::Transpose.call(*self)

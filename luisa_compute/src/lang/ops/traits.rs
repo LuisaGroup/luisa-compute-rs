@@ -260,22 +260,25 @@ pub trait NormExpr: Sized {
     fn normalize(&self) -> Self;
 }
 pub trait DotExpr: Sized {
+    type Value;
     type Output;
-    fn dot(&self, other: Self) -> Self::Output;
+    fn dot(&self, other: impl AsExpr<Value = Self::Value>) -> Self::Output;
 }
 pub trait CrossExpr: Sized {
+    type Value;
     type Output;
-    fn cross(&self, other: Self) -> Self::Output;
+    fn cross(&self, other: impl AsExpr<Value = Self::Value>) -> Self::Output;
 }
 pub trait MatExpr: Sized {
     type Scalar;
-    fn comp_mul(&self, other: Self) -> Self;
+    type Value;
+    fn comp_mul(&self, other: impl AsExpr<Value = Self::Value>) -> Self;
     fn transpose(&self) -> Self;
     fn determinant(&self) -> Self::Scalar;
     fn inverse(&self) -> Self;
 }
 pub trait VectorSelectExpr: Sized {
-    fn select<X: Linear>(self, on: Expr<X>, off: Expr<X>) -> Self;
+    fn select<X: Linear>(self, on: impl AsExpr<Value = X>, off: impl AsExpr<Value = X>) -> Self;
 }
 
 pub trait ArrayNewExpr<T: Value, const N: usize>: Value {

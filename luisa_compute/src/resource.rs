@@ -1274,10 +1274,10 @@ impl<T: IoTexel> Tex2d<T> {
     pub fn format(&self) -> PixelFormat {
         self.handle.format
     }
-    pub fn read(&self, uv: impl Into<Expr<Uint2>>) -> Expr<T> {
+    pub fn read(&self, uv: impl AsExpr<Value = Uint2>) -> Expr<T> {
         self.var().read(uv)
     }
-    pub fn write(&self, uv: impl Into<Expr<Uint2>>, v: impl Into<Expr<T>>) {
+    pub fn write(&self, uv: impl AsExpr<Value = Uint2>, v: impl AsExpr<Value = T>) {
         self.var().write(uv, v)
     }
 }
@@ -1300,10 +1300,10 @@ impl<T: IoTexel> Tex3d<T> {
     pub fn format(&self) -> PixelFormat {
         self.handle.format
     }
-    pub fn read(&self, uv: impl Into<Expr<Uint3>>) -> Expr<T> {
+    pub fn read(&self, uv: impl AsExpr<Value = Uint3>) -> Expr<T> {
         self.var().read(uv)
     }
-    pub fn write(&self, uv: impl Into<Expr<Uint3>>, v: impl Into<Expr<T>>) {
+    pub fn write(&self, uv: impl AsExpr<Value = Uint3>, v: impl AsExpr<Value = T>) {
         self.var().write(uv, v)
     }
 }
@@ -1981,8 +1981,8 @@ impl<T: IoTexel> Tex2dVar<T> {
             marker: PhantomData,
         }
     }
-    pub fn read(&self, uv: impl Into<Expr<Uint2>>) -> Expr<T> {
-        let uv = uv.into();
+    pub fn read(&self, uv: impl AsExpr<Value = Uint2>) -> Expr<T> {
+        let uv = uv.as_expr();
         T::convert_from_read(Expr::<T::RwType>::from_node(__current_scope(|b| {
             b.call(
                 Func::Texture2dRead,
@@ -1991,9 +1991,9 @@ impl<T: IoTexel> Tex2dVar<T> {
             )
         })))
     }
-    pub fn write(&self, uv: impl Into<Expr<Uint2>>, v: impl Into<Expr<T>>) {
-        let uv = uv.into();
-        let v = v.into();
+    pub fn write(&self, uv: impl AsExpr<Value = Uint2>, v: impl AsExpr<Value = T>) {
+        let uv = uv.as_expr();
+        let v = v.as_expr();
         let v = T::convert_to_write(v);
         __current_scope(|b| {
             b.call(
@@ -2035,8 +2035,8 @@ impl<T: IoTexel> Tex3dVar<T> {
             marker: PhantomData,
         }
     }
-    pub fn read(&self, uv: impl Into<Expr<Uint3>>) -> Expr<T> {
-        let uv = uv.into();
+    pub fn read(&self, uv: impl AsExpr<Value = Uint3>) -> Expr<T> {
+        let uv = uv.as_expr();
         T::convert_from_read(Expr::<T::RwType>::from_node(__current_scope(|b| {
             b.call(
                 Func::Texture3dRead,
@@ -2045,9 +2045,9 @@ impl<T: IoTexel> Tex3dVar<T> {
             )
         })))
     }
-    pub fn write(&self, uv: impl Into<Expr<Uint3>>, v: impl Into<Expr<T>>) {
-        let uv = uv.into();
-        let v = v.into();
+    pub fn write(&self, uv: impl AsExpr<Value = Uint3>, v: impl AsExpr<Value = T>) {
+        let uv = uv.as_expr();
+        let v = v.as_expr();
         let v = T::convert_to_write(v);
         __current_scope(|b| {
             b.call(

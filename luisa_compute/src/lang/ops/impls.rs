@@ -241,9 +241,10 @@ impl<X: Linear> DotExpr for Expr<X>
 where
     X::Scalar: Floating,
 {
+    type Value = X;
     type Output = Expr<X::Scalar>;
-    fn dot(&self, other: Self) -> Self::Output {
-        Func::Dot.call2(self.clone(), other)
+    fn dot(&self, other: impl AsExpr<Value = Self::Value>) -> Self::Output {
+        Func::Dot.call2(self.clone(), other.as_expr())
     }
 }
 impl<X: Floating> CrossExpr for Expr<Vec3<X>>
@@ -251,9 +252,10 @@ where
     Vec3<X>: Linear,
     X: VectorAlign<3>,
 {
+    type Value = Vec3<X>;
     type Output = Expr<Vec3<X>>;
-    fn cross(&self, other: Self) -> Self::Output {
-        Func::Cross.call2(self.clone(), other)
+    fn cross(&self, other: impl AsExpr<Value = Self::Value>) -> Self::Output {
+        Func::Cross.call2(self.clone(), other.as_expr())
     }
 }
 

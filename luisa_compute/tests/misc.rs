@@ -278,7 +278,7 @@ fn test_var_replace() {
     let kernel = device.create_kernel::<fn()>(&track!(|| {
         let tid = dispatch_id().x;
         let x = xs.var().read(tid).var();
-        *x = Int4::expr(1,2,3,4);
+        *x = Int4::expr(1, 2, 3, 4);
         let y = **x;
         *x.y = 10;
         *x.z = 20;
@@ -758,26 +758,26 @@ fn byte_buffer() {
     let i2 = push!(i32, 0i32);
     let i3 = push!(f32, 1f32);
     device
-        .create_kernel::<fn()>(&track!(|| {
+        .create_kernel::<fn()>(&track!(|| unsafe {
             let buf = buf.var();
             let i0 = i0 as u64;
             let i1 = i1 as u64;
             let i2 = i2 as u64;
             let i3 = i3 as u64;
-            let v0 = buf.read::<Float3>(i0).var();
-            let v1 = buf.read::<Big>(i1).var();
-            let v2 = buf.read::<i32>(i2).var();
-            let v3 = buf.read::<f32>(i3).var();
+            let v0 = buf.read_as::<Float3>(i0).var();
+            let v1 = buf.read_as::<Big>(i1).var();
+            let v2 = buf.read_as::<i32>(i2).var();
+            let v3 = buf.read_as::<f32>(i3).var();
             *v0 = Float3::expr(1.0, 2.0, 3.0);
             for_range(0u32..32u32, |i| {
                 v1.a.write(i, i.as_f32() * 2.0);
             });
             *v2 = 1i32.expr();
             *v3 = 2.0.expr();
-            buf.write::<Float3>(i0, v0.load());
-            buf.write::<Big>(i1, v1.load());
-            buf.write::<i32>(i2, v2.load());
-            buf.write::<f32>(i3, v3.load());
+            buf.write_as::<Float3>(i0, v0.load());
+            buf.write_as::<Big>(i1, v1.load());
+            buf.write_as::<i32>(i2, v2.load());
+            buf.write_as::<f32>(i3, v3.load());
         }))
         .dispatch([1, 1, 1]);
     let data = buf.copy_to_vec();
@@ -833,27 +833,27 @@ fn bindless_byte_buffer() {
     let i2 = push!(i32, 0i32);
     let i3 = push!(f32, 1f32);
     device
-        .create_kernel::<fn(ByteBuffer)>(&track!(|out: ByteBufferVar| {
+        .create_kernel::<fn(ByteBuffer)>(&track!(|out: ByteBufferVar| unsafe {
             let heap = heap.var();
             let buf = heap.byte_address_buffer(0u32);
             let i0 = i0 as u64;
             let i1 = i1 as u64;
             let i2 = i2 as u64;
             let i3 = i3 as u64;
-            let v0 = buf.read::<Float3>(i0).var();
-            let v1 = buf.read::<Big>(i1).var();
-            let v2 = buf.read::<i32>(i2).var();
-            let v3 = buf.read::<f32>(i3).var();
+            let v0 = buf.read_as::<Float3>(i0).var();
+            let v1 = buf.read_as::<Big>(i1).var();
+            let v2 = buf.read_as::<i32>(i2).var();
+            let v3 = buf.read_as::<f32>(i3).var();
             *v0 = Float3::expr(1.0, 2.0, 3.0);
             for_range(0u32..32u32, |i| {
                 v1.a.write(i, i.as_f32() * 2.0);
             });
             *v2 = 1i32.expr();
             *v3 = 2.0.expr();
-            out.write::<Float3>(i0, v0.load());
-            out.write::<Big>(i1, v1.load());
-            out.write::<i32>(i2, v2.load());
-            out.write::<f32>(i3, v3.load());
+            out.write_as::<Float3>(i0, v0.load());
+            out.write_as::<Big>(i1, v1.load());
+            out.write_as::<i32>(i2, v2.load());
+            out.write_as::<f32>(i3, v3.load());
         }))
         .dispatch([1, 1, 1], &out);
     let data = out.copy_to_vec();
@@ -952,5 +952,4 @@ fn atomic() {
     }
     assert_eq!(foo_max, expected_foo_max);
     assert_eq!(foo_min, expected_foo_min);
-
 }

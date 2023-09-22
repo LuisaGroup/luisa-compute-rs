@@ -130,8 +130,8 @@ impl Printer {
 
         if_!(
             offset
-                .lt(data.len().cast::<u32>())
-                .bitand((offset.add(1 + args.count as u32)).le(data.len().cast::<u32>())),
+                .lt(data.len_expr().cast::<u32>())
+                .bitand((offset.add(1 + args.count as u32)).le(data.len_expr().cast::<u32>())),
             {
                 data.atomic_fetch_add(0, 1);
                 data.write(offset, item_id);

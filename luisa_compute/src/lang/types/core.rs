@@ -24,7 +24,7 @@ pub trait Primitive: private::Sealed + Copy + TypeOf + 'static {
 impl<T: Primitive> Value for T {
     type Expr = PrimitiveExpr<T>;
     type Var = PrimitiveVar<T>;
-
+    type AtomicRef = PrimitiveAtomicRef<T>;
 
     fn expr(self) -> Expr<Self> {
         let node = __current_scope(|s| -> NodeRef { s.const_(self.const_()) });
@@ -34,6 +34,115 @@ impl<T: Primitive> Value for T {
 
 impl_simple_expr_proxy!([T: Primitive] PrimitiveExpr[T] for T);
 impl_simple_var_proxy!([T: Primitive] PrimitiveVar[T] for T);
+impl_simple_atomic_ref_proxy!([T: Primitive] PrimitiveAtomicRef[T] for T);
+
+macro_rules! impl_atomic {
+    ($t:ty) => {
+        impl AtomicRef<$t> {
+            pub fn compare_exchange(
+                &self,
+                expected: impl AsExpr<Value = $t>,
+                desired: impl AsExpr<Value = $t>,
+            ) -> Expr<$t> {
+                lower_atomic_ref(
+                    self.node(),
+                    Func::AtomicCompareExchange,
+                    &[expected.as_expr().node(), desired.as_expr().node()],
+                )
+            }
+            pub fn exchange(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
+                lower_atomic_ref(
+                    self.node(),
+                    Func::AtomicExchange,
+                    &[operand.as_expr().node()],
+                )
+            }
+            pub fn fetch_add(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
+                lower_atomic_ref(
+                    self.node(),
+                    Func::AtomicFetchAdd,
+                    &[operand.as_expr().node()],
+                )
+            }
+            pub fn fetch_sub(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
+                lower_atomic_ref(
+                    self.node(),
+                    Func::AtomicFetchSub,
+                    &[operand.as_expr().node()],
+                )
+            }
+            pub fn fetch_min(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
+                lower_atomic_ref(
+                    self.node(),
+                    Func::AtomicFetchMin,
+                    &[operand.as_expr().node()],
+                )
+            }
+            pub fn fetch_max(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
+                lower_atomic_ref(
+                    self.node(),
+                    Func::AtomicFetchMax,
+                    &[operand.as_expr().node()],
+                )
+            }
+        }
+    };
+}
+macro_rules! impl_atomic_bit {
+    ($t:ty) => {
+        impl AtomicRef<$t> {
+            pub fn fetch_and(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
+                lower_atomic_ref(
+                    self.node(),
+                    Func::AtomicFetchAnd,
+                    &[operand.as_expr().node()],
+                )
+            }
+            pub fn fetch_or(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
+                lower_atomic_ref(
+                    self.node(),
+                    Func::AtomicFetchOr,
+                    &[operand.as_expr().node()],
+                )
+            }
+            pub fn fetch_xor(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
+                lower_atomic_ref(
+                    self.node(),
+                    Func::AtomicFetchXor,
+                    &[operand.as_expr().node()],
+                )
+            }
+        }
+    };
+}
+impl_atomic!(i32);
+impl_atomic!(u32);
+impl_atomic!(i64);
+impl_atomic!(u64);
+impl_atomic!(f32);
+impl_atomic_bit!(u32);
+impl_atomic_bit!(u64);
+impl_atomic_bit!(i32);
+impl_atomic_bit!(i64);
+fn lower_atomic_ref<T: Value>(node: NodeRef, op: Func, args: &[NodeRef]) -> Expr<T> {
+    let inst = node.get().instruction.as_ref();
+    match inst {
+        Instruction::Call(f, buffer_and_indices) => match f {
+            Func::AtomicRef => {
+                let new_args = buffer_and_indices
+                    .iter()
+                    .chain(args.iter())
+                    .map(|n| *n)
+                    .collect::<Vec<_>>();
+                Expr::<T>::from_node(__current_scope(|b| {
+                    b.call(op, &new_args, <T as TypeOf>::type_())
+                }))
+            }
+            _ => unreachable!("{:?}", inst),
+        },
+        _ => unreachable!(),
+    }
+}
 
 impl Primitive for bool {
     fn const_(&self) -> Const {

@@ -203,8 +203,22 @@ impl Compiler {
                 )
             })
             .collect();
+        let extract_atomic_ref_fields: Vec<_> = fields
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let ident = f.ident.as_ref().unwrap();
+            let ty = &f.ty;
+            quote_spanned!(span=>
+                let #ident = < #lang_path::types::AtomicRef::<#ty> as #lang_path::FromNode>::from_node(#lang_path::__extract::<#ty>(
+                    __node, #i,
+                ));
+            )
+        })
+        .collect();
         let expr_proxy_name = syn::Ident::new(&format!("{}Expr", name), name.span());
         let var_proxy_name = syn::Ident::new(&format!("{}Var", name), name.span());
+        let atomic_ref_proxy_name = syn::Ident::new(&format!("{}AtomicRef", name), name.span());
         let ctor_proxy_name = syn::Ident::new(&format!("{}Comps", name), name.span());
         let ctor_proxy = {
             let ctor_fields = fields
@@ -220,6 +234,7 @@ impl Compiler {
                     #(#ctor_fields),*
                 }
                 impl #impl_generics #name #ty_generics {
+                    #[allow(dead_code)]
                     #vis fn from_comps_expr(ctor: #ctor_proxy_name #ty_generics) -> #lang_path::types::Expr<#name #ty_generics> {
                         use #lang_path::*;
                         let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&ctor.#field_names.as_expr()) ),* ]);
@@ -266,6 +281,14 @@ impl Compiler {
                 self_: #lang_path::types::Var<#name>,
                 #(#field_vis #field_names: #lang_path::types::Var<#field_types>),*,
             }
+            #[derive(Clone, Copy)]
+            #[allow(unused_parens)]
+            #vis struct #atomic_ref_proxy_name #generics{
+                _marker: std::marker::PhantomData<(#marker_args)>,
+                #[allow(dead_code)]
+                self_: #lang_path::types::AtomicRef<#name>,
+                #(#field_vis #field_names: #lang_path::types::AtomicRef<#field_types>),*,
+            }
             #[allow(unused_parens)]
             impl #impl_generics #lang_path::types::ExprProxy for #expr_proxy_name #ty_generics #where_clause {
                 type Value = #name #ty_generics;
@@ -298,6 +321,23 @@ impl Compiler {
                     }
                 }
                 fn as_var_from_proxy(&self) -> &#lang_path::types::Var<#name> {
+                    &self.self_
+                }
+            }
+            #[allow(unused_parens)]
+            unsafe impl #impl_generics #lang_path::types::AtomicRefProxy for #atomic_ref_proxy_name #ty_generics #where_clause {
+                type Value = #name #ty_generics;
+                fn from_atomic_ref(var: #lang_path::types::AtomicRef<#name #ty_generics>) -> Self {
+                    use #lang_path::ToNode;
+                    let __node = var.node();
+                    #(#extract_atomic_ref_fields)*
+                    Self{
+                        self_:var,
+                        _marker:std::marker::PhantomData,
+                        #(#field_names),*
+                    }
+                }
+                fn as_atomic_ref_from_proxy(&self) -> &#lang_path::types::AtomicRef<#name> {
                     &self.self_
                 }
             }
@@ -361,6 +401,7 @@ impl Compiler {
             impl #impl_generics #lang_path::types::Value for #name #ty_generics #where_clause{
                 type Expr = #expr_proxy_name #ty_generics;
                 type Var = #var_proxy_name #ty_generics;
+                type AtomicRef = #atomic_ref_proxy_name #ty_generics;
             }
             #new_expr
         }

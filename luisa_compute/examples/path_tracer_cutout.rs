@@ -15,6 +15,7 @@ use luisa_compute as luisa;
 
 #[derive(Value, Clone, Copy)]
 #[repr(C)]
+#[value_new(pub)]
 pub struct Onb {
     tangent: Float3,
     binormal: Float3,

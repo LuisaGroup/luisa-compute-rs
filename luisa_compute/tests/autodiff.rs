@@ -240,6 +240,7 @@ macro_rules! autodiff_3 {
 }
 #[derive(Clone, Copy, Debug, Value)]
 #[repr(C)]
+#[value_new]
 struct Foo {
     x: f32,
     y: f32,

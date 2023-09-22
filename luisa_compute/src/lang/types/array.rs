@@ -7,6 +7,7 @@ use ir::ArrayType;
 impl<T: Value, const N: usize> Value for [T; N] {
     type Expr = ArrayExpr<T, N>;
     type Var = ArrayVar<T, N>;
+    type AtomicRef = ArrayAtomicRef<T, N>;
 }
 impl<T: Value, const N: usize> ArrayNewExpr<T, N> for [T; N] {
     fn from_elems_expr(elems: [Expr<T>; N]) -> Expr<Self> {
@@ -18,7 +19,7 @@ impl<T: Value, const N: usize> ArrayNewExpr<T, N> for [T; N] {
 
 impl_simple_expr_proxy!([T: Value, const N: usize] ArrayExpr[T, N] for [T; N]);
 impl_simple_var_proxy!([T: Value, const N: usize] ArrayVar[T, N] for [T; N]);
-
+impl_simple_atomic_ref_proxy!([T: Value, const N: usize] ArrayAtomicRef[T, N] for [T; N]);
 impl<T: Value, const N: usize> ArrayExpr<T, N> {
     pub fn len(&self) -> Expr<u32> {
         (N as u32).expr()
@@ -37,6 +38,31 @@ impl<T: Value, const N: usize, X: IntoIndex> Index<X> for ArrayExpr<T, N> {
 
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(Func::ExtractElement, &[self.0.node, i.node()], T::type_())
+        }))
+        ._ref()
+    }
+}
+impl<T: Value, const N: usize, X: IntoIndex> Index<X> for ArrayAtomicRef<T, N> {
+    type Output = AtomicRef<T>;
+    fn index(&self, i: X) -> &Self::Output {
+        let i = i.to_u64();
+
+        // TODO: Add need_runtime_check()?
+        if need_runtime_check() {
+            lc_assert!(i.lt((N as u64).expr()));
+        }
+
+        AtomicRef::<T>::from_node(__current_scope(|b| {
+            let inst = self.0.node.get().instruction.as_ref();
+            let mut args = match inst {
+                Instruction::Call(f, args) => match f {
+                    Func::AtomicRef => args.to_vec(),
+                    _ => unreachable!(),
+                },
+                _ => unreachable!(),
+            };
+            args.push(i.node());
+            b.call_no_append(Func::AtomicRef, &args, T::type_())
         }))
         ._ref()
     }

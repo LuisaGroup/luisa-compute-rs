@@ -851,3 +851,77 @@ fn bindless_byte_buffer() {
         assert!(v1.a[i] == i as f32 * 2.0);
     }
 }
+
+#[derive(Clone, Copy, Debug, Value, PartialEq)]
+#[repr(C)]
+#[value_new(pub)]
+pub struct Foo {
+    i: u32,
+    v: Float2,
+    a: [i32; 4],
+}
+
+#[test]
+fn atomic() {
+    let device = get_device();
+    let mut rng = thread_rng();
+    let foos = device.create_buffer_from_fn(1024, |_| Foo {
+        i: rng.gen(),
+        v: Float2::new(rng.gen(), rng.gen()),
+        a: [rng.gen(), rng.gen(), rng.gen(), rng.gen()],
+    });
+    let foo_max_init = Foo {
+        i: u32::MIN,
+        v: Float2::new(f32::MIN, f32::MIN),
+        a: [i32::MIN; 4],
+    };
+    let foo_min_init = Foo {
+        i: u32::MAX,
+        v: Float2::new(f32::MAX, f32::MAX),
+        a: [i32::MAX; 4],
+    };
+    let foo_max = device.create_buffer_from_slice(&[foo_max_init]);
+    let foo_min = device.create_buffer_from_slice(&[foo_min_init]);
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
+        let i = dispatch_id().x;
+        let foos = foos.var();
+        let foo = foos.read(i);
+        let foo_max = foo_max.var().atomic_ref(0);
+        let foo_min = foo_min.var().atomic_ref(0);
+        foo_max.i.fetch_max(foo.i);
+        foo_max.v.x.fetch_max(foo.v.x);
+        foo_max.v.y.fetch_max(foo.v.y);
+        for i in 0..4u32 {
+            foo_max.a[i].fetch_max(foo.a[i]);
+        }
+        foo_min.i.fetch_min(foo.i);
+        foo_min.v.x.fetch_min(foo.v.x);
+        foo_min.v.y.fetch_min(foo.v.y);
+        for i in 0..4u32 {
+            foo_min.a[i].fetch_min(foo.a[i]);
+        }
+    }));
+    kernel.dispatch([foos.len() as u32, 1, 1]);
+    let foos = foos.view(..).copy_to_vec();
+    let foo_min = foo_min.view(..).copy_to_vec()[0];
+    let foo_max = foo_max.view(..).copy_to_vec()[0];
+    let mut expected_foo_max = foo_max_init;
+    let mut expected_foo_min = foo_min_init;
+    for foo in foos {
+        expected_foo_max.i = expected_foo_max.i.max(foo.i);
+        expected_foo_max.v.x = expected_foo_max.v.x.max(foo.v.x);
+        expected_foo_max.v.y = expected_foo_max.v.y.max(foo.v.y);
+        for i in 0..4 {
+            expected_foo_max.a[i] = expected_foo_max.a[i].max(foo.a[i]);
+        }
+        expected_foo_min.i = expected_foo_min.i.min(foo.i);
+        expected_foo_min.v.x = expected_foo_min.v.x.min(foo.v.x);
+        expected_foo_min.v.y = expected_foo_min.v.y.min(foo.v.y);
+        for i in 0..4 {
+            expected_foo_min.a[i] = expected_foo_min.a[i].min(foo.a[i]);
+        }
+    }
+    assert_eq!(foo_max, expected_foo_max);
+    assert_eq!(foo_min, expected_foo_min);
+
+}

@@ -402,7 +402,7 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
                 Func::AtomicRef => {
                     let mut indices = args.to_vec();
                     indices.push(i);
-                    return b.call(Func::AtomicRef, &indices, <T as TypeOf>::type_());
+                    return b.call_no_append(Func::AtomicRef, &indices, <T as TypeOf>::type_());
                 }
                 Func::GetElementPtr => {
                     let mut indices = args.to_vec();

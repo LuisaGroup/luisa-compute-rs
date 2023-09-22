@@ -6,8 +6,10 @@ macro_rules! element {
             type A = $A;
             type VectorExpr = VectorExprProxy2<$T>;
             type VectorVar = VectorVarProxy2<$T>;
+            type VectorAtomicRef = VectorAtomicRefProxy2<$T>;
             type VectorExprData = VectorExprData<$T, 2>;
             type VectorVarData = VectorVarData<$T, 2>;
+          
         }
     };
     ($T:ty [ 3 ]: $A: ident) => {
@@ -15,6 +17,7 @@ macro_rules! element {
             type A = $A;
             type VectorExpr = VectorExprProxy3<$T>;
             type VectorVar = VectorVarProxy3<$T>;
+            type VectorAtomicRef = VectorAtomicRefProxy3<$T>;
             type VectorExprData = DoubledProxyData<VectorExprData<$T, 3>>;
             type VectorVarData = DoubledProxyData<VectorVarData<$T, 3>>;
         }
@@ -24,6 +27,7 @@ macro_rules! element {
             type A = $A;
             type VectorExpr = VectorExprProxy4<$T>;
             type VectorVar = VectorVarProxy4<$T>;
+            type VectorAtomicRef = VectorAtomicRefProxy4<$T>;
             type VectorExprData = DoubledProxyData<VectorExprData<$T, 4>>;
             type VectorVarData = DoubledProxyData<VectorVarData<$T, 4>>;
         }

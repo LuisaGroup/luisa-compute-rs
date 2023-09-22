@@ -9,6 +9,7 @@ use parking_lot::RawMutex;
 use crate::internal_prelude::*;
 
 use crate::lang::index::IntoIndex;
+use crate::lang::types::AtomicRef;
 use crate::runtime::*;
 
 use api::{BufferDownloadCommand, BufferUploadCommand, INVALID_RESOURCE_HANDLE};
@@ -1744,6 +1745,12 @@ impl<T: Value> BufferVar<T> {
             marker: PhantomData,
             handle: Some(buffer.buffer.handle.clone()),
         }
+    }
+    pub fn atomic_ref(&self, i: impl IntoIndex) -> AtomicRef<T> {
+        let i = i.to_u64();
+        AtomicRef::<T>::from_node(__current_scope(|b| {
+            b.call_no_append(Func::AtomicRef, &[self.node, i.node()], T::type_())
+        }))
     }
     pub fn len(&self) -> Expr<u64> {
         FromNode::from_node(

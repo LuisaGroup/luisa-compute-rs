@@ -193,7 +193,7 @@ pub fn __assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, c
     let msg = if is_cpu_backend() && __env_need_backtrace() {
         let backtrace = get_backtrace();
         format!(
-            "assertion failed: {} at {}:{}:{} \nbacktrace: {}",
+            "assertion failed: {} at {}:{}:{} \nbacktrace:\n{}",
             msg, pretty_filename, line, col, backtrace
         )
     } else {

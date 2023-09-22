@@ -68,7 +68,8 @@ mod internal_prelude {
         CallableArgEncoder, CallableParameter, CallableRet, KernelBuilder,
     };
     pub(crate) use crate::{
-        get_backtrace, impl_simple_expr_proxy, impl_simple_var_proxy, ResourceTracker,
+        get_backtrace, impl_simple_atomic_ref_proxy, impl_simple_expr_proxy, impl_simple_var_proxy,
+        ResourceTracker,
     };
     pub(crate) use luisa_compute_backend::Backend;
     pub(crate) use std::marker::PhantomData;

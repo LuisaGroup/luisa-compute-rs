@@ -24,6 +24,7 @@ pub trait VectorAlign<const N: usize>: Primitive {
     type A: Alignment;
     type VectorExpr: ExprProxy<Value = Vector<Self, N>>;
     type VectorVar: VarProxy<Value = Vector<Self, N>>;
+    type VectorAtomicRef: AtomicRefProxy<Value = Vector<Self, N>>;
     type VectorExprData: Clone + FromNode + 'static;
     type VectorVarData: Clone + FromNode + 'static;
 }
@@ -61,6 +62,18 @@ impl<T: VectorAlign<N>, const N: usize> FromNode for VectorVarData<T, N> {
         }))
     }
 }
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct VectorAtomicRefData<T: VectorAlign<N>, const N: usize>([AtomicRef<T>; N]);
+impl<T: VectorAlign<N>, const N: usize> FromNode for VectorAtomicRefData<T, N> {
+    fn from_node(node: NodeRef) -> Self {
+        Self(std::array::from_fn(|i| {
+            FromNode::from_node(__extract::<T>(node, i))
+        }))
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct DoubledProxyData<X: FromNode + Copy>(X, X);
@@ -71,7 +84,7 @@ impl<X: FromNode + Copy> FromNode for DoubledProxyData<X> {
 }
 
 macro_rules! vector_proxies {
-    ($N:literal [ $($c:ident),* ]: $ExprName:ident, $VarName:ident) => {
+    ($N:literal [ $($c:ident),* ]: $ExprName:ident, $VarName:ident, $AtomicName:ident) => {
         #[repr(C)]
         #[derive(Copy, Clone)]
         pub struct $ExprName<T: VectorAlign<$N>> {
@@ -84,7 +97,12 @@ macro_rules! vector_proxies {
             self_: Var<Vector<T, $N>>,
             $(pub $c: Var<T>),*
         }
-
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        pub struct $AtomicName<T: VectorAlign<$N>> {
+            self_: AtomicRef<Vector<T, $N>>,
+            $(pub $c: AtomicRef<T>),*
+        }
         impl<T: VectorAlign<$N, VectorExpr = $ExprName<T>>> ExprProxy for $ExprName<T> {
             type Value = Vector<T, $N>;
             #[allow(unused_assignments)]
@@ -138,12 +156,32 @@ macro_rules! vector_proxies {
                 _deref_proxy(self)
             }
         }
+        unsafe impl<T: VectorAlign<$N, VectorAtomicRef = $AtomicName<T>>> AtomicRefProxy for $AtomicName<T> {
+            type Value = Vector<T, $N>;
+            #[allow(unused_assignments)]
+            fn from_atomic_ref(e:AtomicRef<Self::Value>) -> Self {
+                let data = VectorAtomicRefData::<T, $N>::from_node(e.node());
+                let mut i = 0;
+                $(
+                    let $c = data.0[i].clone();
+                    i += 1;
+                    if i >= $N { i = 0; }
+                )*
+                Self{
+                    self_: e,
+                    $($c),*
+                }
+            }
+            fn as_atomic_ref_from_proxy(&self)->&AtomicRef<Self::Value> {
+                &self.self_
+            }
+        }
     }
 }
 
-vector_proxies!(2 [x, y]: VectorExprProxy2, VectorVarProxy2);
-vector_proxies!(3 [x, y, z, r, g, b]: VectorExprProxy3, VectorVarProxy3);
-vector_proxies!(4 [x, y, z, w, r, g, b, a]: VectorExprProxy4, VectorVarProxy4);
+vector_proxies!(2 [x, y]: VectorExprProxy2, VectorVarProxy2, VectorAtomicRefProxy2);
+vector_proxies!(3 [x, y, z, r, g, b]: VectorExprProxy3, VectorVarProxy3, VectorAtomicRefProxy3);
+vector_proxies!(4 [x, y, z, w, r, g, b, a]: VectorExprProxy4, VectorVarProxy4, VectorAtomicRefProxy4);
 
 impl<T: VectorAlign<N>, const N: usize> TypeOf for Vector<T, N> {
     fn type_() -> CArc<Type> {
@@ -158,6 +196,7 @@ impl<T: VectorAlign<N>, const N: usize> TypeOf for Vector<T, N> {
 impl<T: VectorAlign<N>, const N: usize> Value for Vector<T, N> {
     type Expr = T::VectorExpr;
     type Var = T::VectorVar;
+    type AtomicRef = T::VectorAtomicRef;
 }
 
 impl<T: VectorAlign<N>, const N: usize> Vector<T, N> {
@@ -355,24 +394,30 @@ where
 
 impl_simple_expr_proxy!(SquareMatrixExpr2 for SquareMatrix<2>);
 impl_simple_var_proxy!(SquareMatrixVar2 for SquareMatrix<2>);
+impl_simple_atomic_ref_proxy!(SquareMatrixAtomicRef2 for SquareMatrix<2>);
 
 impl_simple_expr_proxy!(SquareMatrixExpr3 for SquareMatrix<3>);
 impl_simple_var_proxy!(SquareMatrixVar3 for SquareMatrix<3>);
+impl_simple_atomic_ref_proxy!(SquareMatrixAtomicRef3 for SquareMatrix<3>);
 
 impl_simple_expr_proxy!(SquareMatrixExpr4 for SquareMatrix<4>);
 impl_simple_var_proxy!(SquareMatrixVar4 for SquareMatrix<4>);
+impl_simple_atomic_ref_proxy!(SquareMatrixAtomicRef4 for SquareMatrix<4>);
 
 impl Value for SquareMatrix<2> {
     type Expr = SquareMatrixExpr2;
     type Var = SquareMatrixVar2;
+    type AtomicRef = SquareMatrixAtomicRef2;
 }
 impl Value for SquareMatrix<3> {
     type Expr = SquareMatrixExpr3;
     type Var = SquareMatrixVar3;
+    type AtomicRef = SquareMatrixAtomicRef3;
 }
 impl Value for SquareMatrix<4> {
     type Expr = SquareMatrixExpr4;
     type Var = SquareMatrixVar4;
+    type AtomicRef = SquareMatrixAtomicRef4;
 }
 
 impl SquareMatrix<4> {

@@ -33,7 +33,7 @@ fn main() {
         let y = buf_y.read(tid);
         let vx = Var::<f32>::zeroed(); // create a local mutable variable
         *vx = x;
-        buf_z.write(tid, *vx + y);
+        buf_z.write(tid, vx + y);
     }));
     kernel.dispatch([1024, 1, 1], &z);
     let z_data = z.view(..).copy_to_vec();

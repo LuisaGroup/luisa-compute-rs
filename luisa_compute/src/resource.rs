@@ -1530,10 +1530,7 @@ impl<T: Value> BufferVar<T> {
             } else {
                 let node = new_node(
                     r.pools.as_ref().unwrap(),
-                    Node::new(
-                        CArc::new(Instruction::Buffer),
-                        T::type_()
-                    ),
+                    Node::new(CArc::new(Instruction::Buffer), T::type_()),
                 );
                 let i = r.captured_buffer.len();
                 r.captured_buffer
@@ -1811,6 +1808,11 @@ impl<T: IoTexel> Tex2dVar<T> {
             );
         })
     }
+    pub fn size(&self) -> Expr<Uint2> {
+        Expr::<Uint2>::from_node(__current_scope(|b| {
+            b.call(Func::Texture2dSize, &[self.node], Uint2::type_())
+        }))
+    }
 }
 
 impl<T: IoTexel> Tex3dVar<T> {
@@ -1864,6 +1866,11 @@ impl<T: IoTexel> Tex3dVar<T> {
                 Type::void(),
             );
         })
+    }
+    pub fn size(&self) -> Expr<Uint3> {
+        Expr::<Uint3>::from_node(__current_scope(|b| {
+            b.call(Func::Texture3dSize, &[self.node], Uint3::type_())
+        }))
     }
 }
 #[derive(Clone)]

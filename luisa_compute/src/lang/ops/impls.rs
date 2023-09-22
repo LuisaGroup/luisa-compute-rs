@@ -150,6 +150,12 @@ macro_rules! impl_simple_fns {
             Func::$func.call(self.clone())
         }
     )+};
+
+    ($out:ty, $($fname:ident => $func:ident),+) => {$(
+        fn $fname(&self) -> $out {
+            Func::$func.call(self.clone())
+        }
+    )+};
 }
 
 impl<X: Linear> FloatExpr for Expr<X>
@@ -205,6 +211,49 @@ where
     }
     fn sin_cos(&self) -> (Self, Self) {
         (self.sin(), self.cos())
+    }
+}
+impl<X: Linear> NormExpr for Expr<X>
+where
+    X::Scalar: Floating,
+{
+    type Output = Expr<X::Scalar>;
+    impl_simple_fns! {
+        Self::Output,
+        norm => Length,
+        norm_squared => LengthSquared
+    }
+    impl_simple_fns! {
+        normalize=>Normalize
+    }
+}
+impl<X: Linear> ReduceExpr for Expr<X> {
+    type Output = Expr<X::Scalar>;
+    impl_simple_fns! {
+        Self::Output,
+        reduce_max=>ReduceMax,
+        reduce_min=>ReduceMin,
+        reduce_prod=>ReduceProd,
+        reduce_sum=>ReduceSum
+    }
+}
+impl<X: Linear> DotExpr for Expr<X>
+where
+    X::Scalar: Floating,
+{
+    type Output = Expr<X::Scalar>;
+    fn dot(&self, other: Self) -> Self::Output {
+        Func::Dot.call2(self.clone(), other)
+    }
+}
+impl<X: Floating> CrossExpr for Expr<Vec3<X>>
+where
+    Vec3<X>: Linear,
+    X: VectorAlign<3>,
+{
+    type Output = Expr<Vec3<X>>;
+    fn cross(&self, other: Self) -> Self::Output {
+        Func::Cross.call2(self.clone(), other)
     }
 }
 impl_ops_trait!([X: Linear] FloatMulAddExpr[FloatMulAddThis] for Expr<X> where [X::Scalar: Floating] {

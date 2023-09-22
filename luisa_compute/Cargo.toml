@@ -37,6 +37,7 @@ nalgebra = { version = "0.32.3", optional = true }
 rand = "0.8.5"
 image = "0.24.5"
 tobj = "4.0.0"
+glam = { version = "0.24.0", optional = false }
 
 [features]
 default = ["remote", "cuda", "cpu", "metal", "dx"]

@@ -96,6 +96,17 @@ impl VisitMut for TraceVisitor {
                     }
                 }
             }
+            Expr::Unary(op) => {
+                if let ExprUnary {
+                    op: UnOp::Deref(_),
+                    expr,
+                    ..
+                } = op {
+                    *node = parse_quote_spanned! {span=>
+                        #expr.load()
+                    }
+                }
+            }
             Expr::Binary(expr) => {
                 let left = &expr.left;
                 let right = &expr.right;

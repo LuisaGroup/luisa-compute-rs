@@ -1,9 +1,10 @@
 use std::env::current_exe;
 
 use image::Rgb;
+use luisa::lang::types::vector::{alias::*, *};
 use luisa::prelude::*;
 use luisa::rtx::{
-    Aabb, AccelBuildRequest, AccelOption, ProceduralCandidate, RayExpr, RayQuery, TriangleCandidate,
+    Aabb, AccelBuildRequest, AccelOption, ProceduralCandidate, Ray, RayQuery, TriangleCandidate,
 };
 use luisa_compute as luisa;
 use winit::event::{Event as WinitEvent, WindowEvent};
@@ -18,20 +19,19 @@ pub struct Sphere {
 impl Sphere {
     fn aabb(&self) -> Aabb {
         Aabb {
-            min: PackedFloat3::new(
+            min: [
                 self.center.x - self.radius,
                 self.center.y - self.radius,
                 self.center.z - self.radius,
-            ),
-            max: PackedFloat3::new(
+            ],
+            max: [
                 self.center.x + self.radius,
                 self.center.y + self.radius,
                 self.center.z + self.radius,
-            ),
+            ],
         }
     }
 }
-
 fn main() {
     luisa::init_logger();
 
@@ -55,8 +55,7 @@ fn main() {
         Float3::new(0.5, 0.0, -0.1),
         Float3::new(0.0, 0.5, -0.1),
     ]);
-    let tbuffer: Buffer<PackedUint3> =
-        device.create_buffer_from_slice(&[PackedUint3::new(0, 1, 2)]);
+    let tbuffer: Buffer<[u32; 3]> = device.create_buffer_from_slice(&[[0, 1, 2]]);
     let mesh = device.create_mesh(vbuffer.view(..), tbuffer.view(..), AccelOption::default());
     mesh.build(AccelBuildRequest::ForceBuild);
 
@@ -81,37 +80,54 @@ fn main() {
     ]);
     let spheres = device.create_buffer_from_slice::<Sphere>(&spheres);
     let translate = Float3::new(0.0, 0.0, 0.0);
-    let transform: Mat4 = {
-        let mut m = glam::Mat4::IDENTITY;
-        m = glam::Mat4::from_translation(translate.into()) * m;
-        m
-    }
-    .into();
-    let scaled: Mat4 = {
-        let mut m = glam::Mat4::IDENTITY;
-        m = glam::Mat4::from_scale(glam::vec3(2.0, 2.0, 2.0)) * m;
-        m
-    }
-    .into();
+    #[cfg(feature = "glam")]
+    let (transform, scale) = {
+        let transform: Mat4 = {
+            let mut m = glam::Mat4::IDENTITY;
+            m = glam::Mat4::from_translation(translate.into()) * m;
+            m
+        }
+        .into();
+        let scaled: Mat4 = {
+            let mut m = glam::Mat4::IDENTITY;
+            m = glam::Mat4::from_scale(glam::vec3(2.0, 2.0, 2.0)) * m;
+            m
+        }
+        .into();
+    };
+    #[cfg(not(feature = "glam"))]
+    let (transform, scale) = {
+        let transform: Mat4 = unsafe {
+            let mut m = glam::Mat4::IDENTITY;
+            m = glam::Mat4::from_translation(glam::vec3(translate.x, translate.y, translate.z)) * m;
+            std::mem::transmute(m)
+        };
+        let scaled: Mat4 = unsafe {
+            let mut m = glam::Mat4::IDENTITY;
+            m = glam::Mat4::from_scale(glam::vec3(2.0, 2.0, 2.0)) * m;
+            std::mem::transmute(m)
+        };
+        (transform, scaled)
+    };
     let sphere_accel = device.create_procedural_primitive(aabb.view(..), AccelOption::default());
     sphere_accel.build(AccelBuildRequest::ForceBuild);
     let accel = device.create_accel(Default::default());
-    accel.push_mesh(&mesh, scaled, 0xff, false);
+    accel.push_mesh(&mesh, scale, 0xff, false);
     accel.push_procedural_primitive(&sphere_accel, transform, 0xff);
     accel.build(AccelBuildRequest::ForceBuild);
     let img_w = 800;
     let img_h = 800;
     let img = device.create_tex2d::<Float4>(PixelStorage::Byte4, img_w, img_h, 1);
     let debug_hit_t = device.create_buffer::<f32>(4);
-    let rt_kernel = device.create_kernel::<fn()>(&|| {
+    let rt_kernel = device.create_kernel::<fn()>(&track!(|| {
         let accel = accel.var();
         let px = dispatch_id().xy();
-        let xy = px.float() / Float2::expr(img_w as f32, img_h as f32);
+        let xy = px.as_::<Float2>() / Float2::expr(img_w as f32, img_h as f32);
         let xy = 2.0 * xy - 1.0;
         let o = Float3::expr(0.0, 0.0, -2.0);
-        let d = Float3::expr(xy.x(), xy.y(), 0.0) - o;
+        let d = Float3::expr(xy.x, xy.y, 0.0) - o;
         let d = d.normalize();
-        let ray = RayExpr::new(o + translate.expr(), 1e-3, d, 1e9);
+        let ray = Ray::new_expr(o + translate.expr(), 1e-3f32, d, 1e9f32);
         let hit = accel.query_all(
             ray,
             255,
@@ -192,7 +208,7 @@ fn main() {
             }
         );
         img.write(px, Float4::expr(color.x(), color.y(), color.z(), 1.0));
-    });
+    }));
     let event_loop = EventLoop::new();
     let window = winit::window::WindowBuilder::new()
         .with_title("Luisa Compute Rust - Ray Query")

@@ -25,12 +25,12 @@ pub mod prelude {
     pub use crate::lang::index::{IndexRead, IndexWrite};
     pub use crate::lang::ops::{
         AbsExpr, ActivateMaybeExpr, AddAssignExpr, AddExpr, BitAndAssignExpr, BitAndExpr,
-        BitOrAssignExpr, BitOrExpr, BitXorAssignExpr, BitXorExpr, ClampExpr, CmpExpr,
-        DivAssignExpr, DivExpr, EqExpr, FloatArcTan2Expr, FloatCopySignExpr, FloatExpr,
+        BitOrAssignExpr, BitOrExpr, BitXorAssignExpr, BitXorExpr, ClampExpr, CmpExpr, CrossExpr,
+        DivAssignExpr, DivExpr, DotExpr, EqExpr, FloatArcTan2Expr, FloatCopySignExpr, FloatExpr,
         FloatLerpExpr, FloatLogExpr, FloatMulAddExpr, FloatPowfExpr, FloatPowiExpr,
         FloatSmoothStepExpr, FloatStepExpr, IntExpr, LazyBoolMaybeExpr, LoopMaybeExpr, MinMaxExpr,
-        MulAssignExpr, MulExpr, RemAssignExpr, RemExpr, SelectMaybeExpr, ShlAssignExpr, ShlExpr,
-        ShrAssignExpr, ShrExpr, SubAssignExpr, SubExpr,
+        MulAssignExpr, MulExpr, NormExpr, ReduceExpr, RemAssignExpr, RemExpr, SelectMaybeExpr,
+        ShlAssignExpr, ShlExpr, ShrAssignExpr, ShrExpr, SubAssignExpr, SubExpr,MatExpr
     };
     pub use crate::lang::types::vector::swizzle::*;
     pub use crate::lang::types::vector::VectorExprProxy;

@@ -149,7 +149,7 @@ impl Compiler {
                 let ident = f.ident.as_ref().unwrap();
                 let ty = &f.ty;
                 quote_spanned!(span=>
-                    let #ident = < #lang_path::types::Expr::<#ty> as FromNode>::from_node(__extract::<#ty>(
+                    let #ident = < #lang_path::types::Expr::<#ty> as #lang_path::FromNode>::from_node(#lang_path::__extract::<#ty>(
                         __node, #i,
                     ));
                 )
@@ -162,7 +162,7 @@ impl Compiler {
                 let ident = f.ident.as_ref().unwrap();
                 let ty = &f.ty;
                 quote_spanned!(span=>
-                    let #ident = < #lang_path::types::Var::<#ty> as FromNode>::from_node(__extract::<#ty>(
+                    let #ident = < #lang_path::types::Var::<#ty> as #lang_path::FromNode>::from_node(#lang_path::__extract::<#ty>(
                         __node, #i,
                     ));
                 )
@@ -184,9 +184,9 @@ impl Compiler {
                 #vis struct #ctor_proxy_name #generics {
                     #(#ctor_fields),*
                 }
-                impl #impl_generics From<#ctor_proxy_name #ty_generics> for #expr_proxy_name #ty_generics #where_clause {
-                    fn from(ctor: #ctor_proxy_name #ty_generics) -> Self {
-                        Self::new(#(ctor.#field_names,)*)
+                impl #impl_generics From<#ctor_proxy_name #ty_generics> for #lang_path::types::Expr<#name> {
+                    fn from(ctor: #ctor_proxy_name #ty_generics) -> #lang_path::types::Expr<#name> {
+                        #name::new_expr(#(ctor.#field_names,)*)
                     }
                 }
             )
@@ -269,6 +269,7 @@ impl Compiler {
             impl #impl_generics #lang_path::types::ExprProxy for #expr_proxy_name #ty_generics #where_clause {
                 type Value = #name #ty_generics;
                 fn from_expr(expr: #lang_path::types::Expr<#name #ty_generics>) -> Self {
+                    use #lang_path::ToNode;
                     let __node = expr.node();
                     #(#extract_expr_fields)*
                     Self{
@@ -298,6 +299,7 @@ impl Compiler {
             impl #impl_generics #lang_path::types::VarProxy for #var_proxy_name #ty_generics #where_clause {
                 type Value = #name #ty_generics;
                 fn from_var(var: #lang_path::types::Var<#name #ty_generics>) -> Self {
+                    use #lang_path::ToNode;
                     let __node = var.node();
                     #(#extract_var_fields)*
                     Self{
@@ -354,13 +356,12 @@ impl Compiler {
             impl #impl_generics #lang_path::StructInitiaizable for #name #ty_generics #where_clause{
                 type Init = #ctor_proxy_name #ty_generics;
             }
-            impl #impl_generics #expr_proxy_name #ty_generics #where_clause {
-                #vis fn new(#(#field_names: impl Into<#lang_path::types::Expr<#field_types>>),*) -> Self {
+            impl #impl_generics #name #ty_generics #where_clause {
+                #vis fn new_expr(#(#field_names: impl Into<#lang_path::types::Expr<#field_types>>),*) -> #lang_path::types::Expr::<#name> {
                     use #lang_path::*;
-                    let node = #lang_path::__compose::<#name #ty_generics>(&[ #( ToNode::node(&#field_names.into()) ),* ]);
-                    let expr = <#lang_path::types::Expr::<#name> as FromNode>::from_node(node);
-                    use #lang_path::types::ExprProxy;
-                    Self::from_expr(expr)
+                    let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&#field_names.into()) ),* ]);
+                    let expr = <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node);
+                    expr
                 }
             }
         }

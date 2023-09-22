@@ -246,6 +246,34 @@ pub trait FloatExpr: Sized {
     fn sin_cos(&self) -> (Self, Self);
 }
 
+pub trait ReduceExpr: Sized {
+    type Output;
+    fn reduce_sum(&self) -> Self::Output;
+    fn reduce_prod(&self) -> Self::Output;
+    fn reduce_min(&self) -> Self::Output;
+    fn reduce_max(&self) -> Self::Output;
+}
+pub trait NormExpr: Sized {
+    type Output;
+    fn norm(&self) -> Self::Output;
+    fn norm_squared(&self) -> Self::Output;
+    fn normalize(&self) -> Self;
+}
+pub trait DotExpr : Sized {
+    type Output;
+    fn dot(&self, other: Self) -> Self::Output;
+}
+pub trait CrossExpr : Sized {
+    type Output;
+    fn cross(&self, other: Self) -> Self::Output;
+}
+pub trait MatExpr: Sized {
+    type Scalar;
+    fn comp_mul(&self, other: Self) -> Self;
+    fn transpose(&self) -> Self;
+    fn determinant(&self) -> Self::Scalar;
+    fn inverse(&self) -> Self;
+}
 ops_trait!(FloatMulAddExpr<A, B>[FloatMulAddThis] {
     fn mul_add[_mul_add](self, a: A, b: B);
 });

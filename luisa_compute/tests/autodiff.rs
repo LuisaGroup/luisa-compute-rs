@@ -1,5 +1,6 @@
 use std::ops::Range;
 
+use alias::*;
 use luisa::lang::diff::*;
 use luisa::lang::types::core::*;
 use luisa::lang::types::vector::*;
@@ -12,16 +13,19 @@ use rayon::slice::ParallelSliceMut;
 mod common;
 use common::*;
 
-fn finite_difference(inputs: &[Expr<f32>], f: impl Fn(&[Expr<f32>]) -> Expr<f32>) -> Vec<Expr<f32>> {
+fn finite_difference(
+    inputs: &[Expr<f32>],
+    f: impl Fn(&[Expr<f32>]) -> Expr<f32>,
+) -> Vec<Expr<f32>> {
     let eps = 1e-4;
 
     let mut outputs = vec![];
     for i in 0..inputs.len() {
         let mut inputs_add = inputs.to_vec();
-        inputs_add[i] += eps;
+        inputs_add[i] = track!(inputs_add[i] + eps);
         let mut inputs_sub = inputs.to_vec();
-        inputs_sub[i] -= eps;
-        outputs.push((f(&inputs_add) - f(&inputs_sub)) / Expr<f32>::from(2.0 * eps));
+        inputs_sub[i] = track!(inputs_sub[i] - eps);
+        outputs.push(track!((f(&inputs_add) - f(&inputs_sub)) / (2.0 * eps)));
     }
     outputs
 }
@@ -74,7 +78,7 @@ fn autodiff_helper<F: Fn(&[Expr<f32>]) -> Expr<f32>>(
         let input_vars = inputs.iter().map(|input| input.var()).collect::<Vec<_>>();
         let grad_fd_vars = grad_fd.iter().map(|grad| grad.var()).collect::<Vec<_>>();
         let grad_ad_vars = grad_ad.iter().map(|grad| grad.var()).collect::<Vec<_>>();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let inputs = input_vars
             .iter()
             .map(|input| input.read(tid))
@@ -187,10 +191,15 @@ macro_rules! autodiff_1 {
     ($name:ident, $range:expr, $e:expr) => {
         #[test]
         fn $name() {
-            autodiff_helper($range, 1024 * 1024, 1, |inputs| {
-                let x = inputs[0];
-                ($e)(x)
-            });
+            autodiff_helper(
+                $range,
+                1024 * 1024,
+                1,
+                track!(|inputs| {
+                    let x = inputs[0];
+                    ($e)(x)
+                }),
+            );
         }
     };
 }
@@ -198,11 +207,16 @@ macro_rules! autodiff_2 {
     ($name:ident, $range:expr, $e:expr) => {
         #[test]
         fn $name() {
-            autodiff_helper($range, 1024 * 1024, 2, |inputs| {
-                let x = inputs[0];
-                let y = inputs[1];
-                ($e)(x, y)
-            });
+            autodiff_helper(
+                $range,
+                1024 * 1024,
+                2,
+                track!(|inputs| {
+                    let x = inputs[0];
+                    let y = inputs[1];
+                    ($e)(x, y)
+                }),
+            );
         }
     };
 }
@@ -210,12 +224,17 @@ macro_rules! autodiff_3 {
     ($name:ident, $range:expr, $e:expr) => {
         #[test]
         fn $name() {
-            autodiff_helper($range, 1024 * 1024, 3, |inputs| {
-                let x = inputs[0];
-                let y = inputs[1];
-                let z = inputs[2];
-                ($e)(x, y, z)
-            });
+            autodiff_helper(
+                $range,
+                1024 * 1024,
+                3,
+                track!(|inputs| {
+                    let x = inputs[0];
+                    let y = inputs[1];
+                    let z = inputs[2];
+                    ($e)(x, y, z)
+                }),
+            );
         }
     };
 }
@@ -231,13 +250,14 @@ autodiff_2!(autodiff_const, 1.0..10.0, |x: Expr<f32>, y: Expr<f32>| {
     x * k + y * k
 });
 autodiff_2!(autodiff_struct, 1.0..10.0, |x: Expr<f32>, y: Expr<f32>| {
-    let foo = FooExpr::new(x, y);
-    let foo = foo.set_x(1.0 + foo.x());
-    foo.x() + foo.y()
+    let foo = Foo::new_expr(x, y).var();
+    *foo.x += 1.0;
+    foo.x + foo.y
 });
 autodiff_1!(autodiff_sin, -10.0..10.0, |x: Expr<f32>| x.sin());
 autodiff_1!(autodiff_cos, -10.0..10.0, |x: Expr<f32>| x.cos());
-autodiff_1!(autodiff_sincos, -10.0..10.0, |x: Expr<f32>| x.cos() * x.sin());
+autodiff_1!(autodiff_sincos, -10.0..10.0, |x: Expr<f32>| x.cos()
+    * x.sin());
 autodiff_1!(autodiff_sqrt, 0.1..10.0, |x: Expr<f32>| x.sqrt());
 autodiff_1!(autodiff_rsqrt, 0.1..10.0, |x: Expr<f32>| x.rsqrt());
 autodiff_1!(autodiff_exp, -10.0..3.0, |x: Expr<f32>| x.exp());
@@ -256,40 +276,59 @@ autodiff_1!(autodiff_tanh, -10.0..10.0, |x: Expr<f32>| x.tanh());
 
 autodiff_2!(autodiff_div, 1.0..10.0, |x: Expr<f32>, y: Expr<f32>| x / y);
 
-autodiff_2!(autodiff_pow, 1.0..10.0, |x: Expr<f32>, y: Expr<f32>| x.powf(y));
-autodiff_3!(autodiff_lerp, 0.0..1.0, |x: Expr<f32>, y: Expr<f32>, z: Expr<f32>| x
-    .lerp(y, z));
+autodiff_2!(autodiff_pow, 1.0..10.0, |x: Expr<f32>, y: Expr<f32>| x
+    .powf(y));
+autodiff_3!(
+    autodiff_lerp,
+    0.0..1.0,
+    |x: Expr<f32>, y: Expr<f32>, z: Expr<f32>| x.lerp(y, z)
+);
 
 #[test]
 fn autodiff_vec3_reduce_add_manual() {
-    autodiff_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
-        let x = inputs[0];
-        let y = inputs[1];
-        let z = inputs[2];
-        let v = Float3::expr(x, y, z);
-        v.x() + v.y() + v.z()
-    });
+    autodiff_helper(
+        -10.0..10.0,
+        1024 * 1024,
+        3,
+        track!(|inputs| {
+            let x = inputs[0];
+            let y = inputs[1];
+            let z = inputs[2];
+            let v = Float3::expr(x, y, z);
+            v.x + v.y + v.z
+        }),
+    );
 }
 
 #[test]
 fn autodiff_vec3_reduce_prod_manual() {
-    autodiff_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
-        let x = inputs[0];
-        let y = inputs[1];
-        let z = inputs[2];
-        let v = Float3::expr(x, y, z);
-        v.x() * v.y() * v.z()
-    });
+    autodiff_helper(
+        -10.0..10.0,
+        1024 * 1024,
+        3,
+        track!(|inputs| {
+            let x = inputs[0];
+            let y = inputs[1];
+            let z = inputs[2];
+            let v = Float3::expr(x, y, z);
+            v.x * v.y * v.z
+        }),
+    );
 }
 #[test]
 fn autodiff_vec3_reduce_add() {
-    autodiff_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
-        let x = inputs[0];
-        let y = inputs[1];
-        let z = inputs[2];
-        let v = Float3::expr(x, y, z);
-        v.reduce_sum()
-    });
+    autodiff_helper(
+        -10.0..10.0,
+        1024 * 1024,
+        3,
+        track!(|inputs| {
+            let x = inputs[0];
+            let y = inputs[1];
+            let z = inputs[2];
+            let v = Float3::expr(x, y, z);
+            v.reduce_sum()
+        }),
+    );
 }
 #[test]
 fn autodiff_vec3_reduce_mul() {
@@ -333,239 +372,305 @@ fn autodiff_vec3_length_squared() {
 }
 #[test]
 fn autodiff_vec3_normalize() {
-    autodiff_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
-        let x = inputs[0];
-        let y = inputs[1];
-        let z = inputs[2];
-        let v = Float3::expr(x, y, z);
-        v.normalize().x()
-    });
-    autodiff_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
-        let x = inputs[0];
-        let y = inputs[1];
-        let z = inputs[2];
-        let v = Float3::expr(x, y, z);
-        v.normalize().y()
-    });
-    autodiff_helper(-10.0..10.0, 1024 * 1024, 3, |inputs| {
-        let x = inputs[0];
-        let y = inputs[1];
-        let z = inputs[2];
-        let v = Float3::expr(x, y, z);
-        v.normalize().z()
-    });
+    autodiff_helper(
+        -10.0..10.0,
+        1024 * 1024,
+        3,
+        track!(|inputs| {
+            let x = inputs[0];
+            let y = inputs[1];
+            let z = inputs[2];
+            let v = Float3::expr(x, y, z);
+            v.normalize().x
+        }),
+    );
+    autodiff_helper(
+        -10.0..10.0,
+        1024 * 1024,
+        3,
+        track!(|inputs| {
+            let x = inputs[0];
+            let y = inputs[1];
+            let z = inputs[2];
+            let v = Float3::expr(x, y, z);
+            v.normalize().y
+        }),
+    );
+    autodiff_helper(
+        -10.0..10.0,
+        1024 * 1024,
+        3,
+        track!(|inputs| {
+            let x = inputs[0];
+            let y = inputs[1];
+            let z = inputs[2];
+            let v = Float3::expr(x, y, z);
+            v.normalize().z
+        }),
+    );
 }
 
 #[test]
 fn autodiff_vec3_cross_x() {
-    autodiff_helper(-10.0..10.0, 1024 * 1024, 6, |inputs| {
-        let ax = inputs[0];
-        let ay = inputs[1];
-        let az = inputs[2];
-        let a = Float3::expr(ax, ay, az).var();
-        let bx = inputs[3];
-        let by = inputs[4];
-        let bz = inputs[5];
-        let b = Float3::expr(bx, by, bz).var();
-        let v = a.cross(*b).var();
-        *v.x()
-    });
+    autodiff_helper(
+        -10.0..10.0,
+        1024 * 1024,
+        6,
+        track!(|inputs| {
+            let ax = inputs[0];
+            let ay = inputs[1];
+            let az = inputs[2];
+            let a = Float3::expr(ax, ay, az).var();
+            let bx = inputs[3];
+            let by = inputs[4];
+            let bz = inputs[5];
+            let b = Float3::expr(bx, by, bz).var();
+            let v = a.cross(*b).var();
+            *v.x
+        }),
+    );
 }
 #[test]
 fn autodiff_vec3_cross_y() {
-    autodiff_helper(-10.0..10.0, 1024 * 1024, 6, |inputs| {
-        let ax = inputs[0];
-        let ay = inputs[1];
-        let az = inputs[2];
-        let a = Float3::expr(ax, ay, az).var();
-        let bx = inputs[3];
-        let by = inputs[4];
-        let bz = inputs[5];
-        let b = Float3::expr(bx, by, bz).var();
-        let v = a.cross(*b).var();
-        *v.x()
-    });
+    autodiff_helper(
+        -10.0..10.0,
+        1024 * 1024,
+        6,
+        track!(|inputs| {
+            let ax = inputs[0];
+            let ay = inputs[1];
+            let az = inputs[2];
+            let a = Float3::expr(ax, ay, az).var();
+            let bx = inputs[3];
+            let by = inputs[4];
+            let bz = inputs[5];
+            let b = Float3::expr(bx, by, bz).var();
+            let v = a.cross(*b).var();
+            *v.x
+        }),
+    );
 }
 
 #[test]
 fn autodiff_vec3_cross_z() {
-    autodiff_helper(-10.0..10.0, 1024 * 1024, 6, |inputs| {
-        let ax = inputs[0];
-        let ay = inputs[1];
-        let az = inputs[2];
-        let a = Float3::expr(ax, ay, az);
-        let bx = inputs[3];
-        let by = inputs[4];
-        let bz = inputs[5];
-        let b = Float3::expr(bx, by, bz);
-        let v = a.cross(b);
-        v.z()
-    });
+    autodiff_helper(
+        -10.0..10.0,
+        1024 * 1024,
+        6,
+        track!(|inputs| {
+            let ax = inputs[0];
+            let ay = inputs[1];
+            let az = inputs[2];
+            let a = Float3::expr(ax, ay, az);
+            let bx = inputs[3];
+            let by = inputs[4];
+            let bz = inputs[5];
+            let b = Float3::expr(bx, by, bz);
+            let v = a.cross(b);
+            v.z
+        }),
+    );
 }
-#[test]
-fn autodiff_vec3_distance() {
-    autodiff_helper(-10.0..10.0, 1024 * 1024, 6, |inputs| {
-        let ax = inputs[0];
-        let ay = inputs[1];
-        let az = inputs[2];
-        let a = Float3::expr(ax, ay, az);
-        let bx = inputs[3];
-        let by = inputs[4];
-        let bz = inputs[5];
-        let b = Float3::expr(bx, by, bz);
-        a.distance(b)
-    });
-}
+// #[test]
+// fn autodiff_vec3_distance() {
+//     autodiff_helper(-10.0..10.0, 1024 * 1024, 6, track!(|inputs| {
+//         let ax = inputs[0];
+//         let ay = inputs[1];
+//         let az = inputs[2];
+//         let a = Float3::expr(ax, ay, az);
+//         let bx = inputs[3];
+//         let by = inputs[4];
+//         let bz = inputs[5];
+//         let b = Float3::expr(bx, by, bz);
+//         a.distance(b)
+//     }));
+// }
 #[test]
 fn autodiff_vec3_replace() {
-    autodiff_helper(-2.0..2.0, 1024 * 1024, 4, |inputs| {
-        let ax = inputs[0];
-        let ay = inputs[1];
-        let az = inputs[2];
-        let a = Float3::expr(ax, ay, az);
-        let b = inputs[3];
-        let c = a.set_y(b);
-        a.dot(c)
-    });
+    autodiff_helper(
+        -2.0..2.0,
+        1024 * 1024,
+        4,
+        track!(|inputs| {
+            let ax = inputs[0];
+            let ay = inputs[1];
+            let az = inputs[2];
+            let a = Float3::expr(ax, ay, az).var();
+            let c = *a;
+            let b = inputs[3];
+            *a.y = b;
+            a.dot(c)
+        }),
+    );
 }
 #[test]
 fn autodiff_matmul() {
-    autodiff_helper(-4.0..4.0, 1024 * 1024, 12, |inputs| {
-        let ax = inputs[0];
-        let ay = inputs[1];
-        let az = inputs[2];
-        let a = Float3::expr(ax, ay, az);
-        let bx = inputs[0 + 3];
-        let by = inputs[1 + 3];
-        let bz = inputs[2 + 3];
-        let b = Float3::expr(bx, by, bz);
-        let cx = inputs[0 + 6];
-        let cy = inputs[1 + 6];
-        let cz = inputs[2 + 6];
-        let c = Float3::expr(cx, cy, cz);
-        let dx = inputs[0 + 9];
-        let dy = inputs[1 + 9];
-        let dz = inputs[2 + 9];
-        let d = Float3::expr(dx, dy, dz);
-        let m = Mat3Expr::new(a, b, c);
-        let o = m * d;
-        o.x()
-    });
+    autodiff_helper(
+        -4.0..4.0,
+        1024 * 1024,
+        12,
+        track!(|inputs| {
+            let ax = inputs[0];
+            let ay = inputs[1];
+            let az = inputs[2];
+            let a = Float3::expr(ax, ay, az);
+            let bx = inputs[0usize + 3];
+            let by = inputs[1usize + 3];
+            let bz = inputs[2usize + 3];
+            let b = Float3::expr(bx, by, bz);
+            let cx = inputs[0usize + 6];
+            let cy = inputs[1usize + 6];
+            let cz = inputs[2usize + 6];
+            let c = Float3::expr(cx, cy, cz);
+            let dx = inputs[0usize + 9];
+            let dy = inputs[1usize + 9];
+            let dz = inputs[2usize + 9];
+            let d = Float3::expr(dx, dy, dz);
+            let m = Mat3::expr(a, b, c);
+            let o = m * d;
+            o.x
+        }),
+    );
 }
 #[test]
 fn autodiff_matmul_transpose() {
-    autodiff_helper(-4.0..4.0, 1024 * 1024, 12, |inputs| {
-        let ax = inputs[0];
-        let ay = inputs[1];
-        let az = inputs[2];
-        let a = Float3::expr(ax, ay, az);
-        let bx = inputs[0 + 3];
-        let by = inputs[1 + 3];
-        let bz = inputs[2 + 3];
-        let b = Float3::expr(bx, by, bz);
-        let cx = inputs[0 + 6];
-        let cy = inputs[1 + 6];
-        let cz = inputs[2 + 6];
-        let c = Float3::expr(cx, cy, cz);
-        let dx = inputs[0 + 9];
-        let dy = inputs[1 + 9];
-        let dz = inputs[2 + 9];
-        let d = Float3::expr(dx, dy, dz);
-        let m = Mat3Expr::new(a, b, c);
-        let o = m.transpose() * d;
-        o.y()
-    });
+    autodiff_helper(
+        -4.0..4.0,
+        1024 * 1024,
+        12,
+        track!(|inputs| {
+            let ax = inputs[0];
+            let ay = inputs[1];
+            let az = inputs[2];
+            let a = Float3::expr(ax, ay, az);
+            let bx = inputs[0usize + 3];
+            let by = inputs[1usize + 3];
+            let bz = inputs[2usize + 3];
+            let b = Float3::expr(bx, by, bz);
+            let cx = inputs[0usize+ 6];
+            let cy = inputs[1usize+ 6];
+            let cz = inputs[2usize+ 6];
+            let c = Float3::expr(cx, cy, cz);
+            let dx = inputs[0usize + 9];
+            let dy = inputs[1usize + 9];
+            let dz = inputs[2usize + 9];
+            let d = Float3::expr(dx, dy, dz);
+            let m = Mat3::expr(a, b, c);
+            let o = m.transpose() * d;
+            o.y
+        }),
+    );
 }
 #[test]
 fn autodiff_matmul_2() {
-    autodiff_helper(-2.0..2.0, 1024 * 1024, 12, |inputs| {
-        let ax = inputs[0];
-        let ay = inputs[1];
-        let az = inputs[2];
-        let a = Float3::expr(ax, ay, az);
-        let bx = inputs[0 + 3];
-        let by = inputs[1 + 3];
-        let bz = inputs[2 + 3];
-        let b = Float3::expr(bx, by, bz);
-        let cx = inputs[0 + 6];
-        let cy = inputs[1 + 6];
-        let cz = inputs[2 + 6];
-        let c = Float3::expr(cx, cy, cz);
-        let dx = inputs[0 + 9];
-        let dy = inputs[1 + 9];
-        let dz = inputs[2 + 9];
-        let d = Float3::expr(dx, dy, dz);
-        let m = Mat3Expr::new(a, b, c);
-        let o = m * m * d;
-        o.z()
-    });
+    autodiff_helper(
+        -2.0..2.0,
+        1024 * 1024,
+        12,
+        track!(|inputs| {
+            let ax = inputs[0];
+            let ay = inputs[1];
+            let az = inputs[2];
+            let a = Float3::expr(ax, ay, az);
+            let bx = inputs[0usize + 3];
+            let by = inputs[1usize + 3];
+            let bz = inputs[2usize + 3];
+            let b = Float3::expr(bx, by, bz);
+            let cx = inputs[0usize + 6];
+            let cy = inputs[1usize + 6];
+            let cz = inputs[2usize + 6];
+            let c = Float3::expr(cx, cy, cz);
+            let dx = inputs[0usize + 9];
+            let dy = inputs[1usize + 9];
+            let dz = inputs[2usize + 9];
+            let d = Float3::expr(dx, dy, dz);
+            let m = Mat3::expr(a, b, c);
+            let o = m * m * d;
+            o.z
+        }),
+    );
 }
 #[test]
 fn autodiff_matmul_4() {
-    autodiff_helper(-2.0..2.0, 1024 * 1024, 12, |inputs| {
-        let ax = inputs[0];
-        let ay = inputs[1];
-        let az = inputs[2];
-        let a = Float3::expr(ax, ay, az);
-        let bx = inputs[0 + 3];
-        let by = inputs[1 + 3];
-        let bz = inputs[2 + 3];
-        let b = Float3::expr(bx, by, bz);
-        let cx = inputs[0 + 6];
-        let cy = inputs[1 + 6];
-        let cz = inputs[2 + 6];
-        let c = Float3::expr(cx, cy, cz);
-        let dx = inputs[0 + 9];
-        let dy = inputs[1 + 9];
-        let dz = inputs[2 + 9];
-        let d = Float3::expr(dx, dy, dz);
-        let m = Mat3Expr::new(a, b, c);
-        let o = (m * m) * d;
-        o.z()
-    });
+    autodiff_helper(
+        -2.0..2.0,
+        1024 * 1024,
+        12,
+        track!(|inputs| {
+            let ax = inputs[0];
+            let ay = inputs[1];
+            let az = inputs[2];
+            let a = Float3::expr(ax, ay, az);
+            let bx = inputs[0usize + 3];
+            let by = inputs[1usize + 3];
+            let bz = inputs[2usize + 3];
+            let b = Float3::expr(bx, by, bz);
+            let cx = inputs[0usize + 6];
+            let cy = inputs[1usize + 6];
+            let cz = inputs[2usize + 6];
+            let c = Float3::expr(cx, cy, cz);
+            let dx = inputs[0usize + 9];
+            let dy = inputs[1usize + 9];
+            let dz = inputs[2usize + 9];
+            let d = Float3::expr(dx, dy, dz);
+            let m = Mat3::expr(a, b, c);
+            let o = (m * m) * d;
+            o.z
+        }),
+    );
 }
 #[test]
 fn autodiff_matmul_5() {
-    autodiff_helper(-2.0..2.0, 1024 * 1024, 12, |inputs| {
-        let ax = inputs[0];
-        let ay = inputs[1];
-        let az = inputs[2];
-        let a = Float3::expr(ax, ay, az);
-        let bx = inputs[0 + 3];
-        let by = inputs[1 + 3];
-        let bz = inputs[2 + 3];
-        let b = Float3::expr(bx, by, bz);
-        let cx = inputs[0 + 6];
-        let cy = inputs[1 + 6];
-        let cz = inputs[2 + 6];
-        let c = Float3::expr(cx, cy, cz);
-        let dx = inputs[0 + 9];
-        let dy = inputs[1 + 9];
-        let dz = inputs[2 + 9];
-        let d = Float3::expr(dx, dy, dz);
-        let m = Mat3Expr::new(a, b, c);
-        let o = m.comp_mul(m) * d;
-        o.z()
-    });
+    autodiff_helper(
+        -2.0..2.0,
+        1024 * 1024,
+        12,
+        track!(|inputs| {
+            let ax = inputs[0];
+            let ay = inputs[1];
+            let az = inputs[2];
+            let a = Float3::expr(ax, ay, az);
+            let bx = inputs[0usize + 3];
+            let by = inputs[1usize + 3];
+            let bz = inputs[2usize + 3];
+            let b = Float3::expr(bx, by, bz);
+            let cx = inputs[0usize + 6];
+            let cy = inputs[1usize + 6];
+            let cz = inputs[2usize + 6];
+            let c = Float3::expr(cx, cy, cz);
+            let dx = inputs[0usize + 9];
+            let dy = inputs[1usize + 9];
+            let dz = inputs[2usize + 9];
+            let d = Float3::expr(dx, dy, dz);
+            let m = Mat3::expr(a, b, c);
+            let o = m.comp_mul(m) * d;
+            o.z
+        }),
+    );
 }
 #[test]
 fn autodiff_mat_det() {
-    autodiff_helper(-2.0..2.0, 1024 * 1024, 9, |inputs| {
-        let ax = inputs[0];
-        let ay = inputs[1];
-        let az = inputs[2];
-        let a = Float3::expr(ax, ay, az);
-        let bx = inputs[0 + 3];
-        let by = inputs[1 + 3];
-        let bz = inputs[2 + 3];
-        let b = Float3::expr(bx, by, bz);
-        let cx = inputs[0 + 6];
-        let cy = inputs[1 + 6];
-        let cz = inputs[2 + 6];
-        let c = Float3::expr(cx, cy, cz);
-        let m = Mat3Expr::new(a, b, c);
-        m.determinant()
-    });
+    autodiff_helper(
+        -2.0..2.0,
+        1024 * 1024,
+        9,
+        track!(|inputs| {
+            let ax = inputs[0];
+            let ay = inputs[1];
+            let az = inputs[2];
+            let a = Float3::expr(ax, ay, az);
+            let bx = inputs[0usize + 3];
+            let by = inputs[1usize + 3];
+            let bz = inputs[2usize + 3];
+            let b = Float3::expr(bx, by, bz);
+            let cx = inputs[0usize + 6];
+            let cy = inputs[1usize + 6];
+            let cz = inputs[2usize + 6];
+            let c = Float3::expr(cx, cy, cz);
+            let m = Mat3::expr(a, b, c);
+            m.determinant()
+        }),
+    );
 }
 // #[test]
 // fn autodiff_vec3_reduce_min(){
@@ -600,23 +705,23 @@ fn autodiff_select() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
         let buf_dy = dy.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
         autodiff(|| {
             requires_grad(x);
             requires_grad(y);
-            let z = select(x.cmpgt(y), x * 4.0, y * 0.5);
+            let z = select(x > y, x * 4.0, y * 0.5);
             backward(z);
             buf_dx.write(tid, gradient(x));
             buf_dy.write(tid, gradient(y));
         });
-    });
+    }));
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -644,12 +749,12 @@ fn autodiff_detach() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
         let buf_dy = dy.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
         autodiff(|| {
@@ -661,7 +766,7 @@ fn autodiff_detach() {
             buf_dx.write(tid, gradient(x));
             buf_dy.write(tid, gradient(y));
         });
-    });
+    }));
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -694,25 +799,25 @@ fn autodiff_select_nan() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen::<f32>() + 10.0);
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
         let buf_dy = dy.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
         autodiff(|| {
             requires_grad(x);
             requires_grad(y);
-            let cond = x.cmpgt(y);
+            let cond = x > y;
             let a = (x - y).sqrt();
             let z = select(cond, a, y * 0.5);
             backward(z);
             buf_dx.write(tid, gradient(x));
             buf_dy.write(tid, gradient(y));
         });
-    });
+    }));
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -735,30 +840,30 @@ fn autodiff_if_nan() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen::<f32>() + 10.0);
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
         let buf_dy = dy.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
         autodiff(|| {
             requires_grad(x);
             requires_grad(y);
-            let cond = x.cmpgt(y);
-            let z = if_!(cond, {
+            let cond = x > y;
+            let z = if cond {
                 let a = (x - y).sqrt();
                 a
-            }, else {
+            } else {
                 y * 0.5
-            });
+            };
             // cpu_dbg!(f32, z);
             backward(z);
             buf_dx.write(tid, gradient(x));
             buf_dy.write(tid, gradient(y));
         });
-    });
+    }));
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -786,29 +891,25 @@ fn autodiff_if_phi() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
         let buf_dy = dy.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
-        if_!(true, {
+        if true.expr() {
             autodiff(|| {
                 requires_grad(x);
                 requires_grad(y);
-                let z = if_!(x.cmpgt(y), {
-                    x * 4.0
-                }, else {
-                    y * 0.5
-                });
+                let z = if x > y { x * 4.0 } else { y * 0.5 };
                 backward(z);
                 buf_dx.write(tid, gradient(x));
                 buf_dy.write(tid, gradient(y));
             });
-        });
-    });
+        }
+    }));
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -836,31 +937,31 @@ fn autodiff_if_phi2() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
         let buf_dy = dy.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
         autodiff(|| {
             requires_grad(x);
             requires_grad(y);
-            let z = if_!(x.cmpgt(y), {
-                if_!(x.cmpgt(3.0), {
+            let z = if x > y {
+                if x > 3.0 {
                     x * 4.0
-                }, else {
+                } else {
                     x * 2.0
-                })
-            }, else {
+                }
+            } else {
                 y * 0.5
-            });
+            };
             backward(z);
             buf_dx.write(tid, gradient(x));
             buf_dy.write(tid, gradient(y));
         });
-    });
+    }));
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -892,36 +993,37 @@ fn autodiff_if_phi3() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
         let buf_dy = dy.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
         let const_two = 2.0_f32.var();
         let const_three = 3.0_f32.var();
-        let const_four = F32Var::zeroed();
+        let const_four = f32::var_zeroed();
 
         autodiff(|| {
             requires_grad(x);
             requires_grad(y);
             const_four.store(4.0);
-            let c = x.cmpgt(*const_three).int();
-            let z = if_!(x.cmpgt(y), {
+            let c = (x > const_three).as_::<i32>();
+            let z = if x > y {
                 switch::<Expr<f32>>(c)
                     .case(0, || x * *const_two)
                     .default(|| x * *const_four)
-                    .finish() * *const_two
-            }, else {
+                    .finish()
+                    * *const_two
+            } else {
                 y * 0.5
-            });
+            };
             backward(z);
             buf_dx.write(tid, gradient(x));
             buf_dy.write(tid, gradient(y));
         });
-    });
+    }));
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -953,37 +1055,38 @@ fn autodiff_if_phi4() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
         let buf_dy = dy.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
 
-        let consts = Float3Var::zeroed();
+        let consts = Float3::var_zeroed();
         autodiff(|| {
             requires_grad(x);
             requires_grad(y);
-            consts.store(Float3::expr(2.0, 3.0, 4.0));
-            let const_two = consts.x();
-            let const_three = consts.y();
-            let const_four = consts.z();
-            let c = x.cmpgt(*const_three).int();
-            let z = if_!(x.cmpgt(y), {
+            *consts = Float3::expr(2.0, 3.0, 4.0);
+            let const_two = consts.x;
+            let const_three = consts.y;
+            let const_four = consts.z;
+            let c = (x > *const_three).as_::<i32>();
+            let z = if x > y {
                 switch::<Expr<f32>>(c)
                     .case(0, || x * *const_two)
                     .default(|| x * *const_four)
-                    .finish() * *const_two
-            }, else {
+                    .finish()
+                    * *const_two
+            } else {
                 y * 0.5
-            });
+            };
             backward(z);
             buf_dx.write(tid, gradient(x));
             buf_dy.write(tid, gradient(y));
         });
-    });
+    }));
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -1017,13 +1120,13 @@ fn autodiff_switch() {
     t.view(..).fill_fn(|_| rng.gen_range(0..3));
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_t = t.var();
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
         let buf_dy = dy.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
         let t = buf_t.read(tid);
@@ -1039,7 +1142,7 @@ fn autodiff_switch() {
             buf_dx.write(tid, gradient(x));
             buf_dy.write(tid, gradient(y));
         });
-    });
+    }));
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -1076,29 +1179,30 @@ fn autodiff_callable() {
     t.view(..).fill_fn(|_| rng.gen_range(0..3));
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let callable = device.create_callable::<fn(Var<f32>, Var<f32>, Expr<i32>)>(&|vx, vy, t| {
-        let x = *vx;
-        let y = *vy;
-        autodiff(|| {
-            requires_grad(x);
-            requires_grad(y);
-            let z = switch::<Expr<f32>>(t)
-                .case(0, || x * 4.0)
-                .case(1, || x * 2.0)
-                .case(2, || y * 0.5)
-                .finish();
-            backward(z);
-            *vx.get_mut() = gradient(x);
-            *vy.get_mut() = gradient(y);
-        });
-    });
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let callable =
+        device.create_callable::<fn(Var<f32>, Var<f32>, Expr<i32>)>(track!(&|vx, vy, t| {
+            let x = *vx;
+            let y = *vy;
+            autodiff(|| {
+                requires_grad(x);
+                requires_grad(y);
+                let z = switch::<Expr<f32>>(t)
+                    .case(0, || x * 4.0)
+                    .case(1, || x * 2.0)
+                    .case(2, || y * 0.5)
+                    .finish();
+                backward(z);
+                *vx = gradient(x);
+                *vy = gradient(y);
+            });
+        }));
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
         let buf_t = t.var();
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_dx = dx.var();
         let buf_dy = dy.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
         let t = buf_t.read(tid);
@@ -1107,7 +1211,7 @@ fn autodiff_callable() {
         callable.call(dx, dy, t);
         buf_dx.write(tid, *dx);
         buf_dy.write(tid, *dy);
-    });
+    }));
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();

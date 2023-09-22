@@ -190,7 +190,7 @@ impl<T: Aggregate> Aggregate for Option<T> {
 }
 
 pub trait StructInitiaizable: Value {
-    type Init: Into<Self::Expr>;
+    type Init: Into<Expr<Self>>;
 }
 
 pub trait ToNode {

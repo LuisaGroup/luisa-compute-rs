@@ -192,3 +192,63 @@ pub trait VectorExprProxy {
         }))
     }
 }
+impl<const N: usize> SquareMatrix<N>
+where
+    f32: VectorAlign<N>,
+    Self: Value,
+{
+    pub fn expr_from_elements(elements: [Expr<Vector<f32, N>>; N]) -> Expr<Self> {
+        Expr::<Self>::from_node(__compose::<Self>(&elements.map(|x| x.node())))
+    }
+}
+macro_rules! impl_mat_proxy {
+    ($M:ident, $V:ty : $($xs:ident),+) => {
+        impl $M {
+            pub fn expr($($xs: impl AsExpr<Value = $V>),+) -> Expr<Self> {
+                Self::expr_from_elements([$($xs.as_expr()),+])
+            }
+        }
+        impl AddExpr<Expr<$M>> for Expr<$M> {
+            type Output = Self;
+            fn add(self, rhs: Self) -> Self::Output {
+                Func::Add.call2(self, rhs)
+            }
+        }
+        impl SubExpr<Expr<$M>> for Expr<$M> {
+            type Output = Self;
+            fn sub(self, rhs: Self) -> Self::Output {
+                Func::Sub.call2(self, rhs)
+            }
+        }
+        impl MulExpr<Expr<$M>> for Expr<$M> {
+            type Output = Self;
+            fn mul(self, rhs: Self) -> Self::Output {
+                Func::Mul.call2(self, rhs)
+            }
+        }
+        impl MulExpr<Expr<$V>> for Expr<$M> {
+            type Output = Expr<$V>;
+            fn mul(self, rhs: Expr<$V>) -> Self::Output {
+                Func::Mul.call2(self, rhs)
+            }
+        }
+        impl MatExpr for Expr<$M> {
+            type Scalar = Expr<f32>;
+            fn comp_mul(&self, rhs: Self) -> Self {
+                Func::MatCompMul.call2(*self, rhs)
+            }
+            fn transpose(&self) -> Self {
+                Func::Transpose.call(*self)
+            }
+            fn determinant(&self) -> Self::Scalar {
+                Func::Determinant.call(*self)
+            }
+            fn inverse(&self) -> Self {
+                Func::Inverse.call(*self)
+            }
+        }
+    }
+}
+impl_mat_proxy!(Mat2, Vec2<f32>: x, y);
+impl_mat_proxy!(Mat3, Vec3<f32>: x, y, z);
+impl_mat_proxy!(Mat4, Vec4<f32>: x, y, z, w);

@@ -180,18 +180,14 @@ pub fn output_gradients<V: Value>(v: Expr<V>) -> Vec<Expr<V>> {
         );
         c.n_forward_grads
     });
-    __current_scope(|b| {
-        let mut grads = vec![];
-        for i in 0..n {
+    let mut grads = vec![];
+    for i in 0..n {
+        grads.push(Expr::<V>::from_node(__current_scope(|b| {
             let idx = b.const_(Const::Int32(i as i32));
-            grads.push(Expr::<V>::from_node(b.call(
-                Func::OutputGrad,
-                &[v.node(), idx],
-                v.node().type_().clone(),
-            )));
-        }
-        grads
-    })
+            b.call(Func::OutputGrad, &[v.node(), idx], v.node().type_().clone())
+        })));
+    }
+    grads
 }
 
 pub fn autodiff(body: impl Fn()) {

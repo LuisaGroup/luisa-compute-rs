@@ -70,7 +70,10 @@ impl VisitMut for TraceVisitor {
                 }) = &**left
                 {
                     *node = parse_quote_spanned! {span=>
-                        <_ as #trait_path::StoreMaybeExpr<_>>::store(#expr, #right)
+                        {
+                            use #trait_path::StoreMaybeExpr;
+                            (#expr).__store(#right)
+                        }
                     }
                 }
             }
@@ -164,7 +167,11 @@ impl VisitMut for TraceVisitor {
                         let op_fn = Ident::new(op_fn_str, expr.op.span());
                         let op_trait = Ident::new(op_trait_str, expr.op.span());
                         *node = parse_quote_spanned! {span=>
-                            <_ as #trait_path::#op_trait<_, _>>::#op_fn(#left, #right)
+                            {
+                                use #trait_path::#op_trait;
+                                #[allow(unused_parens)]
+                                (#left).#op_fn(#right)
+                            }
                         };
                         visit_expr_mut(self, node);
                         return;
@@ -271,7 +278,6 @@ impl VisitMut for TraceVisitor {
                 }
             }
             Expr::Macro(expr) => {
-            
                 let path = &expr.mac.path;
                 if path.leading_colon.is_none()
                     && path.segments.len() == 1

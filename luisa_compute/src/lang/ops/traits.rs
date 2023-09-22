@@ -152,12 +152,12 @@ macro_rules! assignop_trait {
                 <X as $TraitExpr<T>>::$fn(self, other)
             }
         }
-        impl<X, T> $TraitMaybe<T, ValueType> for &mut X
+        impl<X: DerefMut, T> $TraitMaybe<T, ValueType> for &mut X
         where
-            X: $TraitOrig<T>,
+            X::Target: $TraitOrig<T>,
         {
             fn $fn_maybe(self, other: T) {
-                <X as $TraitOrig<T>>::$fn_orig(self, other)
+                <X::Target as $TraitOrig<T>>::$fn_orig(self.deref_mut(), other)
             }
         }
     };
@@ -334,7 +334,7 @@ assignop_trait!(ShrAssignExpr[ShrAssign => ShrAssignMaybeExpr]: shr_assign[shr_a
 // Traits for track!.
 
 pub trait StoreMaybeExpr<V> {
-    fn store(self, value: V);
+    fn __store(self, value: V);
 }
 
 pub trait SelectMaybeExpr<R> {

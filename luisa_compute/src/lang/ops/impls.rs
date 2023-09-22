@@ -323,18 +323,21 @@ impl_ops_trait!([X: Linear] FloatLerpExpr[FloatLerpThis] for Expr<X> where [X::S
 
 // Traits for `track!`.
 
-impl<T: Sized> StoreMaybeExpr<T> for &mut T {
-    fn store(self, value: T) {
-        *self = value;
+impl<T: DerefMut> StoreMaybeExpr<T::Target> for &mut T
+where
+    T::Target: Sized,
+{
+    fn __store(self, value: T::Target) {
+        *self.deref_mut() = value;
     }
 }
 impl<V: Value, E: AsExpr<Value = V>> StoreMaybeExpr<E> for &Var<V> {
-    fn store(self, value: E) {
+    fn __store(self, value: E) {
         crate::lang::_store(self, &value.as_expr());
     }
 }
 impl<V: Value, E: AsExpr<Value = V>> StoreMaybeExpr<E> for Var<V> {
-    fn store(self, value: E) {
+    fn __store(self, value: E) {
         crate::lang::_store(&self, &value.as_expr());
     }
 }

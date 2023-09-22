@@ -375,20 +375,46 @@ pub fn __module_pools() -> &'static CArc<ModulePools> {
         unsafe { std::mem::transmute(pool) }
     })
 }
-// pub fn __load<T: Value>(node: NodeRef) -> Expr<T> {
-//     __current_scope(|b| {
-//         let node = b.load(node);
-//         Expr::<T>::from_node(node)
-//     })
-// }
-// pub fn __store(var:NodeRef, value:NodeRef) {
-//     let inst = &var.get().instruction;
-// }
 
+/// Don't call this function directly unless you know what you are doing
+/** This function is soley for constructing proxies
+ *  Given a node, __extract selects the correct Func based on the node's type
+ *  It then inserts the extract(node, i) call *at where the node is defined*
+ *  *Note*, after insertion, the IrBuilder in the correct/parent scope might not be up to date
+ *  Thus, for IrBuilder of each scope, it updates the insertion point to the end of the current basic block
+ */
 pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
     let inst = &node.get().instruction;
-    __current_scope(|b| {
+    RECORDER.with(|r| {
+        let mut r = r.borrow_mut();
+
+        let pools = {
+            let cur_builder = r.scopes.last_mut().unwrap();
+            cur_builder.pools()
+        };
+        let mut b = IrBuilder::new_without_bb(pools.clone());
+
+        if !node.is_argument() && !node.is_uniform() && !node.is_atomic_ref() {
+            // These nodes are not attached to any BB
+            // however, we need to generate the index node
+            // We generate them at the top of current module
+            b.set_insert_point(node);
+        } else {
+            let first_scope = &r.scopes[0];
+            let first_scope_bb = first_scope.bb();
+            b.set_insert_point(first_scope_bb.first());
+        }
+
         let i = b.const_(Const::Int32(index as i32));
+        // Since we have inserted something, the insertion point in cur_builder might not be up to date
+        // So we need to set it to the end of the current basic block
+        macro_rules! update_builders {
+            () => {
+                for scope in &mut r.scopes {
+                    scope.set_insert_point_to_end();
+                }
+            };
+        }
         let op = match inst.as_ref() {
             Instruction::Local { .. } => Func::GetElementPtr,
             Instruction::Argument { by_value } => {
@@ -402,18 +428,24 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
                 Func::AtomicRef => {
                     let mut indices = args.to_vec();
                     indices.push(i);
-                    return b.call_no_append(Func::AtomicRef, &indices, <T as TypeOf>::type_());
+                    let n = b.call_no_append(Func::AtomicRef, &indices, <T as TypeOf>::type_());
+                    update_builders!();
+                    return n;
                 }
                 Func::GetElementPtr => {
                     let mut indices = args.to_vec();
                     indices.push(i);
-                    return b.call(Func::GetElementPtr, &indices, <T as TypeOf>::type_());
+                    let n = b.call(Func::GetElementPtr, &indices, <T as TypeOf>::type_());
+                    update_builders!();
+                    return n;
                 }
                 _ => Func::ExtractElement,
             },
             _ => Func::ExtractElement,
         };
         let node = b.call(op, &[node, i], <T as TypeOf>::type_());
+
+        update_builders!();
         node
     })
 }

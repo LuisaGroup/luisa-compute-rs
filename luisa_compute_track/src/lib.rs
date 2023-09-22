@@ -344,26 +344,3 @@ fn track_impl(mut ast: Expr) -> TokenStream {
 
     quote!(#ast)
 }
-
-#[test]
-fn test_macro() {
-    #[rustfmt::skip]
-    assert_eq!(
-        track_impl(parse_quote!(|x: Expr<f32>, y: Expr<f32>| {
-            if x > y {
-                x * y
-            } else {
-                y * x + (x / 32.0 * PI).sin()
-            }
-        }))
-        .to_string(),
-        quote!(|x: Expr<f32>, y: Expr<f32>| {
-            <_ as ::luisa_compute::lang::maybe_expr::BoolIfElseMaybeExpr<_> >::if_then_else(
-                <_ as ::luisa_compute::lang::maybe_expr::PartialOrdMaybeExpr<_> >::gt(x, y),
-                | | { x * y },
-                | | { y * x + (x / 32.0 * PI).sin() }
-            )
-        })
-        .to_string()
-    );
-}

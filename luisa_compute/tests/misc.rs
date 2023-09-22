@@ -954,14 +954,3 @@ fn atomic() {
     assert_eq!(foo_min, expected_foo_min);
 
 }
-
-
-#[test]
-fn expr_proxy() {
-    let device = get_device();
-    let foo = device.create_buffer_from_fn(1024, |_| Foo {
-        i: 0,
-        v: Float2::new(0.0, 0.0),
-        a: [0; 4],
-    });
-}

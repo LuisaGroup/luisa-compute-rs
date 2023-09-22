@@ -4,6 +4,7 @@ use std::env::current_exe;
 use std::mem::swap;
 use std::time::Instant;
 
+use luisa::lang::types::vector::alias::*;
 use luisa::prelude::*;
 use luisa_compute as luisa;
 use winit::event::{Event, WindowEvent};
@@ -26,7 +27,7 @@ fn main() {
     let device = ctx.create_device(if args.len() == 2 {
         args[1].as_str()
     } else {
-        "metal"
+        "cpu"
     });
 
     let event_loop = EventLoop::new();
@@ -66,83 +67,92 @@ fn main() {
     let mut p1 = device.create_buffer::<f32>(grid_size);
     let div = device.create_buffer::<f32>(grid_size);
 
-    let index = |xy: Expr<Uint2>| -> Expr<u32> {
+    let index = track!(|xy: Expr<Uint2>| -> Expr<u32> {
         let p = xy.clamp(
             Uint2::expr(0, 0),
             Uint2::expr(N_GRID as u32 - 1, N_GRID as u32 - 1),
         );
-        p.x() + p.y() * N_GRID as u32
-    };
+        p.x + p.y * N_GRID as u32
+    });
 
-    let lookup_float = |f: &BufferVar<f32>, x: Expr<i32>, y: Expr<i32>| -> Expr<f32> {
-        return f.read(index(Uint2::expr(x.uint(), y.uint())));
-    };
+    let lookup_float = track!(
+        |f: &BufferVar<f32>, x: Expr<i32>, y: Expr<i32>| -> Expr<f32> {
+            f.read(index(Uint2::expr(x.as_u32(), y.as_u32())))
+        }
+    );
 
-    let sample_float = |f: BufferVar<f32>, x: Expr<f32>, y: Expr<f32>| -> Expr<f32> {
-        let lx = x.floor().int();
-        let ly = y.floor().int();
+    let sample_float = track!(
+        |f: BufferVar<f32>, x: Expr<f32>, y: Expr<f32>| -> Expr<f32> {
+            let lx = x.floor().as_i32();
+            let ly = y.floor().as_i32();
 
-        let tx = x - lx.float();
-        let ty = y - ly.float();
+            let tx = x - lx.as_f32();
+            let ty = y - ly.as_f32();
 
-        let s0 = lookup_float(&f, lx, ly).lerp(lookup_float(&f, lx + 1, ly), tx);
-        let s1 = lookup_float(&f, lx, ly + 1).lerp(lookup_float(&f, lx + 1, ly + 1), tx);
+            let s0 = lookup_float(&f, lx, ly).lerp(lookup_float(&f, lx + 1, ly), tx);
+            let s1 = lookup_float(&f, lx, ly + 1).lerp(lookup_float(&f, lx + 1, ly + 1), tx);
 
-        return s0.lerp(s1, ty);
-    };
+            s0.lerp(s1, ty)
+        }
+    );
 
-    let lookup_vel = |f: &BufferVar<Float2>, x: Expr<i32>, y: Expr<i32>| -> Expr<Float2> {
-        return f.read(index(Uint2::expr(x.uint(), y.uint())));
-    };
+    let lookup_vel = track!(
+        |f: &BufferVar<Float2>, x: Expr<i32>, y: Expr<i32>| -> Expr<Float2> {
+            f.read(index(Uint2::expr(x.as_u32(), y.as_u32())))
+        }
+    );
 
-    let sample_vel = |f: BufferVar<Float2>, x: Expr<f32>, y: Expr<f32>| -> Expr<Float2> {
-        let lx = x.floor().int();
-        let ly = y.floor().int();
+    let sample_vel = track!(
+        |f: BufferVar<Float2>, x: Expr<f32>, y: Expr<f32>| -> Expr<Float2> {
+            let lx = x.floor().as_i32();
+            let ly = y.floor().as_i32();
 
-        let tx = x - lx.float();
-        let ty = y - ly.float();
+            let tx = x - lx.as_f32();
+            let ty = y - ly.as_f32();
 
-        let s0 = lookup_vel(&f, lx, ly).lerp(lookup_vel(&f, lx + 1, ly), Float2::expr(tx, tx));
-        let s1 =
-            lookup_vel(&f, lx, ly + 1).lerp(lookup_vel(&f, lx + 1, ly + 1), Float2::expr(tx, tx));
+            let s0 = lookup_vel(&f, lx, ly).lerp(lookup_vel(&f, lx + 1, ly), Float2::expr(tx, tx));
+            let s1 = lookup_vel(&f, lx, ly + 1)
+                .lerp(lookup_vel(&f, lx + 1, ly + 1), Float2::expr(tx, tx));
 
-        return s0.lerp(s1, Float2::expr(ty, ty));
-    };
+            s0.lerp(s1, Float2::expr(ty, ty))
+        }
+    );
 
     let advect = device
         .create_kernel_async::<fn(Buffer<Float2>, Buffer<Float2>, Buffer<f32>, Buffer<f32>)>(
-            &|u0, u1, rho0, rho1| {
+            track!(&|u0, u1, rho0, rho1| {
                 let coord = dispatch_id().xy();
                 let u = u0.read(index(coord));
 
                 // trace backward
-                let mut p = Float2::expr(coord.x().float(), coord.y().float());
+                let mut p = Float2::expr(coord.x.as_f32(), coord.y.as_f32());
                 p = p - u * dt;
 
                 // advect
-                u1.write(index(coord), sample_vel(u0, p.x(), p.y()));
-                rho1.write(index(coord), sample_float(rho0, p.x(), p.y()));
-            },
+                u1.write(index(coord), sample_vel(u0, p.x, p.y));
+                rho1.write(index(coord), sample_float(rho0, p.x, p.y));
+            }),
         );
 
-    let divergence = device.create_kernel_async::<fn(Buffer<Float2>, Buffer<f32>)>(&|u, div| {
-        let coord = dispatch_id().xy();
-        if_!(coord.x().cmplt(N_GRID - 1) & coord.y().cmplt(N_GRID - 1), {
-            let dx = (u.read(index(Uint2::expr(coord.x() + 1, coord.y()))).x()
-                - u.read(index(coord)).x())
-                * 0.5;
-            let dy = (u.read(index(Uint2::expr(coord.x(), coord.y() + 1))).y()
-                - u.read(index(coord)).y())
-                * 0.5;
-            div.write(index(coord), dx + dy);
-        });
-    });
-
-    let pressure_solve =
-        device.create_kernel_async::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>(&|p0, p1, div| {
+    let divergence =
+        device.create_kernel_async::<fn(Buffer<Float2>, Buffer<f32>)>(track!(&|u, div| {
             let coord = dispatch_id().xy();
-            let i = coord.x().int();
-            let j = coord.y().int();
+            if coord.x < (N_GRID as u32 - 1) && coord.y < (N_GRID as u32 - 1) {
+                let dx = (u.read(index(Uint2::expr(coord.x + 1, coord.y))).x
+                    - u.read(index(coord)).x)
+                    * 0.5;
+                let dy = (u.read(index(Uint2::expr(coord.x, coord.y + 1))).y
+                    - u.read(index(coord)).y)
+                    * 0.5;
+                div.write(index(coord), dx + dy);
+            }
+        }));
+
+    let pressure_solve = device.create_kernel_async::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>(
+        track!(&|p0, p1, div| {
+            let coord = dispatch_id().xy();
+            let i = coord.x.as_i32();
+            let j = coord.y.as_i32();
             let ij = index(coord);
 
             let s1 = lookup_float(&p0, i - 1, j);
@@ -153,58 +163,59 @@ fn main() {
             // Jacobi update
             let err = s1 + s2 + s3 + s4 - div.read(ij);
             p1.write(ij, err * 0.25f32);
-        });
+        }),
+    );
 
-    let pressure_apply = device.create_kernel_async::<fn(Buffer<f32>, Buffer<Float2>)>(&|p, u| {
-        let coord = dispatch_id().xy();
-        let i = coord.x().int();
-        let j = coord.y().int();
-        let ij = index(coord);
+    let pressure_apply =
+        device.create_kernel_async::<fn(Buffer<f32>, Buffer<Float2>)>(track!(&|p, u| {
+            let coord = dispatch_id().xy();
+            let i = coord.x.as_i32();
+            let j = coord.y.as_i32();
+            let ij = index(coord);
 
-        if_!(
-            i.cmpgt(0) & i.cmplt(N_GRID - 1) & j.cmpgt(0) & j.cmplt(N_GRID - 1),
-            {
+            if i > 0 && i < (N_GRID - 1) && j > 0 && j < (N_GRID - 1) {
                 // pressure gradient
                 let f_p = Float2::expr(
-                    p.read(index(Uint2::expr(i.uint() + 1, j.uint())))
-                        - p.read(index(Uint2::expr(i.uint() - 1, j.uint()))),
-                    p.read(index(Uint2::expr(i.uint(), j.uint() + 1)))
-                        - p.read(index(Uint2::expr(i.uint(), j.uint() - 1))),
+                    p.read(index(Uint2::expr(i.as_u32() + 1, j.as_u32())))
+                        - p.read(index(Uint2::expr(i.as_u32() - 1, j.as_u32()))),
+                    p.read(index(Uint2::expr(i.as_u32(), j.as_u32() + 1)))
+                        - p.read(index(Uint2::expr(i.as_u32(), j.as_u32() - 1))),
                 ) * 0.5f32;
 
                 u.write(ij, u.read(ij) - f_p);
             }
-        );
-    });
+        }));
 
-    let integrate = device.create_kernel_async::<fn(Buffer<Float2>, Buffer<f32>)>(&|u, rho| {
-        let coord = dispatch_id().xy();
-        let ij = index(coord);
-
-        // gravity
-        let f_g = Float2::expr(-90.8f32, 0.0f32) * rho.read(ij);
-
-        // integrate
-        u.write(ij, u.read(ij) + dt * f_g);
-
-        // fade
-        rho.write(ij, rho.read(ij) * (1.0f32 - 0.1f32 * dt));
-    });
-
-    let init =
-        device.create_kernel_async::<fn(Buffer<f32>, Buffer<Float2>, Float2)>(&|rho, u, dir| {
+    let integrate =
+        device.create_kernel_async::<fn(Buffer<Float2>, Buffer<f32>)>(track!(&|u, rho| {
             let coord = dispatch_id().xy();
-            let i = coord.x().int();
-            let j = coord.y().int();
             let ij = index(coord);
-            let d = Float2::expr((i - N_GRID / 2).float(), (j - N_GRID / 2).float()).length();
+
+            // gravity
+            let f_g = Float2::expr(-90.8f32, 0.0f32) * rho.read(ij);
+
+            // integrate
+            u.write(ij, u.read(ij) + dt * f_g);
+
+            // fade
+            rho.write(ij, rho.read(ij) * (1.0f32 - 0.1f32 * dt));
+        }));
+
+    let init = device.create_kernel_async::<fn(Buffer<f32>, Buffer<Float2>, Float2)>(track!(
+        &|rho, u, dir| {
+            let coord = dispatch_id().xy();
+            let i = coord.x.as_i32();
+            let j = coord.y.as_i32();
+            let ij = index(coord);
+            let d = Float2::expr((i - N_GRID / 2).as_f32(), (j - N_GRID / 2).as_f32()).length();
 
             let radius = 5.0f32;
-            if_!(d.cmplt(radius), {
+            if d < radius {
                 rho.write(ij, 1.0f32);
                 u.write(ij, dir);
-            });
-        });
+            }
+        }
+    ));
 
     let init_grid = device.create_kernel_async::<fn()>(&|| {
         let idx = index(dispatch_id().xy());
@@ -225,15 +236,15 @@ fn main() {
         p1.var().write(idx, 0.0f32);
     });
 
-    let draw_rho = device.create_kernel_async::<fn()>(&|| {
+    let draw_rho = device.create_kernel_async::<fn()>(&track!(|| {
         let coord = dispatch_id().xy();
         let ij = index(coord);
         let value = rho0.var().read(ij);
         display.var().write(
-            Uint2::expr(coord.x(), (N_GRID - 1) as u32 - coord.y()),
+            Uint2::expr(coord.x, (N_GRID - 1) as u32 - coord.y),
             Float4::expr(value, 0.0f32, 0.0f32, 1.0f32),
         );
-    });
+    }));
 
     event_loop.run(move |event, _, control_flow| {
         control_flow.set_poll();

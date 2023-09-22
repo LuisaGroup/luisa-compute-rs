@@ -830,6 +830,7 @@ impl Stream {
         let s = self.scope();
         f(&s)
     }
+
     #[inline]
     pub fn scope<'a>(&self) -> Scope<'a> {
         self.handle.lock();

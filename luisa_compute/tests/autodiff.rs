@@ -138,12 +138,13 @@ fn autodiff_helper<F: Fn(&[Expr<f32>]) -> Expr<f32>>(
             let abs_error = (grad_ad_datas[i][r] - grad_fd_datas[i][r]).abs();
             assert!(
                 abs_error < 5e-2 || rel_error < 5e-2,
-                "inputs:{:?} fd: {}, ad: {}, kernel: {:?}",
+                "inputs:{:?} fd: {}, ad: {}, i: {}, kernel: {:?}",
                 (0..n_inputs)
                     .map(|i| input_datas[i][r])
                     .collect::<Vec<f32>>(),
                 grad_fd_datas[i][r],
                 grad_ad_datas[i][r],
+                i,
                 kernel_dir,
             );
             rel_errors.push(rel_error);

@@ -271,6 +271,35 @@ fn bvec_op() {
     }
 }
 #[test]
+fn test_var_replace() {
+    let device = get_device();
+    let xs: Buffer<Int4> = device.create_buffer(1024);
+    let ys: Buffer<Int4> = device.create_buffer(1024);
+    let kernel = device.create_kernel::<fn()>(&track!(|| {
+        let tid = dispatch_id().x;
+        let x = xs.var().read(tid).var();
+        *x = Int4::expr(1,2,3,4);
+        let y = **x;
+        *x.y = 10;
+        *x.z = 20;
+        xs.write(tid, x);
+        ys.write(tid, y);
+    }));
+    kernel.dispatch([1024, 1, 1]);
+    let xs = xs.view(..).copy_to_vec();
+    let ys = ys.view(..).copy_to_vec();
+    for i in 0..1024 {
+        assert_eq!(xs[i].x, 1);
+        assert_eq!(xs[i].y, 10);
+        assert_eq!(xs[i].z, 20);
+        assert_eq!(xs[i].w, 4);
+        assert_eq!(ys[i].x, 1);
+        assert_eq!(ys[i].y, 2);
+        assert_eq!(ys[i].z, 3);
+        assert_eq!(ys[i].w, 4);
+    }
+}
+#[test]
 fn vec_bit_minmax() {
     let device = get_device();
     let x: Buffer<Int2> = device.create_buffer(1024);

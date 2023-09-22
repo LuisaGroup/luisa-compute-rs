@@ -5,6 +5,7 @@ use luisa::prelude::*;
 use luisa_compute as luisa;
 #[derive(Clone, Copy, Value, Debug)]
 #[repr(C)]
+#[value_new(pub)]
 pub struct MyAddArgs {
     pub x: f32,
     pub y: f32,

@@ -267,13 +267,13 @@ macro_rules! impl_mat_proxy {
             }
         }
 
-        // impl DivExpr<Expr<f32>> for Expr<$M> {
-        //     type Output = Self;
-        //     #[tracked]
-        //     fn div(self, rhs: Expr<f32>) -> Self::Output {
-        //         *self * rhs.recip()
-        //     }
-        // }
+        impl DivExpr<Expr<f32>> for Expr<$M> {
+            type Output = Self;
+            #[tracked]
+            fn div(self, rhs: Expr<f32>) -> Self::Output {
+                self * rhs.recip()
+            }
+        }
         impl DivExpr<f32> for Expr<$M> {
             type Output = Self;
             #[tracked]

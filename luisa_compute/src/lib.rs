@@ -41,20 +41,12 @@ pub mod prelude {
     pub use crate::runtime::{
         create_static_callable, Command, Device, KernelBuildOptions, Scope, Stream,
     };
-    pub use crate::{
-        cpu_dbg, escape, if_, lc_assert, lc_unreachable, loop_, struct_, while_, Context,
-    };
+    pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, struct_, while_, Context};
 
     pub use luisa_compute_derive::*;
     pub use luisa_compute_track::{track, tracked};
 }
 
-#[macro_export]
-macro_rules! escape {
-    ($e:tt) => {
-        $e
-    };
-}
 mod internal_prelude {
     pub(crate) use crate::lang::debug::{__env_need_backtrace, is_cpu_backend, CpuFn};
     pub(crate) use crate::lang::ir::ffi::*;

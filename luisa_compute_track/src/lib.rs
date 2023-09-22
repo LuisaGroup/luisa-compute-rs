@@ -35,6 +35,22 @@ impl VisitMut for TraceVisitor {
                     *semi = Some(Token![;](span));
                 }
             }
+            Stmt::Macro(stmt) => {
+                let path = &stmt.mac.path;
+                if path.leading_colon.is_none()
+                    && path.segments.len() == 1
+                    && path.segments[0].arguments.is_none()
+                {
+                    let ident = &path.segments[0].ident;
+                    if *ident == "escape" {
+                        let tokens = &stmt.mac.tokens;
+                        *node = parse_quote_spanned! {span=>
+                            #tokens
+                        };
+                        return;
+                    }
+                }
+            }
             _ => {}
         }
         visit_stmt_mut(self, node);

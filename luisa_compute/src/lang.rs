@@ -189,10 +189,6 @@ impl<T: Aggregate> Aggregate for Option<T> {
     }
 }
 
-pub trait StructInitiaizable: Value {
-    type Init: Into<Expr<Self>>;
-}
-
 pub trait ToNode {
     fn node(&self) -> NodeRef;
 }
@@ -464,17 +460,6 @@ pub fn __compose<T: Value>(nodes: &[NodeRef]) -> NodeRef {
             __current_scope(|b| b.call(func, nodes, <T as TypeOf>::type_()))
         }
         _ => todo!(),
-    }
-}
-#[macro_export]
-macro_rules! struct_ {
-    ($t:ty { $($it:ident : $value:expr), *  $(,)?}) =>{
-        {
-            type Init = <$t as $crate::lang::StructInitiaizable>::Init;
-            let init = Init { $($it : $value), *  };
-            let e: Expr<$t> = init.into();
-            e
-        }
     }
 }
 

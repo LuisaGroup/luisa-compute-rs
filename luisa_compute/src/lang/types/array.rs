@@ -9,7 +9,7 @@ impl<T: Value, const N: usize> Value for [T; N] {
     type Var = ArrayVar<T, N>;
 }
 impl<T: Value, const N: usize> ArrayNewExpr<T, N> for [T; N] {
-    fn expr_from_elements(elems: [Expr<T>; N]) -> Expr<Self> {
+    fn from_elems_expr(elems: [Expr<T>; N]) -> Expr<Self> {
         let node =
             __current_scope(|b| b.call(Func::Array, &elems.map(|e| e.node()), <[T; N]>::type_()));
         Expr::<Self>::from_node(node)

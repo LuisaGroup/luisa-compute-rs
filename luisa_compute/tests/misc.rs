@@ -70,6 +70,17 @@ fn callable_return_mismatch() {
         -x
     }));
 }
+#[test]
+#[should_panic]
+fn callable_return_mismatch2() {
+    let device = get_device();
+    let _abs = device.create_callable::<fn(Expr<f32>) -> Expr<f32>>(&track!(|x| {
+        if x > 0.0 {
+            return;
+        }
+        -x
+    }));
+}
 
 #[test]
 #[should_panic]
@@ -79,7 +90,7 @@ fn callable_return_void_mismatch() {
         if x > 0.0 {
             return true.expr();
         }
-        *x = -**x;
+        *x = -x;
     }));
 }
 #[test]

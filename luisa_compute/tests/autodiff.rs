@@ -1209,8 +1209,8 @@ fn autodiff_callable() {
         let dx = x.var();
         let dy = y.var();
         callable.call(dx, dy, t);
-        buf_dx.write(tid, **dx);
-        buf_dy.write(tid, **dy);
+        buf_dx.write(tid, dx);
+        buf_dy.write(tid, dy);
     }));
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();

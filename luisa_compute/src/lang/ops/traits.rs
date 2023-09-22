@@ -282,7 +282,7 @@ pub trait VectorSelectExpr: Sized {
 }
 
 pub trait ArrayNewExpr<T: Value, const N: usize>: Value {
-    fn expr_from_elements(elems: [Expr<T>; N]) -> Expr<Self>;
+    fn from_elems_expr(elems: [Expr<T>; N]) -> Expr<Self>;
 }
 
 ops_trait!(FloatMulAddExpr<A, B>[FloatMulAddThis] {

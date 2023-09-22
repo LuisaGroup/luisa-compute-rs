@@ -38,7 +38,7 @@ impl<T: VectorAlign<N>, const N: usize> Vector<T, N> {
             elements: self.elements.map(f),
         }
     }
-    pub fn expr_from_elements(elements: [Expr<T>; N]) -> Expr<Self> {
+    pub fn from_elems_expr(elements: [Expr<T>; N]) -> Expr<Self> {
         Expr::<Self>::from_node(__compose::<Vector<T, N>>(&elements.map(|x| x.node())))
     }
 }
@@ -67,7 +67,7 @@ macro_rules! impl_sized {
                 }
             }
             pub fn expr($($xs: impl AsExpr<Value = T>),+) -> Expr<Self> {
-                Self::expr_from_elements([$($xs.as_expr()),+])
+                Self::from_elems_expr([$($xs.as_expr()),+])
             }
         }
         impl<T: VectorAlign<$N>, X: IntoIndex> Index<X> for $Vexpr<T> {
@@ -186,7 +186,7 @@ where
     f32: VectorAlign<N>,
     Self: Value,
 {
-    pub fn expr_from_elements(elements: [Expr<Vector<f32, N>>; N]) -> Expr<Self> {
+    pub fn from_elems_expr(elements: [Expr<Vector<f32, N>>; N]) -> Expr<Self> {
         Expr::<Self>::from_node(__compose::<Self>(&elements.map(|x| x.node())))
     }
 }
@@ -194,7 +194,7 @@ macro_rules! impl_mat_proxy {
     ($M:ident, $V:ty : $($xs:ident),+) => {
         impl $M {
             pub fn expr($($xs: impl AsExpr<Value = $V>),+) -> Expr<Self> {
-                Self::expr_from_elements([$($xs.as_expr()),+])
+                Self::from_elems_expr([$($xs.as_expr()),+])
             }
         }
         impl AddExpr<Expr<$M>> for Expr<$M> {

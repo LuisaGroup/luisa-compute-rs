@@ -8,11 +8,12 @@ use winit::event_loop::EventLoop;
 
 use luisa::lang::types::vector::{alias::*, *};
 use luisa::prelude::*;
-use luisa::rtx::{offset_ray_origin, Accel, AccelBuildRequest, AccelOption, AccelVar, Index, Ray};
+use luisa::rtx::{offset_ray_origin, Accel, AccelBuildRequest, AccelOption, AccelVar, Index, Ray, RayComps};
 use luisa_compute as luisa;
 
 #[derive(Value, Clone, Copy)]
 #[repr(C)]
+#[value_new(pub)]
 pub struct Onb {
     tangent: Float3,
     binormal: Float3,
@@ -273,7 +274,7 @@ fn main() {
 
             let make_ray =
                 |o: Expr<Float3>, d: Expr<Float3>, tmin: Expr<f32>, tmax: Expr<f32>| -> Expr<Ray> {
-                    struct_!(Ray {
+                    Ray::from_comps_expr(RayComps {
                         orig: o.into(),
                         tmin: tmin,
                         dir: d.into(),

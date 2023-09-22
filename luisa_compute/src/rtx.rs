@@ -329,6 +329,7 @@ pub struct AccelVar {
 #[repr(C)]
 #[repr(align(16))]
 #[derive(Clone, Copy, Value, Debug)]
+#[value_new(pub)]
 pub struct Ray {
     pub orig: [f32; 3],
     pub tmin: f32,
@@ -337,6 +338,7 @@ pub struct Ray {
 }
 #[repr(C)]
 #[derive(Clone, Copy, Value, Debug)]
+#[value_new(pub)]
 pub struct Aabb {
     pub min: [f32; 3],
     pub max: [f32; 3],

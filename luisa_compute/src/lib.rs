@@ -41,7 +41,7 @@ pub mod prelude {
     pub use crate::runtime::{
         create_static_callable, Command, Device, KernelBuildOptions, Scope, Stream,
     };
-    pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, struct_, while_, Context};
+    pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, while_, Context};
 
     pub use luisa_compute_derive::*;
     pub use luisa_compute_track::{track, tracked};

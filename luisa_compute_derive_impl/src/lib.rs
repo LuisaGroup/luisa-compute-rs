@@ -1,7 +1,34 @@
-use proc_macro2::{TokenStream, TokenTree};
+use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::{quote, quote_spanned};
+use syn::parse::Parse;
 use syn::spanned::Spanned;
-use syn::{Attribute, Item, ItemEnum, ItemFn, ItemStruct};
+use syn::{Attribute, Item, ItemEnum, ItemFn, ItemStruct, Token, Visibility};
+
+struct ValueNewOrdering {
+    vis: Visibility,
+    ordering: Vec<Ident>,
+}
+
+impl Parse for ValueNewOrdering {
+    fn parse(mut input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let vis = input.parse()?;
+        let ordering = if input.is_empty() {
+            vec![]
+        } else {
+            let mut ordering = vec![];
+            while !input.is_empty() {
+                let ident = input.parse()?;
+                ordering.push(ident);
+                if !input.is_empty() {
+                    let _ = input.parse::<Option<Token![,]>>()?;
+                }
+            }
+            ordering
+        };
+        Ok(Self { vis, ordering })
+    }
+}
+
 pub struct Compiler;
 impl Compiler {
     fn lang_path(&self) -> TokenStream {
@@ -13,11 +40,20 @@ impl Compiler {
     pub fn compile_kernel(&self, _func: &ItemFn) -> TokenStream {
         todo!()
     }
-    fn check_repr_c(&self, attribtes: &Vec<Attribute>) {
+    fn value_attributes(&self, attribtes: &Vec<Attribute>) -> Option<ValueNewOrdering> {
         let mut has_repr_c = false;
+        let mut ordering = None;
         for attr in attribtes {
             let meta = &attr.meta;
             match meta {
+                syn::Meta::Path(path) => {
+                    if path.is_ident("value_new") {
+                        ordering = Some(ValueNewOrdering {
+                            vis: Visibility::Inherited,
+                            ordering: vec![],
+                        });
+                    }
+                }
                 syn::Meta::List(list) => {
                     let path = &list.path;
                     if path.is_ident("repr") {
@@ -31,20 +67,19 @@ impl Compiler {
                                 _ => {}
                             }
                         }
+                    } else if path.is_ident("value_new") {
+                        let value_new = syn::parse2::<ValueNewOrdering>(list.tokens.clone())
+                            .expect("invalid value_new attribute");
+                        ordering = Some(value_new);
                     }
                 }
                 _ => {}
             }
-            // if path == "repr" {
-            //     let tokens = attr.bracket_token.to_string();
-            //     if tokens == "(C)" {
-            //         has_repr_c = true;
-            //     }
-            // }
         }
         if !has_repr_c {
             panic!("Struct must have repr(C) attribute");
         }
+        ordering
     }
     pub fn derive_kernel_arg(&self, struct_: &ItemStruct) -> TokenStream {
         let runtime_path = self.runtime_path();
@@ -111,10 +146,10 @@ impl Compiler {
     }
 
     pub fn derive_value(&self, struct_: &ItemStruct) -> TokenStream {
-        self.check_repr_c(&struct_.attrs);
+        let ordering = self.value_attributes(&struct_.attrs);
         let span = struct_.span();
         let lang_path = self.lang_path();
-        let runtime_path = self.runtime_path();
+        // let runtime_path = self.runtime_path();
         let generics = &struct_.generics;
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
         let marker_args = generics
@@ -170,7 +205,7 @@ impl Compiler {
             .collect();
         let expr_proxy_name = syn::Ident::new(&format!("{}Expr", name), name.span());
         let var_proxy_name = syn::Ident::new(&format!("{}Var", name), name.span());
-        let ctor_proxy_name = syn::Ident::new(&format!("{}Init", name), name.span());
+        let ctor_proxy_name = syn::Ident::new(&format!("{}Comps", name), name.span());
         let ctor_proxy = {
             let ctor_fields = fields
                 .iter()
@@ -184,9 +219,12 @@ impl Compiler {
                 #vis struct #ctor_proxy_name #generics {
                     #(#ctor_fields),*
                 }
-                impl #impl_generics From<#ctor_proxy_name #ty_generics> for #lang_path::types::Expr<#name> {
-                    fn from(ctor: #ctor_proxy_name #ty_generics) -> #lang_path::types::Expr<#name> {
-                        #name::new_expr(#(ctor.#field_names,)*)
+                impl #impl_generics #name #ty_generics {
+                    #vis fn from_comps_expr(ctor: #ctor_proxy_name #ty_generics) -> #lang_path::types::Expr<#name #ty_generics> {
+                        use #lang_path::*;
+                        let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&ctor.#field_names.as_expr()) ),* ]);
+                        let expr = <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node);
+                        expr
                     }
                 }
             )
@@ -228,43 +266,6 @@ impl Compiler {
                 self_: #lang_path::types::Var<#name>,
                 #(#field_vis #field_names: #lang_path::types::Var<#field_types>),*,
             }
-            // #[allow(unused_parens)]
-            // impl #impl_generics #lang_path::Aggregate for #expr_proxy_name #ty_generics #where_clause {
-            //     fn to_nodes(&self, nodes: &mut Vec<#lang_path::NodeRef>) {
-            //         nodes.push(self.node);
-            //     }
-            //     fn from_nodes<__I: Iterator<Item = #lang_path::NodeRef>>(iter: &mut __I) -> Self {
-            //         Self{
-            //             node: iter.next().unwrap(),
-            //             _marker:std::marker::PhantomData
-            //         }
-            //     }
-            // }
-            // #[allow(unused_parens)]
-            // impl #impl_generics #lang_path::Aggregate for #var_proxy_name #ty_generics #where_clause {
-            //     fn to_nodes(&self, nodes: &mut Vec<#lang_path::NodeRef>) {
-            //         nodes.push(self.node);
-            //     }
-            //     fn from_nodes<__I: Iterator<Item = #lang_path::NodeRef>>(iter: &mut __I) -> Self {
-            //         Self{
-            //             node: iter.next().unwrap(),
-            //             _marker:std::marker::PhantomData
-            //         }
-            //     }
-            // }
-            // #[allow(unused_parens)]
-            // impl #impl_generics #lang_path::FromNode  for #expr_proxy_name #ty_generics #where_clause {
-            //     #[allow(unused_assignments)]
-            //     fn from_node(node: #lang_path::NodeRef) -> Self {
-            //         Self { node, _marker:std::marker::PhantomData }
-            //     }
-            // }
-            // #[allow(unused_parens)]
-            // impl #impl_generics #lang_path::ToNode  for #expr_proxy_name #ty_generics #where_clause {
-            //     fn node(&self) -> #lang_path::NodeRef {
-            //         self.node
-            //     }
-            // }
             #[allow(unused_parens)]
             impl #impl_generics #lang_path::types::ExprProxy for #expr_proxy_name #ty_generics #where_clause {
                 type Value = #name #ty_generics;
@@ -276,25 +277,13 @@ impl Compiler {
                         self_:expr,
                         _marker:std::marker::PhantomData,
                         #(#field_names),*
-                        
+
                     }
                 }
                 fn as_expr_from_proxy(&self) -> &#lang_path::types::Expr<#name> {
                     &self.self_
                 }
             }
-            // #[allow(unused_parens)]
-            // impl #impl_generics #lang_path::FromNode for #var_proxy_name #ty_generics #where_clause {
-            //     #[allow(unused_assignments)]
-            //     fn from_node(node: #lang_path::NodeRef) -> Self {
-            //         Self { node, _marker:std::marker::PhantomData }
-            //     }
-            // }
-            // impl #impl_generics #lang_path::ToNode for #var_proxy_name #ty_generics #where_clause {
-            //     fn node(&self) -> #lang_path::NodeRef {
-            //         self.self_.node()
-            //     }
-            // }
             #[allow(unused_parens)]
             impl #impl_generics #lang_path::types::VarProxy for #var_proxy_name #ty_generics #where_clause {
                 type Value = #name #ty_generics;
@@ -319,32 +308,52 @@ impl Compiler {
                     #lang_path::types::_deref_proxy(self)
                 }
             }
-            // #[allow(unused_parens)]
-            // impl #impl_generics From<#var_proxy_name #ty_generics> for #expr_proxy_name #ty_generics #where_clause {
-            //     fn from(var: #var_proxy_name #ty_generics) -> Self {
-            //         var.load()
-            //     }
-            // }
-            // #[allow(unused_parens)]
-            // impl #impl_generics #runtime_path::CallableParameter for #expr_proxy_name #ty_generics #where_clause {
-            //     fn def_param(_:Option<std::rc::Rc<dyn std::any::Any>>, builder: &mut #runtime_path::KernelBuilder) -> #lang_path::types::Expr<#name> #ty_generics {
-            //         builder.value::<#name #ty_generics>()
-            //     }
-            //     fn encode(&self, encoder: &mut #runtime_path::CallableArgEncoder) {
-            //         encoder.var(*self)
-            //     }
-            // }
-            // #[allow(unused_parens)]
-            // impl #impl_generics #runtime_path::CallableParameter for #var_proxy_name #ty_generics #where_clause  {
-            //     fn def_param(_:Option<std::rc::Rc<dyn std::any::Any>>, builder: &mut #runtime_path::KernelBuilder) -> #lang_path::types::Var<#name> #ty_generics {
-            //         builder.var::<#name #ty_generics>()
-            //     }
-            //     fn encode(&self, encoder: &mut #runtime_path::CallableArgEncoder) {
-            //         encoder.var(*self)
-            //     }
-            // }
-
         );
+        let new_expr = if let Some(ordering) = ordering {
+            let (field_names, field_types) = if ordering.ordering.is_empty() {
+                // fields
+                //     .iter()
+                //     .map(|f| f.ident.as_ref().unwrap())
+                //     .collect::<Vec<_>>()
+                let field_names = fields
+                    .iter()
+                    .map(|f| f.ident.as_ref().unwrap())
+                    .collect::<Vec<_>>();
+                let field_types = fields.iter().map(|f| &f.ty).collect::<Vec<_>>();
+                (field_names, field_types)
+            } else {
+                let fields = ordering
+                    .ordering
+                    .iter()
+                    .map(|ident| {
+                        *fields
+                            .iter()
+                            .find(|f| f.ident.as_ref().unwrap() == ident)
+                            .unwrap_or_else(|| panic!("field {} not found", ident))
+                    })
+                    .collect::<Vec<_>>();
+                let fields_names = fields
+                    .iter()
+                    .map(|f| f.ident.as_ref().unwrap())
+                    .collect::<Vec<_>>();
+                let fields_types = fields.iter().map(|f| &f.ty).collect::<Vec<_>>();
+                (fields_names, fields_types)
+            };
+            let vis = &ordering.vis;
+            quote_spanned! {
+                span =>
+                impl #impl_generics #name #ty_generics #where_clause {
+                    #vis fn new_expr(#(#field_names: impl #lang_path::types::AsExpr<Value = #field_types>),*) -> #lang_path::types::Expr::<#name> {
+                        use #lang_path::*;
+                        let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&#field_names.as_expr()) ),* ]);
+                        let expr = <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node);
+                        expr
+                    }
+                }
+            }
+        } else {
+            quote!()
+        };
         quote_spanned! {
             span=>
             #proxy_def
@@ -353,17 +362,7 @@ impl Compiler {
                 type Expr = #expr_proxy_name #ty_generics;
                 type Var = #var_proxy_name #ty_generics;
             }
-            impl #impl_generics #lang_path::StructInitiaizable for #name #ty_generics #where_clause{
-                type Init = #ctor_proxy_name #ty_generics;
-            }
-            impl #impl_generics #name #ty_generics #where_clause {
-                #vis fn new_expr(#(#field_names: impl #lang_path::types::AsExpr<Value = #field_types>),*) -> #lang_path::types::Expr::<#name> {
-                    use #lang_path::*;
-                    let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&#field_names.as_expr()) ),* ]);
-                    let expr = <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node);
-                    expr
-                }
-            }
+            #new_expr
         }
     }
     pub fn derive_aggregate_for_struct(&self, struct_: &ItemStruct) -> TokenStream {

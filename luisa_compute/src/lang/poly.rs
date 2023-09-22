@@ -57,7 +57,7 @@ macro_rules! impl_polymorphic {
                 luisa_compute::lang::poly::PolyArray::new(
                     tag,
                     key,
-                    Box::new(move |_, index| Box::new(buffer.var().read(index))),
+                    Box::new(move |_, index| Box::new(*buffer.var().read(index))),
                 )
             }
         }

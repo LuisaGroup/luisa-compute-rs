@@ -154,6 +154,10 @@ pub struct Expr<T: Value> {
     proxy: *mut ExprProxyData<T>,
 }
 
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct TypeTag<T: Value>(PhantomData<T>);
+
 /// A variable within a [`Kernel`](crate::runtime::Kernel) or
 /// [`Callable`](crate::runtime::Callable). Created using [`Expr::var`]
 /// and [`Value::var`].
@@ -293,6 +297,9 @@ impl<T: Value> Expr<T> {
         let ty = S::type_();
         let node = __current_scope(|s| s.bitcast(self.node(), ty));
         Expr::<S>::from_node(node)
+    }
+    pub fn _type_tag(&self)->TypeTag<T> {
+        TypeTag(PhantomData)
     }
 }
 

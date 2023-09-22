@@ -8,6 +8,7 @@ pub use log as _log;
 
 use crate::internal_prelude::*;
 
+use crate::lang::types::TypeTag;
 use crate::lang::{pack_to, packed_size};
 
 pub use crate::{lc_debug, lc_error, lc_info, lc_warn};
@@ -102,7 +103,7 @@ macro_rules! lc_error {
         $crate::lc_log!($printer, log::Level::Error, $fmt, $($arg)*);
     };
 }
-pub fn _unpack_from_expr<V: Value>(data: *const u32, _: Expr<V>) -> V {
+pub fn _unpack_from_expr<V: Value>(data: *const u32, _: TypeTag<V>) -> V {
     unsafe { std::ptr::read_unaligned(data as *const V) }
 }
 impl Printer {

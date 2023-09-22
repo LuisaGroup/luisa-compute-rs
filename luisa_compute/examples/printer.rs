@@ -21,14 +21,14 @@ fn main() {
         "cpu"
     });
     let printer = Printer::new(&device, 65536);
-    let kernel = device.create_kernel::<fn()>(&|| {
+    let kernel = device.create_kernel::<fn()>(track!(&|| {
         let id = dispatch_id().xy();
-        if_!(id.x().cmpeq(id.y()), {
+        if id.x == id.y {
             lc_info!(printer, "id = {:?}", id);
-        }, else {
-            lc_info!(printer, "not equal!, id = [{} {}]", id.x(), id.y());
-        });
-    });
+        } else {
+            lc_info!(printer, "not equal!, id = [{} {}]", id.x, id.y);
+        }
+    }));
     device.default_stream().with_scope(|s| {
         s.reset_printer(&printer);
         s.submit([kernel.dispatch_async([4, 4, 1])]);

@@ -68,7 +68,7 @@ pub fn _log(item: TokenStream) -> TokenStream {
     quote! {
         {
             #(
-                let #arg_idents = #args;
+                let #arg_idents = #args._type_tag();
             )*;
             let mut __log_priv_i = 0;
             let log_fn = Box::new(move |args: &[*const u32]| -> () {
@@ -81,6 +81,9 @@ pub fn _log(item: TokenStream) -> TokenStream {
                     }
                 ), *);
             });
+            #(
+                let #arg_idents = #args;
+            )*;
             let mut printer_args = luisa_compute::printer::PrinterArgs::new();
             #(
                 printer_args.append(#arg_idents);

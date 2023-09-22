@@ -163,7 +163,7 @@ fn main() {
                     let t = Var::<f32>::zeroed();
 
                     for _ in 0..100 {
-                        let dist = (o + d * t.load() - (sphere.center + translate.expr())).length()
+                        let dist = (o + d * t - (sphere.center + translate.expr())).length()
                             - sphere.radius;
                         if dist < 0.001 {
                             if (px == Uint2::expr(400, 400)).all() {

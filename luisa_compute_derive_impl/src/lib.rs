@@ -230,6 +230,7 @@ impl Compiler {
                 })
                 .collect::<Vec<_>>();
             quote_spanned!(span=>
+                #[allow(dead_code)]
                 #vis struct #ctor_proxy_name #generics {
                     #(#ctor_fields),*
                 }
@@ -266,26 +267,26 @@ impl Compiler {
             #ctor_proxy
             #[derive(Clone, Copy)]
             #[allow(unused_parens)]
+            #[allow(dead_code)]
             #vis struct #expr_proxy_name #generics{
                 _marker: std::marker::PhantomData<(#marker_args)>,
-                #[allow(dead_code)]
                 self_: #lang_path::types::Expr<#name>,
                 #(#field_vis #field_names: #lang_path::types::Expr<#field_types>),*
 
             }
             #[derive(Clone, Copy)]
             #[allow(unused_parens)]
+            #[allow(dead_code)]
             #vis struct #var_proxy_name #generics{
                 _marker: std::marker::PhantomData<(#marker_args)>,
-                #[allow(dead_code)]
                 self_: #lang_path::types::Var<#name>,
                 #(#field_vis #field_names: #lang_path::types::Var<#field_types>),*,
             }
             #[derive(Clone, Copy)]
             #[allow(unused_parens)]
+            #[allow(dead_code)]
             #vis struct #atomic_ref_proxy_name #generics{
                 _marker: std::marker::PhantomData<(#marker_args)>,
-                #[allow(dead_code)]
                 self_: #lang_path::types::AtomicRef<#name>,
                 #(#field_vis #field_names: #lang_path::types::AtomicRef<#field_types>),*,
             }

@@ -29,8 +29,9 @@ pub mod prelude {
         CrossExpr, DivAssignExpr, DivExpr, DotExpr, EqExpr, FloatArcTan2Expr, FloatCopySignExpr,
         FloatExpr, FloatLerpExpr, FloatLogExpr, FloatMulAddExpr, FloatPowfExpr, FloatPowiExpr,
         FloatSmoothStepExpr, FloatStepExpr, IntExpr, LazyBoolMaybeExpr, LoopMaybeExpr, MatExpr,
-        MinMaxExpr, MulAssignExpr, MulExpr, NormExpr, ReduceExpr, RemAssignExpr, RemExpr,
-        SelectMaybeExpr, ShlAssignExpr, ShlExpr, ShrAssignExpr, ShrExpr, SubAssignExpr, SubExpr,
+        MinMaxExpr, MulAssignExpr, MulExpr, NormExpr, OuterProductExpr, ReduceExpr, RemAssignExpr,
+        RemExpr, SelectMaybeExpr, ShlAssignExpr, ShlExpr, ShrAssignExpr, ShrExpr, SubAssignExpr,
+        SubExpr,
     };
     pub use crate::lang::types::vector::swizzle::*;
     pub use crate::lang::types::vector::VectorExprProxy;

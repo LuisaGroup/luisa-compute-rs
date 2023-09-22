@@ -116,15 +116,16 @@ fn main() {
             let (i, j) = (ii % 3, ii / 3);
             track!({
                 let offset = Int2::expr(i as i32, j as i32);
-            let dpos = (offset.cast_f32() - fx) * DX;
-            let weight = w[i].x * w[j].y;
-            let vadd = weight * (P_MASS * vp + affine * dpos);
-            let idx = index((base + offset).as_u32());
-            grid_v.var().atomic_fetch_add(idx * 2, vadd.x);
-            grid_v.var().atomic_fetch_add(idx * 2 + 1, vadd.y);
-            grid_m.var().atomic_fetch_add(idx, weight * P_MASS);
+                let dpos = (offset.cast_f32() - fx) * DX;
+                let weight = w[i].x * w[j].y;
+                let vadd = weight * (P_MASS * vp + affine * dpos);
+                let idx = index((base + offset).cast_u32());
+                grid_v.var().atomic_fetch_add(idx * 2, vadd.x);
+                grid_v.var().atomic_fetch_add(idx * 2 + 1, vadd.y);
+                grid_m.var().atomic_fetch_add(idx, weight * P_MASS);
             });
         });
+        let _ = (); // WHAT?
     }));
 
     let simulate_grid = device.create_kernel_async::<fn()>(&track!(|| {
@@ -171,22 +172,24 @@ fn main() {
         new_C.store(Mat2::expr(Float2::expr(0., 0.), Float2::expr(0., 0.)));
         escape!({
             for ii in 0..9 {
+                let (i, j) = (ii % 3, ii / 3);
                 track!({
-                    let (i, j) = (ii % 3, ii / 3);
                     let offset = Int2::expr(i as i32, j as i32);
                     let dpos = (offset.cast_f32() - fx) * DX.expr();
                     let weight = w[i].x * w[j].y;
-                    let idx = index((base + offset).uint());
+                    let idx = index((base + offset).cast_u32());
                     let g_v = Float2::expr(
                         grid_v.var().read(idx * 2u32),
                         grid_v.var().read(idx * 2u32 + 1u32),
                     );
                     new_v.store(new_v.load() + weight * g_v);
-                    new_C.store(new_C.load() + 4.0f32 * weight * g_v.outer_product(dpos) / (DX * DX));
+                    new_C.store(
+                        new_C.load() + 4.0f32 * weight * g_v.outer_product(dpos) / (DX * DX),
+                    );
                 });
             }
         });
-       
+
         v.var().write(p, new_v);
         x.var().write(p, x.var().read(p) + new_v.load() * DT);
         J.var()
@@ -200,26 +203,24 @@ fn main() {
             Float4::expr(0.1f32, 0.2f32, 0.3f32, 1.0f32),
         );
     });
-    let draw_particles = device.create_kernel_async::<fn()>(&|| {
+    let draw_particles = device.create_kernel_async::<fn()>(&track!(|| {
         let p = dispatch_id().x;
         for i in -1..=1 {
             for j in -1..=1 {
                 let pos = (x.var().read(p) * RESOLUTION as f32).cast_i32() + Int2::expr(i, j);
-                if_!(
-                    pos.x.cmpge(0i32)
-                        & pos.x.cmplt(RESOLUTION as i32)
-                        & pos.y.cmpge(0i32)
-                        & pos.y.cmplt(RESOLUTION as i32),
-                    {
-                        display.var().write(
-                            Uint2::expr(pos.x.uint(), RESOLUTION - 1u32 - pos.y.uint()),
-                            Float4::expr(0.4f32, 0.6f32, 0.6f32, 1.0f32),
-                        );
-                    }
-                );
+                if pos.x >= (0i32)
+                    && pos.x < (RESOLUTION as i32)
+                    && pos.y >= (0i32)
+                    && pos.y < (RESOLUTION as i32)
+                {
+                    display.var().write(
+                        Uint2::expr(pos.x.cast_u32(), RESOLUTION - 1u32 - pos.y.cast_u32()),
+                        Float4::expr(0.4f32, 0.6f32, 0.6f32, 1.0f32),
+                    );
+                }
             }
         }
-    });
+    }));
     event_loop.run(move |event, _, control_flow| {
         control_flow.set_poll();
         match event {

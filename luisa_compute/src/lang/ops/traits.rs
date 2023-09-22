@@ -258,6 +258,17 @@ pub trait NormExpr: Sized {
     fn norm(&self) -> Self::Output;
     fn norm_squared(&self) -> Self::Output;
     fn normalize(&self) -> Self;
+    fn length(&self) -> Self::Output {
+        self.norm()
+    }
+    fn length_squared(&self) -> Self::Output {
+        self.norm_squared()
+    }
+}
+pub trait OuterProductExpr: Sized {
+    type Value;
+    type Output;
+    fn outer_product(&self, other: impl AsExpr<Value = Self::Value>) -> Self::Output;
 }
 pub trait DotExpr: Sized {
     type Value;

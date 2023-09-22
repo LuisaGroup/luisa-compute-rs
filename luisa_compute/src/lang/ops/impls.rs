@@ -224,8 +224,10 @@ where
         self.clone().mul(self.clone()).mul(self.clone())
     }
     fn recip(&self) -> Self {
-        todo!()
-        // 1.0 / self.clone()
+        <Self as FromNode>::from_node(__current_scope(|b|{
+            let one = b.const_(Const::One(<X as TypeOf>::type_()));
+            b.call(Func::Div, &[one, self.node()], <X as TypeOf>::type_())
+        }))
     }
     fn sin_cos(&self) -> (Self, Self) {
         (self.sin(), self.cos())
@@ -243,6 +245,27 @@ where
     }
     impl_simple_fns! {
         normalize=>Normalize
+    }
+}
+impl OuterProductExpr for Expr<Float2> {
+    type Output = Expr<Mat2>;
+    type Value = Float2;
+    fn outer_product(&self, other: impl AsExpr<Value = Self::Value>) -> Self::Output {
+        Func::OuterProduct.call2(self.clone(), other.as_expr())
+    }
+}
+impl OuterProductExpr for Expr<Float3> {
+    type Output = Expr<Mat3>;
+    type Value = Float3;
+    fn outer_product(&self, other: impl AsExpr<Value = Self::Value>) -> Self::Output {
+        Func::OuterProduct.call2(self.clone(), other.as_expr())
+    }
+}
+impl OuterProductExpr for Expr<Float4> {
+    type Output = Expr<Mat4>;
+    type Value = Float4;
+    fn outer_product(&self, other: impl AsExpr<Value = Self::Value>) -> Self::Output {
+        Func::OuterProduct.call2(self.clone(), other.as_expr())
     }
 }
 impl<X: Linear> ReduceExpr for Expr<X> {

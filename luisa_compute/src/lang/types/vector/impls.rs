@@ -170,16 +170,6 @@ pub trait VectorExprProxy {
             )
         }))
     }
-    fn length(&self) -> Expr<Self::T> {
-        Expr::<Self::T>::from_node(__current_scope(|s| {
-            s.call(Func::Length, &[self.node()], Self::T::type_())
-        }))
-    }
-    fn length_squared(&self) -> Expr<Self::T> {
-        Expr::<Self::T>::from_node(__current_scope(|s| {
-            s.call(Func::LengthSquared, &[self.node()], Self::T::type_())
-        }))
-    }
 }
 impl<const N: usize> SquareMatrix<N>
 where
@@ -227,8 +217,9 @@ macro_rules! impl_mat_proxy {
                 Self::from_elems_expr([$($xs.as_expr()),+])
             }
             pub fn full_expr(scalar: impl AsExpr<Value = f32>) -> Expr<Self> {
+                let scalar = scalar.as_expr();
                 Expr::<Self>::from_node(__current_scope(|b|{
-                    b.call(Func::Mat, &[scalar.as_expr().node()], Self::type_())
+                    b.call(Func::Mat, &[scalar.node()], Self::type_())
                 }))
             }
         }
@@ -250,36 +241,69 @@ macro_rules! impl_mat_proxy {
                 Func::Mul.call2(self, rhs)
             }
         }
+
         impl MulExpr<Expr<f32>> for Expr<$M> {
             type Output = Self;
             fn mul(self, rhs: Expr<f32>) -> Self::Output {
-                Func::Mul.call2(self, $M::full_expr(rhs))
+                Func::MatCompMul.call2(self, $M::full_expr(rhs))
             }
         }
         impl MulExpr<f32> for Expr<$M> {
             type Output = Self;
             fn mul(self, rhs: f32) -> Self::Output {
-                Func::Mul.call2(self, $M::full_expr(rhs))
+                Func::MatCompMul.call2(self, $M::full_expr(rhs))
             }
         }
         impl MulExpr<Expr<$M>> for Expr<f32> {
             type Output = Expr<$M>;
             fn mul(self, rhs: Expr<$M>) -> Self::Output {
-                Func::Mul.call2($M::full_expr(self), rhs)
+                Func::MatCompMul.call2($M::full_expr(self), rhs)
             }
         }
         impl MulExpr<Expr<$M>> for f32 {
             type Output = Expr<$M>;
             fn mul(self, rhs: Expr<$M>) -> Self::Output {
-                Func::Mul.call2($M::full_expr(self), rhs)
+                Func::MatCompMul.call2($M::full_expr(self), rhs)
             }
         }
+
+        // impl DivExpr<Expr<f32>> for Expr<$M> {
+        //     type Output = Self;
+        //     #[tracked]
+        //     fn div(self, rhs: Expr<f32>) -> Self::Output {
+        //         *self * rhs.recip()
+        //     }
+        // }
+        impl DivExpr<f32> for Expr<$M> {
+            type Output = Self;
+            #[tracked]
+            fn div(self, rhs: f32) -> Self::Output {
+                self * rhs.recip()
+            }
+        }
+        impl DivExpr<Expr<$M>> for Expr<f32> {
+            type Output = Expr<$M>;
+            #[tracked]
+            fn div(self, rhs: Expr<$M>) -> Self::Output {
+                self.recip() * rhs
+            }
+        }
+        impl DivExpr<Expr<$M>> for f32 {
+            type Output = Expr<$M>;
+            #[tracked]
+            fn div(self, rhs: Expr<$M>) -> Self::Output {
+                self.recip() * rhs
+            }
+        }
+
+
         impl MulExpr<Expr<$V>> for Expr<$M> {
             type Output = Expr<$V>;
             fn mul(self, rhs: Expr<$V>) -> Self::Output {
                 Func::Mul.call2(self, rhs)
             }
         }
+        
         impl MatExpr for Expr<$M> {
             type Scalar = Expr<f32>;
             type Value = $M;

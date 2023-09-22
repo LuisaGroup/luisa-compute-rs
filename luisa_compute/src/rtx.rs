@@ -560,9 +560,8 @@ impl AccelVar {
     #[inline]
     pub fn query_all<T, P>(
         &self,
-
-        ray: impl Into<Expr<Ray>>,
-        mask: impl Into<Expr<u32>>,
+        ray: impl AsExpr<Value = Ray>,
+        mask: impl AsExpr<Value = u32>,
         ray_query: RayQuery<T, P>,
     ) -> Expr<CommittedHit>
     where
@@ -574,8 +573,8 @@ impl AccelVar {
     #[inline]
     pub fn query_any<T, P>(
         &self,
-        ray: impl Into<Expr<Ray>>,
-        mask: impl Into<Expr<u32>>,
+        ray: impl AsExpr<Value = Ray>,
+        mask: impl AsExpr<Value = u32>,
         ray_query: RayQuery<T, P>,
     ) -> Expr<CommittedHit>
     where
@@ -588,16 +587,16 @@ impl AccelVar {
     fn _query<T, P>(
         &self,
         terminate_on_first: bool,
-        ray: impl Into<Expr<Ray>>,
-        mask: impl Into<Expr<u32>>,
+        ray: impl AsExpr<Value = Ray>,
+        mask: impl AsExpr<Value = u32>,
         ray_query: RayQuery<T, P>,
     ) -> Expr<CommittedHit>
     where
         T: FnOnce(TriangleCandidate),
         P: FnOnce(ProceduralCandidate),
     {
-        let ray = ray.into();
-        let mask = mask.into();
+        let ray = ray.as_expr();
+        let mask = mask.as_expr();
         let query = __current_scope(|b| {
             b.call(
                 if terminate_on_first {
@@ -623,14 +622,16 @@ impl AccelVar {
             let s = &mut r.scopes;
             s.push(IrBuilder::new(pools));
         });
-        let triangle_candidate = __current_scope(|b| TriangleCandidate {
+        let triangle_candidate = TriangleCandidate {
             query,
-            hit: FromNode::from_node(b.call(
-                Func::RayQueryTriangleCandidateHit,
-                &[query],
-                TriangleHit::type_(),
-            )),
-        });
+            hit: FromNode::from_node(__current_scope(|b| {
+                b.call(
+                    Func::RayQueryTriangleCandidateHit,
+                    &[query],
+                    TriangleHit::type_(),
+                )
+            })),
+        };
         (ray_query.on_triangle_hit)(triangle_candidate);
         let on_triangle_hit = __pop_scope();
         RECORDER.with(|r| {
@@ -639,20 +640,22 @@ impl AccelVar {
             let s = &mut r.scopes;
             s.push(IrBuilder::new(pools));
         });
-        let procedural_candidate = __current_scope(|b| ProceduralCandidate {
+        let procedural_candidate = ProceduralCandidate {
             query,
-            hit: FromNode::from_node(b.call(
-                Func::RayQueryProceduralCandidateHit,
-                &[query],
-                ProceduralHit::type_(),
-            )),
-        });
+            hit: FromNode::from_node(__current_scope(|b| {
+                b.call(
+                    Func::RayQueryProceduralCandidateHit,
+                    &[query],
+                    ProceduralHit::type_(),
+                )
+            })),
+        };
         (ray_query.on_procedural_hit)(procedural_candidate);
         let on_procedural_hit = __pop_scope();
-        __current_scope(|b| {
+        FromNode::from_node(__current_scope(|b| {
             b.ray_query(query, on_triangle_hit, on_procedural_hit, Type::void());
-            FromNode::from_node(b.call(Func::RayQueryCommittedHit, &[query], CommittedHit::type_()))
-        })
+            b.call(Func::RayQueryCommittedHit, &[query], CommittedHit::type_())
+        }))
     }
     pub fn new(accel: &rtx::Accel) -> Self {
         let node = RECORDER.with(|r| {

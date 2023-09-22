@@ -8,6 +8,13 @@ impl<T: Value, const N: usize> Value for [T; N] {
     type Expr = ArrayExpr<T, N>;
     type Var = ArrayVar<T, N>;
 }
+impl<T: Value, const N: usize> ArrayNewExpr<T, N> for [T; N] {
+    fn expr_from_elements(elems: [Expr<T>; N]) -> Expr<Self> {
+        let node =
+            __current_scope(|b| b.call(Func::Array, &elems.map(|e| e.node()), <[T; N]>::type_()));
+        Expr::<Self>::from_node(node)
+    }
+}
 
 impl_simple_expr_proxy!([T: Value, const N: usize] ArrayExpr[T, N] for [T; N]);
 impl_simple_var_proxy!([T: Value, const N: usize] ArrayVar[T, N] for [T; N]);
@@ -34,7 +41,29 @@ impl<T: Value, const N: usize, X: IntoIndex> Index<X> for ArrayExpr<T, N> {
         ._ref()
     }
 }
-
+macro_rules! impl_array_vec_conversion{
+    ($N:literal,$($xs:expr,)*)=>{
+        impl<T: Value> From<Expr<[T; $N]>> for Expr<Vector<T, $N>>
+            where T: vector::VectorAlign<$N>
+        {
+            fn from(array: Expr<[T; $N]>) -> Self {
+                Vector::<T, $N>::expr($(array[$xs]),*)
+            }
+        }
+        impl<T:Value> From<Expr<Vector<T,$N>>> for Expr<[T;$N]>
+            where T: vector::VectorAlign<$N>,
+        {
+            fn from(vec:Expr<Vector<T,$N>>)->Self{
+                let elems = (0..$N).map(|i| __extract::<T>(vec.node(), i)).collect::<Vec<_>>();
+                let node = __current_scope(|b| b.call(Func::Array, &elems, <[T;$N]>::type_()));
+                Self::from_node(node)
+            }
+        }
+    }
+}
+impl_array_vec_conversion!(2, 0, 1,);
+impl_array_vec_conversion!(3, 0, 1, 2,);
+impl_array_vec_conversion!(4, 0, 1, 2, 3,);
 #[derive(Clone, Copy, Debug)]
 pub struct VLArrayExpr<T: Value> {
     marker: PhantomData<T>,

@@ -127,87 +127,84 @@ fn main() {
         let o = Float3::expr(0.0, 0.0, -2.0);
         let d = Float3::expr(xy.x, xy.y, 0.0) - o;
         let d = d.normalize();
-        let ray = Ray::new_expr(o + translate.expr(), 1e-3f32, d, 1e9f32);
+
+        let ray = Ray::new_expr(
+            Expr::<[f32; 3]>::from(o + translate.expr()),
+            1e-3f32,
+            Expr::<[f32; 3]>::from(d),
+            1e9f32,
+        );
         let hit = accel.query_all(
             ray,
             255,
             RayQuery {
                 on_triangle_hit: |candidate: TriangleCandidate| {
-                    let bary = candidate.bary();
-                    let uvw = Float3::expr(1.0 - bary.x() - bary.y(), bary.x(), bary.y());
-                    let t = candidate.committed_ray_t();
-                    if_!(px.cmpeq(Uint2::expr(400, 400)).all(), {
+                    let bary = candidate.bary;
+                    let uvw = Float3::expr(1.0 - bary.x - bary.y, bary.x, bary.y);
+                    let t = candidate.committed_ray_t;
+                    if (px == Uint2::expr(400, 400)).all() {
                         debug_hit_t.write(0, t);
-                        debug_hit_t.write(1, candidate.ray().tmax());
-                    });
-                    if_!(
-                        uvw.xy().length().cmplt(0.8)
-                            & uvw.yz().length().cmplt(0.8)
-                            & uvw.xz().length().cmplt(0.8),
-                        {
-                            candidate.commit();
-                        }
-                    );
+                        debug_hit_t.write(1, candidate.ray().tmax);
+                    };
+                    // if (uvw.xy().length() < 0.8)
+                    //     & (uvw.yz().length() < 0.8)
+                    //     & (uvw.xz().length() < 0.8)
+                    if uvw.xy().length() < 0.8 && uvw.yz().length() < 0.8 && uvw.xz().length() < 0.8
+                    {
+                        candidate.commit();
+                    }
                 },
                 on_procedural_hit: |candidate: ProceduralCandidate| {
                     let ray = candidate.ray();
-                    let prim = candidate.prim();
+                    let prim = candidate.prim;
                     let sphere = spheres.var().read(prim);
-                    let o = ray.orig().unpack();
-                    let d = ray.dir().unpack();
+                    let o: Expr<Float3> = ray.orig.into();
+                    let d: Expr<Float3> = ray.dir.into();
                     let t = Var::<f32>::zeroed();
 
-                    for_range(0i32.expr()..100i32.expr(), |_| {
-                        let dist = (o + d * t.load() - (sphere.center() + translate.expr()))
-                            .length()
-                            - sphere.radius();
-                        if_!(dist.cmplt(0.001), {
-                            if_!(px.cmpeq(Uint2::expr(400, 400)).all(), {
+                    for _ in 0..100 {
+                        let dist = (o + d * *t - (sphere.center + translate.expr())).length()
+                            - sphere.radius;
+                        if dist < 0.001 {
+                            if (px == Uint2::expr(400, 400)).all() {
                                 debug_hit_t.write(2, *t);
-                                debug_hit_t.write(3, candidate.ray().tmax());
-                            });
-                            if_!(t.cmplt(ray.tmax()), {
-                                candidate.commit(t.load());
-                            });
-                            break_();
-                        });
-                        t.store(t.load() + dist);
-                    });
+                                debug_hit_t.write(3, candidate.ray().tmax);
+                            }
+                            if t < ray.tmax {
+                                candidate.commit(*t);
+                            }
+                            break;
+                        }
+                        *t += dist;
+                    }
                 },
             },
         );
         let img = img.view(0).var();
-        let color = if_!(
-            hit.triangle_hit(),
-            {
-                let bary = hit.bary();
-                let uvw = Float3::expr(1.0 - bary.x() - bary.y(), bary.x(), bary.y());
-                uvw
-            },
-            else,
-            {
-                if_!(
-                    hit.procedural_hit(),
-                    {
-                        let prim = hit.prim_id();
-                        let sphere = spheres.var().read(prim);
-                        let normal = (ray.orig().unpack()
-                            + ray.dir().unpack() * hit.committed_ray_t()
-                            - sphere.center())
-                        .normalize();
-                        let light_dir = Float3::expr(1.0, 0.6, -0.2).normalize();
-                        let light = Float3::expr(1.0, 1.0, 1.0);
-                        let ambient = Float3::expr(0.1, 0.1, 0.1);
-                        let diffuse = light * normal.dot(light_dir).max(0.0);
-                        let color = ambient + diffuse;
-                        color
-                    },
-                    else,
-                    { Float3::expr(0.0, 0.0, 0.0) }
-                )
+        let color = if hit.triangle_hit() {
+            let bary = hit.bary;
+            let uvw = Float3::expr(1.0 - bary.x - bary.y, bary.x, bary.y);
+            uvw
+        } else {
+            if hit.procedural_hit() {
+                let prim = hit.prim_id;
+                let sphere = spheres.var().read(prim);
+                let normal = (Expr::<Float3>::from(ray.orig)
+                    + Expr::<Float3>::from(ray.dir) * hit.committed_ray_t
+                    - sphere.center)
+                    .normalize();
+                let light_dir = Float3::expr(1.0, 0.6, -0.2).normalize();
+                let light = Float3::expr(1.0, 1.0, 1.0);
+                let ambient = Float3::expr(0.1, 0.1, 0.1);
+                let diffuse = luisa::max(light * normal.dot(light_dir), 0.0);
+                let color = ambient + diffuse;
+                color
+            } else {
+                Float3::expr(0.0, 0.0, 0.0)
             }
-        );
-        img.write(px, Float4::expr(color.x(), color.y(), color.z(), 1.0));
+        };
+
+        img.write(px, Float4::expr(color.x, color.y, color.z, 1.0));
     }));
     let event_loop = EventLoop::new();
     let window = winit::window::WindowBuilder::new()

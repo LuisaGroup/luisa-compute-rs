@@ -19,6 +19,7 @@ fn cmake_build() -> PathBuf {
     println!("cargo:rerun-if-changed=./LuisaCompute/src/gui");
     println!("cargo:rerun-if-changed=./LuisaCompute/src/ir");
     println!("cargo:rerun-if-changed=./LuisaCompute/src/rust/luisa_compute_backend_impl");
+    println!("cargo:rerun-if-changed=./LuisaCompute/src/rust/luisa_compute_ir");
     println!("cargo:rerun-if-changed=./LuisaCompute/src/rust/CMakeLists.txt");
     println!("cargo:rerun-if-changed=./LuisaCompute/src/py");
     println!("cargo:rerun-if-changed=./LuisaCompute/src/runtime");

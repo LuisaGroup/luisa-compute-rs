@@ -357,9 +357,9 @@ impl Compiler {
                 type Init = #ctor_proxy_name #ty_generics;
             }
             impl #impl_generics #name #ty_generics #where_clause {
-                #vis fn new_expr(#(#field_names: impl Into<#lang_path::types::Expr<#field_types>>),*) -> #lang_path::types::Expr::<#name> {
+                #vis fn new_expr(#(#field_names: impl #lang_path::types::AsExpr<Value = #field_types>),*) -> #lang_path::types::Expr::<#name> {
                     use #lang_path::*;
-                    let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&#field_names.into()) ),* ]);
+                    let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&#field_names.as_expr()) ),* ]);
                     let expr = <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node);
                     expr
                 }

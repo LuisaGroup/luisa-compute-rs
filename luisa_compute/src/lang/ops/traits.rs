@@ -259,11 +259,11 @@ pub trait NormExpr: Sized {
     fn norm_squared(&self) -> Self::Output;
     fn normalize(&self) -> Self;
 }
-pub trait DotExpr : Sized {
+pub trait DotExpr: Sized {
     type Output;
     fn dot(&self, other: Self) -> Self::Output;
 }
-pub trait CrossExpr : Sized {
+pub trait CrossExpr: Sized {
     type Output;
     fn cross(&self, other: Self) -> Self::Output;
 }
@@ -274,6 +274,14 @@ pub trait MatExpr: Sized {
     fn determinant(&self) -> Self::Scalar;
     fn inverse(&self) -> Self;
 }
+pub trait VectorSelectExpr: Sized {
+    fn select<X: Linear>(self, on: Expr<X>, off: Expr<X>) -> Self;
+}
+
+pub trait ArrayNewExpr<T: Value, const N: usize>: Value {
+    fn expr_from_elements(elems: [Expr<T>; N]) -> Expr<Self>;
+}
+
 ops_trait!(FloatMulAddExpr<A, B>[FloatMulAddThis] {
     fn mul_add[_mul_add](self, a: A, b: B);
 });
@@ -330,12 +338,12 @@ pub trait StoreMaybeExpr<V> {
 }
 
 pub trait SelectMaybeExpr<R> {
-    fn if_then_else(self, on: impl FnOnce() -> R, off: impl FnOnce() -> R) -> R;
+    fn if_then_else(self, on: impl Fn() -> R, off: impl Fn() -> R) -> R;
     fn select(self, on: R, off: R) -> R;
 }
 
 pub trait ActivateMaybeExpr {
-    fn activate(self, then: impl FnOnce());
+    fn activate(self, then: impl Fn());
 }
 
 pub trait LoopMaybeExpr {
@@ -344,6 +352,6 @@ pub trait LoopMaybeExpr {
 
 pub trait LazyBoolMaybeExpr<T, Ty: TrackingType> {
     type Bool;
-    fn and(self, other: impl FnOnce() -> T) -> Self::Bool;
-    fn or(self, other: impl FnOnce() -> T) -> Self::Bool;
+    fn and(self, other: impl Fn() -> T) -> Self::Bool;
+    fn or(self, other: impl Fn() -> T) -> Self::Bool;
 }

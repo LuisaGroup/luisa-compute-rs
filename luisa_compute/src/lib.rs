@@ -24,13 +24,13 @@ pub mod prelude {
     pub use crate::lang::functions::{block_size, dispatch_id, dispatch_size, set_block_size};
     pub use crate::lang::index::{IndexRead, IndexWrite};
     pub use crate::lang::ops::{
-        AbsExpr, ActivateMaybeExpr, AddAssignExpr, AddExpr, BitAndAssignExpr, BitAndExpr,
-        BitOrAssignExpr, BitOrExpr, BitXorAssignExpr, BitXorExpr, ClampExpr, CmpExpr, CrossExpr,
-        DivAssignExpr, DivExpr, DotExpr, EqExpr, FloatArcTan2Expr, FloatCopySignExpr, FloatExpr,
-        FloatLerpExpr, FloatLogExpr, FloatMulAddExpr, FloatPowfExpr, FloatPowiExpr,
-        FloatSmoothStepExpr, FloatStepExpr, IntExpr, LazyBoolMaybeExpr, LoopMaybeExpr, MinMaxExpr,
-        MulAssignExpr, MulExpr, NormExpr, ReduceExpr, RemAssignExpr, RemExpr, SelectMaybeExpr,
-        ShlAssignExpr, ShlExpr, ShrAssignExpr, ShrExpr, SubAssignExpr, SubExpr,MatExpr
+        AbsExpr, ActivateMaybeExpr, AddAssignExpr, AddExpr, ArrayNewExpr, BitAndAssignExpr,
+        BitAndExpr, BitOrAssignExpr, BitOrExpr, BitXorAssignExpr, BitXorExpr, ClampExpr, CmpExpr,
+        CrossExpr, DivAssignExpr, DivExpr, DotExpr, EqExpr, FloatArcTan2Expr, FloatCopySignExpr,
+        FloatExpr, FloatLerpExpr, FloatLogExpr, FloatMulAddExpr, FloatPowfExpr, FloatPowiExpr,
+        FloatSmoothStepExpr, FloatStepExpr, IntExpr, LazyBoolMaybeExpr, LoopMaybeExpr, MatExpr,
+        MinMaxExpr, MulAssignExpr, MulExpr, NormExpr, ReduceExpr, RemAssignExpr, RemExpr,
+        SelectMaybeExpr, ShlAssignExpr, ShlExpr, ShrAssignExpr, ShrExpr, SubAssignExpr, SubExpr,
     };
     pub use crate::lang::types::vector::swizzle::*;
     pub use crate::lang::types::vector::VectorExprProxy;

@@ -1,4 +1,4 @@
-use crate::lang::types::{ExprType, ValueType};
+use crate::lang::types::{vector, ExprType, ValueType};
 
 use super::*;
 
@@ -256,6 +256,28 @@ where
         Func::Cross.call2(self.clone(), other)
     }
 }
+
+impl<const N: usize> Expr<Vector<bool, N>>
+where
+    Vector<bool, N>: Linear + Value,
+    bool: vector::VectorAlign<N>,
+{
+    pub fn any(&self) -> Expr<bool> {
+        Func::Any.call(self.clone())
+    }
+    pub fn all(&self) -> Expr<bool> {
+        Func::All.call(self.clone())
+    }
+    pub fn select<X: Linear>(&self, t: Expr<X>, f: Expr<X>) -> Expr<X> {
+        assert_eq!(
+            X::N,
+            N,
+            "Cannot select between vectors of different dimensions."
+        );
+        Func::Select.call3(self.clone(), t, f)
+    }
+}
+
 impl_ops_trait!([X: Linear] FloatMulAddExpr[FloatMulAddThis] for Expr<X> where [X::Scalar: Floating] {
     fn mul_add[_mul_add](self, a, b) { Func::Fma.call3(self, a, b) }
 });
@@ -318,7 +340,7 @@ impl<V: Value, E: AsExpr<Value = V>> StoreMaybeExpr<E> for Var<V> {
 }
 
 impl<R> SelectMaybeExpr<R> for bool {
-    fn if_then_else(self, on: impl FnOnce() -> R, off: impl FnOnce() -> R) -> R {
+    fn if_then_else(self, on: impl Fn() -> R, off: impl Fn() -> R) -> R {
         if self {
             on()
         } else {
@@ -334,7 +356,7 @@ impl<R> SelectMaybeExpr<R> for bool {
     }
 }
 impl<R: Aggregate> SelectMaybeExpr<R> for Expr<bool> {
-    fn if_then_else(self, on: impl FnOnce() -> R, off: impl FnOnce() -> R) -> R {
+    fn if_then_else(self, on: impl Fn() -> R, off: impl Fn() -> R) -> R {
         crate::lang::control_flow::if_then_else(self, on, off)
     }
     fn select(self, on: R, off: R) -> R {
@@ -343,14 +365,14 @@ impl<R: Aggregate> SelectMaybeExpr<R> for Expr<bool> {
 }
 
 impl ActivateMaybeExpr for bool {
-    fn activate(self, then: impl FnOnce()) {
+    fn activate(self, then: impl Fn()) {
         if self {
             then()
         }
     }
 }
 impl ActivateMaybeExpr for Expr<bool> {
-    fn activate(self, then: impl FnOnce()) {
+    fn activate(self, then: impl Fn()) {
         crate::lang::control_flow::if_then_else(self, then, || {})
     }
 }
@@ -371,23 +393,23 @@ impl LoopMaybeExpr for Expr<bool> {
 
 impl LazyBoolMaybeExpr<bool, ValueType> for bool {
     type Bool = bool;
-    fn and(self, other: impl FnOnce() -> bool) -> bool {
+    fn and(self, other: impl Fn() -> bool) -> bool {
         self && other()
     }
-    fn or(self, other: impl FnOnce() -> bool) -> bool {
+    fn or(self, other: impl Fn() -> bool) -> bool {
         self || other()
     }
 }
 impl LazyBoolMaybeExpr<Expr<bool>, ExprType> for bool {
     type Bool = Expr<bool>;
-    fn and(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+    fn and(self, other: impl Fn() -> Expr<bool>) -> Self::Bool {
         if self {
             other()
         } else {
             false.expr()
         }
     }
-    fn or(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+    fn or(self, other: impl Fn() -> Expr<bool>) -> Self::Bool {
         if self {
             true.expr()
         } else {
@@ -397,27 +419,21 @@ impl LazyBoolMaybeExpr<Expr<bool>, ExprType> for bool {
 }
 impl LazyBoolMaybeExpr<bool, ExprType> for Expr<bool> {
     type Bool = Expr<bool>;
-    fn and(self, other: impl FnOnce() -> bool) -> Self::Bool {
-        if other() {
-            self
-        } else {
-            false.expr()
-        }
+    fn and(self, other: impl Fn() -> bool) -> Self::Bool {
+        let other = other().expr();
+        select(self, other, false.expr())
     }
-    fn or(self, other: impl FnOnce() -> bool) -> Self::Bool {
-        if other() {
-            true.expr()
-        } else {
-            self
-        }
+    fn or(self, other: impl Fn() -> bool) -> Self::Bool {
+        let other = other().expr();
+        select(self, true.expr(), other)
     }
 }
 impl LazyBoolMaybeExpr<Expr<bool>, ExprType> for Expr<bool> {
     type Bool = Expr<bool>;
-    fn and(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+    fn and(self, other: impl Fn() -> Expr<bool>) -> Self::Bool {
         crate::lang::control_flow::if_then_else(self, other, || false.expr())
     }
-    fn or(self, other: impl FnOnce() -> Expr<bool>) -> Self::Bool {
+    fn or(self, other: impl Fn() -> Expr<bool>) -> Self::Bool {
         crate::lang::control_flow::if_then_else(self, || true.expr(), other)
     }
 }

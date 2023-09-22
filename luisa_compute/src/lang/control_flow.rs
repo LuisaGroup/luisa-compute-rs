@@ -89,8 +89,8 @@ pub fn return_() {
 
 pub fn if_then_else<R: Aggregate>(
     cond: Expr<bool>,
-    then: impl FnOnce() -> R,
-    else_: impl FnOnce() -> R,
+    then: impl Fn() -> R,
+    else_: impl Fn() -> R,
 ) -> R {
     let cond = cond.node();
     RECORDER.with(|r| {
@@ -298,9 +298,9 @@ pub fn for_range<R: ForLoopRange>(r: R, body: impl Fn(Expr<R::Element>)) {
     let i = __current_scope(|b| b.local(start));
     generic_loop(
         || {
-            __current_scope(|b| {
+            Expr::<bool>::from_node(__current_scope(|b| {
                 let i = b.call(Func::Load, &[i], i.type_().clone());
-                Expr::<bool>::from_node(b.call(
+                b.call(
                     if r.end_inclusive() {
                         Func::Le
                     } else {
@@ -308,8 +308,8 @@ pub fn for_range<R: ForLoopRange>(r: R, body: impl Fn(Expr<R::Element>)) {
                     },
                     &[i, end],
                     <bool as TypeOf>::type_(),
-                ))
-            })
+                )
+            }))
         },
         move || {
             let i = __current_scope(|b| b.call(Func::Load, &[i], i.type_().clone()));

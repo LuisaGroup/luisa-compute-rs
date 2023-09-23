@@ -76,7 +76,7 @@ macro_rules! impl_sized {
                 let i = i.to_u64();
 
                 if need_runtime_check() {
-                    lc_assert!(i.lt(($N as u64).expr()));
+                    check_index_lt_usize(i, $N);
                 }
 
                 Expr::<T>::from_node(__current_scope(|s| {
@@ -94,7 +94,7 @@ macro_rules! impl_sized {
                 let i = i.to_u64();
 
                 if need_runtime_check() {
-                    lc_assert!(i.lt(($N as u64).expr()));
+                    check_index_lt_usize(i, $N);
                 }
 
                 Var::<T>::from_node(__current_scope(|s| {
@@ -333,7 +333,7 @@ macro_rules! impl_mat_proxy {
             fn index(&self, i: X) -> &Self::Output {
                 let i = i.to_u64();
                 if need_runtime_check() {
-                    lc_assert!(i.lt(($N as u64).expr()));
+                    check_index_lt_usize(i, $N);
                 }
                 Expr::<$V>::from_node(__current_scope(|b| {
                     b.call(Func::ExtractElement, &[self.0.node, i.node()], <$V>::type_())

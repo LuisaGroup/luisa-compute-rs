@@ -33,7 +33,7 @@ impl<T: Value, const N: usize, X: IntoIndex> Index<X> for ArrayExpr<T, N> {
 
         // TODO: Add need_runtime_check()?
         if need_runtime_check() {
-            lc_assert!(i.lt((N as u64).expr()));
+            check_index_lt_usize(i, N);
         }
 
         Expr::<T>::from_node(__current_scope(|b| {
@@ -49,7 +49,7 @@ impl<T: Value, const N: usize, X: IntoIndex> Index<X> for ArrayAtomicRef<T, N> {
 
         // TODO: Add need_runtime_check()?
         if need_runtime_check() {
-            lc_assert!(i.lt((N as u64).expr()));
+            check_index_lt_usize(i, N);
         }
 
         AtomicRef::<T>::from_node(__current_scope(|b| {
@@ -92,7 +92,7 @@ impl<T: Value, const N: usize> IndexRead for Expr<[T; N]> {
     fn read<I: IntoIndex>(&self, i: I) -> Expr<Self::Element> {
         let i = i.to_u64();
         if need_runtime_check() {
-            lc_assert!(i.lt(N as u64));
+            check_index_lt_usize(i, N);
         }
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(Func::ExtractElement, &[self.node(), i.node()], T::type_())
@@ -104,7 +104,7 @@ impl<T: Value, const N: usize> IndexRead for Var<[T; N]> {
     fn read<I: IntoIndex>(&self, i: I) -> Expr<Self::Element> {
         let i = i.to_u64();
         if need_runtime_check() {
-            lc_assert!(i.lt(N as u64));
+            check_index_lt_usize(i, N);
         }
         Expr::<T>::from_node(__current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node(), i.node()], T::type_());
@@ -117,7 +117,7 @@ impl<T: Value, const N: usize> IndexWrite for Var<[T; N]> {
         let i = i.to_u64();
         let value = value.as_expr();
         if need_runtime_check() {
-            lc_assert!(i.lt(N as u64));
+            check_index_lt_usize(i, N);
         }
         __current_scope(|b| {
             let gep = b.call(Func::GetElementPtr, &[self.node(), i.node()], T::type_());
@@ -259,7 +259,7 @@ impl<T: Value> VLArrayExpr<T> {
         });
         Self::from_node(node)
     }
-    pub fn static_len(&self) -> usize {
+    pub fn len(&self) -> usize {
         match self.node.type_().as_ref() {
             Type::Array(ArrayType { element: _, length }) => *length,
             _ => unreachable!(),
@@ -268,14 +268,14 @@ impl<T: Value> VLArrayExpr<T> {
     pub fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
         let i = i.to_u64();
         if need_runtime_check() {
-            lc_assert!(i.lt(self.len()));
+            check_index_lt_usize(i, self.len());
         }
 
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(Func::ExtractElement, &[self.node, i.node()], T::type_())
         }))
     }
-    pub fn len(&self) -> Expr<u64> {
+    pub fn len_expr(&self) -> Expr<u64> {
         match self.node.type_().as_ref() {
             Type::Array(ArrayType { element: _, length }) => (*length as u64).expr(),
             _ => unreachable!(),

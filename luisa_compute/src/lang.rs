@@ -24,6 +24,8 @@ use ir::{
     Instruction, IrBuilder, ModulePools, Pooled, Type, TypeOf, UserNodeData,
 };
 
+use self::index::IntoIndex;
+
 pub mod control_flow;
 pub mod debug;
 pub mod diff;
@@ -537,4 +539,42 @@ pub(crate) fn need_runtime_check() -> bool {
             Err(_) => false,
         }
         || debug::__env_need_backtrace()
+}
+fn try_eval_const_index(index: NodeRef) -> Option<usize> {
+    let inst = &index.get().instruction;
+    match inst.as_ref() {
+        Instruction::Const(c) => match c {
+            Const::Int8(i) => Some(*i as usize),
+            Const::Int16(i) => Some(*i as usize),
+            Const::Int32(i) => Some(*i as usize),
+            Const::Int64(i) => Some(*i as usize),
+            Const::Uint8(i) => Some(*i as usize),
+            Const::Uint16(i) => Some(*i as usize),
+            Const::Uint32(i) => Some(*i as usize),
+            Const::Uint64(i) => Some(*i as usize),
+            _ => None,
+        },
+        Instruction::Call(f, args) => match f {
+            Func::Cast => try_eval_const_index(args[0]),
+            Func::Add => {
+                let a = try_eval_const_index(args[0]);
+                let b = try_eval_const_index(args[1]);
+                match (a, b) {
+                    (Some(a), Some(b)) => Some(a + b),
+                    _ => None,
+                }
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+pub(crate) fn check_index_lt_usize(index: impl IntoIndex, size: usize) {
+    let index = index.to_u64();
+    let i: Option<usize> = try_eval_const_index(index.node());
+    if let Some(i) = i {
+        assert!(i < size, "Index out of bound, index: {}, size: {}", i, size);
+    } else {
+        lc_assert!(index.lt(size as u64));
+    }
 }

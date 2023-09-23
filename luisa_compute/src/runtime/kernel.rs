@@ -348,14 +348,13 @@ impl KernelBuilder {
             }
         })
     }
-    fn build_kernel(
+    fn build_kernel<S: KernelSignature>(
         &mut self,
-        options: KernelBuildOptions,
         body: impl FnOnce(&mut Self),
-    ) -> crate::runtime::RawKernel {
+    ) -> crate::runtime::KernelDef<S> {
         body(self);
         let (rt, cpu_custom_ops, captures) = self.collect_module_info();
-        RECORDER.with(|r| -> crate::runtime::RawKernel {
+        RECORDER.with(|r| -> crate::runtime::KernelDef<S> {
             let mut r = r.borrow_mut();
             assert!(r.lock);
             r.lock = false;
@@ -380,45 +379,28 @@ impl KernelBuilder {
                 block_size: r.block_size.unwrap_or([64, 1, 1]),
                 pools: r.pools.clone().unwrap(),
             };
-
-            let module = CArc::new(module);
-            let name = options.name.unwrap_or("".to_string());
-            let name = Arc::new(CString::new(name).unwrap());
-            let shader_options = api::ShaderOption {
-                enable_cache: options.enable_cache,
-                enable_fast_math: options.enable_fast_math,
-                enable_debug_info: options.enable_debug_info,
-                compile_only: false,
-                name: name.as_ptr(),
-            };
-            let artifact = if options.async_compile {
-                ShaderArtifact::Async(AsyncShaderArtifact::new(
-                    self.device.clone().unwrap(),
-                    module.clone(),
-                    shader_options,
-                    name,
-                ))
-            } else {
-                ShaderArtifact::Sync(
-                    self.device
-                        .as_ref()
-                        .unwrap()
-                        .inner
-                        .create_shader(&module, &shader_options),
-                )
-            };
-            //
             r.reset();
-            RawKernel {
-                artifact,
-                device: self.device.clone().unwrap(),
-                resource_tracker: rt,
-                module,
+
+            KernelDef {
+                inner: RawKernelDef {
+                    device: self.device.clone(),
+                    resource_tracker: rt,
+                    module: CArc::new(module),
+                },
+                _marker: PhantomData,
             }
         })
     }
 }
 
+/// Build options for kernel compilation
+/// * `enable_debug_info`: enable debug info, default true on debug build
+/// * `enable_optimization`: enable optimization, default true
+/// * `async_compile`: compile the kernel asynchronously
+/// * `enable_cache`: enable cache for the compiled kernel
+/// * `enable_fast_math`: enable fast math in the compiled kernel
+/// * `name`: name of the compiled kernel. On CUDA backend, this is the name of the generated PTX kernel
+///
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct KernelBuildOptions {
     pub enable_debug_info: bool,
@@ -445,21 +427,12 @@ impl Default for KernelBuildOptions {
         }
     }
 }
-
-pub trait KernelBuildFn {
-    fn build_kernel(
-        &self,
-        builder: &mut KernelBuilder,
-        options: KernelBuildOptions,
-    ) -> crate::runtime::RawKernel;
-}
-
-pub trait CallableBuildFn {
+pub trait CallableBuildFn<S:CallableSignature> {
     fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)
         -> RawCallable;
 }
 
-pub trait StaticCallableBuildFn: CallableBuildFn {}
+pub trait StaticCallableBuildFn<S:CallableSignature>: CallableBuildFn<S> {}
 
 // @FIXME: this looks redundant
 pub unsafe trait CallableRet {
@@ -486,204 +459,206 @@ unsafe impl<V: Value> CallableRet for Expr<V> {
     }
 }
 
-pub trait CallableSignature<'a> {
-    type Callable;
-    type DynCallable;
-    type Fn: CallableBuildFn;
-    type StaticFn: StaticCallableBuildFn;
-    type DynFn: CallableBuildFn + 'static;
+pub trait CallableSignature {
     type Ret: CallableRet;
-    fn wrap_raw_callable(callable: RawCallable) -> Self::Callable;
-    fn create_dyn_callable(device: Device, init_once: bool, f: Self::DynFn) -> Self::DynCallable;
 }
 
-pub trait KernelSignature<'a> {
-    type Fn: KernelBuildFn;
-    type Kernel;
-
-    fn wrap_raw_kernel(kernel: crate::runtime::RawKernel) -> Self::Kernel;
-}
-macro_rules! impl_callable_signature {
-    ()=>{
-        impl<'a, R: CallableRet +'static> CallableSignature<'a> for fn()->R {
-            type Fn = &'a dyn Fn() ->R;
-            type DynFn = Box<dyn Fn() ->R>;
-            type StaticFn = fn() -> R;
-            type Callable = Callable<fn()->R>;
-            type DynCallable = DynCallable<fn()->R>;
+pub trait KernelSignature {}
+macro_rules! impl_callable {
+    ($($Ts:ident)*) => {
+        impl<R:CallableRet +'static, $($Ts: CallableParameter +'static),*> CallableSignature for fn($($Ts,)*)->R {
             type Ret = R;
-            fn wrap_raw_callable(callable: RawCallable) -> Self::Callable{
-                Callable {
-                    inner: callable,
-                    _marker:PhantomData,
+         }
+        impl<R:CallableRet +'static, $($Ts: CallableParameter +'static),*> Callable<fn($($Ts,)*)->R> {
+            pub fn new<F:Fn($($Ts,)*)->R>(device: &Device, f:F)->Self where F:CallableBuildFn<fn($($Ts,)*)->R> {
+                let mut builder = KernelBuilder::new(Some(device.clone()), false);
+                let raw_callable = CallableBuildFn::build_callable(&f, None, &mut builder);
+                Self{
+                    inner: raw_callable,
+                    _marker: PhantomData,
                 }
             }
-            fn create_dyn_callable(device:Device, init_once:bool, f: Self::DynFn) -> Self::DynCallable {
-                DynCallable::new(device, init_once, Box::new(move |arg, builder| {
+            pub fn new_static(f:fn($($Ts,)*)->R)->Self  where fn($($Ts,)*)->R :CallableBuildFn<fn($($Ts,)*)->R> {
+                let r_backup = RECORDER.with(|r| {
+                    let mut r = r.borrow_mut();
+                    std::mem::replace(&mut *r, Recorder::new())
+                });
+                let mut builder = KernelBuilder::new(None, false);
+                let raw_callable = CallableBuildFn::build_callable(&f, None, &mut builder);
+                RECORDER.with(|r| {
+                    *r.borrow_mut() = r_backup;
+                });
+                Self{
+                    inner: raw_callable,
+                    _marker: PhantomData,
+                }
+            }
+        }
+        impl<R:CallableRet +'static, $($Ts: CallableParameter +'static),*> DynCallable<fn($($Ts,)*)->R> {
+            pub fn new(device: &Device, f:Box<dyn Fn($($Ts,)*)->R>)->Self where Box<dyn Fn($($Ts,)*)->R> : CallableBuildFn<fn($($Ts,)*)->R> {
+                DynCallable::_new(device.clone(), false, Box::new(move |arg, builder| {
                     let raw_callable = CallableBuildFn::build_callable(&f, Some(arg), builder);
-                    Self::wrap_raw_callable(raw_callable)
+                    Callable {
+                        inner: raw_callable,
+                        _marker: PhantomData,
+                    }
                 }))
             }
         }
     };
-    ($first:ident  $($rest:ident)*) => {
-        impl<'a, R:CallableRet +'static, $first:CallableParameter +'static, $($rest: CallableParameter +'static),*> CallableSignature<'a> for fn($first, $($rest,)*)->R {
-            type Fn = &'a dyn Fn($first, $($rest),*)->R;
-            type DynFn = Box<dyn Fn($first, $($rest),*)->R>;
-            type Callable = Callable<fn($first, $($rest,)*)->R>;
-            type StaticFn = fn($first, $($rest,)*)->R;
-            type DynCallable = DynCallable<fn($first, $($rest,)*)->R>;
-            type Ret = R;
-            fn wrap_raw_callable(callable: RawCallable) -> Self::Callable{
-                Callable {
-                    inner: callable,
-                    _marker:PhantomData,
-                }
+}
+
+impl_callable!();
+impl_callable!(T0);
+impl_callable!(T0 T1 );
+impl_callable!(T0 T1 T2 );
+impl_callable!(T0 T1 T2 T3 );
+impl_callable!(T0 T1 T2 T3 T4 );
+impl_callable!(T0 T1 T2 T3 T4 T5 );
+impl_callable!(T0 T1 T2 T3 T4 T5 T6 );
+impl_callable!(T0 T1 T2 T3 T4 T5 T6 T7 );
+impl_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 );
+impl_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 );
+impl_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 );
+impl_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 );
+impl_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 );
+impl_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 );
+impl_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 );
+impl_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
+
+macro_rules! impl_kernel {
+    ($($Ts:ident)*) => {
+        impl<$($Ts: KernelArg +'static),*> KernelSignature for fn($($Ts,)*) {}
+        impl<$($Ts: KernelArg +'static),*> KernelDef<fn($($Ts,)*)>  {
+            #[allow(non_snake_case)]
+            #[allow(unused_variables)]
+            pub fn new_maybe_device(device: Option<&Device>, f:impl FnOnce($($Ts::Parameter,)*))->Self {
+                let mut builder = KernelBuilder::new(device.cloned(), true);
+                builder.build_kernel(move |builder| {
+                    $(let $Ts = <$Ts::Parameter as KernelParameter>::def_param(builder);)*
+                    (f)($($Ts,)*)
+                })
             }
-            fn create_dyn_callable(device:Device, init_once:bool, f: Self::DynFn) -> Self::DynCallable {
-                DynCallable::new(device, init_once, Box::new(move |arg, builder| {
-                    let raw_callable = CallableBuildFn::build_callable(&f, Some(arg), builder);
-                    Self::wrap_raw_callable(raw_callable)
-                }))
+            pub fn new(device: &Device, f:impl FnOnce($($Ts::Parameter,)*))->Self {
+                Self::new_maybe_device(Some(device), f)
+            }
+            pub fn new_static(f:fn($($Ts::Parameter,)*))->Self {
+                Self::new_maybe_device(None, f)
             }
         }
-        impl_callable_signature!($($rest)*);
+        impl<$($Ts: KernelArg +'static),*> Kernel<fn($($Ts,)*)> {
+            /// Compile a kernel with given recording function `f`.
+            pub fn new(device: &Device, f:impl FnOnce($($Ts::Parameter,)*))->Self {
+                let def = KernelDef::<fn($($Ts,)*)>::new(device, f);
+                device.compile_kernel(&def)
+            }
+            /// Compile a kernel asynchronously with given recording function `f`.
+            /// This function returns immediately after `f` returns
+
+            pub fn new_async(device: &Device, f:impl FnOnce($($Ts::Parameter,)*))->Self {
+                let def = KernelDef::<fn($($Ts,)*)>::new(device, f);
+                device.compile_kernel_async(&def)
+            }
+
+             // Compile a kernel with given recording function `f` and build options [`KernelBuildOptions`]
+            pub fn new_with_options(device: &Device, options: KernelBuildOptions, f:impl FnOnce($($Ts::Parameter,)*))->Self {
+                let def = KernelDef::<fn($($Ts,)*)>::new(device, f);
+                device.compile_kernel_with_options(&def, options)
+            }
+        }
     };
 }
-impl_callable_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
-macro_rules! impl_kernel_signature {
-    ()=>{
-        impl<'a> KernelSignature<'a> for fn() {
-            type Fn = &'a dyn Fn();
-            type Kernel = Kernel<fn()>;
-            fn wrap_raw_kernel(kernel: crate::runtime::RawKernel) -> Self::Kernel {
-                Self::Kernel{
-                    inner:kernel,
-                    _marker:PhantomData,
-                }
-            }
-        }
-    };
-    ($first:ident  $($rest:ident)*) => {
-        impl<'a, $first:KernelArg +'static, $($rest: KernelArg +'static),*> KernelSignature<'a> for fn($first, $($rest,)*) {
-            type Fn = &'a dyn Fn($first::Parameter, $($rest::Parameter),*);
-            type Kernel = Kernel<fn($first, $($rest,)*)>;
-            fn wrap_raw_kernel(kernel: crate::runtime::RawKernel) -> Self::Kernel {
-                Self::Kernel{
-                    inner:kernel,
-                    _marker:PhantomData,
-                }
-            }
-        }
-        impl_kernel_signature!($($rest)*);
-    };
-}
-impl_kernel_signature!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
+
+impl_kernel!();
+impl_kernel!(T0);
+impl_kernel!(T0 T1 );
+impl_kernel!(T0 T1 T2 );
+impl_kernel!(T0 T1 T2 T3 );
+impl_kernel!(T0 T1 T2 T3 T4 );
+impl_kernel!(T0 T1 T2 T3 T4 T5 );
+impl_kernel!(T0 T1 T2 T3 T4 T5 T6 );
+impl_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 );
+impl_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 );
+impl_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 );
+impl_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 );
+impl_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 );
+impl_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 );
+impl_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 );
+impl_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 );
+impl_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
 macro_rules! impl_callable_build_for_fn {
-    ()=>{
-        impl<R:CallableRet +'static> CallableBuildFn for &dyn Fn()->R {
-            fn build_callable(&self, _args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
-                builder.build_callable( |_| {
-                    self()
-                })
-            }
-        }
-        impl<R:CallableRet +'static> CallableBuildFn for fn()->R {
-            fn build_callable(&self, _args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
-                builder.build_callable( |_| {
-                    self()
-                })
-            }
-        }
-        impl<R:CallableRet +'static> CallableBuildFn for Box<dyn Fn()->R> {
-            fn build_callable(&self, _args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
-                builder.build_callable( |_| {
-                    self()
-                })
-            }
-        }
-        impl <R:CallableRet +'static> StaticCallableBuildFn  for fn()->R {}
-    };
-    ($first:ident  $($rest:ident)*) => {
-        impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for &dyn Fn($first, $($rest,)*)->R {
+    ($($Ts:ident)*) => {
+        impl<T, R:CallableRet +'static, $($Ts: CallableParameter),*> CallableBuildFn<fn($($Ts,)*)->R> for T 
+            where T: Fn($($Ts,)*)->R + 'static {
             #[allow(non_snake_case)]
+            #[allow(unused_variables)]
             fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
                 builder.build_callable( |builder| {
                     if let Some(args) = args {
-                        let ($first, $($rest,)*) = args.downcast_ref::<($first, $($rest,)*)>().cloned().unwrap();
-                        let $first = $first::def_param(Some(Rc::new($first)), builder);
-                        $(let $rest = $rest::def_param(Some(Rc::new($rest)), builder);)*
-                        self($first, $($rest,)*)
+                        let ($($Ts,)*) = args.downcast_ref::<($($Ts,)*)>().cloned().unwrap();
+                        $(let $Ts = $Ts::def_param(Some(Rc::new($Ts)), builder);)*
+                        self($($Ts,)*)
                     } else {
-                        let $first = $first::def_param(None, builder);
-                        $(let $rest = $rest::def_param(None, builder);)*
-                        self($first, $($rest,)*)
+                        $(let $Ts = $Ts::def_param(None, builder);)*
+                        self($($Ts,)*)
                     }
                 })
             }
         }
-        impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for Box<dyn Fn($first, $($rest,)*)->R> {
-            #[allow(non_snake_case)]
-            fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
-                builder.build_callable( |builder| {
-                    if let Some(args) = args {
-                        let ($first, $($rest,)*) = args.downcast_ref::<($first, $($rest,)*)>().cloned().unwrap();
-                        let $first = $first::def_param(Some(Rc::new($first)), builder);
-                        $(let $rest = $rest::def_param(Some(Rc::new($rest)), builder);)*
-                        self($first, $($rest,)*)
-                    } else {
-                        let $first = $first::def_param(None, builder);
-                        $(let $rest = $rest::def_param(None, builder);)*
-                        self($first, $($rest,)*)
-                    }
-                })
-            }
-        }
-        impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for fn($first, $($rest,)*)->R {
-            #[allow(non_snake_case)]
-            fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
-                builder.build_callable( |builder| {
-                    if let Some(args) = args {
-                        let ($first, $($rest,)*) = args.downcast_ref::<($first, $($rest,)*)>().cloned().unwrap();
-                        let $first = $first::def_param(Some(Rc::new($first)), builder);
-                        $(let $rest = $rest::def_param(Some(Rc::new($rest)), builder);)*
-                        self($first, $($rest,)*)
-                    } else {
-                        let $first = $first::def_param(None, builder);
-                        $(let $rest = $rest::def_param(None, builder);)*
-                        self($first, $($rest,)*)
-                    }
-                })
-            }
-        }
-        impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> StaticCallableBuildFn for fn($first, $($rest,)*)->R {}
-        impl_callable_build_for_fn!($($rest)*);
+        // impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for Box<dyn Fn($first, $($rest,)*)->R> {
+        //     #[allow(non_snake_case)]
+        //     fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
+        //         builder.build_callable( |builder| {
+        //             if let Some(args) = args {
+        //                 let ($first, $($rest,)*) = args.downcast_ref::<($first, $($rest,)*)>().cloned().unwrap();
+        //                 let $first = $first::def_param(Some(Rc::new($first)), builder);
+        //                 $(let $rest = $rest::def_param(Some(Rc::new($rest)), builder);)*
+        //                 self($first, $($rest,)*)
+        //             } else {
+        //                 let $first = $first::def_param(None, builder);
+        //                 $(let $rest = $rest::def_param(None, builder);)*
+        //                 self($first, $($rest,)*)
+        //             }
+        //         })
+        //     }
+        // }
+        // impl<R:CallableRet +'static, $first:CallableParameter, $($rest: CallableParameter),*> CallableBuildFn for fn($first, $($rest,)*)->R {
+        //     #[allow(non_snake_case)]
+        //     fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {
+        //         builder.build_callable( |builder| {
+        //             if let Some(args) = args {
+        //                 let ($first, $($rest,)*) = args.downcast_ref::<($first, $($rest,)*)>().cloned().unwrap();
+        //                 let $first = $first::def_param(Some(Rc::new($first)), builder);
+        //                 $(let $rest = $rest::def_param(Some(Rc::new($rest)), builder);)*
+        //                 self($first, $($rest,)*)
+        //             } else {
+        //                 let $first = $first::def_param(None, builder);
+        //                 $(let $rest = $rest::def_param(None, builder);)*
+        //                 self($first, $($rest,)*)
+        //             }
+        //         })
+        //     }
+        // }
+        impl<R:CallableRet +'static, $($Ts: CallableParameter),*> StaticCallableBuildFn<fn($($Ts,)*)->R> for fn($($Ts,)*)->R
+        where fn($($Ts,)*)->R : CallableBuildFn<fn($($Ts,)*)->R> {}
     };
 }
+
+impl_callable_build_for_fn!();
+impl_callable_build_for_fn!(T0);
+impl_callable_build_for_fn!(T0 T1 );
+impl_callable_build_for_fn!(T0 T1 T2 );
+impl_callable_build_for_fn!(T0 T1 T2 T3 );
+impl_callable_build_for_fn!(T0 T1 T2 T3 T4 );
+impl_callable_build_for_fn!(T0 T1 T2 T3 T4 T5 );
+impl_callable_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 );
+impl_callable_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 );
+impl_callable_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 );
+impl_callable_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 );
+impl_callable_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 );
+impl_callable_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 );
+impl_callable_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 );
+impl_callable_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 );
+impl_callable_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 );
 impl_callable_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
-macro_rules! impl_kernel_build_for_fn {
-    ()=>{
-        impl KernelBuildFn for &dyn Fn() {
-            fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> crate::runtime::RawKernel {
-                builder.build_kernel(options, |_| {
-                    self()
-                })
-            }
-        }
-    };
-    ($first:ident  $($rest:ident)*) => {
-        impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelBuildFn for &dyn Fn($first, $($rest,)*) {
-            #[allow(non_snake_case)]
-            fn build_kernel(&self, builder: &mut KernelBuilder, options:KernelBuildOptions) -> crate::runtime::RawKernel {
-                builder.build_kernel(options, |builder| {
-                    let $first = $first::def_param(builder);
-                    $(let $rest = $rest::def_param(builder);)*
-                    self($first, $($rest,)*)
-                })
-            }
-        }
-        impl_kernel_build_for_fn!($($rest)*);
-    };
-}
-impl_kernel_build_for_fn!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);

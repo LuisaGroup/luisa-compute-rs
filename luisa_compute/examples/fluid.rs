@@ -118,24 +118,25 @@ fn main() {
         }
     );
 
-    let advect = device
-        .create_kernel_async::<fn(Buffer<Float2>, Buffer<Float2>, Buffer<f32>, Buffer<f32>)>(
-            track!(&|u0, u1, rho0, rho1| {
-                let coord = dispatch_id().xy();
-                let u = u0.read(index(coord));
+    let advect = Kernel::<fn(Buffer<Float2>, Buffer<Float2>, Buffer<f32>, Buffer<f32>)>::new_async(
+        &device,
+        track!(|u0, u1, rho0, rho1| {
+            let coord = dispatch_id().xy();
+            let u = u0.read(index(coord));
 
-                // trace backward
-                let mut p = Float2::expr(coord.x.as_f32(), coord.y.as_f32());
-                p = p - u * dt;
+            // trace backward
+            let mut p = Float2::expr(coord.x.as_f32(), coord.y.as_f32());
+            p = p - u * dt;
 
-                // advect
-                u1.write(index(coord), sample_vel(u0, p.x, p.y));
-                rho1.write(index(coord), sample_float(rho0, p.x, p.y));
-            }),
-        );
+            // advect
+            u1.write(index(coord), sample_vel(u0, p.x, p.y));
+            rho1.write(index(coord), sample_float(rho0, p.x, p.y));
+        }),
+    );
 
-    let divergence =
-        device.create_kernel_async::<fn(Buffer<Float2>, Buffer<f32>)>(track!(&|u, div| {
+    let divergence = Kernel::<fn(Buffer<Float2>, Buffer<f32>)>::new_async(
+        &device,
+        track!(|u, div| {
             let coord = dispatch_id().xy();
             if coord.x < (N_GRID as u32 - 1) && coord.y < (N_GRID as u32 - 1) {
                 let dx = (u.read(index(Uint2::expr(coord.x + 1, coord.y))).x
@@ -146,10 +147,12 @@ fn main() {
                     * 0.5;
                 div.write(index(coord), dx + dy);
             }
-        }));
+        }),
+    );
 
-    let pressure_solve = device.create_kernel_async::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>(
-        track!(&|p0, p1, div| {
+    let pressure_solve = Kernel::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>::new_async(
+        &device,
+        track!(|p0, p1, div| {
             let coord = dispatch_id().xy();
             let i = coord.x.as_i32();
             let j = coord.y.as_i32();
@@ -166,8 +169,9 @@ fn main() {
         }),
     );
 
-    let pressure_apply =
-        device.create_kernel_async::<fn(Buffer<f32>, Buffer<Float2>)>(track!(&|p, u| {
+    let pressure_apply = Kernel::<fn(Buffer<f32>, Buffer<Float2>)>::new_async(
+        &device,
+        track!(|p, u| {
             let coord = dispatch_id().xy();
             let i = coord.x.as_i32();
             let j = coord.y.as_i32();
@@ -184,10 +188,12 @@ fn main() {
 
                 u.write(ij, u.read(ij) - f_p);
             }
-        }));
+        }),
+    );
 
-    let integrate =
-        device.create_kernel_async::<fn(Buffer<Float2>, Buffer<f32>)>(track!(&|u, rho| {
+    let integrate = Kernel::<fn(Buffer<Float2>, Buffer<f32>)>::new_async(
+        &device,
+        track!(|u, rho| {
             let coord = dispatch_id().xy();
             let ij = index(coord);
 
@@ -199,10 +205,12 @@ fn main() {
 
             // fade
             rho.write(ij, rho.read(ij) * (1.0f32 - 0.1f32 * dt));
-        }));
+        }),
+    );
 
-    let init = device.create_kernel_async::<fn(Buffer<f32>, Buffer<Float2>, Float2)>(track!(
-        &|rho, u, dir| {
+    let init = Kernel::<fn(Buffer<f32>, Buffer<Float2>, Float2)>::new_async(
+        &device,
+        track!(|rho, u, dir| {
             let coord = dispatch_id().xy();
             let i = coord.x.as_i32();
             let j = coord.y.as_i32();
@@ -214,10 +222,10 @@ fn main() {
                 rho.write(ij, 1.0f32);
                 u.write(ij, dir);
             }
-        }
-    ));
+        }),
+    );
 
-    let init_grid = device.create_kernel_async::<fn()>(&|| {
+    let init_grid = Kernel::<fn()>::new_async(&device, || {
         let idx = index(dispatch_id().xy());
         u0.var().write(idx, Float2::expr(0.0f32, 0.0f32));
         u1.var().write(idx, Float2::expr(0.0f32, 0.0f32));
@@ -230,21 +238,24 @@ fn main() {
         div.var().write(idx, 0.0f32);
     });
 
-    let clear_pressure = device.create_kernel_async::<fn()>(&|| {
+    let clear_pressure = Kernel::<fn()>::new_async(&device, || {
         let idx = index(dispatch_id().xy());
         p0.var().write(idx, 0.0f32);
         p1.var().write(idx, 0.0f32);
     });
 
-    let draw_rho = device.create_kernel_async::<fn()>(&track!(|| {
-        let coord = dispatch_id().xy();
-        let ij = index(coord);
-        let value = rho0.var().read(ij);
-        display.var().write(
-            Uint2::expr(coord.x, (N_GRID - 1) as u32 - coord.y),
-            Float4::expr(value, 0.0f32, 0.0f32, 1.0f32),
-        );
-    }));
+    let draw_rho = Kernel::<fn()>::new_async(
+        &device,
+        track!(|| {
+            let coord = dispatch_id().xy();
+            let ij = index(coord);
+            let value = rho0.var().read(ij);
+            display.var().write(
+                Uint2::expr(coord.x, (N_GRID - 1) as u32 - coord.y),
+                Float4::expr(value, 0.0f32, 0.0f32, 1.0f32),
+            );
+        }),
+    );
 
     event_loop.run(move |event, _, control_flow| {
         control_flow.set_poll();

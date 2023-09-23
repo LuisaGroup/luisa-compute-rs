@@ -149,31 +149,8 @@ impl Printer {
             count_per_arg: args.count_per_arg,
         });
     }
-    pub fn reset(&self) -> PrinterReset {
-        PrinterReset { inner: self }
-    }
-    pub fn print(&self) -> PrinterPrint {
-        PrinterPrint { inner: self }
-    }
 }
-pub struct PrinterPrint<'a> {
-    inner: &'a Printer,
-}
-pub struct PrinterReset<'a> {
-    inner: &'a Printer,
-}
-impl<'a> std::ops::Shl<PrinterPrint<'a>> for &'a Scope<'a> {
-    type Output = Self;
-    fn shl(self, rhs: PrinterPrint<'a>) -> Self::Output {
-        self.print(rhs.inner)
-    }
-}
-impl<'a> std::ops::Shl<PrinterReset<'a>> for &'a Scope<'a> {
-    type Output = Self;
-    fn shl(self, rhs: PrinterReset<'a>) -> Self::Output {
-        self.reset_printer(rhs.inner)
-    }
-}
+
 impl<'a> Scope<'a> {
     pub fn reset_printer(&self, printer: &Printer) -> &Self {
         printer

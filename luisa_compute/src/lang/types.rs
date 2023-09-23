@@ -62,7 +62,7 @@ pub trait ExprProxy: Copy + 'static {
 /// For example, `Var<[f32; 4]>` dereferences to `ArrayVar<f32, 4>`, which
 /// exposes [`Index`](std::ops::Index) and [`IndexMut`](std::ops::IndexMut)
 /// impls.
-pub trait VarProxy: Copy + 'static {
+pub trait VarProxy: Copy + 'static + Deref<Target = Expr<Self::Value>> {
     type Value: Value<Var = Self>;
     fn as_var_from_proxy(&self) -> &Var<Self::Value>;
 

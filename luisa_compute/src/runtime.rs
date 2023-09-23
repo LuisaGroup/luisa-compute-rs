@@ -401,12 +401,14 @@ impl Device {
         }
     }
 
-    /// Compile a [`KernelDef`] into a [`Kernel`]. See [`Kernel`] for more details on kernel creation
+    /// Compile a [`KernelDef`] into a [`Kernel`]. See [`Kernel`] for more
+    /// details on kernel creation
     pub fn compile_kernel<S: KernelSignature>(&self, k: &KernelDef<S>) -> Kernel<S> {
         self.compile_kernel_with_options(k, KernelBuildOptions::default())
     }
 
-    /// Compile a [`KernelDef`] into a [`Kernel`] asynchronously. See [`Kernel`] for more details on kernel creation
+    /// Compile a [`KernelDef`] into a [`Kernel`] asynchronously. See [`Kernel`]
+    /// for more details on kernel creation
     pub fn compile_kernel_async<S: KernelSignature>(&self, k: &KernelDef<S>) -> Kernel<S> {
         self.compile_kernel_with_options(
             k,
@@ -417,7 +419,8 @@ impl Device {
         )
     }
 
-    /// Compile a [`KernelDef`] into a [`Kernel`] with options. See [`Kernel`] for more details on kernel creation
+    /// Compile a [`KernelDef`] into a [`Kernel`] with options. See [`Kernel`]
+    /// for more details on kernel creation
     pub fn compile_kernel_with_options<S: KernelSignature>(
         &self,
         k: &KernelDef<S>,
@@ -1084,7 +1087,11 @@ impl RawKernel {
         }
     }
 
-    pub fn dispatch_async(&self, args: KernelArgEncoder, dispatch_size: [u32; 3]) -> Command {
+    pub fn dispatch_async(
+        &self,
+        args: KernelArgEncoder,
+        dispatch_size: [u32; 3],
+    ) -> Command<'static> {
         let mut rt = ResourceTracker::new();
         rt.add(Arc::new(args.uniform_data));
         let args = args.args;
@@ -1218,8 +1225,8 @@ pub struct KernelDef<T: KernelSignature> {
 /// use luisa_compute::prelude::*;
 /// let ctx = Context::new(std::env::current_exe().unwrap());
 /// let device = ctx.create_device("cpu");
-/// let kernel = KernelDef::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>::new(&device, track!(|a,b,c|{  }));
-/// // Compilation:
+/// let kernel = KernelDef::<fn(Buffer<f32>, Buffer<f32>,
+/// Buffer<f32>)>::new(&device, track!(|a,b,c|{  })); // Compilation:
 /// let kernel = device.compile_kernel(&kernel);
 /// ```
 /// - Recording and compilation in one step:
@@ -1227,11 +1234,10 @@ pub struct KernelDef<T: KernelSignature> {
 /// use luisa_compute::prelude::*;
 /// let ctx = Context::new(std::env::current_exe().unwrap());
 /// let device = ctx.create_device("cpu");
-/// let kernel = Kernel::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>::new(&device, track!(|a,b,c|{ }));
-/// ```
+/// let kernel = Kernel::<fn(Buffer<f32>, Buffer<f32>,
+/// Buffer<f32>)>::new(&device, track!(|a,b,c|{ })); ```
 /// - Asynchronous compilation use [`Kernel::<T>::new_async`]
 /// - Custom build options using [`Kernel::<T>::new_with_options`]
-///
 pub struct Kernel<T: KernelSignature> {
     pub(crate) inner: RawKernel,
     pub(crate) _marker: PhantomData<T>,
@@ -1335,10 +1341,10 @@ macro_rules! impl_dispatch_for_kernel {
             }
             #[allow(non_snake_case)]
             #[allow(unused_mut)]
-            pub fn dispatch_async<'a>(
-                &'a self,
+            pub fn dispatch_async(
+                &self,
                 dispatch_size: [u32; 3], $($Ts:&impl AsKernelArg<$Ts>),*
-            ) -> Command<'a> {
+            ) -> Command<'static> {
                 let mut encoder = KernelArgEncoder::new();
                 $($Ts.encode(&mut encoder);)*
                 self.inner.dispatch_async(encoder, dispatch_size)

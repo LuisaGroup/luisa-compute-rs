@@ -447,12 +447,12 @@ impl Device {
             ShaderArtifact::Sync(self.inner.create_shader(&module, &shader_options))
         };
         Kernel {
-            inner: RawKernel {
+            inner: Arc::new(RawKernel {
                 device: self.clone(),
                 artifact,
                 module,
                 resource_tracker: k.inner.resource_tracker.clone(),
-            },
+            }),
             _marker: PhantomData {},
         }
     }
@@ -885,7 +885,12 @@ pub struct RawKernel {
     pub(crate) resource_tracker: ResourceTracker,
     pub(crate) module: CArc<KernelModule>,
 }
-
+impl Drop for RawKernel {
+    fn drop(&mut self) {
+        let shader = self.unwrap();
+        self.device.inner.destroy_shader(shader);
+    }
+}
 pub struct CallableArgEncoder {
     pub(crate) args: Vec<NodeRef>,
 }
@@ -1088,12 +1093,13 @@ impl RawKernel {
     }
 
     pub fn dispatch_async(
-        &self,
+        self: &Arc<Self>,
         args: KernelArgEncoder,
         dispatch_size: [u32; 3],
     ) -> Command<'static> {
         let mut rt = ResourceTracker::new();
         rt.add(Arc::new(args.uniform_data));
+        rt.add(self.clone());
         let args = args.args;
         let args = Arc::new(args);
         rt.add(args.clone());
@@ -1109,7 +1115,7 @@ impl RawKernel {
             callback: None,
         }
     }
-    pub fn dispatch(&self, args: KernelArgEncoder, dispatch_size: [u32; 3]) {
+    pub fn dispatch(self: &Arc<Self>, args: KernelArgEncoder, dispatch_size: [u32; 3]) {
         submit_default_stream_and_sync(&self.device, vec![self.dispatch_async(args, dispatch_size)])
     }
 }
@@ -1221,12 +1227,13 @@ pub struct KernelDef<T: KernelSignature> {
 /// Kernel creation can be done in multiple ways:
 /// - Seperate recording and compilation:
 /// ```no_run
-//// // Recording:
+/// // Recording:
 /// use luisa_compute::prelude::*;
 /// let ctx = Context::new(std::env::current_exe().unwrap());
 /// let device = ctx.create_device("cpu");
 /// let kernel = KernelDef::<fn(Buffer<f32>, Buffer<f32>,
-/// Buffer<f32>)>::new(&device, track!(|a,b,c|{  })); // Compilation:
+/// Buffer<f32>)>::new(&device, track!(|a,b,c|{  })); 
+/// // Compilation:
 /// let kernel = device.compile_kernel(&kernel);
 /// ```
 /// - Recording and compilation in one step:
@@ -1235,11 +1242,12 @@ pub struct KernelDef<T: KernelSignature> {
 /// let ctx = Context::new(std::env::current_exe().unwrap());
 /// let device = ctx.create_device("cpu");
 /// let kernel = Kernel::<fn(Buffer<f32>, Buffer<f32>,
-/// Buffer<f32>)>::new(&device, track!(|a,b,c|{ })); ```
+/// Buffer<f32>)>::new(&device, track!(|a,b,c|{ }));
+/// ```
 /// - Asynchronous compilation use [`Kernel::<T>::new_async`]
 /// - Custom build options using [`Kernel::<T>::new_with_options`]
 pub struct Kernel<T: KernelSignature> {
-    pub(crate) inner: RawKernel,
+    pub(crate) inner: Arc<RawKernel>,
     pub(crate) _marker: PhantomData<T>,
 }
 unsafe impl<T: KernelSignature> Send for Kernel<T> {}

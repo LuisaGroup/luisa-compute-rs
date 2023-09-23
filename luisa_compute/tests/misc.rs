@@ -1083,3 +1083,27 @@ fn dyn_callable() {
         assert_eq!(w_data[i], i as i32 + 1000 * i as i32);
     }
 }
+
+#[test]
+fn dispatch_async() {
+    let device = get_device();
+    let x = device.create_buffer::<f32>(1024);
+    x.fill_fn(|i| i as f32);
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        track!(|| {
+            for _ in 0..10000000 {
+                let buf_x = x.var();
+                let tid = dispatch_id().x;
+                let x = buf_x.read(tid);
+                buf_x.write(tid, x + 1.0);
+            }
+        }),
+    );
+    let s = device.default_stream().scope();
+    s.submit([
+        kernel.dispatch_async([1024, 1, 1]),
+        kernel.dispatch_async([1024, 1, 1]),
+    ]);
+    drop(kernel);
+}

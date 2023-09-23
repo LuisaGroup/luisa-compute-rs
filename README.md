@@ -275,7 +275,7 @@ pub struct MyVec2 {
 impl MyVec2Expr {
   // pass arguments using `AsExpr` so that they accept both Var and Expr
   #[tracked]
-  pub fn dot(&self, other:AsExpr<Value=MyVec2>) {
+  pub fn dot(&self, other: impl AsExpr<Value=MyVec2>) {
     self.x * other.x + self.y * other.y
   }
 }

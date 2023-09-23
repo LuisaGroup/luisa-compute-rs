@@ -213,11 +213,11 @@ where
     Expr<T::Join>: MinMaxThis,
 {
     type Output = <Expr<T::Join> as MinMaxThis>::Output;
-    fn min_expr(self, other: S) -> Self::Output {
-        Expr::<T::Join>::_min_expr(Self::lift_self(self), Self::lift_other(other))
+    fn min_(self, other: S) -> Self::Output {
+        Expr::<T::Join>::_min_(Self::lift_self(self), Self::lift_other(other))
     }
-    fn max_expr(self, other: S) -> Self::Output {
-        Expr::<T::Join>::_max_expr(Self::lift_self(self), Self::lift_other(other))
+    fn max_(self, other: S) -> Self::Output {
+        Expr::<T::Join>::_max_(Self::lift_self(self), Self::lift_other(other))
     }
 }
 
@@ -225,13 +225,13 @@ pub fn min<T, S>(x: T, y: S) -> <T as MinMaxExpr<S>>::Output
 where
     T: MinMaxExpr<S>,
 {
-    x.min_expr(y)
+    x.min_(y)
 }
 pub fn max<T, S>(x: T, y: S) -> <T as MinMaxExpr<S>>::Output
 where
     T: MinMaxExpr<S>,
 {
-    x.max_expr(y)
+    x.max_(y)
 }
 
 impl<T: Value, S, U> ClampExpr<S, U> for Expr<T>

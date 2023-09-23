@@ -166,8 +166,8 @@ macro_rules! assignop_trait {
 ops_trait!(MinMaxExpr<T>[MinMaxThis] {
     type Output;
 
-    fn max_expr[_max_expr](self, other: T);
-    fn min_expr[_min_expr](self, other: T);
+    fn max_[_max_](self, other: T);
+    fn min_[_min_](self, other: T);
 });
 
 ops_trait!(ClampExpr<A, B>[ClampThis] {
@@ -211,7 +211,7 @@ pub trait IntExpr {
 
 pub trait FloatExpr: Sized {
     type Bool;
-
+    
     fn ceil(&self) -> Self;
     fn floor(&self) -> Self;
     fn round(&self) -> Self;

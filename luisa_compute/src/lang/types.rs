@@ -298,7 +298,7 @@ impl<T: Value> Expr<T> {
         let node = __current_scope(|s| s.bitcast(self.node(), ty));
         Expr::<S>::from_node(node)
     }
-    pub fn _type_tag(&self)->TypeTag<T> {
+    pub fn _type_tag(&self) -> TypeTag<T> {
         TypeTag(PhantomData)
     }
 }
@@ -350,9 +350,7 @@ impl<T: Value> AtomicRef<T> {
 }
 
 pub fn _deref_proxy<P: VarProxy>(proxy: &P) -> &Expr<P::Value> {
-    unsafe { &*(proxy as *const P as *const Var<P::Value>) }
-        .load()
-        ._ref()
+    proxy.as_var_from_proxy().load()._ref()
 }
 
 #[macro_export]

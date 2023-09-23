@@ -1,6 +1,8 @@
 # luisa-compute-rs
 Rust frontend to LuisaCompute and more! Unified API and embedded DSL for high performance computing on stream architectures. 
 
+*Warning:* while the project is already usable, it is not stable and **breaking changes** can happend at any time without notification.
+
 To see the use of `luisa-compute-rs` in a high performance offline rendering system, checkout [our research renderer](https://github.com/shiinamiyuki/akari_render)
 ## Table of Contents
 - [luisa-compute-rs](#luisa-compute-rs)
@@ -15,10 +17,11 @@ To see the use of `luisa-compute-rs` in a high performance offline rendering sys
     - [Debuggability](#debuggability)
   - [Usage](#usage)
     - [Building](#building)
+    - [`track!` and #[tracked] Macro](#track-and-tracked-macro)
     - [Variables and Expressions](#variables-and-expressions)
     - [Builtin Functions](#builtin-functions)
     - [Control Flow](#control-flow)
-    - [`track!` Mcro](#track-mcro)
+
     - [Custom Data Types](#custom-data-types)
     - [Polymorphism](#polymorphism)
     - [Autodiff](#autodiff)
@@ -61,16 +64,16 @@ fn main() {
     let z = device.create_buffer::<f32>(1024);
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
-    let kernel = device.create_kernel::<fn(Buffer<f32>)>(&|buf_z| {
+    let kernel = Kernel::<fn(Buffer<f32>)>::new(&device, |buf_z| {
         // z is pass by arg
         let buf_x = x.var(); // x and y are captured
         let buf_y = y.var();
-        let tid = dispatch_id().x();
+        let tid = dispatch_id().x;
         let x = buf_x.read(tid);
         let y = buf_y.read(tid);
         let vx = 0.0f32.var(); // create a local mutable variable
-        *vx.get_mut() += x;
-        buf_z.write(tid, vx.load() + y);
+        *vx += x;
+        buf_z.write(tid, vx + y);
     });
     kernel.dispatch([1024, 1, 1], &z);
     let z_data = z.view(..).copy_to_vec();
@@ -126,95 +129,127 @@ In your project, the following to your files:
 use luisa_compute as luisa;
 use luisa::prelude::*;
 ```
-### Variables and Expressions
-There are six basic types in EDSL. `bool`, `i32`, `u32`, `i64`, `u64`, `f32`. (`f64` support might be added to CPU backend).
-For each type, there are two EDSL proxy objects `Expr<T>` and `Var<T>`. `Expr<T>` is an immutable object that represents a value. `Var<T>` is a mutable object that represents a variable. To load values from `Var<T>`, use `*var` and to obtain a mutable reference for assignment, use `v.get_mut()`. E.g. `*v.get_mut() = f(*u)`.
 
-*Note*: Every DSL object in host code **must** be immutable due to Rust unable to overload `operator =`. For example:
+### `track!` and `#[tracked]` Macro
+To start writing using DSL, let's first introduce the `track!` macro. `track!( expr )` rewrites `expr` and redirect operators/control flows to DSL's internal traits. It resolves the fundamental issue that Rust is unable to overload `operator=`.
+
+**Every operation involving a DSL object must be enclosed within `track!`**, except `Var<T>::store()` and `Var<T>::load()`
+
+For, example:
+```rust
+let a = 1.0f32.expr();
+let b = 1.0f32.expr();
+let c = a + b; // Compile error
+
+let c = track!(a + b); // c is now 2.0
+
+// Or even better,
+track!({
+  let a = 1.0f32.expr();
+  let b = 1.0f32.expr();
+  let c = a + b;
+});
+```
+We also offer a `#[tracked]` macro that applies to a function. It transform the body of the function using `track!`.
+ ```rust
+#[tracked]
+fn add(a:Expr<f32>, b:Expr<f32>)->Expr<f32> {
+  a + b
+}
+
+However, not every kernel can be constructed using `track!` code only. We still need the ability to use native control flow directly in kernel. 
+
+For example, we can use native `for` loops to unroll a DSL loop. We first starts with a native version using DSL loops.
+```rust
+#[tracked]
+fn pow_naive(x:Expr<f32>, i:u32)->Expr<f32> {
+  let p = 1.0f32.var();
+  for _ in 0..i {
+    p *= x;
+  }
+  **p // converts Var<f32> to Expr<f32>, only required when passing a Var<T> to fn(Expr<T>) and return from fn(...)->Expr<T>
+}
+```
+To unroll the loop, we basically just what the DSL to produce `p*=x` for `i` times. We can use the `escape!(expr)` macro so that it leaves `expr` as is, preserving the native loop. 
+```rust
+#[tracked]
+fn pow_unrolled(x:Expr<f32>, i:u32)->Expr<f32> {
+  let p = 1.0f32.var();
+  escape!({
+    for _ in 0..i {
+      track!({
+        p *= x;
+      });
+  });
+  **p 
+}
+```
+
+
+### Variables and Expressions
+We support the following primitive types on backend `bool`, `i32`, `u32`, `i64`, `u64`, `f32`. Additional primitive types such as `u8`, `i8`, `i16`, `u16`, and `f64` are supported on some backends.
+For each type, there are two EDSL proxy objects `Expr<T>` and `Var<T>`. `Expr<T>` is an immutable object that represents a value. `Var<T>` is also an **immutable** object that represents a variable (mutable value). 
+
+**Warning**: Every DSL object in host code **must** be immutable due to Rust unable to overload `operator =`. Attempting to circumvent this limitation using `Cell` and `RefCell` would likely result in uncompilable kernels/wrong results.
+For example:
 ```rust
 // **no good**
-let mut v = 0.0f32.expr();
-if_!(cond, {
-    v += 1.0;
-});
-
-// also **not good**
 let v = Cell::new(0.0f32.expr());
-if_!(cond, {
-    v.set(v.get() + 1.0);
-});
+track!(if cond {
+  v.set(v.get() + 1.0);
+));
 
 // **good**
 let v = 0.0f32.var();
-if_!(cond, {
-    *v.get_mut() += 1.0;
-});
-```
-*Note*: You should not store the referene obtained by `v.get_mut()` for repeated use, as the assigned value is only updated when `v.get_mut()` is dropped. For example,:
-```rust
-let v = 0.0f32.var();
-let bad = v.get_mut();
-*bad = 1.0;
-let u = *v;
-drop(bad);
-cpu_dbg!(u); // prints 0.0
-cpu_dbg!(*v); // prints now 1.0
-```
+track!(if cond {
+  *v += 1.0;
+));
+
 All operations except load/store should be performed on `Expr<T>`. `Var<T>` can only be used to load/store values.
 
-As in the C++ EDSL, we additionally supports the following vector/matrix types. Their proxy types are `XXXExpr` and `XXXVar`:
+As in the C++ EDSL, we additionally supports the vector of length 2-4 for all primitives and float square matrices with dimension 2-4 such as 
 
 ```rust
-Bool2 // bool2 in C++
-Bool3 // bool3 in C++
-Bool4 // bool4 in C++
-Float2 // float2 in C++
-Float3 // float3 in C++
-Float4 // float4 in C++
-Int2 // int2 in C++
-Int3 // int3 in C++
-Int4 // int4 in C++
-Uint2 // uint2 in C++
-Uint3 // uint3 in C++
-Uint4 // uint4 in C++
-Mat2 // float2x2 in C++
-Mat3 // float3x3 in C++
-Mat4 // float4x4 in C++
-```
-Array types `[T;N]` are also supported and their proxy types are `ArrayExpr<T, N>` and `ArrayVar<T, N>`. Call `arr.read(i)` and `arr.write(i, value)` on `ArrayVar<T, N>` for element access. `ArrayExpr<T,N>` can be stored to and loaded from `ArrayVar<T, N>`. The limitation is however the array length must be determined during host compile time. If runtime length is required, use `VLArrayVar<T>`. `VLArrayVar<T>::zero(length: usize)` would create a zero initialized array. Similarly you can use `read` and `write` methods as well. To query the length of a `VLArrayVar<T>` in host, use `VLArrayVar<T>::static_len()->usize`. To query the length in kernel, use `VLArrayVar<T>::len()->Expr<u32>`
+luisa_compute::lang::types::vector::alias::{
+  Bool2 
+  Bool3 
+  Bool4 
+  Float2 
+  Float3 
+  Float4
+  Int2
+  Int3 
+  Int4 
+  Uint2
+  Uint3 
+  Uint4
+};
 
-Most operators are already overloaded with the only exception is comparision. We cannot overload comparision operators as `PartialOrd` cannot return a DSL type. Instead, use `cmpxx` methods such as `cmpgt, cmpeq`, etc. To cast a primitive/vector into another type, use `v.type()`. For example:
+luisa_compute::lang::types::vector::{Mat2, Mat3, Mat4};
+```
+
+Array types `[T;N]` are also supported. Call `arr.read(i)` and `arr.write(i, value)` on `ArrayVar<T, N>` for element access. `ArrayExpr<T,N>` can be stored to and loaded from `ArrayVar<T, N>`. The limitation is however the array length must be determined during host compile time. If runtime length is required, use `VLArrayVar<T>`. `VLArrayVar<T>::zero(length: usize)` would create a zero initialized array. Similarly you can use `read` and `write` methods as well. To query the length of a `VLArrayVar<T>` in host, use `VLArrayVar<T>::static_len()->usize`. To query the length in kernel, use `VLArrayVar<T>::len()->Expr<u32>`
+
+Most operators are already overloaded with the only exception is comparision. We cannot overload comparision operators as `PartialOrd` cannot return a DSL type. Instead, use `cmpxx` methods such as `cmpgt, cmpeq`, etc. To cast a primitive/vector into another type, use `v.as_::<Type>()`, `v.as_Type()` and `v.as_PrimitiveType()`. For example:
 ```rust
 let iv = Int2::expr(1, 1, 1);
-let fv = iv.float(); //fv is Expr<Float2>
-let bv = fv.bool(); // bv is Expr<Bool2>
+let fv = iv.as_::<Float2>(); //fv is Expr<Float2>
+let also_fv = iv.as_float2();
+let also_fv = iv.cast_f32(); 
 ```
 To perform a bitwise cast, use the `bitcast` function. `let fv:Expr<f32> = bitcast::<u32, f32>(0u32);`
 
 ### Builtin Functions
 
-We have extentded primitive types with methods similar to their host counterpart: `v.sin(), v.max(u)`, etc. Most methods accepts both a `Expr<T>` or a literal like `0.0`. However, the `select` function is slightly different as it does not accept literals. You need to use `select(cond, f_var, 1.0f32.expr())`.
+We have extentded primitive types with methods similar to their host counterpart: `v.sin(), luisa::max(a, b)`, etc. Most methods accepts both a `Expr<T>` or a literal such as `0.0`. However, the `select` function is slightly different as it does not accept literals. You need to use `select(cond, f_var, 1.0f32.expr())`.
 
 ### Control Flow
-*Note*, you cannot modify outer scope variables inside a control flow block by declaring the variable as `mut`. To modify outer scope variables, use `Var<T>` instead and call *var.get_mut() = value` to store the value back to the outer scope.
+*Note*, you cannot modify outer scope variables inside a control flow block by declaring the variable as `mut`. To modify outer scope variables, use `Var<T>` instead and store the value back to the outer scope.
 
-If, while, break, continue are supported. Note that `if` and `switch` works similar to native Rust `if` and `match` in that values can be returned at the end of the block.
+`if`, `while`, `break`, `continue`, `return` and `loop` are supported via `tracked!` macro. It is also possible to construct these control flows without `track!`. 
 
-
+The `switch_` statement has to be constructe manually inside a `escape!` block. For example,
 ```rust
-if_!(cond, { /* then */});
-if_!(cond, { /* then */}, { /* else */});
-if_!(cond, { value_a }, { value_b })
-while_!(cond, { /* body */});
-for_range(start..end, |i| { /* body */});
-/* For loops in C-style are mapped to generic loops
-for(init; cond; update) { body } is mapped to:
-init;
-generic_loop(cond, body, update)
-*/
-generic_loop(|| -> Expr<bool>{ /*cond*/ }, || { /* body */}, || { /* update after each iteration */})
-break_();
-continue_();
 let (x,y) = switch::<(Expr<i32>, Expr<f32>)>(value)
     .case(1, || { ... })
     .case(2, || { ... })
@@ -222,73 +257,57 @@ let (x,y) = switch::<(Expr<i32>, Expr<f32>)>(value)
     .finish();
 ```
 
-### `track!` Mcro
-
-We also offer a `track!` macro that automatically rewrites control flow primitves and comparison operators. For example (from [`examples/mpm.rs`](luisa_compute/examples/mpm.rs)):
-
-```rust
-track!(|| {
-    // ...
-    let vx = select(
-        coord.x() < BOUND && (vx < 0.0f32)
-            || coord.x() + BOUND > N_GRID as u32 && (vx > 0.0f32),
-        0.0f32.into(),
-        vx,
-    );
-    let vy = select(
-        coord.y() < BOUND && (vy < 0.0f32)
-            || coord.y() + BOUND > N_GRID as u32 && (vy > 0.0f32),
-        0.0f32.into(),
-        vy,
-    );
-    // ...
-})
-```
-is equivalent to:
-```rust
-|| {
-    // ...
-    let vx = select(
-        (coord.x().cmplt(BOUND) & vx.cmplt(0.0f32))
-            | (coord.x() + BOUND).cmpgt(N_GRID as u32) & vx.cmpgt(0.0f32),
-        0.0f32.into(),
-        vx,
-    );
-    let vy = select(
-        (coord.y().cmplt(BOUND) & vy.cmplt(0.0f32))
-            | (coord.y() + BOUND).cmpgt(N_GRID as u32) & vy.cmpgt(0.0f32),
-        0.0f32.into(),
-        vy,
-    );
-    // ...
-}
-```
-Similarily,
-```rust
-track!(if cond { foo } else if bar { baz } else { qux })
-```
-will be converted to
-```rust
-if_!(cond, { foo }, { if_!(bar, { baz }, { qux }) })
-```
-
-Note that this macro will rewrite `while`, `for _ in x..y`, and `loop` expressions to versions using functions, which will then break the `break` and `continue` expressions. In order to avoid this, it's possible to use the `escape!` macro within a `track!` context to disable rewriting for an expression.
+**Warning**:  due to backend generates C-like source code instead of LLVM IR/PTX/DXIL directly, it is not possible to use `break` inside switch cases.
 
 ### Custom Data Types
-To add custom data types to the EDSL, simply derive from `Value` macro. Note that `#[repr(C)]` is required for the struct to be compatible with C ABI. The proxy types are `XXXExpr` and `XXXVar`:
+To add custom data types to the EDSL, simply derive from `Value` macro. Note that `#[repr(C)]` is required for the struct to be compatible with C ABI.
+`#[derive(Value)]` would generate two proxies types: `XXExpr` and `XXVar`. Implement your methods on these proxies instead of `Expr<T>` and `Var<T>` directly.
 
 ```rust
 #[derive(Copy, Clone, Default, Debug, Value)]
 #[repr(C)]
+#[value_new(pub)]
 pub struct MyVec2 {
     pub x: f32,
     pub y: f32,
 }
 
-let v = MyVec2.var();
-let sum = *v.x() + *v.y(); 
-*v.x().get_mut() += 1.0;
+impl MyVec2Expr {
+  // pass arguments using `AsExpr` so that they accept both Var and Expr
+  #[tracked]
+  pub fn dot(&self, other:AsExpr<Value=MyVec2>) {
+    self.x * other.x + self.y * other.y
+  }
+}
+impl MyVec2Var {
+  #[tracked]
+  pub fn set_to_one(&self) {
+    // you can access the current `Var<Self>` using `self_`
+    self.self_ = MyVec2::new_expr(1.0, 1.0);
+  }
+}
+
+track!({
+  let v = MyVec2::var_zeroed();
+  let sum = v.x +*v.y; 
+  *v.x += 1.0;
+  let v = MyVec2::from_comps_expr(MyVec2Comps{x:1.0f32.expr(), y:1.0f32.expr()});
+  let v = MyVec2::new_expr(1.0f32, 2.0f32); // only if #[value_new] is present
+});
+
+// You can also control the order of arguments in `#[value_new]`
+#[derive(Copy, Clone, Default, Debug, Value)]
+#[repr(C)]
+#[value_new(pub y, x)]
+pub struct Foo {
+    pub x: f32,
+    pub y: i32,
+}
+let v = MyVec2::new_expr(1.0fi32, 2.0f32);
+// v.x == 2.0
+// v.y == 1
 ```
+
 ### Polymorphism
 We prvoide a powerful `Polymorphic<DevirtualizationKey, dyn Trait>` construct as in the C++ DSL. See examples for more detail
 ```rust
@@ -302,7 +321,7 @@ pub struct Circle {
 }
 impl Area for CircleExpr {
     fn area(&self) -> Float32 {
-        PI * self.radius() * self.radius()
+        PI * self.radius * self.radius
     }
 }
 impl_polymorphic!(Area, Circle);
@@ -359,34 +378,34 @@ let result = my_add.call(args);
 Users can define device-only functions using Callables. Callables have similar type signature to kernels: `Callable<fn(Args)->Ret>`. 
 The difference is that Callables are not dispatchable and can only be called from other Callables or Kernels. Callables can be created using `Device::create_callable`. To invoke a Callable, use `Callable::call(args...)`. Callables accepts arguments such as resources (`BufferVar<T>`, .etc), expressions and references (pass a `Var<T>` to the callable). For example:
 ```rust
-let add = device.create_callable::<fn(Expr<f32>, Expr<f32>)-> Expr<f32>>(&|a, b| {
+let add = Callable::<fn(Expr<f32>, Expr<f32>)-> Expr<f32>>::new(&device, track!(|a, b| {
     a + b
-});
+}));
 let z = add.call(x, y);
-let pass_by_ref = device.create_callable::<fn(Var<f32>)>(&|a| {
-    *a.get_mut() += 1.0;
-});
+let pass_by_ref =  Callable::<fn(Var<f32>)>::new(&device, track!(|a| {
+   a += 1.0;
+}));
 let a = 1.0f32.var();
 pass_by_ref.call(a);
 cpu_dbg!(*a); // prints 2.0
 ```
 ***Note***: You cannot record a callable when recording another kernel or callables. This is because a callable can capture outer variables such as buffers. However, capturing local variables define in another callable is undefined behavior. To avoid this, we disallow recording a callable when recording another callable or kernel. 
 ```rust
-let add = device.create_callable::<fn(Expr<f32>, Expr<f32>)-> Expr<f32>>(&|a, b| {
+let add = Callable::<fn(Expr<f32>, Expr<f32>)-> Expr<f32>>::new(&device, track!(|a, b| {
     // runtime error!
-    let another_add = device.create_callable::<fn(Expr<f32>, Expr<f32>)-> Expr<f32>>(&|a, b| {
+    let another_add = Callable::<fn(Expr<f32>, Expr<f32>)-> Expr<f32>>::new(&device, track!(|a, b| {
         a + b
-    });
+    }));
     a + b
-});
+}));
 ```
 
 ***However, we acknowledge that recording a callable inside another callable/kernel is a useful feature***. Thus we provide two ways to workaround this limitation:
 1. Use static callables. A static callable does not capture any resources and thus can be safely recorded inside any callable/kernel. To create a static callable, use `create_static_callable(fn)`. For example,
 ```rust
 lazy_static! {
-    static ref ADD:Callable<fn(Expr<f32>, Expr<f32>)->Expr<f32>> = create_static_callable::<fn(Expr<f32>, Expr<f32>)->Expr<f32>>(|a, b| {
-    a + b
+    static ref ADD:Callable<fn(Expr<f32>, Expr<f32>)->Expr<f32>> = Callable::<fn(Expr<f32>, Expr<f32>)->Expr<f32>>::new_static(|a, b| {
+    track!(a + b)
 });
 }
 ADD.call(x, y);
@@ -395,13 +414,13 @@ ADD.call(x, y);
 2. Use `DynCallable`. These are callables that defer recording until being called. As a result, it requires you to pass a `'static` closure, avoiding the capture issue. To create a `DynCallable`, use `Device::create_dyn_callable(Box::new(fn))`. The syntax is the same as `create_callable`. Furthermore, `DynCallable` supports `DynExpr` and `DynVar`, which provides some capablitiy of implementing template/overloading inside EDSL.
 
 ```rust
-let add = device.create_callable::<fn(Expr<f32>, Expr<f32>)->Expr<f32>>(&|a, b| {
+let add = Callable::<fn(Expr<f32>, Expr<f32>)-> Expr<f32>>::new(&device, track!(|a, b| {
     // no error!
-    let another_add = device.create_dyn_callable::<fn(Expr<f32>, Expr<f32>)->Expr<f32>>(Box::new(|a, b| {
+    let another_add = DynCallable::<fn(Expr<f32>, Expr<f32>)-> Expr<f32>>::new(&device, track!(Box::new(|a, b| {
         a + b
-    }));
+    })));
     a + b
-});
+}));
 ```
 
 ### Kernel

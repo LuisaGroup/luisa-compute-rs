@@ -1,6 +1,7 @@
+use luisa::lang::ops::AddMaybeExpr;
 use luisa::lang::types::array::VLArrayVar;
-use luisa::lang::types::core::*;
 use luisa::lang::types::vector::alias::*;
+use luisa::lang::types::{core::*, ExprProxy};
 use luisa::prelude::*;
 use luisa_compute as luisa;
 use luisa_compute_api_types::StreamTag;
@@ -880,6 +881,38 @@ fn bindless_byte_buffer() {
         assert!(v1.a[i] == i as f32 * 2.0);
     }
 }
+
+// #[derive(Clone, Copy, Debug, Value, PartialEq)]
+// #[repr(C)]
+// #[value_new(pub)]
+// pub struct CustomAdd {
+//     i: f32,
+// }
+// impl std::ops::Add<Expr<CustomAdd>> for  CustomAddExpr {
+//     type Output = Expr<CustomAdd>;
+//     fn add(self, rhs: Expr<CustomAdd>) -> Self::Output {
+//         todo!()
+//     }
+// }
+// impl AddExpr<CustomAddExpr> for CustomAddExpr {
+//     type Output = Expr<CustomAdd>;
+//     #[tracked]
+//     fn add(self, rhs: CustomAddExpr) -> Expr<CustomAdd> {
+//         let rhs = rhs.as_expr_from_proxy();
+//         let self_ = self.self_.var();
+//         *self_.i += rhs.i;
+//         **self_
+//     }
+// }
+// impl AddMaybeExpr<CustomAddExpr, luisa_compute::lang::types::ExprType> for Expr<CustomAdd> {
+//     type Output = Expr<CustomAdd>;
+//     fn __add(self, rhs: CustomAddExpr) -> Self::Output {
+//         self.add(rhs)
+//     }
+// }
+// fn custom_add(a: Expr<CustomAdd>, b: Expr<CustomAdd>) -> Expr<CustomAdd> {
+//     track!(*a + b)
+// }
 
 #[derive(Clone, Copy, Debug, Value, PartialEq)]
 #[repr(C)]

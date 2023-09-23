@@ -4,10 +4,10 @@ use std::ops::*;
 use super::types::core::{Floating, Integral, Numeric, Primitive, Signed};
 use super::types::vector::{VectorAlign, VectorElement};
 
+mod cast_impls;
 mod impls;
 mod spread;
 mod traits;
-mod cast_impls;
 
 pub use spread::*;
 pub use traits::*;
@@ -24,8 +24,6 @@ pub trait Linear: Value {
     const N: usize;
     type Scalar: VectorElement;
     type WithScalar<S: VectorElement>: Linear<Scalar = S>;
-    // We don't actually know that the vector has equivalent vectors of every
-    // primitive type.
 }
 impl<T: VectorElement> Linear for T {
     const N: usize = 1;

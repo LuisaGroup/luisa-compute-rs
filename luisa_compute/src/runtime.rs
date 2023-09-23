@@ -1213,14 +1213,14 @@ pub struct KernelDef<T: KernelSignature> {
 /// An executable kernel
 /// Kernel creation can be done in multiple ways:
 /// - Seperate recording and compilation:
-/// ```no_run
+/// ```rust
 /// // Recording:
 /// let kernel = KernelDef::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>::new(&device, track!(|a,b,c|{ ... }));
 /// // Compilation:
 /// let kernel = device.compile_kernel(&kernel);
 /// ```
 /// - Recording and compilation in one step:
-/// ```no_run
+/// ```rust
 /// let kernel = Kernel::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>::new(&device, track!(|a,b,c|{ ... }));
 /// ```
 /// - Asynchronous compilation use [`Kernel::<T>::new_async`]

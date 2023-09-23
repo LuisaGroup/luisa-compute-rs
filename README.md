@@ -481,7 +481,7 @@ Safety checks such as OOB is generally not available for GPU backends. As it is 
 When using luisa-compute-rs in an academic project, we encourage you to cite
 ```bibtex
 @misc{LuisaComputeRust
-    author = {Xiaochun Tong},
+    author = {Xiaochun Tong, et al},
     year = {2023},
     note = {https://github.com/LuisaGroup/luisa-compute-rs},
     title = {Rust frontend to LuisaCompute}

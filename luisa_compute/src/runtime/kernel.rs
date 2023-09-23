@@ -104,7 +104,7 @@ impl KernelParameter for rtx::AccelVar {
 }
 
 pub trait KernelParameter {
-    type Arg: KernelArg<Parameter = Self>;
+    type Arg: KernelArg<Parameter = Self> + 'static;
     fn def_param(builder: &mut KernelBuilder) -> Self;
 }
 

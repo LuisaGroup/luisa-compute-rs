@@ -29,7 +29,7 @@ fn main() {
     let dy_gt = device.create_buffer::<f32>(1024);
     x.fill_fn(|i| i as f32);
     y.fill_fn(|i| 1.0 + i as f32);
-    let shader = device.create_kernel::<fn()>(track!(&|| {
+    let shader = Kernel::<fn()>::new(&device, track!(|| {
         let tid = dispatch_id().x;
         let buf_x = x.var();
         let buf_y = y.var();

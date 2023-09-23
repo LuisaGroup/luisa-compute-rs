@@ -40,7 +40,8 @@ pub mod prelude {
     pub use crate::resource::{IoTexel, StorageTexel, *};
     pub use crate::runtime::api::StreamTag;
     pub use crate::runtime::{
-        create_static_callable, Command, Device, KernelBuildOptions, Scope, Stream,
+        Callable, Command, Device, DynCallable, Kernel, KernelBuildOptions, KernelDef, Scope,
+        Stream,
     };
     pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, while_, Context};
 
@@ -155,6 +156,7 @@ impl Context {
     }
 }
 
+#[derive(Clone)]
 pub struct ResourceTracker {
     resources: Vec<Arc<dyn Any>>,
 }

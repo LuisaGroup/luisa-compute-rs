@@ -391,7 +391,7 @@ pub enum HitType {
 pub fn offset_ray_origin(p: Expr<Float3>, n: Expr<Float3>) -> Expr<Float3> {
     lazy_static! {
         static ref F: Callable<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>> =
-            create_static_callable::<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>>(|p, n| {
+            Callable::<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>>::new_static(|p, n| {
                 const ORIGIN: f32 = 1.0f32 / 32.0f32;
                 const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
                 const INT_SCALE: f32 = 256.0f32;
@@ -473,7 +473,7 @@ impl Deref for TriangleCandidate {
     }
 }
 impl ProceduralCandidate {
-    pub fn commit(&self, t: impl AsExpr<Value=f32>) {
+    pub fn commit(&self, t: impl AsExpr<Value = f32>) {
         let t = t.as_expr();
         __current_scope(|b| {
             b.call(

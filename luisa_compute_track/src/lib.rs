@@ -15,6 +15,7 @@ use pretty_assertions::assert_eq;
 struct TraceVisitor {
     trait_path: TokenStream,
     flow_path: TokenStream,
+    is_last_stmt: bool,
 }
 
 impl VisitMut for TraceVisitor {
@@ -22,16 +23,22 @@ impl VisitMut for TraceVisitor {
         let len = node.stmts.len();
         if len > 0 {
             for stmt in node.stmts[0..len - 1].iter_mut() {
+                let old = self.is_last_stmt;
+                self.is_last_stmt = false;
                 self.visit_stmt_mut(stmt);
+                self.is_last_stmt = old;
             }
-            visit_stmt_mut(self, node.stmts.last_mut().unwrap());
+            let old = self.is_last_stmt;
+            self.is_last_stmt = true;
+            self.visit_stmt_mut(node.stmts.last_mut().unwrap());
+            self.is_last_stmt = old;
         }
     }
     fn visit_stmt_mut(&mut self, node: &mut Stmt) {
         let span = node.span();
         match node {
             Stmt::Expr(_, semi) => {
-                if semi.is_none() {
+                if !self.is_last_stmt && semi.is_none() {
                     *semi = Some(Token![;](span));
                 }
             }
@@ -337,6 +344,7 @@ pub fn tracked(
 
 fn track_impl(mut ast: Expr) -> TokenStream {
     (TraceVisitor {
+        is_last_stmt: false,
         flow_path: quote!(::luisa_compute::lang::control_flow),
         trait_path: quote!(::luisa_compute::lang::ops),
     })

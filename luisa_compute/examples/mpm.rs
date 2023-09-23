@@ -130,7 +130,6 @@ fn main() {
                     grid_m.var().atomic_fetch_add(idx, weight * P_MASS);
                 });
             });
-            let _ = (); // WHAT?
         }),
     );
 

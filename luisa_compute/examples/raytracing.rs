@@ -1,7 +1,10 @@
 use std::env::current_exe;
 
 use image::Rgb;
-use luisa::lang::{types::vector::alias::*, types::vector::*, types::*, *};
+use luisa::lang::types::vector::alias::*;
+use luisa::lang::types::vector::*;
+use luisa::lang::types::*;
+use luisa::lang::*;
 use luisa::prelude::*;
 use luisa::rtx::{AccelBuildRequest, AccelOption, Ray};
 use luisa_compute as luisa;
@@ -36,29 +39,32 @@ fn main() {
     let img_w = 800;
     let img_h = 800;
     let img = device.create_tex2d::<Float4>(PixelStorage::Byte4, img_w, img_h, 1);
-    let rt_kernel = Kernel::<fn()>::new(&device,track!(|| {
-        let accel = accel.var();
-        let px = dispatch_id().xy();
-        let xy = px.as_::<Float2>() / Float2::expr(img_w as f32, img_h as f32);
-        let xy = 2.0 * xy - 1.0;
-        let o = Float3::expr(0.0, 0.0, -1.0);
-        let d = Float3::expr(xy.x, xy.y, 0.0) - o;
-        let d = d.normalize();
-        let ray = Ray::new_expr(
-            Expr::<[f32; 3]>::from(o),
-            1e-3,
-            Expr::<[f32; 3]>::from(d),
-            1e9,
-        );
-        let hit = accel.trace_closest(ray);
-        let img = img.view(0).var();
-        let color = select(
-            hit.valid(),
-            Float3::expr(hit.u, hit.v, 1.0),
-            Float3::expr(0.0, 0.0, 0.0),
-        );
-        img.write(px, Float4::expr(color.x, color.y, color.z, 1.0));
-    }));
+    let rt_kernel = Kernel::<fn()>::new(
+        &device,
+        track!(|| {
+            let accel = accel.var();
+            let px = dispatch_id().xy();
+            let xy = px.as_::<Float2>() / Float2::expr(img_w as f32, img_h as f32);
+            let xy = 2.0 * xy - 1.0;
+            let o = Float3::expr(0.0, 0.0, -1.0);
+            let d = Float3::expr(xy.x, xy.y, 0.0) - o;
+            let d = d.normalize();
+            let ray = Ray::new_expr(
+                Expr::<[f32; 3]>::from(o),
+                1e-3,
+                Expr::<[f32; 3]>::from(d),
+                1e9,
+            );
+            let hit = accel.trace_closest(ray);
+            let img = img.view(0).var();
+            let color = select(
+                hit.valid(),
+                Float3::expr(hit.u, hit.v, 1.0),
+                Float3::expr(0.0, 0.0, 0.0),
+            );
+            img.write(px, Float4::expr(color.x, color.y, color.z, 1.0));
+        }),
+    );
     let event_loop = EventLoop::new();
     let window = winit::window::WindowBuilder::new()
         .with_title("Luisa Compute Rust - Ray Tracing")

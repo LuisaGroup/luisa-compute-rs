@@ -303,7 +303,7 @@ macro_rules! impl_mat_proxy {
                 Func::Mul.call2(self, rhs)
             }
         }
-        
+
         impl MatExpr for Expr<$M> {
             type Scalar = Expr<f32>;
             type Value = $M;

@@ -1226,24 +1226,25 @@ pub struct KernelDef<T: KernelSignature> {
 /// An executable kernel
 /// Kernel creation can be done in multiple ways:
 /// - Seperate recording and compilation:
+///
 /// ```no_run
 /// // Recording:
 /// use luisa_compute::prelude::*;
 /// let ctx = Context::new(std::env::current_exe().unwrap());
 /// let device = ctx.create_device("cpu");
-/// let kernel = KernelDef::<fn(Buffer<f32>, Buffer<f32>,
-/// Buffer<f32>)>::new(&device, track!(|a,b,c|{  })); 
-/// // Compilation:
+/// let kernel = KernelDef::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>::new(&device, track!(|a,b,c|{  })); // Compilation:
 /// let kernel = device.compile_kernel(&kernel);
 /// ```
+///
 /// - Recording and compilation in one step:
+///
 /// ```no_run
 /// use luisa_compute::prelude::*;
 /// let ctx = Context::new(std::env::current_exe().unwrap());
 /// let device = ctx.create_device("cpu");
-/// let kernel = Kernel::<fn(Buffer<f32>, Buffer<f32>,
-/// Buffer<f32>)>::new(&device, track!(|a,b,c|{ }));
+/// let kernel = Kernel::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>::new(&device, track!(|a,b,c|{ }));
 /// ```
+///
 /// - Asynchronous compilation use [`Kernel::<T>::new_async`]
 /// - Custom build options using [`Kernel::<T>::new_with_options`]
 pub struct Kernel<T: KernelSignature> {

@@ -12,9 +12,9 @@ pub mod vector;
 
 // TODO: Check up on comments.
 
-/// A value that can be used in a [`Kernel`](crate::runtime::Kernel) or
-/// [`Callable`](crate::runtime::Callable). Call [`expr`](Value::expr) or
-/// [`var`](Value::var) to convert into a kernel-trackable type.
+/// A value that can be used in a [`Kernel`] or [`Callable`]. Call
+/// [`expr`](Value::expr) or [`var`](Value::var) to convert into a
+/// kernel-trackable type.
 pub trait Value: Copy + TypeOf + 'static {
     /// A proxy for additional impls on [`Expr<Self>`].
     type Expr: ExprProxy<Value = Self>;
@@ -139,8 +139,7 @@ impl<T: Value> AtomciRefProxyDataProxyData<T> {
         }
     }
 }
-/// An expression within a [`Kernel`](crate::runtime::Kernel) or
-/// [`Callable`](crate::runtime::Callable). Created from a raw value
+/// An expression within a [`Kernel`] or [`Callable`]. Created from a raw value
 /// using [`Value::expr`].
 ///
 /// Note that this does not store the value, and in order to get the result of a
@@ -158,8 +157,7 @@ pub struct Expr<T: Value> {
 #[repr(C)]
 pub struct TypeTag<T: Value>(PhantomData<T>);
 
-/// A variable within a [`Kernel`](crate::runtime::Kernel) or
-/// [`Callable`](crate::runtime::Callable). Created using [`Expr::var`]
+/// A variable within a [`Kernel`] or [`Callable`]. Created using [`Expr::var`]
 /// and [`Value::var`].
 ///
 /// Note that setting a `Var` using direct assignment will not work. Instead,

@@ -399,8 +399,8 @@ impl KernelBuilder {
 /// * `async_compile`: compile the kernel asynchronously
 /// * `enable_cache`: enable cache for the compiled kernel
 /// * `enable_fast_math`: enable fast math in the compiled kernel
-/// * `name`: name of the compiled kernel. On CUDA backend, this is the name of the generated PTX kernel
-///
+/// * `name`: name of the compiled kernel. On CUDA backend, this is the name of
+///   the generated PTX kernel
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct KernelBuildOptions {
     pub enable_debug_info: bool,
@@ -427,12 +427,12 @@ impl Default for KernelBuildOptions {
         }
     }
 }
-pub trait CallableBuildFn<S:CallableSignature> {
+pub trait CallableBuildFn<S: CallableSignature> {
     fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)
         -> RawCallable;
 }
 
-pub trait StaticCallableBuildFn<S:CallableSignature>: CallableBuildFn<S> {}
+pub trait StaticCallableBuildFn<S: CallableSignature>: CallableBuildFn<S> {}
 
 // @FIXME: this looks redundant
 pub unsafe trait CallableRet {
@@ -589,7 +589,7 @@ impl_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
 macro_rules! impl_callable_build_for_fn {
     ($($Ts:ident)*) => {
-        impl<T, R:CallableRet +'static, $($Ts: CallableParameter),*> CallableBuildFn<fn($($Ts,)*)->R> for T 
+        impl<T, R:CallableRet +'static, $($Ts: CallableParameter),*> CallableBuildFn<fn($($Ts,)*)->R> for T
             where T: Fn($($Ts,)*)->R + 'static {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]

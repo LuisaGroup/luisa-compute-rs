@@ -1,5 +1,6 @@
 use image::Rgb;
-use luisa::lang::types::vector::{alias::*, Mat4};
+use luisa::lang::types::vector::alias::*;
+use luisa::lang::types::vector::Mat4;
 use luisa_compute_api_types::StreamTag;
 use rand::Rng;
 use std::env::current_exe;

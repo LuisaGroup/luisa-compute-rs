@@ -6,7 +6,8 @@ use std::time::Instant;
 use winit::event::{Event as WinitEvent, WindowEvent};
 use winit::event_loop::EventLoop;
 
-use luisa::lang::types::vector::{alias::*, *};
+use luisa::lang::types::vector::alias::*;
+use luisa::lang::types::vector::*;
 use luisa::prelude::*;
 use luisa::rtx::{
     offset_ray_origin, Accel, AccelBuildRequest, AccelOption, AccelVar, Index, Ray, RayComps,

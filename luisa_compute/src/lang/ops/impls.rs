@@ -224,7 +224,7 @@ where
         self.clone().mul(self.clone()).mul(self.clone())
     }
     fn recip(&self) -> Self {
-        <Self as FromNode>::from_node(__current_scope(|b|{
+        <Self as FromNode>::from_node(__current_scope(|b| {
             let one = b.const_(Const::One(<X as TypeOf>::type_()));
             b.call(Func::Div, &[one, self.node()], <X as TypeOf>::type_())
         }))

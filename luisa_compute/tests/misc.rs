@@ -1,8 +1,9 @@
 use luisa::lang::ops::AddMaybeExpr;
 use luisa::lang::types::array::VLArrayVar;
+use luisa::lang::types::core::*;
 use luisa::lang::types::dynamic::*;
 use luisa::lang::types::vector::alias::*;
-use luisa::lang::types::{core::*, ExprProxy};
+use luisa::lang::types::ExprProxy;
 use luisa::prelude::*;
 use luisa_compute as luisa;
 use luisa_compute_api_types::StreamTag;

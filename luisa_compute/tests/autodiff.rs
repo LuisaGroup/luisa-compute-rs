@@ -74,7 +74,7 @@ fn autodiff_helper<F: Fn(&[Expr<f32>]) -> Expr<f32>>(
     //     inputs[i].view(..).copy_from(&tmp);
     // }
     println!("init time: {:?}", tic.elapsed());
-    let kernel = device.create_kernel_async::<fn()>(&|| {
+    let kernel = Kernel::<fn()>::new_async(&device, || {
         let input_vars = inputs.iter().map(|input| input.var()).collect::<Vec<_>>();
         let grad_fd_vars = grad_fd.iter().map(|grad| grad.var()).collect::<Vec<_>>();
         let grad_ad_vars = grad_ad.iter().map(|grad| grad.var()).collect::<Vec<_>>();
@@ -707,23 +707,26 @@ fn autodiff_select() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<fn()>(&track!(|| {
-        let buf_x = x.var();
-        let buf_y = y.var();
-        let buf_dx = dx.var();
-        let buf_dy = dy.var();
-        let tid = dispatch_id().x;
-        let x = buf_x.read(tid);
-        let y = buf_y.read(tid);
-        autodiff(|| {
-            requires_grad(x);
-            requires_grad(y);
-            let z = select(x > y, x * 4.0, y * 0.5);
-            backward(z);
-            buf_dx.write(tid, gradient(x));
-            buf_dy.write(tid, gradient(y));
-        });
-    }));
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        track!(|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_dx = dx.var();
+            let buf_dy = dy.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            autodiff(|| {
+                requires_grad(x);
+                requires_grad(y);
+                let z = select(x > y, x * 4.0, y * 0.5);
+                backward(z);
+                buf_dx.write(tid, gradient(x));
+                buf_dy.write(tid, gradient(y));
+            });
+        }),
+    );
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -751,24 +754,27 @@ fn autodiff_detach() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<fn()>(&track!(|| {
-        let buf_x = x.var();
-        let buf_y = y.var();
-        let buf_dx = dx.var();
-        let buf_dy = dy.var();
-        let tid = dispatch_id().x;
-        let x = buf_x.read(tid);
-        let y = buf_y.read(tid);
-        autodiff(|| {
-            requires_grad(x);
-            requires_grad(y);
-            let k = detach(x * y);
-            let z = (x + y) * k;
-            backward(z);
-            buf_dx.write(tid, gradient(x));
-            buf_dy.write(tid, gradient(y));
-        });
-    }));
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        track!(|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_dx = dx.var();
+            let buf_dy = dy.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            autodiff(|| {
+                requires_grad(x);
+                requires_grad(y);
+                let k = detach(x * y);
+                let z = (x + y) * k;
+                backward(z);
+                buf_dx.write(tid, gradient(x));
+                buf_dy.write(tid, gradient(y));
+            });
+        }),
+    );
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -801,25 +807,28 @@ fn autodiff_select_nan() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen::<f32>() + 10.0);
-    let kernel = device.create_kernel::<fn()>(&track!(|| {
-        let buf_x = x.var();
-        let buf_y = y.var();
-        let buf_dx = dx.var();
-        let buf_dy = dy.var();
-        let tid = dispatch_id().x;
-        let x = buf_x.read(tid);
-        let y = buf_y.read(tid);
-        autodiff(|| {
-            requires_grad(x);
-            requires_grad(y);
-            let cond = x > y;
-            let a = (x - y).sqrt();
-            let z = select(cond, a, y * 0.5);
-            backward(z);
-            buf_dx.write(tid, gradient(x));
-            buf_dy.write(tid, gradient(y));
-        });
-    }));
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        track!(|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_dx = dx.var();
+            let buf_dy = dy.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            autodiff(|| {
+                requires_grad(x);
+                requires_grad(y);
+                let cond = x > y;
+                let a = (x - y).sqrt();
+                let z = select(cond, a, y * 0.5);
+                backward(z);
+                buf_dx.write(tid, gradient(x));
+                buf_dy.write(tid, gradient(y));
+            });
+        }),
+    );
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -842,30 +851,33 @@ fn autodiff_if_nan() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen::<f32>() + 10.0);
-    let kernel = device.create_kernel::<fn()>(&track!(|| {
-        let buf_x = x.var();
-        let buf_y = y.var();
-        let buf_dx = dx.var();
-        let buf_dy = dy.var();
-        let tid = dispatch_id().x;
-        let x = buf_x.read(tid);
-        let y = buf_y.read(tid);
-        autodiff(|| {
-            requires_grad(x);
-            requires_grad(y);
-            let cond = x > y;
-            let z = if cond {
-                let a = (x - y).sqrt();
-                a
-            } else {
-                y * 0.5
-            };
-            // cpu_dbg!(f32, z);
-            backward(z);
-            buf_dx.write(tid, gradient(x));
-            buf_dy.write(tid, gradient(y));
-        });
-    }));
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        track!(|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_dx = dx.var();
+            let buf_dy = dy.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            autodiff(|| {
+                requires_grad(x);
+                requires_grad(y);
+                let cond = x > y;
+                let z = if cond {
+                    let a = (x - y).sqrt();
+                    a
+                } else {
+                    y * 0.5
+                };
+                // cpu_dbg!(f32, z);
+                backward(z);
+                buf_dx.write(tid, gradient(x));
+                buf_dy.write(tid, gradient(y));
+            });
+        }),
+    );
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -893,25 +905,28 @@ fn autodiff_if_phi() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<fn()>(&track!(|| {
-        let buf_x = x.var();
-        let buf_y = y.var();
-        let buf_dx = dx.var();
-        let buf_dy = dy.var();
-        let tid = dispatch_id().x;
-        let x = buf_x.read(tid);
-        let y = buf_y.read(tid);
-        if true.expr() {
-            autodiff(|| {
-                requires_grad(x);
-                requires_grad(y);
-                let z = if x > y { x * 4.0 } else { y * 0.5 };
-                backward(z);
-                buf_dx.write(tid, gradient(x));
-                buf_dy.write(tid, gradient(y));
-            });
-        }
-    }));
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        track!(|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_dx = dx.var();
+            let buf_dy = dy.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            if true.expr() {
+                autodiff(|| {
+                    requires_grad(x);
+                    requires_grad(y);
+                    let z = if x > y { x * 4.0 } else { y * 0.5 };
+                    backward(z);
+                    buf_dx.write(tid, gradient(x));
+                    buf_dy.write(tid, gradient(y));
+                });
+            }
+        }),
+    );
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -939,31 +954,34 @@ fn autodiff_if_phi2() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<fn()>(&track!(|| {
-        let buf_x = x.var();
-        let buf_y = y.var();
-        let buf_dx = dx.var();
-        let buf_dy = dy.var();
-        let tid = dispatch_id().x;
-        let x = buf_x.read(tid);
-        let y = buf_y.read(tid);
-        autodiff(|| {
-            requires_grad(x);
-            requires_grad(y);
-            let z = if x > y {
-                if x > 3.0 {
-                    x * 4.0
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        track!(|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_dx = dx.var();
+            let buf_dy = dy.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            autodiff(|| {
+                requires_grad(x);
+                requires_grad(y);
+                let z = if x > y {
+                    if x > 3.0 {
+                        x * 4.0
+                    } else {
+                        x * 2.0
+                    }
                 } else {
-                    x * 2.0
-                }
-            } else {
-                y * 0.5
-            };
-            backward(z);
-            buf_dx.write(tid, gradient(x));
-            buf_dy.write(tid, gradient(y));
-        });
-    }));
+                    y * 0.5
+                };
+                backward(z);
+                buf_dx.write(tid, gradient(x));
+                buf_dy.write(tid, gradient(y));
+            });
+        }),
+    );
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -995,37 +1013,40 @@ fn autodiff_if_phi3() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<fn()>(&track!(|| {
-        let buf_x = x.var();
-        let buf_y = y.var();
-        let buf_dx = dx.var();
-        let buf_dy = dy.var();
-        let tid = dispatch_id().x;
-        let x = buf_x.read(tid);
-        let y = buf_y.read(tid);
-        let const_two = 2.0_f32.var();
-        let const_three = 3.0_f32.var();
-        let const_four = f32::var_zeroed();
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        track!(|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_dx = dx.var();
+            let buf_dy = dy.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            let const_two = 2.0_f32.var();
+            let const_three = 3.0_f32.var();
+            let const_four = f32::var_zeroed();
 
-        autodiff(|| {
-            requires_grad(x);
-            requires_grad(y);
-            const_four.store(4.0);
-            let c = (x > const_three).as_::<i32>();
-            let z = if x > y {
-                switch::<Expr<f32>>(c)
-                    .case(0, || x * const_two)
-                    .default(|| x * const_four)
-                    .finish()
-                    * const_two
-            } else {
-                y * 0.5
-            };
-            backward(z);
-            buf_dx.write(tid, gradient(x));
-            buf_dy.write(tid, gradient(y));
-        });
-    }));
+            autodiff(|| {
+                requires_grad(x);
+                requires_grad(y);
+                const_four.store(4.0);
+                let c = (x > const_three).as_::<i32>();
+                let z = if x > y {
+                    switch::<Expr<f32>>(c)
+                        .case(0, || x * const_two)
+                        .default(|| x * const_four)
+                        .finish()
+                        * const_two
+                } else {
+                    y * 0.5
+                };
+                backward(z);
+                buf_dx.write(tid, gradient(x));
+                buf_dy.write(tid, gradient(y));
+            });
+        }),
+    );
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -1057,38 +1078,41 @@ fn autodiff_if_phi4() {
     let mut rng = rand::thread_rng();
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<fn()>(&track!(|| {
-        let buf_x = x.var();
-        let buf_y = y.var();
-        let buf_dx = dx.var();
-        let buf_dy = dy.var();
-        let tid = dispatch_id().x;
-        let x = buf_x.read(tid);
-        let y = buf_y.read(tid);
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        track!(|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_dx = dx.var();
+            let buf_dy = dy.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
 
-        let consts = Float3::var_zeroed();
-        autodiff(|| {
-            requires_grad(x);
-            requires_grad(y);
-            *consts = Float3::expr(2.0, 3.0, 4.0);
-            let const_two = consts.x;
-            let const_three = consts.y;
-            let const_four = consts.z;
-            let c = (x > const_three).as_::<i32>();
-            let z = if x > y {
-                switch::<Expr<f32>>(c)
-                    .case(0, || x * const_two)
-                    .default(|| x * const_four)
-                    .finish()
-                    * const_two
-            } else {
-                y * 0.5
-            };
-            backward(z);
-            buf_dx.write(tid, gradient(x));
-            buf_dy.write(tid, gradient(y));
-        });
-    }));
+            let consts = Float3::var_zeroed();
+            autodiff(|| {
+                requires_grad(x);
+                requires_grad(y);
+                *consts = Float3::expr(2.0, 3.0, 4.0);
+                let const_two = consts.x;
+                let const_three = consts.y;
+                let const_four = consts.z;
+                let c = (x > const_three).as_::<i32>();
+                let z = if x > y {
+                    switch::<Expr<f32>>(c)
+                        .case(0, || x * const_two)
+                        .default(|| x * const_four)
+                        .finish()
+                        * const_two
+                } else {
+                    y * 0.5
+                };
+                backward(z);
+                buf_dx.write(tid, gradient(x));
+                buf_dy.write(tid, gradient(y));
+            });
+        }),
+    );
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -1122,29 +1146,32 @@ fn autodiff_switch() {
     t.view(..).fill_fn(|_| rng.gen_range(0..3));
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let kernel = device.create_kernel::<fn()>(&track!(|| {
-        let buf_t = t.var();
-        let buf_x = x.var();
-        let buf_y = y.var();
-        let buf_dx = dx.var();
-        let buf_dy = dy.var();
-        let tid = dispatch_id().x;
-        let x = buf_x.read(tid);
-        let y = buf_y.read(tid);
-        let t = buf_t.read(tid);
-        autodiff(|| {
-            requires_grad(x);
-            requires_grad(y);
-            let z = switch::<Expr<f32>>(t)
-                .case(0, || x * 4.0)
-                .case(1, || x * 2.0)
-                .case(2, || y * 0.5)
-                .finish();
-            backward(z);
-            buf_dx.write(tid, gradient(x));
-            buf_dy.write(tid, gradient(y));
-        });
-    }));
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        track!(|| {
+            let buf_t = t.var();
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_dx = dx.var();
+            let buf_dy = dy.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            let t = buf_t.read(tid);
+            autodiff(|| {
+                requires_grad(x);
+                requires_grad(y);
+                let z = switch::<Expr<f32>>(t)
+                    .case(0, || x * 4.0)
+                    .case(1, || x * 2.0)
+                    .case(2, || y * 0.5)
+                    .finish();
+                backward(z);
+                buf_dx.write(tid, gradient(x));
+                buf_dy.write(tid, gradient(y));
+            });
+        }),
+    );
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();
@@ -1182,7 +1209,7 @@ fn autodiff_callable() {
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
     let callable =
-        device.create_callable::<fn(Var<f32>, Var<f32>, Expr<i32>)>(track!(&|vx, vy, t| {
+        Callable::<fn(Var<f32>, Var<f32>, Expr<i32>)>::new(&device, track!(|vx, vy, t| {
             let x = **vx;
             let y = **vy;
             autodiff(|| {
@@ -1198,22 +1225,25 @@ fn autodiff_callable() {
                 *vy = gradient(y);
             });
         }));
-    let kernel = device.create_kernel::<fn()>(&track!(|| {
-        let buf_t = t.var();
-        let buf_x = x.var();
-        let buf_y = y.var();
-        let buf_dx = dx.var();
-        let buf_dy = dy.var();
-        let tid = dispatch_id().x;
-        let x = buf_x.read(tid);
-        let y = buf_y.read(tid);
-        let t = buf_t.read(tid);
-        let dx = x.var();
-        let dy = y.var();
-        callable.call(dx, dy, t);
-        buf_dx.write(tid, dx);
-        buf_dy.write(tid, dy);
-    }));
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        track!(|| {
+            let buf_t = t.var();
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_dx = dx.var();
+            let buf_dy = dy.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            let t = buf_t.read(tid);
+            let dx = x.var();
+            let dy = y.var();
+            callable.call(dx, dy, t);
+            buf_dx.write(tid, dx);
+            buf_dy.write(tid, dy);
+        }),
+    );
     kernel.dispatch([1024, 1, 1]);
     let dx = dx.view(..).copy_to_vec();
     let dy = dy.view(..).copy_to_vec();

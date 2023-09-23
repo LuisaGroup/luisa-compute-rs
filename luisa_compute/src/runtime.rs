@@ -202,7 +202,7 @@ impl Device {
             }),
             _marker: PhantomData {},
             len: count,
-            _is_byte_buffer:false,
+            _is_byte_buffer: false,
         };
         buffer
     }
@@ -400,93 +400,59 @@ impl Device {
             modifications: RwLock::new(HashMap::new()),
         }
     }
-    pub fn create_callable<'a, S: CallableSignature<'a>>(&self, f: S::Fn) -> S::Callable {
-        let mut builder = KernelBuilder::new(Some(self.clone()), false);
-        let raw_callable = CallableBuildFn::build_callable(&f, None, &mut builder);
-        S::wrap_raw_callable(raw_callable)
+
+    /// Compile a [`KernelDef`] into a [`Kernel`]. See [`Kernel`] for more details on kernel creation
+    pub fn compile_kernel<S: KernelSignature>(&self, k: &KernelDef<S>) -> Kernel<S> {
+        self.compile_kernel_with_options(k, KernelBuildOptions::default())
     }
-    pub fn create_dyn_callable<'a, S: CallableSignature<'a>>(&self, f: S::DynFn) -> S::DynCallable {
-        S::create_dyn_callable(self.clone(), false, f)
-    }
-    pub fn create_dyn_callable_once<'a, S: CallableSignature<'a>>(
-        &self,
-        f: S::DynFn,
-    ) -> S::DynCallable {
-        S::create_dyn_callable(self.clone(), true, f)
-    }
-    pub fn create_kernel<'a, S: KernelSignature<'a>>(&self, f: S::Fn) -> S::Kernel {
-        let mut builder = KernelBuilder::new(Some(self.clone()), true);
-        let raw_kernel =
-            KernelBuildFn::build_kernel(&f, &mut builder, KernelBuildOptions::default());
-        S::wrap_raw_kernel(raw_kernel)
-    }
-    pub fn create_kernel_async<'a, S: KernelSignature<'a>>(&self, f: S::Fn) -> S::Kernel {
-        let mut builder = KernelBuilder::new(Some(self.clone()), true);
-        let raw_kernel = KernelBuildFn::build_kernel(
-            &f,
-            &mut builder,
+
+    /// Compile a [`KernelDef`] into a [`Kernel`] asynchronously. See [`Kernel`] for more details on kernel creation
+    pub fn compile_kernel_async<S: KernelSignature>(&self, k: &KernelDef<S>) -> Kernel<S> {
+        self.compile_kernel_with_options(
+            k,
             KernelBuildOptions {
                 async_compile: true,
                 ..Default::default()
             },
-        );
-        S::wrap_raw_kernel(raw_kernel)
+        )
     }
-    pub fn create_kernel_with_options<'a, S: KernelSignature<'a>>(
-        &self,
-        f: S::Fn,
-        options: KernelBuildOptions,
-    ) -> S::Kernel {
-        let mut builder = KernelBuilder::new(Some(self.clone()), true);
-        let raw_kernel = KernelBuildFn::build_kernel(&f, &mut builder, options);
-        S::wrap_raw_kernel(raw_kernel)
-    }
-}
 
-pub fn create_static_callable<'a, S: CallableSignature<'a>>(f: S::StaticFn) -> S::Callable {
-    let r_backup = RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
-        std::mem::replace(&mut *r, Recorder::new())
-    });
-    let mut builder = KernelBuilder::new(None, false);
-    let raw_callable = CallableBuildFn::build_callable(&f, None, &mut builder);
-    let callable = S::wrap_raw_callable(raw_callable);
-    RECORDER.with(|r| {
-        *r.borrow_mut() = r_backup;
-    });
-    callable
-}
-#[macro_export]
-macro_rules! fn_n_args {
-    (0)=>{ dyn Fn()};
-    (1)=>{ dyn Fn(_)};
-    (2)=>{ dyn Fn(_,_)};
-    (3)=>{ dyn Fn(_,_,_)};
-    (4)=>{ dyn Fn(_,_,_,_)};
-    (5)=>{ dyn Fn(_,_,_,_,_)};
-    (6)=>{ dyn Fn(_,_,_,_,_,_)};
-    (7)=>{ dyn Fn(_,_,_,_,_,_,_)};
-    (8)=>{ dyn Fn(_,_,_,_,_,_,_,_)};
-    (9)=>{ dyn Fn(_,_,_,_,_,_,_,_,_)};
-    (10)=>{dyn Fn(_,_,_,_,_,_,_,_,_,_)};
-    (11)=>{dyn Fn(_,_,_,_,_,_,_,_,_,_,_)};
-    (12)=>{dyn Fn(_,_,_,_,_,_,_,_,_,_,_,_)};
-    (13)=>{dyn Fn(_,_,_,_,_,_,_,_,_,_,_,_,_)};
-    (14)=>{dyn Fn(_,_,_,_,_,_,_,_,_,_,_,_,_,_)};
-    (15)=>{dyn Fn(_,_,_,_,_,_,_,_,_,_,_,_,_,_,_)};
-}
-#[macro_export]
-macro_rules! wrap_fn {
-    ($arg_count:tt, $f:expr) => {
-        &$f as &fn_n_args!($arg_count)
-    };
-}
-#[macro_export]
-macro_rules! create_kernel {
-    ($device:expr, $arg_count:tt, $f:expr) => {{
-        let kernel: fn_n_args!($arg_count) = Box::new($f);
-        $device.create_kernel(kernel)
-    }};
+    /// Compile a [`KernelDef`] into a [`Kernel`] with options. See [`Kernel`] for more details on kernel creation
+    pub fn compile_kernel_with_options<S: KernelSignature>(
+        &self,
+        k: &KernelDef<S>,
+        options: KernelBuildOptions,
+    ) -> Kernel<S> {
+        let name = options.name.unwrap_or("".to_string());
+        let name = Arc::new(CString::new(name).unwrap());
+        let shader_options = api::ShaderOption {
+            enable_cache: options.enable_cache,
+            enable_fast_math: options.enable_fast_math,
+            enable_debug_info: options.enable_debug_info,
+            compile_only: false,
+            name: name.as_ptr(),
+        };
+        let module = k.inner.module.clone();
+        let artifact = if options.async_compile {
+            ShaderArtifact::Async(AsyncShaderArtifact::new(
+                self.clone(),
+                module.clone(),
+                shader_options,
+                name,
+            ))
+        } else {
+            ShaderArtifact::Sync(self.inner.create_shader(&module, &shader_options))
+        };
+        Kernel {
+            inner: RawKernel {
+                device: self.clone(),
+                artifact,
+                module,
+                resource_tracker: k.inner.resource_tracker.clone(),
+            },
+            _marker: PhantomData {},
+        }
+    }
 }
 pub(crate) enum StreamHandle {
     Default {
@@ -793,31 +759,6 @@ impl<'a> Scope<'a> {
         self
     }
 }
-impl<'a> std::ops::Shl<Command<'a>> for &'a Scope<'a> {
-    type Output = Self;
-    #[inline]
-    #[allow(unused_must_use)]
-    fn shl(self, rhs: Command<'a>) -> Self::Output {
-        self.submit(std::iter::once(rhs));
-        self
-    }
-}
-impl<'a> std::ops::Shl<EventSignal<'a>> for &'a Scope<'a> {
-    type Output = Self;
-    #[inline]
-    #[allow(unused_must_use)]
-    fn shl(self, rhs: EventSignal<'a>) -> Self::Output {
-        self.signal(rhs.event, rhs.ticket)
-    }
-}
-impl<'a> std::ops::Shl<EventWait<'a>> for &'a Scope<'a> {
-    type Output = Self;
-    #[inline]
-    #[allow(unused_must_use)]
-    fn shl(self, rhs: EventWait<'a>) -> Self::Output {
-        self.wait(rhs.event, rhs.ticket)
-    }
-}
 impl<'a> Drop for Scope<'a> {
     fn drop(&mut self) {
         if !self.synchronized.get() {
@@ -939,7 +880,7 @@ pub struct RawKernel {
     pub(crate) artifact: ShaderArtifact,
     #[allow(dead_code)]
     pub(crate) resource_tracker: ResourceTracker,
-    pub(crate) module: CArc<ir::KernelModule>,
+    pub(crate) module: CArc<KernelModule>,
 }
 
 pub struct CallableArgEncoder {
@@ -1111,17 +1052,17 @@ macro_rules! impl_kernel_arg_for_tuple {
             fn encode(&self, _: &mut KernelArgEncoder) { }
         }
     };
-    ($first:ident  $($rest:ident) *) => {
-        impl<$first:KernelArg, $($rest: KernelArg),*> KernelArg for ($first, $($rest,)*) {
-            type Parameter = ($first::Parameter, $($rest::Parameter),*);
+    ($first:ident  $($Ts:ident) *) => {
+        impl<$first:KernelArg, $($Ts: KernelArg),*> KernelArg for ($first, $($Ts,)*) {
+            type Parameter = ($first::Parameter, $($Ts::Parameter),*);
             #[allow(non_snake_case)]
             fn encode(&self, encoder: &mut KernelArgEncoder) {
-                let ($first, $($rest,)*) = self;
+                let ($first, $($Ts,)*) = self;
                 $first.encode(encoder);
-                $($rest.encode(encoder);)*
+                $($Ts.encode(encoder);)*
             }
         }
-        impl_kernel_arg_for_tuple!($($rest)*);
+        impl_kernel_arg_for_tuple!($($Ts)*);
     };
 
 }
@@ -1142,6 +1083,7 @@ impl RawKernel {
             }
         }
     }
+
     pub fn dispatch_async(&self, args: KernelArgEncoder, dispatch_size: [u32; 3]) -> Command {
         let mut rt = ResourceTracker::new();
         rt.add(Arc::new(args.uniform_data));
@@ -1165,23 +1107,23 @@ impl RawKernel {
     }
 }
 
-pub struct Callable<S: CallableSignature<'static>> {
+pub struct Callable<S: CallableSignature> {
     #[allow(dead_code)]
     pub(crate) inner: RawCallable,
     pub(crate) _marker: PhantomData<S>,
 }
-pub(crate) struct DynCallableInner<S: CallableSignature<'static>> {
+pub(crate) struct DynCallableInner<S: CallableSignature> {
     builder: Box<dyn Fn(std::rc::Rc<dyn Any>, &mut KernelBuilder) -> Callable<S>>,
     callables: Vec<Callable<S>>,
 }
-pub struct DynCallable<S: CallableSignature<'static>> {
+pub struct DynCallable<S: CallableSignature> {
     #[allow(dead_code)]
     pub(crate) inner: RefCell<DynCallableInner<S>>,
     pub(crate) device: Device,
     pub(crate) init_once: bool,
 }
-impl<S: CallableSignature<'static>> DynCallable<S> {
-    pub(crate) fn new(
+impl<S: CallableSignature> DynCallable<S> {
+    pub(crate) fn _new(
         device: Device,
         init_once: bool,
         builder: Box<dyn Fn(std::rc::Rc<dyn Any>, &mut KernelBuilder) -> Callable<S>>,
@@ -1253,14 +1195,50 @@ pub struct RawCallable {
     #[allow(dead_code)]
     pub(crate) resource_tracker: ResourceTracker,
 }
+pub struct RawKernelDef {
+    #[allow(dead_code)]
+    pub(crate) device: Option<Device>,
+    pub(crate) module: CArc<KernelModule>,
+    #[allow(dead_code)]
+    pub(crate) resource_tracker: ResourceTracker,
+}
 
-pub struct Kernel<T: KernelSignature<'static>> {
+/// A kernel definition
+/// See [`Kernel<T>`] for more information
+pub struct KernelDef<T: KernelSignature> {
+    pub(crate) inner: RawKernelDef,
+    pub(crate) _marker: PhantomData<T>,
+}
+
+/// An executable kernel
+/// Kernel creation can be done in multiple ways:
+/// - Seperate recording and compilation:
+/// ```no_run
+//// // Recording:
+/// use luisa_compute::prelude::*;
+/// let ctx = Context::new(std::env::current_exe().unwrap());
+/// let device = ctx.create_device("cpu");
+/// let kernel = KernelDef::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>::new(&device, track!(|a,b,c|{  }));
+/// // Compilation:
+/// let kernel = device.compile_kernel(&kernel);
+/// ```
+/// - Recording and compilation in one step:
+/// ```no_run
+/// use luisa_compute::prelude::*;
+/// let ctx = Context::new(std::env::current_exe().unwrap());
+/// let device = ctx.create_device("cpu");
+/// let kernel = Kernel::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>::new(&device, track!(|a,b,c|{ }));
+/// ```
+/// - Asynchronous compilation use [`Kernel::<T>::new_async`]
+/// - Custom build options using [`Kernel::<T>::new_with_options`]
+///
+pub struct Kernel<T: KernelSignature> {
     pub(crate) inner: RawKernel,
     pub(crate) _marker: PhantomData<T>,
 }
-unsafe impl<T: KernelSignature<'static>> Send for Kernel<T> {}
-unsafe impl<T: KernelSignature<'static>> Sync for Kernel<T> {}
-impl<T: KernelSignature<'static>> Kernel<T> {
+unsafe impl<T: KernelSignature> Send for Kernel<T> {}
+unsafe impl<T: KernelSignature> Sync for Kernel<T> {}
+impl<T: KernelSignature> Kernel<T> {
     pub fn cache_dir(&self) -> Option<PathBuf> {
         let handle = self.inner.unwrap();
         let device = &self.inner.device;
@@ -1302,80 +1280,101 @@ impl<T: IoTexel> AsKernelArg<Tex3d<T>> for Tex3d<T> {}
 impl AsKernelArg<BindlessArray> for BindlessArray {}
 
 impl AsKernelArg<Accel> for Accel {}
+
 macro_rules! impl_call_for_callable {
-    ($first:ident  $($rest:ident)*) => {
-        impl <R:CallableRet+'static, $first:CallableParameter, $($rest: CallableParameter),*> Callable<fn($first, $($rest,)*)->R> {
+    ( $($Ts:ident)*) => {
+        impl <R:CallableRet+'static, $($Ts: CallableParameter),*> Callable<fn($($Ts,)*)->R> {
             #[allow(non_snake_case)]
-            pub fn call(&self, $first:$first, $($rest:$rest),*) -> R {
+            #[allow(unused_mut)]
+            pub fn call(&self, $($Ts:$Ts),*) -> R {
                 let mut encoder = CallableArgEncoder::new();
-                $first.encode(&mut encoder);
-                $($rest.encode(&mut encoder);)*
+                $($Ts.encode(&mut encoder);)*
                 CallableRet::_from_return(
                     crate::lang::__invoke_callable(&self.inner.module, &encoder.args))
             }
         }
-        impl <R:CallableRet+'static, $first:CallableParameter, $($rest: CallableParameter),*> DynCallable<fn($first, $($rest,)*)->R> {
+        impl <R:CallableRet+'static, $($Ts: CallableParameter),*> DynCallable<fn($($Ts,)*)->R> {
             #[allow(non_snake_case)]
-            pub fn call(&self, $first:$first, $($rest:$rest),*) -> R {
+            #[allow(unused_mut)]
+            pub fn call(&self, $($Ts:$Ts),*) -> R {
                 let mut encoder = CallableArgEncoder::new();
-                $first.encode(&mut encoder);
-                $($rest.encode(&mut encoder);)*
-                self.call_impl(std::rc::Rc::new(($first, $($rest,)*)), &encoder.args)
+                $($Ts.encode(&mut encoder);)*
+                self.call_impl(std::rc::Rc::new(($($Ts,)*)), &encoder.args)
             }
         }
-        impl_call_for_callable!($($rest)*);
    };
-   ()=>{
-        impl<R:CallableRet+'static> Callable<fn()->R> {
-            pub fn call(&self)->R {
-                CallableRet::_from_return(
-                    crate::lang::__invoke_callable(&self.inner.module, &[]))
-            }
-        }
-        impl<R:CallableRet+'static> DynCallable<fn()->R> {
-            pub fn call(&self)-> R{
-                self.call_impl(std::rc::Rc::new(()), &[])
-            }
-        }
-    }
 }
+impl_call_for_callable!();
+impl_call_for_callable!(T0);
+impl_call_for_callable!(T0 T1 );
+impl_call_for_callable!(T0 T1 T2 );
+impl_call_for_callable!(T0 T1 T2 T3 );
+impl_call_for_callable!(T0 T1 T2 T3 T4 );
+impl_call_for_callable!(T0 T1 T2 T3 T4 T5 );
+impl_call_for_callable!(T0 T1 T2 T3 T4 T5 T6 );
+impl_call_for_callable!(T0 T1 T2 T3 T4 T5 T6 T7 );
+impl_call_for_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 );
+impl_call_for_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 );
+impl_call_for_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 );
+impl_call_for_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 );
+impl_call_for_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 );
+impl_call_for_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 );
+impl_call_for_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 );
 impl_call_for_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
+
 macro_rules! impl_dispatch_for_kernel {
 
-   ($first:ident  $($rest:ident)*) => {
-        impl <$first:KernelArg+'static, $($rest: KernelArg+'static),*> Kernel<fn($first, $($rest,)*)> {
+   ($($Ts:ident)*) => {
+        impl <$($Ts: KernelArg+'static),*> Kernel<fn($($Ts,)*)> {
             #[allow(non_snake_case)]
-            pub fn dispatch(&self, dispatch_size: [u32; 3], $first:&impl AsKernelArg<$first>, $($rest:&impl AsKernelArg<$rest>),*)  {
+            #[allow(unused_mut)]
+            pub fn dispatch(&self, dispatch_size: [u32; 3], $($Ts:&impl AsKernelArg<$Ts>),*)  {
                 let mut encoder = KernelArgEncoder::new();
-                $first.encode(&mut encoder);
-                $($rest.encode(&mut encoder);)*
+                $($Ts.encode(&mut encoder);)*
                 self.inner.dispatch(encoder, dispatch_size)
             }
             #[allow(non_snake_case)]
+            #[allow(unused_mut)]
             pub fn dispatch_async<'a>(
                 &'a self,
-                dispatch_size: [u32; 3], $first: &impl AsKernelArg<$first>, $($rest:&impl AsKernelArg<$rest>),*
+                dispatch_size: [u32; 3], $($Ts:&impl AsKernelArg<$Ts>),*
             ) -> Command<'a> {
                 let mut encoder = KernelArgEncoder::new();
-                $first.encode(&mut encoder);
-                $($rest.encode(&mut encoder);)*
+                $($Ts.encode(&mut encoder);)*
                 self.inner.dispatch_async(encoder, dispatch_size)
             }
+            /// Blocks until the kernel is compiled
+            pub fn ensure_ready(&self) {
+                self.inner.unwrap();
+            }
         }
-        impl_dispatch_for_kernel!($($rest)*);
    };
-   ()=>{
-    impl Kernel<fn()> {
-        pub fn dispatch(&self, dispatch_size: [u32; 3])  {
-            self.inner.dispatch(KernelArgEncoder::new(), dispatch_size)
-        }
-        pub fn dispatch_async<'a>(
-            &'a self,
-            dispatch_size: [u32; 3],
-        ) -> Command<'a> {
-            self.inner.dispatch_async(KernelArgEncoder::new(), dispatch_size)
-        }
-    }
 }
-}
+
+impl_dispatch_for_kernel!();
+impl_dispatch_for_kernel!(T0);
+impl_dispatch_for_kernel!(T0 T1 );
+impl_dispatch_for_kernel!(T0 T1 T2 );
+impl_dispatch_for_kernel!(T0 T1 T2 T3 );
+impl_dispatch_for_kernel!(T0 T1 T2 T3 T4 );
+impl_dispatch_for_kernel!(T0 T1 T2 T3 T4 T5 );
+impl_dispatch_for_kernel!(T0 T1 T2 T3 T4 T5 T6 );
+impl_dispatch_for_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 );
+impl_dispatch_for_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 );
+impl_dispatch_for_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 );
+impl_dispatch_for_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 );
+impl_dispatch_for_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 );
+impl_dispatch_for_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 );
+impl_dispatch_for_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 );
+impl_dispatch_for_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 );
 impl_dispatch_for_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
+
+#[macro_export]
+macro_rules! remove_last {
+    ($x:ident) => {
+
+    };
+    ($first:ident $($xs:ident)*) => {
+        $first remove_last!($($xs)*)
+    };
+}

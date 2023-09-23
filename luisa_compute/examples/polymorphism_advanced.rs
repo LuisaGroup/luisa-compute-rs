@@ -132,19 +132,22 @@ fn main() {
     );
     let poly_shader = builder.build();
     let result = device.create_buffer::<f32>(100);
-    let kernel = device.create_kernel::<fn()>(&track!(|| {
-        let i = dispatch_id().x;
-        let x = i.as_f32() / 100.0 * PI;
-        let ctx = ShaderEvalContext {
-            poly_shader: &poly_shader,
-            key: &shader_final_key,
-        };
-        let tag_index = TagIndex::new_expr(shader_final.tag, shader_final.index);
-        let v = poly_shader
-            .get(tag_index)
-            .dispatch(|_, _, shader| shader.evaluate(x, &ctx));
-        result.var().write(i, v);
-    }));
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        track!(|| {
+            let i = dispatch_id().x;
+            let x = i.as_f32() / 100.0 * PI;
+            let ctx = ShaderEvalContext {
+                poly_shader: &poly_shader,
+                key: &shader_final_key,
+            };
+            let tag_index = TagIndex::new_expr(shader_final.tag, shader_final.index);
+            let v = poly_shader
+                .get(tag_index)
+                .dispatch(|_, _, shader| shader.evaluate(x, &ctx));
+            result.var().write(i, v);
+        }),
+    );
     kernel.dispatch([100, 1, 1]);
     let result = result.copy_to_vec();
     for i in 0..100 {

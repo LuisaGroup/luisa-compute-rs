@@ -8,7 +8,9 @@ use winit::event_loop::EventLoop;
 
 use luisa::lang::types::vector::{alias::*, *};
 use luisa::prelude::*;
-use luisa::rtx::{offset_ray_origin, Accel, AccelBuildRequest, AccelOption, AccelVar, Index, Ray, RayComps};
+use luisa::rtx::{
+    offset_ray_origin, Accel, AccelBuildRequest, AccelOption, AccelVar, Index, Ray, RayComps,
+};
 use luisa_compute as luisa;
 
 #[derive(Value, Clone, Copy)]
@@ -244,11 +246,12 @@ fn main() {
     });
 
     // use create_kernel_async to compile multiple kernels in parallel
-    let path_tracer = device.create_kernel_async::<fn(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>(
-        track!(&|image: Tex2dVar<Float4>,
-                 seed_image: Tex2dVar<u32>,
-                 accel: AccelVar,
-                 resolution: Expr<Uint2>| {
+    let path_tracer = Kernel::<fn(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>::new_async(
+        &device,
+        track!(|image: Tex2dVar<Float4>,
+                seed_image: Tex2dVar<u32>,
+                accel: AccelVar,
+                resolution: Expr<Uint2>| {
             set_block_size([16u32, 16u32, 1u32]);
             let cbox_materials = ([
                 Float3::new(0.725f32, 0.710f32, 0.680f32), // floor
@@ -263,7 +266,7 @@ fn main() {
             .expr();
 
             let lcg = |state: Var<u32>| -> Expr<f32> {
-                let lcg = create_static_callable::<fn(Var<u32>) -> Expr<f32>>(|state: Var<u32>| {
+                let lcg = Callable::<fn(Var<u32>) -> Expr<f32>>::new_static(|state: Var<u32>| {
                     const LCG_A: u32 = 1664525u32;
                     const LCG_C: u32 = 1013904223u32;
                     *state = LCG_A * state + LCG_C;
@@ -278,7 +281,7 @@ fn main() {
                         orig: o.into(),
                         tmin: tmin,
                         dir: d.into(),
-                        tmax: tmax
+                        tmax: tmax,
                     })
                 };
 
@@ -455,8 +458,9 @@ fn main() {
             );
         }),
     );
-    let display =
-        device.create_kernel_async::<fn(Tex2d<Float4>, Tex2d<Float4>)>(track!(&|acc, display| {
+    let display = Kernel::<fn(Tex2d<Float4>, Tex2d<Float4>)>::new_async(
+        &device,
+        track!(|acc, display| {
             set_block_size([16, 16, 1]);
             let coord = dispatch_id().xy();
             let radiance = acc.read(coord);
@@ -468,7 +472,8 @@ fn main() {
 
             let srgb = radiance.lt(0.0031308).select(radiance * 12.92, r);
             display.write(coord, Float4::expr(srgb.x, srgb.y, srgb.z, 1.0f32));
-        }));
+        }),
+    );
     let img_w = 1024;
     let img_h = 1024;
     let acc_img = device.create_tex2d::<Float4>(PixelStorage::Float4, img_w, img_h, 1);

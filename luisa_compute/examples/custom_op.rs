@@ -28,21 +28,24 @@ fn main() {
             println!("Hello from thread 0!");
         }
     });
-    let shader = device.create_kernel::<fn(Buffer<f32>)>(&track!(|buf_z: BufferVar<f32>| {
-        // z is pass by arg
-        let buf_x = x.var(); // x and y are captured
-        let buf_y = y.var();
-        let tid = dispatch_id().x;
-        let x = buf_x.read(tid);
-        let y = buf_y.read(tid);
-        let args = MyAddArgs::new_expr(x, y, 0.0f32.expr());
-        let result = my_add.call(args);
-        let _ = my_print.call(tid);
-        if tid == 0 {
-            cpu_dbg!(args);
-        }
-        buf_z.write(tid, result.result);
-    }));
+    let shader = Kernel::<fn(Buffer<f32>)>::new(
+        &device,
+        track!(|buf_z: BufferVar<f32>| {
+            // z is pass by arg
+            let buf_x = x.var(); // x and y are captured
+            let buf_y = y.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            let args = MyAddArgs::new_expr(x, y, 0.0f32.expr());
+            let result = my_add.call(args);
+            let _ = my_print.call(tid);
+            if tid == 0 {
+                cpu_dbg!(args);
+            }
+            buf_z.write(tid, result.result);
+        }),
+    );
     shader.dispatch([1024, 1, 1], &z);
     let mut z_data = vec![0.0; 1024];
     z.view(..).copy_to(&mut z_data);

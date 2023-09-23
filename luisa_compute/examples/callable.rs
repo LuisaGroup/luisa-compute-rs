@@ -18,13 +18,13 @@ fn main() {
         "cpu"
     });
     let add =
-        device.create_callable::<fn(Expr<f32>, Expr<f32>) -> Expr<f32>>(&|a, b| track!(a + b));
+       Callable::<fn(Expr<f32>, Expr<f32>) -> Expr<f32>>::new(&device, |a, b| track!(a + b));
     let x = device.create_buffer::<f32>(1024);
     let y = device.create_buffer::<f32>(1024);
     let z = device.create_buffer::<f32>(1024);
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
-    let kernel = device.create_kernel::<fn(Buffer<f32>)>(&track!(|buf_z| {
+    let kernel = Kernel::<fn(Buffer<f32>)>::new(&device, track!(|buf_z| {
         let buf_x = x.var();
         let buf_y = y.var();
         let tid = dispatch_id().x;

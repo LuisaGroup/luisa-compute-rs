@@ -50,15 +50,18 @@ fn main() {
     poly_area.register((), &circles);
     poly_area.register((), &squares);
     let areas = device.create_buffer::<f32>(4);
-    let shader = device.create_kernel::<fn()>(&track!(|| {
-        let tid = dispatch_id().x;
-        let tag = tid / 2;
-        let index = tid % 2;
-        let area = poly_area
-            .get(TagIndex::new_expr(tag, index))
-            .dispatch(|_tag, _key, obj| obj.area());
-        areas.var().write(tid, area);
-    }));
+    let shader = Kernel::<fn()>::new(
+        &device,
+        track!(|| {
+            let tid = dispatch_id().x;
+            let tag = tid / 2;
+            let index = tid % 2;
+            let area = poly_area
+                .get(TagIndex::new_expr(tag, index))
+                .dispatch(|_tag, _key, obj| obj.area());
+            areas.var().write(tid, area);
+        }),
+    );
     shader.dispatch([4, 1, 1]);
     let areas = areas.view(..).copy_to_vec();
     println!("{:?}", areas);

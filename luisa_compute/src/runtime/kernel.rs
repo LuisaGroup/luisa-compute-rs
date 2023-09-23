@@ -97,40 +97,47 @@ impl CallableParameter for BindlessArrayVar {
     }
 }
 impl KernelParameter for rtx::AccelVar {
+    type Arg = rtx::Accel;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.accel()
     }
 }
 
 pub trait KernelParameter {
+    type Arg: KernelArg<Parameter = Self>;
     fn def_param(builder: &mut KernelBuilder) -> Self;
 }
 
 impl<T: Value> KernelParameter for Expr<T> {
+    type Arg = T;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.uniform::<T>()
     }
 }
 
 impl<T: Value> KernelParameter for BufferVar<T> {
+    type Arg = Buffer<T>;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.buffer()
     }
 }
 
 impl<T: IoTexel> KernelParameter for Tex2dVar<T> {
+    type Arg = Tex2d<T>;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.tex2d()
     }
 }
 
 impl<T: IoTexel> KernelParameter for Tex3dVar<T> {
+    type Arg = Tex3d<T>;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.tex3d()
     }
 }
 
 impl KernelParameter for BindlessArrayVar {
+    type Arg = BindlessArray;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.bindless_array()
     }
@@ -139,6 +146,7 @@ impl KernelParameter for BindlessArrayVar {
 macro_rules! impl_kernel_param_for_tuple {
     ($first:ident  $($rest:ident)*) => {
         impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelParameter for ($first, $($rest,)*) {
+            type Arg = ($first::Arg, $($rest::Arg),*);
             #[allow(non_snake_case)]
             fn def_param(builder: &mut KernelBuilder) -> Self {
                 ($first::def_param(builder), $($rest::def_param(builder)),*)
@@ -148,6 +156,7 @@ macro_rules! impl_kernel_param_for_tuple {
     };
     ()=>{
         impl KernelParameter for () {
+            type Arg = ();
             fn def_param(_: &mut KernelBuilder) -> Self {
             }
         }

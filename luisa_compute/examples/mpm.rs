@@ -118,8 +118,8 @@ fn main() {
             let affine =
                 Mat2::diag_expr(Float2::expr(stress, stress)) + P_MASS as f32 * C.var().read(p);
             let vp = v.var().read(p);
-            for_unrolled(0..9, |ii| {
-                let (i, j) = escape!((ii % 3, ii / 3));
+            for_unrolled(0..9usize, |ii| {
+                let (i, j) = ((ii % 3, ii / 3);
                 let offset = Int2::expr(i as i32, j as i32);
                 let dpos = (offset.cast_f32() - fx) * DX;
                 let weight = w[i].x * w[j].y;
@@ -181,8 +181,8 @@ fn main() {
             let new_C = Var::<Mat2>::zeroed();
             new_v.store(Float2::expr(0.0f32, 0.0f32));
             new_C.store(Mat2::expr(Float2::expr(0., 0.), Float2::expr(0., 0.)));
-            for_unrolled(0..9, |ii| {
-                let (i, j) = escape!((ii % 3, ii / 3));
+            for_unrolled(0..9usize, |ii| {
+                let (i, j) = (ii % 3, ii / 3);
 
                 let offset = Int2::expr(i as i32, j as i32);
                 let dpos = (offset.cast_f32() - fx) * DX.expr();

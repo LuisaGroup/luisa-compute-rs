@@ -99,6 +99,12 @@ impl Drop for DeviceHandle {
 }
 
 impl Device {
+    pub fn query(&self, name: &str) -> Option<String> {
+        self.inner.query(name)
+    }
+    pub fn name(&self) -> String {
+        self.query("device_name").unwrap_or("unknown".to_string())
+    }
     pub fn create_swapchain(
         &self,
         window: &Window,
@@ -1237,9 +1243,23 @@ impl<S: CallableSignature> DynCallable<S> {
 unsafe impl Send for RawCallable {}
 unsafe impl Sync for RawCallable {}
 pub struct RawCallable {
+    #[allow(dead_code)]
+    pub(crate) device: Option<Device>,
     pub(crate) module: ir::CallableModuleRef,
     #[allow(dead_code)]
     pub(crate) resource_tracker: ResourceTracker,
+}
+impl RawCallable {
+    pub(crate) fn check_on_same_device(&self) {
+        RECORDER.with(|r| {
+            let r =r.borrow();
+            if let Some(device) = &self.device {
+                if let Some((a,b)) = r.check_on_same_device(device) {
+                    panic!("Callable created on a different device than the one it is called on: {:?} vs {:?}", a,b);
+                }
+            }
+        });
+    }
 }
 pub struct RawKernelDef {
     #[allow(dead_code)]
@@ -1339,6 +1359,7 @@ macro_rules! impl_call_for_callable {
             #[allow(unused_mut)]
             pub fn call(&self, $($Ts:$Ts),*) -> R {
                 let mut encoder = CallableArgEncoder::new();
+                self.inner.check_on_same_device();
                 $($Ts.encode(&mut encoder);)*
                 CallableRet::_from_return(
                     crate::lang::__invoke_callable(&self.inner.module, &encoder.args))

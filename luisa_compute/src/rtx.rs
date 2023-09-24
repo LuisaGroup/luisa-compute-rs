@@ -662,21 +662,18 @@ impl AccelVar {
     pub fn new(accel: &rtx::Accel) -> Self {
         let node = RECORDER.with(|r| {
             let mut r = r.borrow_mut();
-            assert!(r.lock, "BufferVar must be created from within a kernel");
+            assert!(r.lock, "AccelVar must be created from within a kernel");
             let handle: u64 = accel.handle().0;
             let binding = Binding::Accel(AccelBinding { handle });
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
-                *node
-            } else {
-                let node = new_node(
-                    r.pools.as_ref().unwrap(),
-                    Node::new(CArc::new(Instruction::Accel), Type::void()),
+            if let Some((a, b)) = r.check_on_same_device(&accel.handle.device) {
+                panic!(
+                    "Accel created for a device: `{:?}` but used in `{:?}`",
+                    b, a
                 );
-                let i = r.captured_buffer.len();
-                r.captured_buffer
-                    .insert(binding, (i, node, binding, accel.handle.clone()));
-                node
             }
+            r.capture_or_get(binding, &accel.handle, || {
+                Node::new(CArc::new(Instruction::Accel), Type::void())
+            })
         });
         Self {
             node,

@@ -255,7 +255,7 @@ pub(crate) struct Recorder {
     pub(crate) scopes: Vec<IrBuilder>,
     pub(crate) kernel_id: Option<usize>,
     pub(crate) lock: bool,
-    pub(crate) captured_buffer: IndexMap<Binding, (usize, NodeRef, Binding, Arc<dyn Any>)>,
+    pub(crate) captured_resources: IndexMap<Binding, (usize, NodeRef, Binding, Arc<dyn Any>)>,
     pub(crate) cpu_custom_ops: IndexMap<u64, (usize, CArc<CpuCustomOp>)>,
     pub(crate) callables: IndexMap<u64, CallableModuleRef>,
     pub(crate) shared: Vec<NodeRef>,
@@ -270,7 +270,7 @@ pub(crate) struct Recorder {
 impl Recorder {
     pub(crate) fn reset(&mut self) {
         self.scopes.clear();
-        self.captured_buffer.clear();
+        self.captured_resources.clear();
         self.cpu_custom_ops.clear();
         self.callables.clear();
         self.lock = false;
@@ -281,11 +281,42 @@ impl Recorder {
         self.kernel_id = None;
         self.callable_ret_type = None;
     }
+
+    pub(crate) fn check_on_same_device(&self, other: &Device) -> Option<(String, String)> {
+        if let Some(device) = &self.device {
+            let device = device.upgrade().unwrap();
+            if !Arc::ptr_eq(&device.inner, &other.inner) {
+                return Some((
+                    format!("{} at {:?}", device.name(), Arc::as_ptr(&device.inner)),
+                    format!("{} at {:?}", other.name(), Arc::as_ptr(&other.inner)),
+                ));
+            }
+        } else {
+            // @FIXME: What should we do?
+        }
+        None
+    }
+    pub(crate) fn capture_or_get<T: Any>(
+        &mut self,
+        binding: ir::Binding,
+        handle: &Arc<T>,
+        create_node: impl FnOnce() -> Node,
+    ) -> NodeRef {
+        if let Some((_, node, _, _)) = self.captured_resources.get(&binding) {
+            *node
+        } else {
+            let node = new_node(self.pools.as_ref().unwrap(), create_node());
+            let i = self.captured_resources.len();
+            self.captured_resources
+                .insert(binding, (i, node, binding, handle.clone()));
+            node
+        }
+    }
     pub(crate) fn new() -> Self {
         Recorder {
             scopes: vec![],
             lock: false,
-            captured_buffer: IndexMap::new(),
+            captured_resources: IndexMap::new(),
             cpu_custom_ops: IndexMap::new(),
             callables: IndexMap::new(),
             shared: vec![],

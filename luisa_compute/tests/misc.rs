@@ -48,7 +48,23 @@ fn event() {
     let v = a.copy_to_vec();
     assert_eq!(v[0], (1 + 3) * (4 + 5));
 }
+
 #[test]
+#[should_panic]
+fn callable_different_device() {
+    let device1 = get_device();
+    let device2 = get_device();
+    let abs = Callable::<fn(Expr<f32>) -> Expr<f32>>::new(
+        &device1,
+        track!(|x| {
+            if x > 0.0 {
+                return x;
+            }
+            -x
+        }),
+    );
+    let _foo = Callable::<fn(Expr<f32>) -> Expr<f32>>::new(&device2, |x| abs.call(x));
+}
 #[test]
 #[should_panic]
 fn callable_return_mismatch() {

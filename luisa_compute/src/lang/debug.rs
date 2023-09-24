@@ -154,7 +154,7 @@ pub fn __unreachable(file: &str, line: u32, col: u32) {
     } else {
         pretty_filename = file.to_string();
     }
-    let msg = if is_cpu_backend() && __env_need_backtrace() {
+    let msg = if __env_need_backtrace() {
         let backtrace = get_backtrace();
         format!(
             "unreachable code at {}:{}:{} \nbacktrace: {}",
@@ -190,7 +190,7 @@ pub fn __assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, c
     } else {
         pretty_filename = file.to_string();
     }
-    let msg = if is_cpu_backend() && __env_need_backtrace() {
+    let msg = if __env_need_backtrace() {
         let backtrace = get_backtrace();
         format!(
             "assertion failed: {} at {}:{}:{} \nbacktrace:\n{}",

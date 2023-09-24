@@ -1451,19 +1451,15 @@ impl BindlessArrayVar {
             );
             let handle: u64 = array.handle().0;
             let binding = Binding::BindlessArray(BindlessArrayBinding { handle });
-
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
-                *node
-            } else {
-                let node = new_node(
-                    r.pools.as_ref().unwrap(),
-                    Node::new(CArc::new(Instruction::Bindless), Type::void()),
+            if let Some((a, b)) = r.check_on_same_device(&array.device) {
+                panic!(
+                    "BindlessArray created for a device: `{:?}` but used in `{:?}`",
+                    b, a
                 );
-                let i = r.captured_buffer.len();
-                r.captured_buffer
-                    .insert(binding, (i, node, binding, array.handle.clone()));
-                node
             }
+            r.capture_or_get(binding, &array.handle, || {
+                Node::new(CArc::new(Instruction::Bindless), Type::void())
+            })
         });
         Self {
             node,
@@ -1525,18 +1521,15 @@ impl<T: Value> BufferVar<T> {
                 size: buffer.len * std::mem::size_of::<T>(),
                 offset: (buffer.offset * std::mem::size_of::<T>()) as u64,
             });
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
-                *node
-            } else {
-                let node = new_node(
-                    r.pools.as_ref().unwrap(),
-                    Node::new(CArc::new(Instruction::Buffer), T::type_()),
+            if let Some((a, b)) = r.check_on_same_device(&buffer.buffer.device) {
+                panic!(
+                    "Buffer created for a device: `{:?}` but used in `{:?}`",
+                    b, a
                 );
-                let i = r.captured_buffer.len();
-                r.captured_buffer
-                    .insert(binding, (i, node, binding, buffer.buffer.handle.clone()));
-                node
             }
+            r.capture_or_get(binding, &buffer.buffer.handle, || {
+                Node::new(CArc::new(Instruction::Buffer), T::type_())
+            })
         });
         Self {
             node,
@@ -1766,18 +1759,15 @@ impl<T: IoTexel> Tex2dVar<T> {
                 handle,
                 level: view.level,
             });
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
-                *node
-            } else {
-                let node = new_node(
-                    r.pools.as_ref().unwrap(),
-                    Node::new(CArc::new(Instruction::Texture2D), T::RwType::type_()),
+            if let Some((a, b)) = r.check_on_same_device(&view.tex.handle.device) {
+                panic!(
+                    "Tex2d created for a device: `{:?}` but used in `{:?}`",
+                    b, a
                 );
-                let i = r.captured_buffer.len();
-                r.captured_buffer
-                    .insert(binding, (i, node, binding, view.tex.handle.clone()));
-                node
             }
+            r.capture_or_get(binding, &view.tex.handle, || {
+                Node::new(CArc::new(Instruction::Texture2D), T::RwType::type_())
+            })
         });
         Self {
             node,
@@ -1825,18 +1815,15 @@ impl<T: IoTexel> Tex3dVar<T> {
                 handle,
                 level: view.level,
             });
-            if let Some((_, node, _, _)) = r.captured_buffer.get(&binding) {
-                *node
-            } else {
-                let node = new_node(
-                    r.pools.as_ref().unwrap(),
-                    Node::new(CArc::new(Instruction::Texture3D), T::RwType::type_()),
+            if let Some((a, b)) = r.check_on_same_device(&view.tex.handle.device) {
+                panic!(
+                    "Tex3d created for a device: `{:?}` but used in `{:?}`",
+                    b, a
                 );
-                let i = r.captured_buffer.len();
-                r.captured_buffer
-                    .insert(binding, (i, node, binding, view.tex.handle.clone()));
-                node
             }
+            r.capture_or_get(binding, &view.tex.handle, || {
+                Node::new(CArc::new(Instruction::Texture3D), T::RwType::type_())
+            })
         });
         Self {
             node,

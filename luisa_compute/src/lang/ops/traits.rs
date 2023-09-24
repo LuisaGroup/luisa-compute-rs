@@ -211,7 +211,7 @@ pub trait IntExpr {
 
 pub trait FloatExpr: Sized {
     type Bool;
-    
+
     fn ceil(&self) -> Self;
     fn floor(&self) -> Self;
     fn round(&self) -> Self;

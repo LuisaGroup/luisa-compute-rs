@@ -2,7 +2,8 @@
 use std::env::current_exe;
 use std::time::Instant;
 
-use luisa::lang::types::vector::{alias::*, Mat2};
+use luisa::lang::types::vector::alias::*;
+use luisa::lang::types::vector::Mat2;
 use luisa::prelude::*;
 use luisa_compute as luisa;
 use rand::Rng;

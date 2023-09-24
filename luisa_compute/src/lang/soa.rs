@@ -1,4 +1,5 @@
-use luisa_compute_ir::{ir::Type, CArc};
+use luisa_compute_ir::ir::Type;
+use luisa_compute_ir::CArc;
 
 use crate::prelude::*;
 /** A buffer with SOA layout.

@@ -6,8 +6,6 @@ struct Foo {
     b: u32,
 }
 
-
-
 fn main() {
     let compiler = Compiler;
     let item: syn::ItemStruct = syn::parse_str(

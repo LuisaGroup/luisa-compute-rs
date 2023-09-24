@@ -62,15 +62,18 @@ fn main() {
     bindless.emplace_buffer_async(1, &y);
     bindless.emplace_tex2d_async(0, &img, Sampler::default());
     bindless.update();
-    let kernel = Kernel::<fn(Buffer<f32>)>::new(&device, &track!(|buf_z| {
-        let bindless = bindless.var();
-        let tid = dispatch_id().x;
-        let buf_x = bindless.buffer::<f32>(0_u32.expr());
-        let buf_y = bindless.buffer::<f32>(1_u32.expr());
-        let x = buf_x.read(tid).as_::<u32>().as_::<f32>();
-        let y = buf_y.read(tid);
-        buf_z.write(tid, x + y);
-    }));
+    let kernel = Kernel::<fn(Buffer<f32>)>::new(
+        &device,
+        &track!(|buf_z| {
+            let bindless = bindless.var();
+            let tid = dispatch_id().x;
+            let buf_x = bindless.buffer::<f32>(0_u32.expr());
+            let buf_y = bindless.buffer::<f32>(1_u32.expr());
+            let x = buf_x.read(tid).as_::<u32>().as_::<f32>();
+            let y = buf_y.read(tid);
+            buf_z.write(tid, x + y);
+        }),
+    );
     kernel.dispatch([1024, 1, 1], &z);
     let mut z_data = vec![0.0; 1024];
     z.view(..).copy_to(&mut z_data);

@@ -138,6 +138,46 @@ fn callable_early_return() {
     }
 }
 #[test]
+fn var_copy_inner() {
+    let device = get_device();
+    let write = Callable::<fn(BufferVar<u32>, Expr<u32>, Var<u32>)>::new(
+        &device,
+        track!(|buf: BufferVar<u32>, i: Expr<u32>, v: Var<u32>| {
+            buf.write(i, v.load());
+            let u = v.var();
+            *u += 1;
+        }),
+    );
+    let add = Callable::<fn(Expr<u32>, Expr<u32>) -> Expr<u32>>::new(&device, |a, b| track!(a + b));
+    let x = device.create_buffer::<u32>(1024);
+    let y = device.create_buffer::<u32>(1024);
+    let z = device.create_buffer::<u32>(1024);
+    let w = device.create_buffer::<u32>(1024);
+    x.view(..).fill_fn(|i| i as u32);
+    y.view(..).fill_fn(|i| 1000 * i as u32);
+    let kernel = Kernel::<fn(Buffer<u32>)>::new(
+        &device,
+        &track!(|buf_z| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_w = w.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            let z = add.call(x, y).var();
+            write.call(buf_z, tid, z);
+            buf_w.write(tid, z);
+        }),
+    );
+    kernel.dispatch([1024, 1, 1], &z);
+    let z_data = z.view(..).copy_to_vec();
+    let w_data = w.view(..).copy_to_vec();
+    for i in 0..z_data.len() {
+        assert_eq!(z_data[i], (i + 1000 * i) as u32);
+        assert_eq!(w_data[i], (i + 1000 * i) as u32);
+    }
+}
+#[test]
 fn callable() {
     let device = get_device();
     let write = Callable::<fn(BufferVar<u32>, Expr<u32>, Var<u32>)>::new(

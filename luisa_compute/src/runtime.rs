@@ -681,7 +681,6 @@ pub struct Scope<'a> {
     resource_tracker: RefCell<ResourceTracker>,
 }
 
-
 impl<'a> Scope<'a> {
     #[inline]
     pub fn handle(&self) -> api::Stream {

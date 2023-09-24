@@ -135,6 +135,7 @@ To start writing using DSL, let's first introduce the `track!` macro. `track!( e
 
 **Every operation involving a DSL object must be enclosed within `track!`**, except `Var<T>::store()` and `Var<T>::load()`
 
+
 For, example:
 ```rust
 let a = 1.0f32.expr();
@@ -150,6 +151,29 @@ track!({
   let c = a + b;
 });
 ```
+**We* highly encourage you to enclose the entire kernel inside `track!`**
+
+Inside `track!` normal Rust syntax is still supported. Operations involving non-DSL values are still performed using native Rust operators. For example:
+```rust
+// This is still valid
+track!({
+  let mut v = vec![1.0f32, 2.0,f32];
+  v.push(3.0);
+  let a = RefCell::new(1.0f32);
+  *a.borrow_mut() += 1.0;
+  match v.len() {
+    1 => println!("1"),
+    _ => println!("not 1"),
+  }
+  if v.is_empty() {
+    println!("empty");
+  }
+  let a = 1.0f32.expr();
+  let b = a + 1.0;
+});
+
+```
+
 We also offer a `#[tracked]` macro that applies to a function. It transform the body of the function using `track!`.
  ```rust
 #[tracked]
@@ -192,6 +216,12 @@ fn pow_unrolled(x:Expr<f32>, i:u32)->Expr<f32> {
   for_unrolled(0..i, |_|{
       p *= x;
   });
+  /*
+  Equivalently, you can use
+  (0..i).for_each(|_|{
+      p *= x;
+  });
+  */
   **p 
 }
 ```

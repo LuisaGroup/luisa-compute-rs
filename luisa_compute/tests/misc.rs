@@ -1202,3 +1202,21 @@ fn dispatch_async() {
     ]);
     drop(kernel);
 }
+
+#[test]
+#[tracked]
+fn test_tracked() {
+    let v = true;
+
+    if v {
+    } else {
+        panic!();
+    }
+
+    let v = false;
+
+    if !v {
+    } else {
+        panic!();
+    }
+}

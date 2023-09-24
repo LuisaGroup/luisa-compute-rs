@@ -43,6 +43,7 @@ Try `cargo run --release --example path_tracer -- [cpu|cuda|dx|metal]`!
 use luisa::prelude::*;
 use luisa_compute as luisa;
 
+#[tracked]
 fn main() {
     use luisa::*;
     init_logger();

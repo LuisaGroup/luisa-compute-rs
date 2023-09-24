@@ -209,7 +209,7 @@ where
         log10 => Log10
     }
     fn is_finite(&self) -> Self::Bool {
-        !self.is_infinite().bitand(!self.is_nan())
+        (!self.is_infinite()).bitand(!self.is_nan())
     }
     fn is_infinite(&self) -> Self::Bool {
         Func::IsInf.call(self.clone())
@@ -233,11 +233,11 @@ where
         (self.sin(), self.cos())
     }
 }
-impl<X: Linear> NormExpr for Expr<X>
+impl<const N: usize, X: Floating> NormExpr for Expr<Vector<X, N>>
 where
-    X::Scalar: Floating,
+    X: vector::VectorAlign<N>,
 {
-    type Output = Expr<X::Scalar>;
+    type Output = Expr<X>;
     impl_simple_fns! {
         Self::Output,
         norm => Length,
@@ -268,8 +268,11 @@ impl OuterProductExpr for Expr<Float4> {
         Func::OuterProduct.call2(self.clone(), other.as_expr())
     }
 }
-impl<X: Linear> ReduceExpr for Expr<X> {
-    type Output = Expr<X::Scalar>;
+impl<const N: usize, X: VectorElement> ReduceExpr for Expr<Vector<X, N>>
+where
+    X: vector::VectorAlign<N>,
+{
+    type Output = Expr<X>;
     impl_simple_fns! {
         Self::Output,
         reduce_max=>ReduceMax,
@@ -278,12 +281,12 @@ impl<X: Linear> ReduceExpr for Expr<X> {
         reduce_sum=>ReduceSum
     }
 }
-impl<X: Linear> DotExpr for Expr<X>
+impl<const N: usize, X: Floating> DotExpr for Expr<Vector<X, N>>
 where
-    X::Scalar: Floating,
+    X: vector::VectorAlign<N>,
 {
-    type Value = X;
-    type Output = Expr<X::Scalar>;
+    type Value = Vector<X, N>;
+    type Output = Expr<X>;
     fn dot(&self, other: impl AsExpr<Value = Self::Value>) -> Self::Output {
         Func::Dot.call2(self.clone(), other.as_expr())
     }

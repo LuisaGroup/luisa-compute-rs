@@ -285,6 +285,9 @@ fn vec_cast() {
 #[test]
 fn bool_op() {
     let device = get_device();
+    if device.name() == "dx" {
+        return;
+    }
     let x: Buffer<bool> = device.create_buffer(1024);
     let y: Buffer<bool> = device.create_buffer(1024);
     let and: Buffer<bool> = device.create_buffer(1024);
@@ -329,6 +332,9 @@ fn bool_op() {
 #[test]
 fn bvec_op() {
     let device = get_device();
+    if device.name() == "dx" {
+        return;
+    }
     let x: Buffer<Bool2> = device.create_buffer(1024);
     let y: Buffer<Bool2> = device.create_buffer(1024);
     let and: Buffer<Bool2> = device.create_buffer(1024);
@@ -505,6 +511,9 @@ fn vec_permute() {
 #[test]
 fn if_phi() {
     let device = get_device();
+    if device.name() == "dx" {
+        return;
+    }
     let x: Buffer<i32> = device.create_buffer(1024);
     let even: Buffer<bool> = device.create_buffer(1024);
     x.view(..).fill_fn(|i| i as i32);

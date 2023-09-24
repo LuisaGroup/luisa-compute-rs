@@ -176,7 +176,7 @@ impl Device {
     }
     pub fn create_byte_buffer(&self, len: usize) -> ByteBuffer {
         let buffer = self.inner.create_buffer(&Type::void(), len);
-        let buffer = Buffer::<u8> {
+        let buffer = ByteBuffer {
             device: self.clone(),
             handle: Arc::new(BufferHandle {
                 device: self.clone(),
@@ -184,8 +184,6 @@ impl Device {
                 native_handle: buffer.resource.native_handle,
             }),
             len,
-            _marker: PhantomData {},
-            _is_byte_buffer: true,
         };
         buffer
     }
@@ -194,6 +192,13 @@ impl Device {
         todo!()
     }
     pub fn create_buffer<T: Value>(&self, count: usize) -> Buffer<T> {
+        let name = self.name();
+        if name == "dx" {
+            assert!(
+                std::mem::align_of::<T>() >= 4,
+                "T must be aligned to 4 bytes on dx"
+            );
+        }
         assert!(
             std::mem::size_of::<T>() > 0,
             "size of T must be greater than 0"
@@ -208,7 +213,6 @@ impl Device {
             }),
             _marker: PhantomData {},
             len: count,
-            _is_byte_buffer: false,
         };
         buffer
     }
@@ -944,6 +948,9 @@ impl CallableArgEncoder {
     pub fn buffer<T: Value>(&mut self, buffer: &BufferVar<T>) {
         self.args.push(buffer.node);
     }
+    pub fn byte_buffer(&mut self, buffer: &ByteBufferVar) {
+        self.args.push(buffer.node);
+    }
     pub fn tex2d<T: IoTexel>(&mut self, tex2d: &Tex2dVar<T>) {
         self.args.push(tex2d.node);
     }
@@ -1007,6 +1014,20 @@ impl KernelArgEncoder {
             size: buffer.len * std::mem::size_of::<T>(),
         }));
     }
+    pub fn byte_buffer(&mut self, buffer: &ByteBuffer) {
+        self.args.push(api::Argument::Buffer(api::BufferArgument {
+            buffer: buffer.handle.handle,
+            offset: 0,
+            size: buffer.len,
+        }));
+    }
+    pub fn byte_buffer_view(&mut self, buffer: &ByteBufferView) {
+        self.args.push(api::Argument::Buffer(api::BufferArgument {
+            buffer: buffer.handle(),
+            offset: buffer.offset,
+            size: buffer.len,
+        }));
+    }
     pub fn tex2d<T: IoTexel>(&mut self, tex: &Tex2dView<T>) {
         self.args.push(api::Argument::Texture(api::TextureArgument {
             texture: tex.handle(),
@@ -1037,6 +1058,18 @@ impl<T: Value> KernelArg for Buffer<T> {
     type Parameter = BufferVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.buffer(self);
+    }
+}
+impl KernelArg for ByteBuffer {
+    type Parameter = ByteBufferVar;
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
+        encoder.byte_buffer(self);
+    }
+}
+impl<'a> KernelArg for ByteBufferView<'a> {
+    type Parameter = ByteBufferVar;
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
+        encoder.byte_buffer_view(self);
     }
 }
 impl<T: Value> KernelArg for T {
@@ -1333,6 +1366,14 @@ impl<'a, T: Value> AsKernelArg<Buffer<T>> for BufferView<'a, T> {}
 impl<'a, T: Value> AsKernelArg<BufferView<'a, T>> for BufferView<'a, T> {}
 
 impl<'a, T: Value> AsKernelArg<BufferView<'a, T>> for Buffer<T> {}
+
+impl AsKernelArg<ByteBuffer> for ByteBuffer {}
+
+impl<'a> AsKernelArg<ByteBuffer> for ByteBufferView<'a> {}
+
+impl<'a> AsKernelArg<ByteBufferView<'a>> for ByteBufferView<'a> {}
+
+impl<'a> AsKernelArg<ByteBufferView<'a>> for ByteBuffer {}
 
 impl<'a, T: IoTexel> AsKernelArg<Tex2d<T>> for Tex2dView<'a, T> {}
 

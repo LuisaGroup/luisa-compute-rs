@@ -184,6 +184,18 @@ fn pow_unrolled(x:Expr<f32>, i:u32)->Expr<f32> {
   **p 
 }
 ```
+Of course this can be tedius if you just want to unroll a loop. Thus we provide a `for_unrolled` function that unrolls a loop for you. 
+```rust
+#[tracked]
+fn pow_unrolled(x:Expr<f32>, i:u32)->Expr<f32> {
+  let p = 1.0f32.var();
+  for_unrolled(0..i, |_|{
+      p *= x;
+  });
+  **p 
+}
+```
+
 
 
 ### Variables and Expressions

@@ -286,6 +286,12 @@ pub fn loop_(body: impl Fn()) {
     });
 }
 
+pub fn for_unrolled<I: IntoIterator>(iter: I, body: impl Fn(I::Item)) {
+    for i in iter {
+        body(i);
+    }
+}
+
 pub fn for_range<R: ForLoopRange>(r: R, body: impl Fn(Expr<R::Element>)) {
     let start = r.start();
     let end = r.end();

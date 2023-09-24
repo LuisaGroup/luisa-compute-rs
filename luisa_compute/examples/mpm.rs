@@ -118,18 +118,16 @@ fn main() {
             let affine =
                 Mat2::diag_expr(Float2::expr(stress, stress)) + P_MASS as f32 * C.var().read(p);
             let vp = v.var().read(p);
-            escape!(for ii in 0..9 {
-                let (i, j) = (ii % 3, ii / 3);
-                track!({
-                    let offset = Int2::expr(i as i32, j as i32);
-                    let dpos = (offset.cast_f32() - fx) * DX;
-                    let weight = w[i].x * w[j].y;
-                    let vadd = weight * (P_MASS * vp + affine * dpos);
-                    let idx = index((base + offset).cast_u32());
-                    grid_v.var().atomic_fetch_add(idx * 2, vadd.x);
-                    grid_v.var().atomic_fetch_add(idx * 2 + 1, vadd.y);
-                    grid_m.var().atomic_fetch_add(idx, weight * P_MASS);
-                });
+            for_unrolled(0..9, |ii| {
+                let (i, j) = escape!((ii % 3, ii / 3));
+                let offset = Int2::expr(i as i32, j as i32);
+                let dpos = (offset.cast_f32() - fx) * DX;
+                let weight = w[i].x * w[j].y;
+                let vadd = weight * (P_MASS * vp + affine * dpos);
+                let idx = index((base + offset).cast_u32());
+                grid_v.var().atomic_fetch_add(idx * 2, vadd.x);
+                grid_v.var().atomic_fetch_add(idx * 2 + 1, vadd.y);
+                grid_m.var().atomic_fetch_add(idx, weight * P_MASS);
             });
         }),
     );
@@ -183,24 +181,19 @@ fn main() {
             let new_C = Var::<Mat2>::zeroed();
             new_v.store(Float2::expr(0.0f32, 0.0f32));
             new_C.store(Mat2::expr(Float2::expr(0., 0.), Float2::expr(0., 0.)));
-            escape!({
-                for ii in 0..9 {
-                    let (i, j) = (ii % 3, ii / 3);
-                    track!({
-                        let offset = Int2::expr(i as i32, j as i32);
-                        let dpos = (offset.cast_f32() - fx) * DX.expr();
-                        let weight = w[i].x * w[j].y;
-                        let idx = index((base + offset).cast_u32());
-                        let g_v = Float2::expr(
-                            grid_v.var().read(idx * 2u32),
-                            grid_v.var().read(idx * 2u32 + 1u32),
-                        );
-                        new_v.store(new_v.load() + weight * g_v);
-                        new_C.store(
-                            new_C.load() + 4.0f32 * weight * g_v.outer_product(dpos) / (DX * DX),
-                        );
-                    });
-                }
+            for_unrolled(0..9, |ii| {
+                let (i, j) = escape!((ii % 3, ii / 3));
+
+                let offset = Int2::expr(i as i32, j as i32);
+                let dpos = (offset.cast_f32() - fx) * DX.expr();
+                let weight = w[i].x * w[j].y;
+                let idx = index((base + offset).cast_u32());
+                let g_v = Float2::expr(
+                    grid_v.var().read(idx * 2u32),
+                    grid_v.var().read(idx * 2u32 + 1u32),
+                );
+                new_v.store(new_v.load() + weight * g_v);
+                new_C.store(new_C.load() + 4.0f32 * weight * g_v.outer_product(dpos) / (DX * DX));
             });
 
             v.var().write(p, new_v);

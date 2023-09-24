@@ -22,6 +22,6 @@ fn main() {
         y,
         exclude: 42.0,
     };
-    let shader = Kernel::<fn(MyArgStruct<f32>)>::new(&device, |_args| {});
+    let shader = Kernel::<fn(MyArgStruct<f32>)>::new(&device, &|_args| {});
     shader.dispatch([1024, 1, 1], &my_args);
 }

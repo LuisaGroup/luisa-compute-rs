@@ -62,7 +62,7 @@ fn main() {
     bindless.emplace_buffer_async(1, &y);
     bindless.emplace_tex2d_async(0, &img, Sampler::default());
     bindless.update();
-    let kernel = Kernel::<fn(Buffer<f32>)>::new(&device, track!(|buf_z| {
+    let kernel = Kernel::<fn(Buffer<f32>)>::new(&device, &track!(|buf_z| {
         let bindless = bindless.var();
         let tid = dispatch_id().x;
         let buf_x = bindless.buffer::<f32>(0_u32.expr());

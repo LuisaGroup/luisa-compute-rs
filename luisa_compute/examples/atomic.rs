@@ -12,7 +12,7 @@ fn main() {
     sum.view(..).fill(0.0);
     let shader = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let buf_sum = sum.var();
             let tid = dispatch_id().x;

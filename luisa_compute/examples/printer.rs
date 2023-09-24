@@ -21,7 +21,7 @@ fn main() {
         "cpu"
     });
     let printer = Printer::new(&device, 65536);
-    let kernel = Kernel::<fn()>::new(&device, track!(|| {
+    let kernel = Kernel::<fn()>::new(&device, &track!(|| {
         let id = dispatch_id().xy();
         if id.x == id.y {
             lc_info!(printer, "id = {:?}", id);

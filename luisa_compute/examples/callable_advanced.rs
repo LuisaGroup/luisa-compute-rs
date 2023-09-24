@@ -40,7 +40,7 @@ fn main() {
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
     let kernel = Kernel::<fn(Buffer<f32>)>::new(
         &device,
-        track!(|buf_z| {
+        &track!(|buf_z| {
             let buf_x = x.var();
             let buf_y = y.var();
             let tid = dispatch_id().x;

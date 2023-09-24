@@ -24,7 +24,7 @@ fn main() {
     let z = device.create_buffer::<f32>(1024);
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
-    let kernel = Kernel::<fn(Buffer<f32>)>::new(&device, track!(|buf_z| {
+    let kernel = Kernel::<fn(Buffer<f32>)>::new(&device, &track!(|buf_z| {
         // z is pass by arg
         let buf_x = x.var(); // x and y are captured
         let buf_y = y.var();

@@ -121,7 +121,7 @@ fn main() {
     let debug_hit_t = device.create_buffer::<f32>(4);
     let rt_kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let accel = accel.var();
             let px = dispatch_id().xy();
             let xy = px.as_float2() / Float2::expr(img_w as f32, img_h as f32);

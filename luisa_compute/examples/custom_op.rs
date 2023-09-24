@@ -30,7 +30,7 @@ fn main() {
     });
     let shader = Kernel::<fn(Buffer<f32>)>::new(
         &device,
-        track!(|buf_z: BufferVar<f32>| {
+        &track!(|buf_z: BufferVar<f32>| {
             // z is pass by arg
             let buf_x = x.var(); // x and y are captured
             let buf_y = y.var();

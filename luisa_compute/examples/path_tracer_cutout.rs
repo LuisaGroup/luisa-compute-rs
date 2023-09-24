@@ -258,7 +258,7 @@ fn main() {
     // use create_kernel_async to compile multiple kernels in parallel
     let path_tracer = Kernel::<fn(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>::new_async(
         &device,
-        track!(|image: Tex2dVar<Float4>,
+        &track!(|image: Tex2dVar<Float4>,
                 seed_image: Tex2dVar<u32>,
                 accel: AccelVar,
                 resolution: Expr<Uint2>| {
@@ -508,7 +508,7 @@ fn main() {
     );
     let display = Kernel::<fn(Tex2d<Float4>, Tex2d<Float4>)>::new_async(
         &device,
-        track!(|acc, display| {
+        &track!(|acc, display| {
             set_block_size([16, 16, 1]);
             let coord = dispatch_id().xy();
             let radiance = acc.read(coord);

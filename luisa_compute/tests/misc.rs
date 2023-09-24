@@ -17,10 +17,10 @@ fn event() {
     let a: Buffer<i32> = device.create_buffer_from_slice(&[0]);
     let b: Buffer<i32> = device.create_buffer_from_slice(&[0]);
     // compute (1 + 3) * (4 + 5)
-    let add = Kernel::<fn(Buffer<i32>, i32)>::new(&device, |buf: BufferVar<i32>, v: Expr<i32>| {
+    let add = device.create_kernel::<fn(Buffer<i32>, i32)>(&|buf, v| {
         track!(buf.write(0, buf.read(0) + v));
     });
-    let mul = Kernel::<fn(Buffer<i32>, Buffer<i32>)>::new(&device, |a, b| {
+    let mul = Kernel::<fn(Buffer<i32>, Buffer<i32>)>::new(&device, &|a, b| {
         track!(a.write(0, a.read(0) * b.read(0)));
     });
     let stream_a = device.create_stream(StreamTag::Compute);
@@ -106,7 +106,7 @@ fn callable_early_return() {
     let mut rng = StdRng::seed_from_u64(0);
     x.fill_fn(|_| rng.gen());
     let y = device.create_buffer::<f32>(1024);
-    Kernel::<fn()>::new(&device, || {
+    Kernel::<fn()>::new(&device, &|| {
         let i = dispatch_id().x;
         let x = x.var().read(i);
         let y = y.var();
@@ -138,7 +138,7 @@ fn callable() {
     y.view(..).fill_fn(|i| 1000 * i as u32);
     let kernel = Kernel::<fn(Buffer<u32>)>::new(
         &device,
-        track!(|buf_z| {
+        &track!(|buf_z| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_w = w.var();
@@ -201,7 +201,7 @@ fn bool_op() {
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let tid = dispatch_id().x;
             let x = x.var().read(tid);
             let y = y.var().read(tid);
@@ -245,7 +245,7 @@ fn bvec_op() {
     y.view(..).fill_fn(|_| Bool2::new(rng.gen(), rng.gen()));
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let tid = dispatch_id().x;
             let x = x.var().read(tid);
             let y = y.var().read(tid);
@@ -286,7 +286,7 @@ fn test_var_replace() {
     let ys: Buffer<Int4> = device.create_buffer(1024);
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let tid = dispatch_id().x;
             let x = xs.var().read(tid).var();
             *x = Int4::expr(1, 2, 3, 4);
@@ -330,7 +330,7 @@ fn vec_bit_minmax() {
     z.view(..).fill_fn(|_| Int2::new(rng.gen(), rng.gen()));
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let tid = dispatch_id().x;
             let x = x.var().read(tid);
             let y = y.var().read(tid);
@@ -390,7 +390,7 @@ fn vec_permute() {
     let v3: Buffer<Int3> = device.create_buffer(1024);
     v2.view(..)
         .fill_fn(|i| Int2::new(i as i32 + 0, i as i32 + 1));
-    let kernel = Kernel::<fn()>::new(&device, || {
+    let kernel = Kernel::<fn()>::new(&device, &|| {
         let v2 = v2.var();
         let v3 = v3.var();
         let tid = dispatch_id().x;
@@ -415,7 +415,7 @@ fn if_phi() {
     x.view(..).fill_fn(|i| i as i32);
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let x = x.var();
             let even = even.var();
             let tid = dispatch_id().x;
@@ -443,7 +443,7 @@ fn switch_phi() {
     let y: Buffer<i32> = device.create_buffer(1024);
     let z: Buffer<f32> = device.create_buffer(1024);
     x.view(..).fill_fn(|i| i as i32);
-    let kernel = Kernel::<fn()>::new(&device, || {
+    let kernel = Kernel::<fn()>::new(&device, &|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_z = z.var();
@@ -490,7 +490,7 @@ fn switch_unreachable() {
     let y: Buffer<i32> = device.create_buffer(1024);
     let z: Buffer<f32> = device.create_buffer(1024);
     x.view(..).fill_fn(|i| i as i32 % 3);
-    let kernel = Kernel::<fn()>::new(&device, || {
+    let kernel = Kernel::<fn()>::new(&device, &|| {
         let buf_x = x.var();
         let buf_y = y.var();
         let buf_z = z.var();
@@ -534,7 +534,7 @@ fn array_read_write() {
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let tid = dispatch_id().x;
             let arr = Var::<[i32; 4]>::zeroed();
@@ -561,7 +561,7 @@ fn array_read_write3() {
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let tid = dispatch_id().x;
             let arr = Var::<[i32; 4]>::zeroed();
@@ -586,7 +586,7 @@ fn array_read_write4() {
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let tid = dispatch_id().x;
             let arr = Var::<[i32; 4]>::zeroed();
@@ -619,7 +619,7 @@ fn array_read_write2() {
     let y: Buffer<i32> = device.create_buffer(1024);
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let tid = dispatch_id().x;
@@ -651,7 +651,7 @@ fn array_read_write_vla() {
     let y: Buffer<i32> = device.create_buffer(1024);
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let tid = dispatch_id().x;
@@ -688,7 +688,7 @@ fn array_read_write_async_compile() {
     let x: Buffer<[i32; 4]> = device.create_buffer(1024);
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let tid = dispatch_id().x;
             let arr = Var::<[i32; 4]>::zeroed();
@@ -718,7 +718,7 @@ fn capture_same_buffer_multiple_view() {
     sum.view(..).fill(0.0);
     let shader = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let tid = dispatch_id().x;
             let buf_x_lo = x.view(0..64).var();
             let buf_x_hi = x.view(64..).var();
@@ -749,7 +749,7 @@ fn uniform() {
     sum.view(..).fill(0.0);
     let shader = Kernel::<fn(Float3)>::new(
         &device,
-        track!(|v: Expr<Float3>| {
+        &track!(|v: Expr<Float3>| {
             let tid = dispatch_id().x;
             let buf_x_lo = x.view(0..64).var();
             let buf_x_hi = x.view(64..).var();
@@ -801,7 +801,7 @@ fn byte_buffer() {
     let i3 = push!(f32, 1f32);
     Kernel::<fn()>::new(
         &device,
-        track!(|| unsafe {
+        &track!(|| unsafe {
             let buf = buf.var();
             let i0 = i0 as u64;
             let i1 = i1 as u64;
@@ -878,7 +878,7 @@ fn bindless_byte_buffer() {
     let i3 = push!(f32, 1f32);
     Kernel::<fn(ByteBuffer)>::new(
         &device,
-        track!(|out: ByteBufferVar| unsafe {
+        &track!(|out: ByteBufferVar| unsafe {
             let heap = heap.var();
             let buf = heap.byte_address_buffer(0u32);
             let i0 = i0 as u64;
@@ -991,7 +991,7 @@ fn atomic() {
     let foo_min = device.create_buffer_from_slice(&[foo_min_init]);
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let i = dispatch_id().x;
             let foos = foos.var();
             let foo = foos.read(i);
@@ -1060,7 +1060,7 @@ fn dyn_callable() {
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
     let kernel = Kernel::<fn(Buffer<f32>)>::new(
         &device,
-        track!(|buf_z| {
+        &track!(|buf_z| {
             let buf_x = x.var();
             let buf_y = y.var();
             let tid = dispatch_id().x;
@@ -1091,7 +1091,7 @@ fn dispatch_async() {
     x.fill_fn(|i| i as f32);
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             for _ in 0..10000000 {
                 let buf_x = x.var();
                 let tid = dispatch_id().x;

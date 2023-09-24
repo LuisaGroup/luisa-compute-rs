@@ -427,12 +427,12 @@ impl Default for KernelBuildOptions {
         }
     }
 }
-pub trait CallableBuildFn<S:CallableSignature> {
+pub trait CallableBuildFn<S: CallableSignature> {
     fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)
         -> RawCallable;
 }
 
-pub trait StaticCallableBuildFn<S:CallableSignature>: CallableBuildFn<S> {}
+pub trait StaticCallableBuildFn<S: CallableSignature>: CallableBuildFn<S> {}
 
 // @FIXME: this looks redundant
 pub unsafe trait CallableRet {
@@ -463,7 +463,6 @@ pub trait CallableSignature {
     type Ret: CallableRet;
 }
 
-pub trait KernelSignature {}
 macro_rules! impl_callable {
     ($($Ts:ident)*) => {
         impl<R:CallableRet +'static, $($Ts: CallableParameter +'static),*> CallableSignature for fn($($Ts,)*)->R {
@@ -526,44 +525,61 @@ impl_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 );
 impl_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 );
 impl_callable!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
+pub trait KernelSignature: Sized {}
+pub trait KernelSignature2<'a>: KernelSignature {
+    type Fn: KernelBuildFn<'a, Self>;
+}
+pub trait KernelBuildFn<'a, S: KernelSignature2<'a>> {
+    fn build_kernel(&self, builder: &mut KernelBuilder) -> KernelDef<S>;
+}
+
 macro_rules! impl_kernel {
     ($($Ts:ident)*) => {
         impl<$($Ts: KernelArg +'static),*> KernelSignature for fn($($Ts,)*) {}
+        impl<'a, $($Ts: KernelArg +'static),*> KernelSignature2<'a> for fn($($Ts,)*) {
+            type Fn = &'a dyn Fn($($Ts::Parameter,)*);
+        }
+        impl<'a, $($Ts: KernelArg +'static),*> KernelBuildFn<'a, fn($($Ts,)*)> for &'a dyn Fn($($Ts::Parameter,)*) {
+            #[allow(non_snake_case)]
+            #[allow(unused_variables)]
+            fn build_kernel(&self, builder: &mut KernelBuilder) -> KernelDef<fn($($Ts,)*)> {
+                builder.build_kernel(|builder| {
+                    $(let $Ts = <$Ts::Parameter as KernelParameter>::def_param(builder);)*
+                    (self)($($Ts,)*)
+                })
+            }
+        }
         impl<$($Ts: KernelArg +'static),*> KernelDef<fn($($Ts,)*)>  {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
-            pub fn new_maybe_device(device: Option<&Device>, f:impl FnOnce($($Ts::Parameter,)*))->Self {
-                let mut builder = KernelBuilder::new(device.cloned(), true);
-                builder.build_kernel(move |builder| {
-                    $(let $Ts = <$Ts::Parameter as KernelParameter>::def_param(builder);)*
-                    (f)($($Ts,)*)
-                })
+            pub fn new_maybe_device(device: Option<&Device>, f:&dyn Fn($($Ts::Parameter,)*))->Self {
+                KernelBuildFn::build_kernel(&f, &mut KernelBuilder::new(device.cloned(), true))
             }
-            pub fn new(device: &Device, f:impl FnOnce($($Ts::Parameter,)*))->Self {
+            pub fn new(device: &Device, f:&dyn Fn($($Ts::Parameter,)*))->Self {
                 Self::new_maybe_device(Some(device), f)
             }
             pub fn new_static(f:fn($($Ts::Parameter,)*))->Self {
-                Self::new_maybe_device(None, f)
+                Self::new_maybe_device(None, &f)
             }
         }
         impl<$($Ts: KernelArg +'static),*> Kernel<fn($($Ts,)*)> {
             /// Compile a kernel with given recording function `f`.
-            pub fn new(device: &Device, f:impl FnOnce($($Ts::Parameter,)*))->Self {
+            pub fn new(device: &Device, f:&dyn Fn($($Ts::Parameter,)*))->Self {
                 let def = KernelDef::<fn($($Ts,)*)>::new(device, f);
-                device.compile_kernel(&def)
+                device.compile_kernel_def(&def)
             }
+
             /// Compile a kernel asynchronously with given recording function `f`.
             /// This function returns immediately after `f` returns
-
-            pub fn new_async(device: &Device, f:impl FnOnce($($Ts::Parameter,)*))->Self {
+            pub fn new_async(device: &Device, f:&dyn Fn($($Ts::Parameter,)*))->Self {
                 let def = KernelDef::<fn($($Ts,)*)>::new(device, f);
-                device.compile_kernel_async(&def)
+                device.compile_kernel_def_async(&def)
             }
 
              // Compile a kernel with given recording function `f` and build options [`KernelBuildOptions`]
-            pub fn new_with_options(device: &Device, options: KernelBuildOptions, f:impl FnOnce($($Ts::Parameter,)*))->Self {
+            pub fn new_with_options(device: &Device, options: KernelBuildOptions, f:&dyn Fn($($Ts::Parameter,)*))->Self {
                 let def = KernelDef::<fn($($Ts,)*)>::new(device, f);
-                device.compile_kernel_with_options(&def, options)
+                device.compile_kernel_def_with_options(&def, options)
             }
         }
     };
@@ -589,7 +605,7 @@ impl_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 
 macro_rules! impl_callable_build_for_fn {
     ($($Ts:ident)*) => {
-        impl<T, R:CallableRet +'static, $($Ts: CallableParameter),*> CallableBuildFn<fn($($Ts,)*)->R> for T 
+        impl<T, R:CallableRet +'static, $($Ts: CallableParameter),*> CallableBuildFn<fn($($Ts,)*)->R> for T
             where T: Fn($($Ts,)*)->R + 'static {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]

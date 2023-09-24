@@ -74,7 +74,7 @@ fn autodiff_helper<F: Fn(&[Expr<f32>]) -> Expr<f32>>(
     //     inputs[i].view(..).copy_from(&tmp);
     // }
     println!("init time: {:?}", tic.elapsed());
-    let kernel = Kernel::<fn()>::new_async(&device, || {
+    let kernel = Kernel::<fn()>::new_async(&device, &|| {
         let input_vars = inputs.iter().map(|input| input.var()).collect::<Vec<_>>();
         let grad_fd_vars = grad_fd.iter().map(|grad| grad.var()).collect::<Vec<_>>();
         let grad_ad_vars = grad_ad.iter().map(|grad| grad.var()).collect::<Vec<_>>();
@@ -709,7 +709,7 @@ fn autodiff_select() {
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -756,7 +756,7 @@ fn autodiff_detach() {
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -809,7 +809,7 @@ fn autodiff_select_nan() {
     y.view(..).fill_fn(|_| rng.gen::<f32>() + 10.0);
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -853,7 +853,7 @@ fn autodiff_if_nan() {
     y.view(..).fill_fn(|_| rng.gen::<f32>() + 10.0);
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -907,7 +907,7 @@ fn autodiff_if_phi() {
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -956,7 +956,7 @@ fn autodiff_if_phi2() {
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -1015,7 +1015,7 @@ fn autodiff_if_phi3() {
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -1080,7 +1080,7 @@ fn autodiff_if_phi4() {
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_x = x.var();
             let buf_y = y.var();
             let buf_dx = dx.var();
@@ -1148,7 +1148,7 @@ fn autodiff_switch() {
     y.view(..).fill_fn(|_| rng.gen());
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_t = t.var();
             let buf_x = x.var();
             let buf_y = y.var();
@@ -1227,7 +1227,7 @@ fn autodiff_callable() {
         }));
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let buf_t = t.var();
             let buf_x = x.var();
             let buf_y = y.var();

@@ -52,7 +52,7 @@ fn main() {
     let areas = device.create_buffer::<f32>(4);
     let shader = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let tid = dispatch_id().x;
             let tag = tid / 2;
             let index = tid % 2;

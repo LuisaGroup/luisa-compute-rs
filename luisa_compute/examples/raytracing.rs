@@ -36,7 +36,7 @@ fn main() {
     let img_w = 800;
     let img_h = 800;
     let img = device.create_tex2d::<Float4>(PixelStorage::Byte4, img_w, img_h, 1);
-    let rt_kernel = Kernel::<fn()>::new(&device,track!(|| {
+    let rt_kernel = Kernel::<fn()>::new(&device,&track!(|| {
         let accel = accel.var();
         let px = dispatch_id().xy();
         let xy = px.as_::<Float2>() / Float2::expr(img_w as f32, img_h as f32);

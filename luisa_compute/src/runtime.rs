@@ -401,16 +401,49 @@ impl Device {
         }
     }
 
+    // pub fn create_callable<S: CallableSignature>(
+    //     &self,
+    //     f: impl CallableBuildFn<S>,
+    // ) -> Callable<S> {
+    //     let mut builder = KernelBuilder::new(Some(self.clone()), false);
+    //     let raw_callable = CallableBuildFn::build_callable(&f, None, &mut builder);
+    //     Callable {
+    //         inner: raw_callable,
+    //         _marker: PhantomData,
+    //     }
+    // }
+
+    pub fn create_kernel<'a, S: KernelSignature2<'a>>(&self, f: S::Fn) -> Kernel<S> {
+        let mut builder = KernelBuilder::new(Some(self.clone()), true);
+        let k = KernelBuildFn::build_kernel(&f, &mut builder);
+        self.compile_kernel_def(&k)
+    }
+
+    pub fn create_kernel_async<'a, S: KernelSignature2<'a>>(&self, f: S::Fn) -> Kernel<S> {
+        let mut builder = KernelBuilder::new(Some(self.clone()), true);
+        let k = KernelBuildFn::build_kernel(&f, &mut builder);
+        self.compile_kernel_def_async(&k)
+    }
+
+    pub fn create_kernel_with_options<'a, S: KernelSignature2<'a>>(
+        &self,
+        options: KernelBuildOptions,
+        f: S::Fn,
+    ) -> Kernel<S> {
+        let mut builder = KernelBuilder::new(Some(self.clone()), true);
+        let k = KernelBuildFn::build_kernel(&f, &mut builder);
+        self.compile_kernel_def_with_options(&k, options)
+    }
     /// Compile a [`KernelDef`] into a [`Kernel`]. See [`Kernel`] for more
     /// details on kernel creation
-    pub fn compile_kernel<S: KernelSignature>(&self, k: &KernelDef<S>) -> Kernel<S> {
-        self.compile_kernel_with_options(k, KernelBuildOptions::default())
+    pub fn compile_kernel_def<S: KernelSignature>(&self, k: &KernelDef<S>) -> Kernel<S> {
+        self.compile_kernel_def_with_options(k, KernelBuildOptions::default())
     }
 
     /// Compile a [`KernelDef`] into a [`Kernel`] asynchronously. See [`Kernel`]
     /// for more details on kernel creation
-    pub fn compile_kernel_async<S: KernelSignature>(&self, k: &KernelDef<S>) -> Kernel<S> {
-        self.compile_kernel_with_options(
+    pub fn compile_kernel_def_async<S: KernelSignature>(&self, k: &KernelDef<S>) -> Kernel<S> {
+        self.compile_kernel_def_with_options(
             k,
             KernelBuildOptions {
                 async_compile: true,
@@ -421,7 +454,7 @@ impl Device {
 
     /// Compile a [`KernelDef`] into a [`Kernel`] with options. See [`Kernel`]
     /// for more details on kernel creation
-    pub fn compile_kernel_with_options<S: KernelSignature>(
+    pub fn compile_kernel_def_with_options<S: KernelSignature>(
         &self,
         k: &KernelDef<S>,
         options: KernelBuildOptions,
@@ -1231,21 +1264,22 @@ pub struct KernelDef<T: KernelSignature> {
 /// use luisa_compute::prelude::*;
 /// let ctx = Context::new(std::env::current_exe().unwrap());
 /// let device = ctx.create_device("cpu");
-/// let kernel = KernelDef::<fn(Buffer<f32>, Buffer<f32>,
-/// Buffer<f32>)>::new(&device, track!(|a,b,c|{  })); 
+/// type Signature = fn(Buffer<f32>, Buffer<f32>, Buffer<f32>);
+/// let kernel = KernelDef::<Signature>::new(&device, &track!(|a,b,c|{  }));
 /// // Compilation:
-/// let kernel = device.compile_kernel(&kernel);
+/// let kernel = device.compile_kernel_def(&kernel);
 /// ```
 /// - Recording and compilation in one step:
 /// ```no_run
 /// use luisa_compute::prelude::*;
 /// let ctx = Context::new(std::env::current_exe().unwrap());
 /// let device = ctx.create_device("cpu");
-/// let kernel = Kernel::<fn(Buffer<f32>, Buffer<f32>,
-/// Buffer<f32>)>::new(&device, track!(|a,b,c|{ }));
+/// type Signature = fn(Buffer<f32>, Buffer<f32>, Buffer<f32>);
+/// let kernel = device.
+///     create_kernel::<Signature>(&track!(|a,b,c|{ }));
 /// ```
-/// - Asynchronous compilation use [`Kernel::<T>::new_async`]
-/// - Custom build options using [`Kernel::<T>::new_with_options`]
+/// - Asynchronous compilation use [`Kernel::<T>::new_async`] or [`Device::create_kernel_async`]
+/// - Custom build options using [`Kernel::<T>::new_with_options`] or [`Device::create_kernel_async`]
 pub struct Kernel<T: KernelSignature> {
     pub(crate) inner: Arc<RawKernel>,
     pub(crate) _marker: PhantomData<T>,

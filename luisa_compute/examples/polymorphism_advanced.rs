@@ -134,7 +134,7 @@ fn main() {
     let result = device.create_buffer::<f32>(100);
     let kernel = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let i = dispatch_id().x;
             let x = i.as_f32() / 100.0 * PI;
             let ctx = ShaderEvalContext {

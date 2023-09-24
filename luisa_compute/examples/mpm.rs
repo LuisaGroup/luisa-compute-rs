@@ -92,7 +92,7 @@ fn main() {
 
     let clear_grid = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let idx = index(dispatch_id().xy());
             grid_v.var().write(idx * 2, 0.0f32);
             grid_v.var().write(idx * 2 + 1, 0.0f32);
@@ -102,7 +102,7 @@ fn main() {
 
     let point_to_grid = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let p = dispatch_id().x;
             let xp = x.var().read(p) / DX;
             let base = (xp - 0.5f32).cast_i32();
@@ -135,7 +135,7 @@ fn main() {
 
     let simulate_grid = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let coord = dispatch_id().xy();
             let i = index(coord);
             let v = Var::<Float2>::zeroed();
@@ -167,7 +167,7 @@ fn main() {
 
     let grid_to_point = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let p = dispatch_id().x;
             let xp = x.var().read(p) / DX;
             let base = (xp - 0.5f32).cast_i32();
@@ -210,7 +210,7 @@ fn main() {
         }),
     );
 
-    let clear_display = Kernel::<fn()>::new(&device, || {
+    let clear_display = Kernel::<fn()>::new(&device, &|| {
         display.var().write(
             dispatch_id().xy(),
             Float4::expr(0.1f32, 0.2f32, 0.3f32, 1.0f32),
@@ -218,7 +218,7 @@ fn main() {
     });
     let draw_particles = Kernel::<fn()>::new(
         &device,
-        track!(|| {
+        &track!(|| {
             let p = dispatch_id().x;
             for i in -1..=1 {
                 for j in -1..=1 {

@@ -120,7 +120,7 @@ fn main() {
 
     let advect = Kernel::<fn(Buffer<Float2>, Buffer<Float2>, Buffer<f32>, Buffer<f32>)>::new_async(
         &device,
-        track!(|u0, u1, rho0, rho1| {
+        &track!(|u0, u1, rho0, rho1| {
             let coord = dispatch_id().xy();
             let u = u0.read(index(coord));
 
@@ -136,7 +136,7 @@ fn main() {
 
     let divergence = Kernel::<fn(Buffer<Float2>, Buffer<f32>)>::new_async(
         &device,
-        track!(|u, div| {
+        &track!(|u, div| {
             let coord = dispatch_id().xy();
             if coord.x < (N_GRID as u32 - 1) && coord.y < (N_GRID as u32 - 1) {
                 let dx = (u.read(index(Uint2::expr(coord.x + 1, coord.y))).x
@@ -152,7 +152,7 @@ fn main() {
 
     let pressure_solve = Kernel::<fn(Buffer<f32>, Buffer<f32>, Buffer<f32>)>::new_async(
         &device,
-        track!(|p0, p1, div| {
+        &track!(|p0, p1, div| {
             let coord = dispatch_id().xy();
             let i = coord.x.as_i32();
             let j = coord.y.as_i32();
@@ -171,7 +171,7 @@ fn main() {
 
     let pressure_apply = Kernel::<fn(Buffer<f32>, Buffer<Float2>)>::new_async(
         &device,
-        track!(|p, u| {
+        &track!(|p, u| {
             let coord = dispatch_id().xy();
             let i = coord.x.as_i32();
             let j = coord.y.as_i32();
@@ -193,7 +193,7 @@ fn main() {
 
     let integrate = Kernel::<fn(Buffer<Float2>, Buffer<f32>)>::new_async(
         &device,
-        track!(|u, rho| {
+        &track!(|u, rho| {
             let coord = dispatch_id().xy();
             let ij = index(coord);
 
@@ -210,7 +210,7 @@ fn main() {
 
     let init = Kernel::<fn(Buffer<f32>, Buffer<Float2>, Float2)>::new_async(
         &device,
-        track!(|rho, u, dir| {
+        &track!(|rho, u, dir| {
             let coord = dispatch_id().xy();
             let i = coord.x.as_i32();
             let j = coord.y.as_i32();
@@ -225,7 +225,7 @@ fn main() {
         }),
     );
 
-    let init_grid = Kernel::<fn()>::new_async(&device, || {
+    let init_grid = Kernel::<fn()>::new_async(&device, &|| {
         let idx = index(dispatch_id().xy());
         u0.var().write(idx, Float2::expr(0.0f32, 0.0f32));
         u1.var().write(idx, Float2::expr(0.0f32, 0.0f32));
@@ -238,7 +238,7 @@ fn main() {
         div.var().write(idx, 0.0f32);
     });
 
-    let clear_pressure = Kernel::<fn()>::new_async(&device, || {
+    let clear_pressure = Kernel::<fn()>::new_async(&device, &|| {
         let idx = index(dispatch_id().xy());
         p0.var().write(idx, 0.0f32);
         p1.var().write(idx, 0.0f32);
@@ -246,7 +246,7 @@ fn main() {
 
     let draw_rho = Kernel::<fn()>::new_async(
         &device,
-        track!(|| {
+        &track!(|| {
             let coord = dispatch_id().xy();
             let ij = index(coord);
             let value = rho0.var().read(ij);

@@ -119,7 +119,7 @@ fn main() {
                 Mat2::diag_expr(Float2::expr(stress, stress)) + P_MASS as f32 * C.var().read(p);
             let vp = v.var().read(p);
             for_unrolled(0..9usize, |ii| {
-                let (i, j) = ((ii % 3, ii / 3);
+                let (i, j) = (ii % 3, ii / 3);
                 let offset = Int2::expr(i as i32, j as i32);
                 let dpos = (offset.cast_f32() - fx) * DX;
                 let weight = w[i].x * w[j].y;

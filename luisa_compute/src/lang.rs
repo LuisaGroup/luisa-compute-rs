@@ -282,7 +282,7 @@ impl Recorder {
         self.callable_ret_type = None;
     }
 
-    pub(crate) fn check_on_same_device(&self, other: &Device) -> Option<(String, String)> {
+    pub(crate) fn check_on_same_device(&mut self, other: &Device) -> Option<(String, String)> {
         if let Some(device) = &self.device {
             let device = device.upgrade().unwrap();
             if !Arc::ptr_eq(&device.inner, &other.inner) {
@@ -292,7 +292,7 @@ impl Recorder {
                 ));
             }
         } else {
-            // @FIXME: What should we do?
+            self.device = Some(WeakDevice::new(other));
         }
         None
     }

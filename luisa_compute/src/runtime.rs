@@ -1254,7 +1254,7 @@ pub struct RawCallable {
 impl RawCallable {
     pub(crate) fn check_on_same_device(&self) {
         RECORDER.with(|r| {
-            let r =r.borrow();
+            let mut r =r.borrow_mut();
             if let Some(device) = &self.device {
                 if let Some((a,b)) = r.check_on_same_device(device) {
                     panic!("Callable created on a different device than the one it is called on: {:?} vs {:?}", a,b);

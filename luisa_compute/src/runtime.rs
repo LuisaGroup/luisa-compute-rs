@@ -510,6 +510,8 @@ pub(crate) enum StreamHandle {
         mutex: RawMutex,
     },
 }
+unsafe impl Send for StreamHandle {}
+unsafe impl Sync for StreamHandle {}
 
 pub(crate) struct SwapchainHandle {
     pub(crate) device: Arc<DeviceHandle>,
@@ -678,6 +680,7 @@ pub struct Scope<'a> {
     synchronized: Cell<bool>,
     resource_tracker: RefCell<ResourceTracker>,
 }
+
 
 impl<'a> Scope<'a> {
     #[inline]

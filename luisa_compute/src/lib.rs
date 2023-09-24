@@ -41,7 +41,7 @@ pub mod prelude {
     pub use crate::runtime::api::StreamTag;
     pub use crate::runtime::{
         Callable, Command, Device, DynCallable, Kernel, KernelBuildOptions, KernelDef, Scope,
-        Stream,
+        Stream, Swapchain,
     };
     pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, while_, Context};
 

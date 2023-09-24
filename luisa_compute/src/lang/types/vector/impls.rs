@@ -171,6 +171,24 @@ pub trait VectorExprProxy {
         }))
     }
 }
+impl<T: VectorAlign<2>> VectorExprProxy2<T> {
+    #[tracked]
+    pub fn extend(self, z: impl AsExpr<Value = T>) -> Expr<Vec3<T>>
+    where
+        T: VectorAlign<3>,
+    {
+        Vec3::expr(self.x, self.y, z)
+    }
+}
+impl<T: VectorAlign<3>> VectorExprProxy3<T> {
+    #[tracked]
+    pub fn extend(self, w: impl AsExpr<Value = T>) -> Expr<Vec4<T>>
+    where
+        T: VectorAlign<4>,
+    {
+        Vec4::expr(self.x, self.y, self.z, w)
+    }
+}
 impl<const N: usize> SquareMatrix<N>
 where
     f32: VectorAlign<N>,

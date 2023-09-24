@@ -380,10 +380,11 @@ pub fn __module_pools() -> &'static CArc<ModulePools> {
 
 /// Don't call this function directly unless you know what you are doing
 /** This function is soley for constructing proxies
- *  Given a node, __extract selects the correct Func based on the node's type
- *  It then inserts the extract(node, i) call *at where the node is defined*
- *  *Note*, after insertion, the IrBuilder in the correct/parent scope might not be up to date
- *  Thus, for IrBuilder of each scope, it updates the insertion point to the end of the current basic block
+ *  Given a node, __extract selects the correct Func based on the node's
+ * type  It then inserts the extract(node, i) call *at where the node is
+ * defined*  *Note*, after insertion, the IrBuilder in the correct/parent
+ * scope might not be up to date  Thus, for IrBuilder of each scope, it
+ * updates the insertion point to the end of the current basic block
  */
 pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
     let inst = &node.get().instruction;
@@ -408,8 +409,9 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
         }
 
         let i = b.const_(Const::Int32(index as i32));
-        // Since we have inserted something, the insertion point in cur_builder might not be up to date
-        // So we need to set it to the end of the current basic block
+        // Since we have inserted something, the insertion point in cur_builder might
+        // not be up to date So we need to set it to the end of the current
+        // basic block
         macro_rules! update_builders {
             () => {
                 for scope in &mut r.scopes {

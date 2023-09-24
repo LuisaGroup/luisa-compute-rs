@@ -1259,6 +1259,7 @@ pub struct KernelDef<T: KernelSignature> {
 /// An executable kernel
 /// Kernel creation can be done in multiple ways:
 /// - Seperate recording and compilation:
+///
 /// ```no_run
 /// // Recording:
 /// use luisa_compute::prelude::*;
@@ -1269,7 +1270,9 @@ pub struct KernelDef<T: KernelSignature> {
 /// // Compilation:
 /// let kernel = device.compile_kernel_def(&kernel);
 /// ```
+///
 /// - Recording and compilation in one step:
+///
 /// ```no_run
 /// use luisa_compute::prelude::*;
 /// let ctx = Context::new(std::env::current_exe().unwrap());

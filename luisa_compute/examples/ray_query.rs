@@ -1,7 +1,8 @@
 use std::env::current_exe;
 
 use image::Rgb;
-use luisa::lang::types::vector::{alias::*, *};
+use luisa::lang::types::vector::alias::*;
+use luisa::lang::types::vector::*;
 use luisa::prelude::*;
 use luisa::rtx::{
     Aabb, AccelBuildRequest, AccelOption, ProceduralCandidate, Ray, RayQuery, TriangleCandidate,

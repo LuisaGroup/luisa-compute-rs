@@ -1,8 +1,9 @@
 use luisa::lang::ops::AddMaybeExpr;
 use luisa::lang::types::array::VLArrayVar;
+use luisa::lang::types::core::*;
 use luisa::lang::types::dynamic::*;
 use luisa::lang::types::vector::alias::*;
-use luisa::lang::types::{core::*, ExprProxy};
+use luisa::lang::types::ExprProxy;
 use luisa::prelude::*;
 use luisa_compute as luisa;
 use luisa_compute_api_types::StreamTag;
@@ -47,6 +48,7 @@ fn event() {
     let v = a.copy_to_vec();
     assert_eq!(v[0], (1 + 3) * (4 + 5));
 }
+#[test]
 #[test]
 #[should_panic]
 fn callable_return_mismatch() {
@@ -126,7 +128,7 @@ fn callable() {
         &device,
         |buf: BufferVar<u32>, i: Expr<u32>, v: Var<u32>| {
             buf.write(i, v.load());
-            track!(*v+=1;)
+            track!(*v += 1);
         },
     );
     let add = Callable::<fn(Expr<u32>, Expr<u32>) -> Expr<u32>>::new(&device, |a, b| track!(a + b));
@@ -151,6 +153,43 @@ fn callable() {
         }),
     );
     kernel.dispatch([1024, 1, 1], &z);
+    let z_data = z.view(..).copy_to_vec();
+    let w_data = w.view(..).copy_to_vec();
+    for i in 0..z_data.len() {
+        assert_eq!(z_data[i], (i + 1000 * i) as u32);
+        assert_eq!(w_data[i], (i + 1000 * i) as u32 + 1);
+    }
+}
+#[test]
+fn callable_capture() {
+    let device = get_device();
+
+    let add = Callable::<fn(Expr<u32>, Expr<u32>) -> Expr<u32>>::new(&device, |a, b| track!(a + b));
+    let x = device.create_buffer::<u32>(1024);
+    let y = device.create_buffer::<u32>(1024);
+    let z = device.create_buffer::<u32>(1024);
+    let w = device.create_buffer::<u32>(1024);
+    x.view(..).fill_fn(|i| i as u32);
+    y.view(..).fill_fn(|i| 1000 * i as u32);
+    let write = Callable::<fn(Expr<u32>, Var<u32>)>::new(&device, |i, v| {
+        z.write(i, v);
+        track!(*v += 1);
+    });
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        &track!(|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_w = w.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            let z = add.call(x, y).var();
+            write.call(tid, z);
+            buf_w.write(tid, z);
+        }),
+    );
+    kernel.dispatch([1024, 1, 1]);
     let z_data = z.view(..).copy_to_vec();
     let w_data = w.view(..).copy_to_vec();
     for i in 0..z_data.len() {

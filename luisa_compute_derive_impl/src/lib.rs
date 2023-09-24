@@ -128,6 +128,7 @@ impl Compiler {
             #parameter_def
 
             impl #impl_generics #runtime_path::KernelParameter for #parameter_name #ty_generics #where_clause{
+                type Arg = #name #ty_generics #where_clause;
                 fn def_param(builder: &mut #runtime_path::KernelBuilder) -> Self {
                     Self{
                         #(#field_names:  #runtime_path::KernelParameter::def_param(builder)),*

@@ -97,40 +97,47 @@ impl CallableParameter for BindlessArrayVar {
     }
 }
 impl KernelParameter for rtx::AccelVar {
+    type Arg = rtx::Accel;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.accel()
     }
 }
 
 pub trait KernelParameter {
+    type Arg: KernelArg<Parameter = Self> + 'static;
     fn def_param(builder: &mut KernelBuilder) -> Self;
 }
 
 impl<T: Value> KernelParameter for Expr<T> {
+    type Arg = T;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.uniform::<T>()
     }
 }
 
 impl<T: Value> KernelParameter for BufferVar<T> {
+    type Arg = Buffer<T>;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.buffer()
     }
 }
 
 impl<T: IoTexel> KernelParameter for Tex2dVar<T> {
+    type Arg = Tex2d<T>;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.tex2d()
     }
 }
 
 impl<T: IoTexel> KernelParameter for Tex3dVar<T> {
+    type Arg = Tex3d<T>;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.tex3d()
     }
 }
 
 impl KernelParameter for BindlessArrayVar {
+    type Arg = BindlessArray;
     fn def_param(builder: &mut KernelBuilder) -> Self {
         builder.bindless_array()
     }
@@ -139,6 +146,7 @@ impl KernelParameter for BindlessArrayVar {
 macro_rules! impl_kernel_param_for_tuple {
     ($first:ident  $($rest:ident)*) => {
         impl<$first:KernelParameter, $($rest: KernelParameter),*> KernelParameter for ($first, $($rest,)*) {
+            type Arg = ($first::Arg, $($rest::Arg),*);
             #[allow(non_snake_case)]
             fn def_param(builder: &mut KernelBuilder) -> Self {
                 ($first::def_param(builder), $($rest::def_param(builder)),*)
@@ -148,6 +156,7 @@ macro_rules! impl_kernel_param_for_tuple {
     };
     ()=>{
         impl KernelParameter for () {
+            type Arg = ();
             fn def_param(_: &mut KernelBuilder) -> Self {
             }
         }
@@ -399,8 +408,8 @@ impl KernelBuilder {
 /// * `async_compile`: compile the kernel asynchronously
 /// * `enable_cache`: enable cache for the compiled kernel
 /// * `enable_fast_math`: enable fast math in the compiled kernel
-/// * `name`: name of the compiled kernel. On CUDA backend, this is the name of the generated PTX kernel
-///
+/// * `name`: name of the compiled kernel. On CUDA backend, this is the name of
+///   the generated PTX kernel
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct KernelBuildOptions {
     pub enable_debug_info: bool,
@@ -606,7 +615,7 @@ impl_kernel!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 macro_rules! impl_callable_build_for_fn {
     ($($Ts:ident)*) => {
         impl<T, R:CallableRet +'static, $($Ts: CallableParameter),*> CallableBuildFn<fn($($Ts,)*)->R> for T
-            where T: Fn($($Ts,)*)->R + 'static {
+            where T: Fn($($Ts,)*)->R {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
             fn build_callable(&self, args: Option<Rc<dyn Any>>, builder: &mut KernelBuilder)->RawCallable {

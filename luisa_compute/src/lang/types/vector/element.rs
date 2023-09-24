@@ -9,7 +9,6 @@ macro_rules! element {
             type VectorAtomicRef = VectorAtomicRefProxy2<$T>;
             type VectorExprData = VectorExprData<$T, 2>;
             type VectorVarData = VectorVarData<$T, 2>;
-          
         }
     };
     ($T:ty [ 3 ]: $A: ident) => {

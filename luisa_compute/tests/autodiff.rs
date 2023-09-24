@@ -1208,8 +1208,9 @@ fn autodiff_callable() {
     t.view(..).fill_fn(|_| rng.gen_range(0..3));
     x.view(..).fill_fn(|_| rng.gen());
     y.view(..).fill_fn(|_| rng.gen());
-    let callable =
-        Callable::<fn(Var<f32>, Var<f32>, Expr<i32>)>::new(&device, track!(|vx, vy, t| {
+    let callable = Callable::<fn(Var<f32>, Var<f32>, Expr<i32>)>::new(
+        &device,
+        track!(|vx, vy, t| {
             let x = **vx;
             let y = **vy;
             autodiff(|| {
@@ -1224,7 +1225,8 @@ fn autodiff_callable() {
                 *vx = gradient(x);
                 *vy = gradient(y);
             });
-        }));
+        }),
+    );
     let kernel = Kernel::<fn()>::new(
         &device,
         &track!(|| {

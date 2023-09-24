@@ -388,7 +388,7 @@ pub enum HitType {
     Procedural = 2,
 }
 
-pub fn offset_ray_origin(p: Expr<Float3>, n: Expr<Float3>) -> Expr<Float3> {
+pub fn offset_ray_origin(p: impl AsExpr<Value = Float3>, n: impl AsExpr<Value = Float3>) -> Expr<Float3> {
     lazy_static! {
         static ref F: Callable<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>> =
             Callable::<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>>::new_static(|p, n| {
@@ -402,6 +402,8 @@ pub fn offset_ray_origin(p: Expr<Float3>, n: Expr<Float3>) -> Expr<Float3> {
                 })
             });
     }
+    let p = p.as_expr();
+    let n = n.as_expr();
     F.call(p, n)
 }
 pub type Index = [u32; 3];

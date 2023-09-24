@@ -1047,6 +1047,57 @@ fn bindless_byte_buffer() {
     }
 }
 
+#[test]
+fn is_finite() {
+    let device = get_device();
+    let x = device.create_buffer::<f32>(1024);
+    x.fill_fn(|i| i as f32);
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        &track!(|| {
+            let tid = dispatch_id().x;
+            let x = x.read(tid);
+            lc_assert!(x.is_finite());
+            lc_assert!(!x.is_nan());
+            lc_assert!(!x.is_infinite());
+        }),
+    );
+    kernel.dispatch([1024, 1, 1]);
+}
+#[test]
+fn is_infinite() {
+    let device = get_device();
+    let x = device.create_buffer::<f32>(1024);
+    x.fill_fn(|i| 1.0 + i as f32);
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        &track!(|| {
+            let tid = dispatch_id().x;
+            let x = x.read(tid) / 0.0;
+            lc_assert!(!x.is_finite());
+            lc_assert!(!x.is_nan());
+            lc_assert!(x.is_infinite());
+        }),
+    );
+    kernel.dispatch([1024, 1, 1]);
+}
+#[test]
+fn is_nan() {
+    let device = get_device();
+    let x = device.create_buffer::<f32>(1024);
+    x.fill_fn(|i| i as f32);
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        &track!(|| {
+            let tid = dispatch_id().x;
+            let x = x.read(tid) / 0.0 - x.read(tid) / 0.0;
+            lc_assert!(!x.is_finite());
+            lc_assert!(x.is_nan());
+            lc_assert!(!x.is_infinite());
+        }),
+    );
+    kernel.dispatch([1024, 1, 1]);
+}
 // #[derive(Clone, Copy, Debug, Value, PartialEq)]
 // #[repr(C)]
 // #[value_new(pub)]

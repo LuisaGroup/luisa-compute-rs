@@ -37,6 +37,12 @@ fn autodiff_helper<F: Fn(&[Expr<f32>]) -> Expr<f32>>(
     f: F,
 ) {
     let device = get_device();
+    if device.name() == "dx" {
+        // DX has limit on writable buffers
+        if n_inputs > 8 {
+            return;
+        }
+    }
     let inputs = (0..n_inputs)
         .map(|_| device.create_buffer::<f32>(repeats))
         .collect::<Vec<_>>();

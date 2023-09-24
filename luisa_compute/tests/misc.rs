@@ -880,6 +880,22 @@ struct Big {
     a: [f32; 32],
 }
 #[test]
+fn buffer_u8() {
+    let device = get_device();
+    if device.name() == "dx" {
+        return;
+    }
+    let buf = device.create_buffer::<u8>(1024);
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        &track!(|| {
+            let tid = dispatch_id().x;
+            buf.write(tid, (tid & 0xff).as_u8());
+        }),
+    );
+    kernel.dispatch([1024, 1, 1]);
+}
+#[test]
 fn byte_buffer() {
     let device = get_device();
     let buf = device.create_byte_buffer(1024);

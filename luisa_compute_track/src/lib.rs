@@ -75,6 +75,7 @@ impl VisitMut for TraceVisitor {
         let flow_path = &self.flow_path;
         let trait_path = &self.trait_path;
         let span = node.span();
+
         match node {
             Expr::Assign(expr) => {
                 let left = &expr.left;
@@ -126,9 +127,21 @@ impl VisitMut for TraceVisitor {
                 let body = &expr.body;
                 let expr = &expr.expr;
                 if let Expr::Range(range) = &**expr {
-                    *node = parse_quote_spanned! {span=>
-                        #flow_path::for_range(#range, |#pat| #body)
+                    let attrs = &range.attrs;
+                    // check if #[unroll] is present
+                    let unroll = attrs.iter().any(|attr| {
+                        attr.path().is_ident("unroll")
+                    });
+                    if unroll {
+                        *node = parse_quote_spanned! {span=>
+                            #range.for_each(|#pat| #body)
+                        }
+                    } else {
+                        *node = parse_quote_spanned! {span=>
+                            #flow_path::for_range(#range, |#pat| #body)
+                        }
                     }
+                    
                 }
             }
             // Expr::Unary(op) => {

@@ -70,14 +70,14 @@ impl<T: Value + 'static> CallableParameter for BufferVar<T> {
         encoder.buffer(self)
     }
 }
-impl CallableParameter for ByteBufferVar {
-    fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
-        builder.byte_buffer()
-    }
-    fn encode(&self, encoder: &mut CallableArgEncoder) {
-        encoder.byte_buffer(self)
-    }
-}
+// impl CallableParameter for ByteBufferVar {
+//     fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
+//         builder.byte_buffer()
+//     }
+//     fn encode(&self, encoder: &mut CallableArgEncoder) {
+//         encoder.byte_buffer(self)
+//     }
+// }
 impl<T: IoTexel + 'static> CallableParameter for Tex2dVar<T> {
     fn def_param(_: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         builder.tex2d()
@@ -129,12 +129,13 @@ impl<T: Value> KernelParameter for BufferVar<T> {
         builder.buffer()
     }
 }
-impl KernelParameter for ByteBufferVar {
-    type Arg = ByteBuffer;
-    fn def_param(builder: &mut KernelBuilder) -> Self {
-        builder.byte_buffer()
-    }
-}
+
+// impl KernelParameter for ByteBufferVar {
+//     type Arg = ByteBuffer;
+//     fn def_param(builder: &mut KernelBuilder) -> Self {
+//         builder.byte_buffer()
+//     }
+// }
 
 impl<T: IoTexel> KernelParameter for Tex2dVar<T> {
     type Arg = Tex2d<T>;
@@ -223,14 +224,14 @@ impl KernelBuilder {
         self.args.push(node);
         FromNode::from_node(node)
     }
-    pub fn byte_buffer(&mut self) -> ByteBufferVar {
-        let node = new_node(
-            __module_pools(),
-            Node::new(CArc::new(Instruction::Buffer), Type::void()),
-        );
-        self.args.push(node);
-        ByteBufferVar { node, handle: None }
-    }
+    // pub fn byte_buffer(&mut self) -> ByteBufferVar {
+    //     let node = new_node(
+    //         __module_pools(),
+    //         Node::new(CArc::new(Instruction::Buffer), Type::void()),
+    //     );
+    //     self.args.push(node);
+    //     ByteBufferVar { node, handle: None }
+    // }
     pub fn buffer<T: Value>(&mut self) -> BufferVar<T> {
         let node = new_node(
             __module_pools(),

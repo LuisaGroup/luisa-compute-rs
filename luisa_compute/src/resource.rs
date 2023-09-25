@@ -290,8 +290,9 @@ impl<T: Value + fmt::Debug> fmt::Debug for Buffer<T> {
         }
 
         write!(f, "Buffer<{}>({})", std::any::type_name::<T>(), self.len())?;
-        if let Some(count) = f.precision() {
-            if count > self.len() {
+        if self.len() <= 16 || f.precision().is_some() {
+            let count = f.precision().unwrap_or(16);
+            if count >= self.len() {
                 f.debug_list().entries(self.copy_to_vec().iter()).finish()?;
             } else {
                 let values = self.view(0..count).copy_to_vec();
@@ -876,7 +877,7 @@ unsafe impl Sync for BindlessArray {}
 pub use api::{PixelFormat, PixelStorage, Sampler, SamplerAddress, SamplerFilter};
 use luisa_compute_ir::context::type_hash;
 use luisa_compute_ir::ir::{
-    new_node, Binding, BindlessArrayBinding, BufferBinding, Func, Instruction, Node, TextureBinding,
+    Binding, BindlessArrayBinding, BufferBinding, Func, Instruction, Node, TextureBinding,
 };
 
 pub(crate) struct TextureHandle {

@@ -364,7 +364,7 @@ impl<'a, T: Value> BufferView<'a, T> {
         }
     }
 
-    pub fn copy_from_async<'b>(&'a self, data: &'b [T]) -> Command<'static> {
+    pub fn copy_from_async<'b>(&'a self, data: &'b [T]) -> Command<'b> {
         assert_eq!(data.len(), self.len);
         let mut rt = ResourceTracker::new();
         rt.add(self.buffer.handle.clone());
@@ -434,7 +434,7 @@ impl<T: Value> Buffer<T> {
         self.view(..).copy_from(data);
     }
     #[inline]
-    pub fn copy_from_async<'a>(&self, data: &[T]) -> Command<'_> {
+    pub fn copy_from_async<'a>(&self, data: &'a [T]) -> Command<'a> {
         self.view(..).copy_from_async(data)
     }
     #[inline]
@@ -526,6 +526,12 @@ pub struct BufferHeap<T: Value> {
     pub(crate) inner: BindlessArray,
     pub(crate) _marker: PhantomData<T>,
 }
+impl<T: Value + fmt::Debug> fmt::Debug for BufferHeap<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "BufferHeap<{}>", std::any::type_name::<T>(),)
+    }
+}
+
 pub struct BufferHeapVar<T: Value> {
     inner: BindlessArrayVar,
     _marker: PhantomData<T>,

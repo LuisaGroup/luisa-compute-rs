@@ -148,7 +148,6 @@ impl Context {
                     handle: api::Stream(default_stream.handle),
                     native_handle: default_stream.native_handle,
                     device: weak.clone(),
-                    mutex: RawMutex::INIT,
                 })),
                 ctx: self.inner.clone(),
             }),

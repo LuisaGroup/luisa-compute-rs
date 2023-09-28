@@ -1397,6 +1397,27 @@ impl<T: Value> IndexRead for BindlessBufferVar<T> {
         }))
     }
 }
+impl<T: Value> IndexWrite for BindlessBufferVar<T> {
+    fn write<I: IntoIndex, V: AsExpr<Value = Self::Element>>(&self, i: I, value: V) {
+        let i = i.to_u64();
+        if need_runtime_check() {
+            lc_assert!(i.lt(self.len_expr()));
+        }
+        let value = value.as_expr();
+        __current_scope(|b| {
+            b.call(
+                Func::BindlessBufferWrite,
+                &[
+                    self.array,
+                    self.buffer_index.node(),
+                    ToNode::node(&i),
+                    value.node(),
+                ],
+                Type::void(),
+            )
+        });
+    }
+}
 impl<T: Value> BindlessBufferVar<T> {
     pub fn len_expr(&self) -> Expr<u64> {
         let stride = (T::type_().size() as u64).expr();
@@ -1787,6 +1808,11 @@ impl<T: Value> BufferVar<T> {
     pub fn len_expr(&self) -> Expr<u64> {
         FromNode::from_node(
             __current_scope(|b| b.call(Func::BufferSize, &[self.node], u64::type_())).into(),
+        )
+    }
+    pub fn len_expr_u32(&self) -> Expr<u32> {
+        FromNode::from_node(
+            __current_scope(|b| b.call(Func::BufferSize, &[self.node], u32::type_())).into(),
         )
     }
 }

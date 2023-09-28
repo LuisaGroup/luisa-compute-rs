@@ -874,7 +874,7 @@ fn uniform() {
     let expected = (x.len() as f32 - 1.0) * x.len() as f32 * 0.5 * 6.0;
     assert!((actual - expected).abs() < 1e-4);
 }
-#[derive(Clone, Copy, Debug, Value)]
+#[derive(Clone, Copy, Debug, Value, Default)]
 #[repr(C)]
 struct Big {
     a: [f32; 32],
@@ -1277,6 +1277,27 @@ fn dispatch_async() {
         kernel.dispatch_async([1024, 1, 1]),
     ]);
     drop(kernel);
+}
+
+#[test]
+fn buffer_size() {
+    let device = get_device();
+    let x = device.create_buffer::<Big>(1024);
+    x.fill(Big::default());
+    let out = device.create_buffer::<u32>(1);
+    out.fill(2);
+    device
+        .create_kernel::<fn()>(&track!(|| {
+            lc_assert!((x.len() as u64).eq(x.var().len_expr()));
+            lc_assert!((x.len() as u32).eq(x.var().len_expr().cast_u32()));
+            let tid = dispatch_id().x;
+            if tid == 0 {
+                out.write(0, x.var().len_expr_u32());
+            }
+        }))
+        .dispatch([1024, 1, 1]);
+    let out = out.view(..).copy_to_vec();
+    assert_eq!(out[0], 1024);
 }
 
 #[test]

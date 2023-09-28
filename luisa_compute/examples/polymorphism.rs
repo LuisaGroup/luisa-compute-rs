@@ -34,7 +34,17 @@ impl Area for SquareExpr {
 impl_polymorphic!(Area, Square);
 fn main() {
     let ctx = Context::new(current_exe().unwrap());
-    let device = ctx.create_device("cpu");
+    let args: Vec<String> = std::env::args().collect();
+    assert!(
+        args.len() <= 2,
+        "Usage: {} <backend>. <backend>: cpu, cuda, dx, metal, remote",
+        args[0]
+    );
+    let device = ctx.create_device(if args.len() == 2 {
+        args[1].as_str()
+    } else {
+        "cpu"
+    });
     let circles = device.create_buffer::<Circle>(2);
     circles
         .view(..)

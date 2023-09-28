@@ -175,6 +175,13 @@ impl Device {
         swapchain
     }
     pub fn create_byte_buffer(&self, len: usize) -> Buffer<u8> {
+        let name = self.name();
+        if name == "dx" {
+            assert!(
+                len < u32::MAX as usize,
+                "numer of bytes must be less than u32::MAX on dx"
+            );
+        }
         let buffer = self.inner.create_buffer(&Type::void(), len);
         let buffer = Buffer {
             device: self.clone(),
@@ -198,6 +205,10 @@ impl Device {
             assert!(
                 std::mem::align_of::<T>() >= 4,
                 "T must be aligned to 4 bytes on dx"
+            );
+            assert!(
+                count < u32::MAX as usize,
+                "count must be less than u32::MAX on dx"
             );
         }
         assert!(

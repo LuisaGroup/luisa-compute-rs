@@ -73,7 +73,7 @@ impl ProceduralPrimitive {
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         self.handle.native_handle
     }
-    pub fn build_async<'a>(&self, request: AccelBuildRequest) -> Command<'a> {
+    pub fn build_async(&self, request: AccelBuildRequest) -> Command<'static, 'static> {
         let mut rt = ResourceTracker::new();
         rt.add(self.handle.clone());
         Command {
@@ -124,7 +124,7 @@ impl Mesh {
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         self.handle.native_handle
     }
-    pub fn build_async<'a>(&self, request: AccelBuildRequest) -> Command<'a> {
+    pub fn build_async(&self, request: AccelBuildRequest) -> Command<'static, 'static> {
         let mut rt = ResourceTracker::new();
         rt.add(self.handle.clone());
         Command {
@@ -287,7 +287,7 @@ impl Accel {
     pub fn build(&self, request: api::AccelBuildRequest) {
         submit_default_stream_and_sync(&self.handle.device, [self.build_async(request)])
     }
-    pub fn build_async<'a>(&'a self, request: api::AccelBuildRequest) -> Command<'a> {
+    pub fn build_async(&self, request: api::AccelBuildRequest) -> Command<'static, 'static> {
         let mut rt = ResourceTracker::new();
         let instance_handles = self.instance_handles.read();
         rt.add(self.handle.clone());
@@ -388,7 +388,10 @@ pub enum HitType {
     Procedural = 2,
 }
 
-pub fn offset_ray_origin(p: impl AsExpr<Value = Float3>, n: impl AsExpr<Value = Float3>) -> Expr<Float3> {
+pub fn offset_ray_origin(
+    p: impl AsExpr<Value = Float3>,
+    n: impl AsExpr<Value = Float3>,
+) -> Expr<Float3> {
     lazy_static! {
         static ref F: Callable<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>> =
             Callable::<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>>::new_static(|p, n| {
@@ -402,8 +405,8 @@ pub fn offset_ray_origin(p: impl AsExpr<Value = Float3>, n: impl AsExpr<Value = 
                 })
             });
     }
-    let p = p.as_expr();
-    let n = n.as_expr();
+    let p: Expr<Float3> = p.as_expr();
+    let n: Expr<Float3> = n.as_expr();
     F.call(p, n)
 }
 pub type Index = [u32; 3];

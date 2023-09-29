@@ -333,7 +333,7 @@ impl<'a, T: Value> BufferView<'a, T> {
     pub fn handle(&self) -> api::Buffer {
         self.buffer.handle()
     }
-    pub fn copy_to_async<'b>(&'a self, data: &'b mut [T]) -> Command<'b> {
+    pub fn copy_to_async<'b>(&'a self, data: &'b mut [T]) -> Command<'b, 'b> {
         assert_eq!(data.len(), self.len);
         let mut rt = ResourceTracker::new();
         rt.add(self.buffer.handle.clone());
@@ -364,7 +364,7 @@ impl<'a, T: Value> BufferView<'a, T> {
         }
     }
 
-    pub fn copy_from_async<'b>(&'a self, data: &'b [T]) -> Command<'static> {
+    pub fn copy_from_async<'b>(&'a self, data: &'b [T]) -> Command<'b, 'static> {
         assert_eq!(data.len(), self.len);
         let mut rt = ResourceTracker::new();
         rt.add(self.buffer.handle.clone());
@@ -389,7 +389,7 @@ impl<'a, T: Value> BufferView<'a, T> {
     pub fn fill(&self, value: T) {
         self.fill_fn(|_| value);
     }
-    pub fn copy_to_buffer_async(&self, dst: BufferView<'a, T>) -> Command<'static> {
+    pub fn copy_to_buffer_async(&self, dst: BufferView<'a, T>) -> Command<'static, 'static> {
         assert_eq!(self.len, dst.len);
         let mut rt = ResourceTracker::new();
         rt.add(self.buffer.handle.clone());
@@ -434,7 +434,7 @@ impl<T: Value> Buffer<T> {
         self.view(..).copy_from(data);
     }
     #[inline]
-    pub fn copy_from_async<'a>(&self, data: &'a [T]) -> Command<'a> {
+    pub fn copy_from_async<'a>(&self, data: &'a [T]) -> Command<'a, 'static> {
         self.view(..).copy_from_async(data)
     }
     #[inline]
@@ -442,7 +442,7 @@ impl<T: Value> Buffer<T> {
         self.view(..).copy_to(data);
     }
     #[inline]
-    pub fn copy_to_async<'a>(&self, data: &'a mut [T]) -> Command<'a> {
+    pub fn copy_to_async<'a>(&self, data: &'a mut [T]) -> Command<'a, 'a> {
         self.view(..).copy_to_async(data)
     }
     #[inline]
@@ -454,7 +454,7 @@ impl<T: Value> Buffer<T> {
         self.view(..).copy_to_buffer(dst.view(..));
     }
     #[inline]
-    pub fn copy_to_buffer_async<'a>(&'a self, dst: &'a Buffer<T>) -> Command<'a> {
+    pub fn copy_to_buffer_async<'a>(&'a self, dst: &'a Buffer<T>) -> Command<'static, 'static> {
         self.view(..).copy_to_buffer_async(dst.view(..))
     }
     #[inline]
@@ -845,7 +845,7 @@ impl BindlessArray {
     pub fn update(&self) {
         submit_default_stream_and_sync(&self.device, [self.update_async()]);
     }
-    pub fn update_async<'a>(&'a self) -> Command<'a> {
+    pub fn update_async<'a>(&'a self) -> Command<'a, 'a> { // What lifetime should this be?
         self.lock();
         let mut rt = ResourceTracker::new();
         let modifications = Arc::new(std::mem::replace(
@@ -1161,7 +1161,7 @@ impl<T: IoTexel> Tex3d<T> {
 macro_rules! impl_tex_view {
     ($name:ident) => {
         impl<'a, T: IoTexel> $name<'a, T> {
-            pub fn copy_to_async<U: StorageTexel<T>>(&'a self, data: &'a mut [U]) -> Command<'a> {
+            pub fn copy_to_async<U: StorageTexel<T>>(&'a self, data: &'a mut [U]) -> Command<'a, 'a> {
                 assert_eq!(data.len(), self.texel_count() as usize);
                 assert_eq!(self.tex.handle.storage, U::pixel_storage());
                 let mut rt = ResourceTracker::new();
@@ -1192,7 +1192,7 @@ macro_rules! impl_tex_view {
                 self.copy_to(&mut data);
                 data
             }
-            pub fn copy_from_async<'b, U: StorageTexel<T>>(&'a self, data: &'b [U]) -> Command<'b> {
+            pub fn copy_from_async<'b, U: StorageTexel<T>>(&'a self, data: &'b [U]) -> Command<'b, 'static> {
                 assert_eq!(data.len(), self.texel_count() as usize);
                 assert_eq!(self.tex.handle.storage, U::pixel_storage());
                 let mut rt = ResourceTracker::new();
@@ -1219,7 +1219,7 @@ macro_rules! impl_tex_view {
             pub fn copy_to_buffer_async<'b, U: StorageTexel<T> + Value>(
                 &'a self,
                 buffer_view: &'b BufferView<U>,
-            ) -> Command<'static> {
+            ) -> Command<'static, 'static> {
                 let mut rt = ResourceTracker::new();
                 rt.add(self.tex.handle.clone());
                 rt.add(buffer_view.buffer.handle.clone());
@@ -1251,7 +1251,7 @@ macro_rules! impl_tex_view {
             pub fn copy_from_buffer_async<'b, U: StorageTexel<T> + Value>(
                 &'a self,
                 buffer_view: BufferView<U>,
-            ) -> Command<'static> {
+            ) -> Command<'static, 'static> {
                 let mut rt = ResourceTracker::new();
                 rt.add(self.tex.handle.clone());
                 rt.add(buffer_view.buffer.handle.clone());
@@ -1280,7 +1280,7 @@ macro_rules! impl_tex_view {
                     [self.copy_from_buffer_async(buffer_view)],
                 );
             }
-            pub fn copy_to_texture_async(&'a self, other: $name<T>) -> Command<'static> {
+            pub fn copy_to_texture_async(&'a self, other: $name<T>) -> Command<'static, 'static> {
                 let mut rt = ResourceTracker::new();
                 rt.add(self.tex.handle.clone());
                 rt.add(other.tex.handle.clone());

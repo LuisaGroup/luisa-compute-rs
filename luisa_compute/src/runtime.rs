@@ -703,21 +703,15 @@ impl<'a> Scope<'a> {
         self
     }
     #[inline]
-    fn command_list(&self) -> CommandList<'a> {
-        CommandList::<'a> {
-            marker: PhantomData {},
-            commands: Vec::new(),
-        }
-    }
-    #[inline]
-    pub fn submit(&self, commands: impl IntoIterator<Item = Command<'a>>) -> &Self {
+    pub fn submit<'cmd>(&self, commands: impl IntoIterator<Item = Command<'cmd, 'a>>) -> &Self {
         self.submit_with_callback(commands, || {})
     }
-    fn submit_impl<F: FnOnce() + Send + 'static>(&self, commands: Vec<Command<'a>>, callback: F) {
+    fn submit_impl<'cmd, F: FnOnce() + Send + 'static>(
+        &self,
+        commands: Vec<Command<'cmd, 'a>>,
+        callback: F,
+    ) {
         self.synchronized.set(false);
-        let mut command_buffer = self.command_list();
-        command_buffer.extend(commands);
-        let commands = command_buffer.commands;
         let api_commands = commands.iter().map(|c| c.inner).collect::<Vec<_>>();
         let ctx = CommandCallbackCtx {
             commands,
@@ -725,7 +719,7 @@ impl<'a> Scope<'a> {
         };
         let ptr = Box::into_raw(Box::new(ctx));
         extern "C" fn trampoline<'a, F: FnOnce() + Send + 'static>(ptr: *mut u8) {
-            let ctx = unsafe { *Box::from_raw(ptr as *mut CommandCallbackCtx<'a, F>) };
+            let ctx = unsafe { *Box::from_raw(ptr as *mut CommandCallbackCtx<'static, 'a, F>) };
             (ctx.f)();
         }
         self.handle.device().dispatch(
@@ -735,9 +729,9 @@ impl<'a> Scope<'a> {
         )
     }
     #[inline]
-    pub fn submit_with_callback<F: FnOnce() + Send + 'static>(
+    pub fn submit_with_callback<'cmd, F: FnOnce() + Send + 'static>(
         &self,
-        commands: impl IntoIterator<Item = Command<'a>>,
+        commands: impl IntoIterator<Item = Command<'cmd, 'a>>,
         callback: F,
     ) -> &Self {
         let mut iter = commands.into_iter();
@@ -847,28 +841,17 @@ impl Stream {
     }
 }
 
-pub(crate) struct CommandList<'a> {
-    marker: PhantomData<&'a ()>,
-    commands: Vec<Command<'a>>,
-}
-
-struct CommandCallbackCtx<'a, F: FnOnce() + Send + 'static> {
+struct CommandCallbackCtx<'cmd, 'scope, F: FnOnce() + Send + 'static> {
     #[allow(dead_code)]
-    commands: Vec<Command<'a>>,
+    commands: Vec<Command<'cmd, 'scope>>,
     f: F,
 }
 
-impl<'a> CommandList<'a> {
-    pub fn extend<I: IntoIterator<Item = Command<'a>>>(&mut self, commands: I) {
-        self.commands.extend(commands);
-    }
-    #[allow(dead_code)]
-    pub fn push(&mut self, command: Command<'a>) {
-        self.commands.push(command);
-    }
-}
-
-pub fn submit_default_stream_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
+pub fn submit_default_stream_and_sync<
+    'cmd,
+    'scope,
+    I: IntoIterator<Item = Command<'cmd, 'scope>>,
+>(
     device: &Device,
     commands: I,
 ) {
@@ -879,15 +862,29 @@ pub fn submit_default_stream_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
     })
 }
 
+/// 'from_data is the lifetime of the data that is copied from
+/// 'to_data is the lifetime of the data that is copied to. It is also the lifetime of [`Scope<'a>`]
+/// Commands are created by resources and submitted to a [`Scope<'a>`] via `scope.submit` and `scope.submit_with_callback`.
 #[must_use]
-pub struct Command<'a> {
+pub struct Command<'from_data, 'to_data> {
     #[allow(dead_code)]
     pub(crate) inner: api::Command,
     // is this really necessary?
-    pub(crate) marker: PhantomData<&'a ()>,
+    pub(crate) marker: PhantomData<(&'from_data (), &'to_data ())>,
     pub(crate) callback: Option<Box<dyn FnOnce() + Send + 'static>>,
     #[allow(dead_code)]
     pub(crate) resource_tracker: ResourceTracker,
+}
+
+impl<'cmd, 'scope> Command<'cmd, 'scope> {
+    pub unsafe fn lift(self) -> Command<'static, 'static> {
+        Command {
+            inner: self.inner,
+            marker: PhantomData {},
+            callback: self.callback,
+            resource_tracker: self.resource_tracker,
+        }
+    }
 }
 
 pub(crate) struct AsyncShaderArtifact {
@@ -1175,7 +1172,7 @@ impl RawKernel {
         self: &Arc<Self>,
         args: KernelArgEncoder,
         dispatch_size: [u32; 3],
-    ) -> Command<'static> {
+    ) -> Command<'static, 'static> {
         let mut rt = ResourceTracker::new();
         rt.add(Arc::new(args.uniform_data));
         rt.add(self.clone());
@@ -1458,7 +1455,7 @@ macro_rules! impl_dispatch_for_kernel {
             pub fn dispatch_async(
                 &self,
                 dispatch_size: [u32; 3], $($Ts:&impl AsKernelArg<$Ts>),*
-            ) -> Command<'static> {
+            ) -> Command<'static, 'static> {
                 let mut encoder = KernelArgEncoder::new();
                 $($Ts.encode(&mut encoder);)*
                 self.inner.dispatch_async(encoder, dispatch_size)

@@ -879,6 +879,7 @@ pub fn submit_default_stream_and_sync<'a, I: IntoIterator<Item = Command<'a>>>(
     })
 }
 
+#[must_use]
 pub struct Command<'a> {
     #[allow(dead_code)]
     pub(crate) inner: api::Command,

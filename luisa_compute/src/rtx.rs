@@ -7,7 +7,7 @@ use crate::internal_prelude::*;
 use crate::runtime::*;
 use crate::{ResourceTracker, *};
 use luisa_compute_ir::ir::{
-    new_node, AccelBinding, Binding, Func, Instruction, IrBuilder, Node, NodeRef, Type,
+    AccelBinding, Binding, Func, Instruction, IrBuilder, Node, NodeRef, Type,
 };
 use parking_lot::RwLock;
 use std::ops::Deref;

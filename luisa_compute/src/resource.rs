@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use std::fmt;
 use std::ops::RangeBounds;
 use std::process::abort;
 use std::sync::Arc;
@@ -279,6 +280,33 @@ pub struct Buffer<T: Value> {
     pub(crate) len: usize,
     pub(crate) _marker: PhantomData<T>,
 }
+impl<T: Value + fmt::Debug> fmt::Debug for Buffer<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        struct DebugEllipsis;
+        impl fmt::Debug for DebugEllipsis {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("..")
+            }
+        }
+
+        write!(f, "Buffer<{}>({})", std::any::type_name::<T>(), self.len())?;
+        // if self.len() <= 16 || f.precision().is_some() {
+        //     let count = f.precision().unwrap_or(16);
+        //     if count >= self.len() {
+        //         f.debug_list().entries(self.copy_to_vec().iter()).finish()?;
+        //     } else {
+        //         let values = self.view(0..count).copy_to_vec();
+        //
+        //         f.debug_list()
+        //             .entries(values.iter())
+        //             .entry(&DebugEllipsis)
+        //             .finish()?;
+        //     }
+        // }
+        Ok(())
+    }
+}
+
 pub(crate) struct BufferHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::Buffer,
@@ -406,7 +434,7 @@ impl<T: Value> Buffer<T> {
         self.view(..).copy_from(data);
     }
     #[inline]
-    pub fn copy_from_async<'a>(&self, data: &[T]) -> Command<'_> {
+    pub fn copy_from_async<'a>(&self, data: &'a [T]) -> Command<'a> {
         self.view(..).copy_from_async(data)
     }
     #[inline]
@@ -498,6 +526,12 @@ pub struct BufferHeap<T: Value> {
     pub(crate) inner: BindlessArray,
     pub(crate) _marker: PhantomData<T>,
 }
+impl<T: Value + fmt::Debug> fmt::Debug for BufferHeap<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "BufferHeap<{}>", std::any::type_name::<T>(),)
+    }
+}
+
 pub struct BufferHeapVar<T: Value> {
     inner: BindlessArrayVar,
     _marker: PhantomData<T>,
@@ -849,7 +883,7 @@ unsafe impl Sync for BindlessArray {}
 pub use api::{PixelFormat, PixelStorage, Sampler, SamplerAddress, SamplerFilter};
 use luisa_compute_ir::context::type_hash;
 use luisa_compute_ir::ir::{
-    new_node, Binding, BindlessArrayBinding, BufferBinding, Func, Instruction, Node, TextureBinding,
+    Binding, BindlessArrayBinding, BufferBinding, Func, Instruction, Node, TextureBinding,
 };
 
 pub(crate) struct TextureHandle {
@@ -1060,6 +1094,17 @@ pub struct Tex2d<T: IoTexel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: PhantomData<T>,
 }
+impl<T: IoTexel + fmt::Debug> fmt::Debug for Tex2d<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Tex2d<{}>({}, {})",
+            std::any::type_name::<T>(),
+            self.width(),
+            self.height(),
+        )
+    }
+}
 
 // `T` is the read out type of the texture, which is not necessarily the same as
 // the storage type In fact, the texture can be stored in any format as long as
@@ -1074,6 +1119,19 @@ pub struct Tex3d<T: IoTexel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: PhantomData<T>,
 }
+impl<T: IoTexel + fmt::Debug> fmt::Debug for Tex3d<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Tex3d<{}>({}, {}, {})",
+            std::any::type_name::<T>(),
+            self.width(),
+            self.height(),
+            self.depth(),
+        )
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct Tex2dView<'a, T: IoTexel> {
     pub(crate) tex: &'a Tex2d<T>,

@@ -260,9 +260,9 @@ fn main() {
     let path_tracer = Kernel::<fn(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>::new_async(
         &device,
         &track!(|image: Tex2dVar<Float4>,
-                seed_image: Tex2dVar<u32>,
-                accel: AccelVar,
-                resolution: Expr<Uint2>| {
+                 seed_image: Tex2dVar<u32>,
+                 accel: AccelVar,
+                 resolution: Expr<Uint2>| {
             set_block_size([16u32, 16u32, 1u32]);
             let cbox_materials = [
                 Float3::new(0.725f32, 0.710f32, 0.680f32), // floor

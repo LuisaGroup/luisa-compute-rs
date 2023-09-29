@@ -290,19 +290,19 @@ impl<T: Value + fmt::Debug> fmt::Debug for Buffer<T> {
         }
 
         write!(f, "Buffer<{}>({})", std::any::type_name::<T>(), self.len())?;
-        if self.len() <= 16 || f.precision().is_some() {
-            let count = f.precision().unwrap_or(16);
-            if count >= self.len() {
-                f.debug_list().entries(self.copy_to_vec().iter()).finish()?;
-            } else {
-                let values = self.view(0..count).copy_to_vec();
-
-                f.debug_list()
-                    .entries(values.iter())
-                    .entry(&DebugEllipsis)
-                    .finish()?;
-            }
-        }
+        // if self.len() <= 16 || f.precision().is_some() {
+        //     let count = f.precision().unwrap_or(16);
+        //     if count >= self.len() {
+        //         f.debug_list().entries(self.copy_to_vec().iter()).finish()?;
+        //     } else {
+        //         let values = self.view(0..count).copy_to_vec();
+        //
+        //         f.debug_list()
+        //             .entries(values.iter())
+        //             .entry(&DebugEllipsis)
+        //             .finish()?;
+        //     }
+        // }
         Ok(())
     }
 }

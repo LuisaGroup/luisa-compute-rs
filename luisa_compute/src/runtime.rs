@@ -677,10 +677,10 @@ impl Drop for StreamHandle {
 /// To prevent a scope from synchronizing on drop, use [`Scope::detach`].Note this is only
 /// available for `Scope<'static>` as certain commands such as `copy_to_async<'a>` requires
 /// synchronization.
-/// 
+///
 /// **WARNING**: attempting to circumvent `drop` on `Scope<'a>, 'a != 'static` can result in
 /// undefined behavior.
-/// 
+///
 pub struct Scope<'a> {
     handle: Arc<StreamHandle>,
     marker: PhantomData<&'a ()>,
@@ -1310,11 +1310,25 @@ pub struct RawKernelDef {
     pub(crate) resource_tracker: ResourceTracker,
 }
 
+impl RawKernelDef {
+    #[doc(hidden)]
+    pub fn kernel_module(&self) -> &KernelModule {
+        self.module.as_ref()
+    }
+}
+
 /// A kernel definition
 /// See [`Kernel<T>`] for more information
 pub struct KernelDef<T: KernelSignature> {
     pub(crate) inner: RawKernelDef,
     pub(crate) _marker: PhantomData<T>,
+}
+
+impl<T: KernelSignature> KernelDef<T> {
+    #[doc(hidden)]
+    pub fn raw_def(&self) -> &RawKernelDef {
+        &self.inner
+    }
 }
 
 /// An executable kernel

@@ -1373,6 +1373,10 @@ impl<T: KernelSignature> Kernel<T> {
     pub fn dump(&self) -> String {
         ir::debug::dump_ir_human_readable(&self.inner.module.module)
     }
+    #[doc(hidden)]
+    pub fn raw(&self) -> &RawKernel {
+        &self.inner
+    }
 }
 
 pub trait AsKernelArg<T: KernelArg>: KernelArg {}

@@ -337,7 +337,15 @@ impl KernelBuilder {
             (resource_tracker, cpu_custom_ops, captured)
         })
     }
-    fn build_callable<R: CallableRet>(&mut self, body: impl FnOnce(&mut Self) -> R) -> RawCallable {
+
+
+    /// Don't use this directly
+    /// See [`Callable`] for how to create a callable
+    #[doc(hidden)]
+    pub fn build_callable<R: CallableRet>(
+        &mut self,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> RawCallable {
         let ret = body(self);
         let ret_type = ret._return();
         let (rt, cpu_custom_ops, captures) = self.collect_module_info();
@@ -381,7 +389,11 @@ impl KernelBuilder {
             }
         })
     }
-    fn build_kernel<S: KernelSignature>(
+
+    /// Don't use this directly
+    /// See [`Kernel`] for how to create a kernel
+    #[doc(hidden)]
+    pub fn build_kernel<S: KernelSignature>(
         &mut self,
         body: impl FnOnce(&mut Self),
     ) -> crate::runtime::KernelDef<S> {

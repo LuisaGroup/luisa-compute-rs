@@ -381,7 +381,7 @@ impl KernelBuilder {
             }
         })
     }
-    fn build_kernel<S: KernelSignature>(
+    pub fn build_kernel<S: KernelSignature>(
         &mut self,
         body: impl FnOnce(&mut Self),
     ) -> crate::runtime::KernelDef<S> {

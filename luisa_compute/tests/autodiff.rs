@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use alias::*;
-use luisa::lang::diff::*;
+use luisa::lang::autodiff::*;
 use luisa::lang::types::core::*;
 use luisa::lang::types::vector::*;
 use luisa::prelude::*;

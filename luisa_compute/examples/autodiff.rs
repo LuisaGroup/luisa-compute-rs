@@ -1,7 +1,7 @@
 use std::env::current_exe;
 use std::f32::consts::PI;
 
-use luisa::lang::diff::*;
+use luisa::lang::autodiff::*;
 use luisa::prelude::*;
 use luisa_compute as luisa;
 fn main() {

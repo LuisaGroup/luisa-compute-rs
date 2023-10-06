@@ -1375,45 +1375,46 @@ impl<T: KernelSignature> Kernel<T> {
     }
 }
 
-pub trait AsKernelArg<T: KernelArg>: KernelArg {}
+// A trait signifying that this argument can be used in place of an argument of type `Self::T`.
+pub trait AsKernelArg: KernelArg {
+    type Output: KernelArg + 'static;
+}
 
-impl<T: Value> AsKernelArg<T> for T {}
+impl<T: Value> AsKernelArg for T {
+    type Output = T;
+}
 
-impl<T: Value> AsKernelArg<Buffer<T>> for Buffer<T> {}
+impl<T: Value> AsKernelArg for Buffer<T> {
+    type Output = T;
+}
 
-impl<'a, T: Value> AsKernelArg<Buffer<T>> for BufferView<'a, T> {}
+impl<'a, T: Value> AsKernelArg for BufferView<'a, T> {
+    type Output = Buffer<T>;
+}
 
-impl<'a, T: Value> AsKernelArg<BufferView<'a, T>> for BufferView<'a, T> {}
+impl<'a, T: IoTexel> AsKernelArg for Tex2dView<'a, T> {
+    type Output = Tex2d<T>;
+}
 
-impl<'a, T: Value> AsKernelArg<BufferView<'a, T>> for Buffer<T> {}
+impl<'a, T: IoTexel> AsKernelArg for Tex3dView<'a, T> {
+    type Output = Tex3d<T>;
+}
 
-// impl AsKernelArg<ByteBuffer> for ByteBuffer {}
+impl<T: IoTexel> AsKernelArg for Tex2d<T> {
+    type Output = Tex2d<T>;
+}
 
-// impl<'a> AsKernelArg<ByteBuffer> for ByteBufferView<'a> {}
+impl<T: IoTexel> AsKernelArg for Tex3d<T> {
+    type Output = Tex3d<T>;
+}
 
-// impl<'a> AsKernelArg<ByteBufferView<'a>> for ByteBufferView<'a> {}
+impl AsKernelArg for BindlessArray {
+    type Output = BindlessArray;
+}
 
-// impl<'a> AsKernelArg<ByteBufferView<'a>> for ByteBuffer {}
-
-impl<'a, T: IoTexel> AsKernelArg<Tex2d<T>> for Tex2dView<'a, T> {}
-
-impl<'a, T: IoTexel> AsKernelArg<Tex3d<T>> for Tex3dView<'a, T> {}
-
-impl<'a, T: IoTexel> AsKernelArg<Tex3dView<'a, T>> for Tex2dView<'a, T> {}
-
-impl<'a, T: IoTexel> AsKernelArg<Tex3dView<'a, T>> for Tex3dView<'a, T> {}
-
-impl<'a, T: IoTexel> AsKernelArg<Tex3dView<'a, T>> for Tex2d<T> {}
-
-impl<'a, T: IoTexel> AsKernelArg<Tex3dView<'a, T>> for Tex3d<T> {}
-
-impl<T: IoTexel> AsKernelArg<Tex2d<T>> for Tex2d<T> {}
-
-impl<T: IoTexel> AsKernelArg<Tex3d<T>> for Tex3d<T> {}
-
-impl AsKernelArg<BindlessArray> for BindlessArray {}
-
-impl AsKernelArg<Accel> for Accel {}
+impl AsKernelArg for Accel {
+    type Output = Accel;
+}
 
 macro_rules! impl_call_for_callable {
     ( $($Ts:ident)*) => {
@@ -1463,7 +1464,7 @@ macro_rules! impl_dispatch_for_kernel {
         impl <$($Ts: KernelArg+'static),*> Kernel<fn($($Ts,)*)> {
             #[allow(non_snake_case)]
             #[allow(unused_mut)]
-            pub fn dispatch(&self, dispatch_size: [u32; 3], $($Ts:&impl AsKernelArg<$Ts>),*)  {
+            pub fn dispatch(&self, dispatch_size: [u32; 3], $($Ts:&impl AsKernelArg<Output = $Ts>),*)  {
                 let mut encoder = KernelArgEncoder::new();
                 $($Ts.encode(&mut encoder);)*
                 self.inner.dispatch(encoder, dispatch_size)
@@ -1472,7 +1473,7 @@ macro_rules! impl_dispatch_for_kernel {
             #[allow(unused_mut)]
             pub fn dispatch_async(
                 &self,
-                dispatch_size: [u32; 3], $($Ts:&impl AsKernelArg<$Ts>),*
+                dispatch_size: [u32; 3], $($Ts:&impl AsKernelArg<Output = $Ts>),*
             ) -> Command<'static, 'static> {
                 let mut encoder = KernelArgEncoder::new();
                 $($Ts.encode(&mut encoder);)*

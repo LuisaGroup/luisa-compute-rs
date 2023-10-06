@@ -28,7 +28,7 @@ use self::index::IntoIndex;
 
 pub mod control_flow;
 pub mod debug;
-pub mod diff;
+pub mod autodiff;
 pub mod functions;
 pub mod index;
 pub mod ops;

@@ -1373,6 +1373,10 @@ impl<T: KernelSignature> Kernel<T> {
     pub fn dump(&self) -> String {
         ir::debug::dump_ir_human_readable(&self.inner.module.module)
     }
+    #[doc(hidden)]
+    pub fn raw(&self) -> &RawKernel {
+        &self.inner
+    }
 }
 
 // A trait signifying that this argument can be used in place of an argument of type `Self::T`.

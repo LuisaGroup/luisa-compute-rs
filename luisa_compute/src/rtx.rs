@@ -328,7 +328,7 @@ pub struct AccelVar {
 
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Clone, Copy, Value, Debug)]
+#[derive(Clone, Copy, Value, Debug, Soa)]
 #[value_new(pub)]
 pub struct Ray {
     pub orig: [f32; 3],
@@ -337,7 +337,7 @@ pub struct Ray {
     pub tmax: f32,
 }
 #[repr(C)]
-#[derive(Clone, Copy, Value, Debug)]
+#[derive(Clone, Copy, Value, Debug, Soa)]
 #[value_new(pub)]
 pub struct Aabb {
     pub min: [f32; 3],
@@ -345,7 +345,7 @@ pub struct Aabb {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Value, Debug)]
+#[derive(Clone, Copy, Value, Debug, Soa)]
 pub struct TriangleHit {
     pub inst: u32,
     pub prim: u32,
@@ -354,14 +354,14 @@ pub struct TriangleHit {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Value, Debug)]
+#[derive(Clone, Copy, Value, Debug, Soa)]
 pub struct ProceduralHit {
     pub inst: u32,
     pub prim: u32,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Value, Debug)]
+#[derive(Clone, Copy, Value, Debug, Soa)]
 pub struct CommittedHit {
     pub inst_id: u32,
     pub prim_id: u32,
@@ -413,7 +413,7 @@ pub type Index = [u32; 3];
 
 #[repr(C)]
 #[repr(align(8))]
-#[derive(Clone, Copy, Value, Debug)]
+#[derive(Clone, Copy, Value, Debug, Soa)]
 pub struct Hit {
     pub inst_id: u32,
     pub prim_id: u32,

@@ -44,7 +44,7 @@ impl IntoIndex for Var<u64> {
     }
 }
 
-pub trait IndexRead: ToNode {
+pub trait IndexRead {
     type Element: Value;
     fn read<I: IntoIndex>(&self, i: I) -> Expr<Self::Element>;
 }

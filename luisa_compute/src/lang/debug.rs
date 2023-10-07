@@ -212,3 +212,21 @@ pub fn __assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, c
         );
     });
 }
+
+pub fn comment(msg: &str) {
+    __current_scope(|b| {
+        b.comment(CBoxedSlice::new(
+            CString::new(msg).unwrap().into_bytes_with_nul(),
+        ))
+    });
+}
+
+#[macro_export]
+macro_rules! lc_comment_lineno {
+    () => {
+        $crate::lang::debug::comment(&format!("{}:{}:{}", file!(), line!(), column!()))
+    };
+    ($msg:literal) => {
+        $crate::lang::debug::comment(&format!("`{}` at {}:{}:{}", $msg, file!(), line!(), column!()))
+    };
+}

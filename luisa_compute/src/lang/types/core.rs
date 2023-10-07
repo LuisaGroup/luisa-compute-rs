@@ -21,6 +21,78 @@ pub trait Primitive: private::Sealed + Copy + TypeOf + 'static {
     fn const_(&self) -> Const;
     fn primitive() -> ir::Primitive;
 }
+/**
+ * This is the heart of SOA implementation.
+ */
+pub struct PrimitiveSoaProxy<T> {
+    /// this soa view starts from (self.global_offset * self.count * 4) of the global bytebuffer
+    /// Each primitive must be stored in a 4-aligned region, due to dx12 does not support access <4 aligned values
+    pub(crate) global_offset: Expr<u64>,
+    /// number of elements in the global buffer
+    pub(crate) count: Expr<u64>,
+    /// number of* elements* in the view
+    pub(crate) view_start: Expr<u64>,
+    pub(crate) view_count: Expr<u64>,
+    pub(crate) data: ByteBufferVar,
+    _marker: std::marker::PhantomData<T>,
+}
+impl<T: Primitive> IndexRead for PrimitiveSoaProxy<T> {
+    type Element = T;
+    #[tracked]
+    fn read<I: crate::lang::index::IntoIndex>(&self, i: I) -> Expr<Self::Element> {
+        let i = i.to_u64();
+        if need_runtime_check() {
+            lc_assert!(i.lt(self.view_count));
+        }
+        unsafe {
+            self.data.read_as::<T>(
+                self.global_offset * self.count * 4
+                    + (self.view_start + i) * std::mem::size_of::<T>() as u64,
+            )
+        }
+    }
+}
+impl<T: Primitive> IndexWrite for PrimitiveSoaProxy<T> {
+    #[tracked]
+    fn write<I: crate::lang::index::IntoIndex, V: AsExpr<Value = Self::Element>>(
+        &self,
+        i: I,
+        value: V,
+    ) {
+        let i = i.to_u64();
+        let v = value.as_expr();
+        if need_runtime_check() {
+            lc_assert!(i.lt(self.view_count));
+        }
+        unsafe {
+            self.data.write_as::<T>(
+                self.global_offset * self.count * 4
+                    + (self.view_start + i) * std::mem::size_of::<T>() as u64,
+                v,
+            );
+        }
+    }
+}
+impl<T: Primitive> SoaBufferProxy for PrimitiveSoaProxy<T> {
+    type Value = T;
+    fn from_soa_storage(
+        storage: ByteBufferVar,
+        meta: Expr<SoaMetadata>,
+        global_offset: usize,
+    ) -> Self {
+        Self {
+            global_offset: (global_offset as u64).expr(),
+            count: meta.count,
+            view_start: meta.view_start,
+            view_count: meta.view_count,
+            data: storage,
+            _marker: std::marker::PhantomData,
+        }
+    }
+    fn num_buffers() -> usize {
+        (std::mem::size_of::<T>() + 3) / 4
+    }
+}
 impl<T: Primitive> Value for T {
     type Expr = PrimitiveExpr<T>;
     type Var = PrimitiveVar<T>;
@@ -30,6 +102,9 @@ impl<T: Primitive> Value for T {
         let node = __current_scope(|s| -> NodeRef { s.const_(self.const_()) });
         Expr::<Self>::from_node(node)
     }
+}
+impl<T: Primitive> SoaValue for T {
+    type SoaBuffer = PrimitiveSoaProxy<T>;
 }
 
 impl_simple_expr_proxy!([T: Primitive] PrimitiveExpr[T] for T);

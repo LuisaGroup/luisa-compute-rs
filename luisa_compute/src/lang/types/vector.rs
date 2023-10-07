@@ -84,7 +84,7 @@ impl<X: FromNode + Copy> FromNode for DoubledProxyData<X> {
 }
 
 macro_rules! vector_proxies {
-    ($N:literal [ $($c:ident),* ]: $ExprName:ident, $VarName:ident, $AtomicName:ident) => {
+    ($N:literal [ $($real_c:ident),* ] [ $($c:ident),* ]: $ExprName:ident, $VarName:ident, $AtomicName:ident, $SoaName:ident) => {
         #[repr(C)]
         #[derive(Copy, Clone)]
         pub struct $ExprName<T: VectorAlign<$N>> {
@@ -102,6 +102,71 @@ macro_rules! vector_proxies {
         pub struct $AtomicName<T: VectorAlign<$N>> {
             self_: AtomicRef<Vector<T, $N>>,
             $(pub $c: AtomicRef<T>),*
+        }
+
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        pub struct $SoaName<T: VectorAlign<$N> + SoaValue> {
+            $(pub $c: T::SoaBuffer),*
+        }
+        impl<T: VectorAlign<$N> + SoaValue> SoaValue for Vector<T, $N> {
+            type SoaBuffer = $SoaName<T>;
+        }
+        impl<T: VectorAlign<$N> + SoaValue> SoaBufferProxy for $SoaName<T> {
+            type Value = Vector<T, $N>;
+            #[allow(unused_assignments)]
+            fn from_soa_storage(
+                storage: ByteBufferVar,
+                meta: Expr<SoaMetadata>,
+                global_offset: usize,
+            ) -> Self {
+                let s = <T::SoaBuffer as SoaBufferProxy>::num_buffers();
+                let mut i = 0;
+                $(
+                    let $c = T::SoaBuffer::from_soa_storage(
+                        storage.clone(),
+                        meta.clone(),
+                        global_offset + i * s,
+                    );
+                    i += 1;
+                    if i >= $N { i = 0; }
+                )*
+                Self{
+                    $($c),*
+                }
+            }
+            fn num_buffers() -> usize {
+                <T::SoaBuffer as SoaBufferProxy>::num_buffers() * $N
+            }
+        }
+        impl<T: VectorAlign<$N> + SoaValue> IndexRead for $SoaName<T> {
+            type Element = Vector<T, $N>;
+            fn read<I: crate::lang::index::IntoIndex>(&self, i: I) -> Expr<Self::Element> {
+                let i = i.to_u64();
+                $(
+                    let $real_c = self.$real_c.read(i);
+                )*
+                Vector::<T, $N>::from_elems_expr([$($real_c),*])
+            }
+        }
+        impl<T: VectorAlign<$N> + SoaValue> IndexWrite for $SoaName<T> {
+            #[allow(unused_assignments)]
+            fn write<I: crate::lang::index::IntoIndex, V: AsExpr<Value = Self::Element>>(
+                &self,
+                i: I,
+                value: V,
+            ) {
+                let i = i.to_u64();
+                let v = value.as_expr();
+                let mut comp = 0;
+                $(
+                    {
+                        let el = Expr::<T>::from_node(__extract::<T>(v.node(), comp));
+                        self.$real_c.write(i, el);
+                        comp += 1;
+                    }
+                )*
+            }
         }
         impl<T: VectorAlign<$N, VectorExpr = $ExprName<T>>> ExprProxy for $ExprName<T> {
             type Value = Vector<T, $N>;
@@ -179,9 +244,9 @@ macro_rules! vector_proxies {
     }
 }
 
-vector_proxies!(2 [x, y]: VectorExprProxy2, VectorVarProxy2, VectorAtomicRefProxy2);
-vector_proxies!(3 [x, y, z, r, g, b]: VectorExprProxy3, VectorVarProxy3, VectorAtomicRefProxy3);
-vector_proxies!(4 [x, y, z, w, r, g, b, a]: VectorExprProxy4, VectorVarProxy4, VectorAtomicRefProxy4);
+vector_proxies!(2 [x, y] [x, y]: VectorExprProxy2, VectorVarProxy2, VectorAtomicRefProxy2, VectorSoaProxy2);
+vector_proxies!(3 [x, y, z] [x, y, z, r, g, b]: VectorExprProxy3, VectorVarProxy3, VectorAtomicRefProxy3, VectorSoaProxy3);
+vector_proxies!(4 [x, y, z, w] [x, y, z, w, r, g, b, a]: VectorExprProxy4, VectorVarProxy4, VectorAtomicRefProxy4, VectorSoaProxy4);
 
 impl<T: VectorAlign<N>, const N: usize> TypeOf for Vector<T, N> {
     fn type_() -> CArc<Type> {

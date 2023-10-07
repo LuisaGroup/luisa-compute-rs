@@ -3,6 +3,8 @@ use std::ops::Deref;
 
 use crate::internal_prelude::*;
 
+use super::soa::SoaMetadata;
+
 pub mod alignment;
 pub mod array;
 pub mod core;
@@ -46,6 +48,10 @@ pub trait Value: Copy + TypeOf + 'static {
     }
 }
 
+pub trait SoaValue: Value {
+    type SoaBuffer: SoaBufferProxy<Value = Self>;
+}
+
 /// A trait for implementing remote impls on top of an [`Expr`] using [`Deref`].
 ///
 /// For example, `Expr<[f32; 4]>` dereferences to `ArrayExpr<f32, 4>`, which
@@ -74,6 +80,19 @@ pub unsafe trait AtomicRefProxy: Copy + 'static {
     fn as_atomic_ref_from_proxy(&self) -> &AtomicRef<Self::Value>;
 
     fn from_atomic_ref(expr: AtomicRef<Self::Value>) -> Self;
+}
+
+pub trait SoaBufferProxy: IndexRead<Element = Self::Value> + IndexWrite + 'static {
+    type Value: SoaValue<SoaBuffer = Self>;
+
+    /// each soa buffer is composed of multiple 32bits buffers
+    fn num_buffers() -> usize;
+
+    fn from_soa_storage(
+        storage: ByteBufferVar,
+        meta: Expr<SoaMetadata>,
+        global_offset: usize,
+    ) -> Self;
 }
 
 pub(crate) struct ExprProxyData<T: Value> {

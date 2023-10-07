@@ -54,6 +54,9 @@ pub fn continue_() {
 pub fn return_v<T: NodeLike>(v: T) {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
+        if r.building_kernel {
+            panic!("cannot return value from kernel!");
+        }
         if r.callable_ret_type.is_none() {
             r.callable_ret_type = Some(v.node().type_().clone());
         } else {
@@ -73,13 +76,15 @@ pub fn return_v<T: NodeLike>(v: T) {
 pub fn return_() {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
-        if r.callable_ret_type.is_none() {
-            r.callable_ret_type = Some(Type::void());
-        } else {
-            assert!(luisa_compute_ir::context::is_type_equal(
-                r.callable_ret_type.as_ref().unwrap(),
-                &Type::void()
-            ));
+        if !r.building_kernel {
+            if r.callable_ret_type.is_none() {
+                r.callable_ret_type = Some(Type::void());
+            } else {
+                assert!(luisa_compute_ir::context::is_type_equal(
+                    r.callable_ret_type.as_ref().unwrap(),
+                    &Type::void()
+                ));
+            }
         }
     });
     __current_scope(|b| {

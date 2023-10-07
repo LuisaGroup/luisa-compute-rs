@@ -54,23 +54,6 @@ impl PrinterArgs {
 #[macro_export]
 macro_rules! lc_log {
     ($printer:expr, $level:expr, $fmt:literal, $($arg:tt) *) => {
-        // {
-        //     let log_fn = Box::new(move |args: &[*const u32]| -> () {
-        //         let mut i = 0;
-        //         log::log!($level, $fmt , $(
-        //             {
-        //                 let ret = $crate::lang::printer::_unpack_from_expr(args[i], $arg);
-        //                 i += 1;
-        //                 ret
-        //             }
-        //         ), *);
-        //     });
-        //     let mut printer_args = $crate::lang::PrinterArgs::new();
-        //     $(
-        //         printer_args.append($arg);
-        //     )*
-        //     $printer._log($level, printer_args, log_fn);
-        // }
         $crate::_log!(
             $printer,
             $level,

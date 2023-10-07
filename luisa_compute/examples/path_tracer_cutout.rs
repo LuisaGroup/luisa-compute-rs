@@ -175,8 +175,6 @@ v	 0.23  1.98  -0.22
 v	 0.23  1.98   0.16
 f -4 -3 -2 -1";
 
-const SPP_PER_DISPATCH: u32 = 1u32;
-
 fn main() {
     luisa::init_logger();
 
@@ -255,7 +253,7 @@ fn main() {
         s.submit(cmds);
         s.synchronize();
     });
-
+    let spp_per_dispatch = 1;;
     // use create_kernel_async to compile multiple kernels in parallel
     let path_tracer = Kernel::<fn(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>::new_async(
         &device,
@@ -345,13 +343,12 @@ fn main() {
 
             let radiance = Var::<Float3>::zeroed();
             radiance.store(Float3::expr(0.0f32, 0.0f32, 0.0f32));
-            for _ in 0..SPP_PER_DISPATCH as u32 {
+            for _ in 0..spp_per_dispatch as u32 {
                 let init_ray = generate_ray(pixel * Float2::expr(1.0f32, -1.0f32));
                 let ray = Var::<Ray>::zeroed();
                 ray.store(init_ray);
 
-                let beta = Var::<Float3>::zeroed();
-                beta.store(Float3::expr(1.0f32, 1.0f32, 1.0f32));
+                let beta = Float3::splat_expr(1.0).var();
                 let pdf_bsdf = Var::<f32>::zeroed();
                 pdf_bsdf.store(0.0f32);
 
@@ -489,7 +486,7 @@ fn main() {
                     *depth += 1;
                 }
             }
-            radiance.store(radiance / SPP_PER_DISPATCH as f32);
+            radiance.store(radiance / spp_per_dispatch as f32);
             seed_image.write(coord, state);
             if radiance.is_nan().any() {
                 radiance.store(Float3::expr(0.0f32, 0.0f32, 0.0f32));
@@ -503,7 +500,7 @@ fn main() {
             let radiance = radiance + old.xyz();
             image.write(
                 dispatch_id().xy(),
-                Float4::expr(radiance.x, radiance.y, radiance.z, spp + 1.0f32),
+                Float4::expr(radiance.x, radiance.y, radiance.z, spp + 1.0),
             );
         }),
     );
@@ -598,7 +595,7 @@ fn main() {
                 log::info!(
                     "time: {}ms {}ms/spp",
                     elapsed * 1e3,
-                    elapsed * 1e3 / SPP_PER_DISPATCH as f32
+                    elapsed * 1e3 / spp_per_dispatch as f32
                 );
                 window.request_redraw();
             }

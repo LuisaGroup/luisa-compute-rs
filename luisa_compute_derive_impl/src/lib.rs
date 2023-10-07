@@ -10,7 +10,7 @@ struct ValueNewOrdering {
 }
 
 impl Parse for ValueNewOrdering {
-    fn parse(mut input: syn::parse::ParseStream) -> syn::Result<Self> {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let vis = input.parse()?;
         let ordering = if input.is_empty() {
             vec![]
@@ -36,9 +36,6 @@ impl Compiler {
     }
     fn runtime_path(&self) -> TokenStream {
         quote!(::luisa_compute::runtime)
-    }
-    pub fn compile_kernel(&self, _func: &ItemFn) -> TokenStream {
-        todo!()
     }
     fn value_attributes(&self, attribtes: &Vec<Attribute>) -> Option<ValueNewOrdering> {
         let mut has_repr_c = false;
@@ -145,7 +142,77 @@ impl Compiler {
             }
         )
     }
+    pub fn derive_soa(&self, struct_: &ItemStruct) -> TokenStream {
+        let span = struct_.span();
+        let lang_path = self.lang_path();
+        let generics = &struct_.generics;
+        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+        let name = &struct_.ident;
+        let vis = &struct_.vis;
+        let fields: Vec<_> = struct_.fields.iter().map(|f| f).collect();
+        let field_vis: Vec<_> = fields.iter().map(|f| &f.vis).collect();
+        let field_types: Vec<_> = fields.iter().map(|f| &f.ty).collect();
+        let field_names: Vec<_> = fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
+        let soa_proxy_name = syn::Ident::new(&format!("{}Soa", name), name.span());
+        quote_spanned!(span=>{
+            #[repr(C)]
+            #[derive(Copy, Clone)]
+            pub struct #soa_proxy_name #generics #where_clause{
+                #(#field_vis #field_names: <#field_types as #lang_path::SoaValue>::SoaBuffer),*
+            }
+            impl #impl_generics #lang_path::SoaValue for #name #ty_generics #where_clause{
+                type SoaBuffer = #soa_proxy_name #ty_generics;
+            }
+            impl #impl_generics #lang_path::SoaBufferProxy for #soa_proxy_name #ty_generics #where_clause{
+                type Value = #name #ty_generics;
 
+                #[allow(unused_assignments)]
+                fn from_soa_storage(
+                    storage: ByteBufferVar,
+                    meta: Expr<SoaMetadata>,
+                    global_offset: usize,
+                ) -> Self {
+                    use #lang_path::SoaBufferProxy;
+                    let mut i = 0;
+                    #(
+                        let $field_names = T::SoaBuffer::from_soa_storage(
+                            storage.clone(),
+                            meta.clone(),
+                            global_offset + i,
+                        );
+                        i += <#field_types::SoaBuffer as SoaBufferProxy>::num_buffers();
+                    )*
+                    Self{
+                        #(#field_names),*
+                    }
+                }
+                fn num_buffers() -> usize {
+                    [#( <#field_types as #lang_path::SoaValue>::SoaBuffer::num_buffers()),*].iter().sum()
+                }
+            }
+            impl #impl_generics #lang_path::IndexRead for #soa_proxy_name #ty_generics #where_clause{
+                type Element = #name #ty_generics;
+                fn read<I:#lang_path::IntoIndex>(&self, i: I) -> Expr<Self::Element> {
+                    let i = i.to_u64();
+                    #(
+                        let #field_names = self.#field_names.read(i);
+                    )*
+                    Self{
+                        #(#field_names),*
+                    }
+                }
+            }
+            impl #impl_generics #lang_path::IndexWrite for #soa_proxy_name #ty_generics #where_clause{
+                fn write<I:#lang_path::IntoIndex, V: #lang_path::AsExpr<Value = Self::Element>>(&self, i: I, value: V) {
+                    let i = i.to_u64();
+                    let v = value.as_expr();
+                    #(
+                        self.#field_names.write(i, v.#field_names);
+                    )*
+                }
+            }
+        })
+    }
     pub fn derive_value(&self, struct_: &ItemStruct) -> TokenStream {
         let ordering = self.value_attributes(&struct_.attrs);
         let span = struct_.span();
@@ -232,10 +299,10 @@ impl Compiler {
                 .collect::<Vec<_>>();
             quote_spanned!(span=>
                 #[allow(dead_code)]
-                #vis struct #ctor_proxy_name #generics {
+                #vis struct #ctor_proxy_name #generics #where_clause{
                     #(#ctor_fields),*
                 }
-                impl #impl_generics #name #ty_generics {
+                impl #impl_generics #name #ty_generics #where_clause{
                     #[allow(dead_code)]
                     #vis fn from_comps_expr(ctor: #ctor_proxy_name #ty_generics) -> #lang_path::types::Expr<#name #ty_generics> {
                         use #lang_path::*;
@@ -269,7 +336,7 @@ impl Compiler {
             #[derive(Clone, Copy)]
             #[allow(unused_parens)]
             #[allow(dead_code)]
-            #vis struct #expr_proxy_name #generics{
+            #vis struct #expr_proxy_name #generics #where_clause{
                 _marker: std::marker::PhantomData<(#marker_args)>,
                 self_: #lang_path::types::Expr<#name>,
                 #(#field_vis #field_names: #lang_path::types::Expr<#field_types>),*
@@ -278,7 +345,7 @@ impl Compiler {
             #[derive(Clone, Copy)]
             #[allow(unused_parens)]
             #[allow(dead_code)]
-            #vis struct #var_proxy_name #generics{
+            #vis struct #var_proxy_name #generics #where_clause{
                 _marker: std::marker::PhantomData<(#marker_args)>,
                 self_: #lang_path::types::Var<#name>,
                 #(#field_vis #field_names: #lang_path::types::Var<#field_types>),*,
@@ -286,7 +353,7 @@ impl Compiler {
             #[derive(Clone, Copy)]
             #[allow(unused_parens)]
             #[allow(dead_code)]
-            #vis struct #atomic_ref_proxy_name #generics{
+            #vis struct #atomic_ref_proxy_name #generics #where_clause{
                 _marker: std::marker::PhantomData<(#marker_args)>,
                 self_: #lang_path::types::AtomicRef<#name>,
                 #(#field_vis #field_names: #lang_path::types::AtomicRef<#field_types>),*,

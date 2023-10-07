@@ -536,7 +536,7 @@ pub const fn packed_size<T: Value>() -> usize {
 
 pub fn pack_to<V: Value, B>(expr: Expr<V>, buffer: &B, index: impl AsExpr<Value = u32>)
 where
-    B: IndexWrite<Element = u32>,
+    B: IndexWrite<Element = u32> + ToNode,
 {
     let index = index.as_expr();
     __current_scope(|b| {
@@ -549,7 +549,7 @@ where
 }
 
 pub fn unpack_from<T>(
-    buffer: &impl IndexWrite<Element = u32>,
+    buffer: &(impl IndexWrite<Element = u32> + ToNode),
     index: impl Into<Expr<u32>>,
 ) -> Expr<T>
 where

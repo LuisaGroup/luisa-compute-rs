@@ -43,7 +43,9 @@ pub mod prelude {
         Callable, Command, Device, DynCallable, Kernel, KernelBuildOptions, KernelDef, Scope,
         Stream, Swapchain,
     };
-    pub use crate::{cpu_dbg, if_, lc_assert, lc_unreachable, loop_, while_, Context};
+    pub use crate::{
+        cpu_dbg, if_, lc_assert, lc_comment_lineno, lc_unreachable, loop_, while_, Context,
+    };
 
     pub use luisa_compute_derive::*;
     pub use luisa_compute_track::{track, tracked};

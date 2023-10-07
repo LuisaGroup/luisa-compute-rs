@@ -1390,7 +1390,7 @@ impl<T: Value> AsKernelArg for T {
 }
 
 impl<T: Value> AsKernelArg for Buffer<T> {
-    type Output = T;
+    type Output = Buffer<T>;
 }
 
 impl<'a, T: Value> AsKernelArg for BufferView<'a, T> {

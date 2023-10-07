@@ -16,7 +16,7 @@ use raw_window_handle::HasRawWindowHandle;
 use winit::window::Window;
 
 use crate::internal_prelude::*;
-use crate::lang::soa::SoaBuffer;
+use crate::lang::soa::{SoaBuffer, SoaBufferVar, SoaBufferView, SoaMetadata};
 use crate::lang::types::SoaValue;
 use ir::{
     CallableModule, CallableModuleRef, Capture, CpuCustomOp, KernelModule, Module, ModuleFlags,
@@ -197,8 +197,25 @@ impl Device {
         buffer
     }
     pub fn create_soa_buffer<T: SoaValue>(&self, count: usize) -> SoaBuffer<T> {
+        assert!(count <= u32::MAX as usize, "count must be less than u32::MAX. This limitation may be removed in the future.");
         // let inner = self.create_byte_buffer(len)
-        todo!()
+        let num_buffers = T::SoaBuffer::num_buffers();
+        let storage = Arc::new(self.create_byte_buffer(count * num_buffers * std::mem::size_of::<u32>()));
+        let metadata = SoaMetadata {
+            count: count as u64,
+            view_start: 0,
+            view_count: count as u64,
+        };
+        let metadata_buf = self.create_buffer_from_slice(&[metadata]);
+        let buffer = SoaBuffer {
+            storage,
+            metadata_buf,
+            metadata,
+            _marker: PhantomData,
+            copy_kernel: Mutex::new(None),
+            device: self.clone(),
+        };
+        buffer
     }
     pub fn create_buffer<T: Value>(&self, count: usize) -> Buffer<T> {
         let name = self.name();
@@ -1014,10 +1031,18 @@ impl KernelArgEncoder {
             size: buffer.len * std::mem::size_of::<T>(),
         }));
     }
+    pub fn soa_buffer<T: SoaValue>(&mut self, buffer: &SoaBuffer<T>) {
+        self.buffer(&buffer.storage);
+        self.buffer(&buffer.metadata_buf);
+    }
+    pub fn soa_buffer_view<T: SoaValue>(&mut self, view: &SoaBufferView<T>) {
+        self.buffer(view.buffer.storage.as_ref());
+        self.buffer::<SoaMetadata>(&view.buffer.metadata_buf);
+    }
     pub fn buffer_view<T: Value>(&mut self, buffer: &BufferView<T>) {
         self.args.push(api::Argument::Buffer(api::BufferArgument {
             buffer: buffer.handle(),
-            offset: buffer.offset,
+            offset: buffer.offset* std::mem::size_of::<T>(),
             size: buffer.len * std::mem::size_of::<T>(),
         }));
     }
@@ -1065,6 +1090,18 @@ impl<T: Value> KernelArg for Buffer<T> {
     type Parameter = BufferVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.buffer(self);
+    }
+}
+impl<T:SoaValue> KernelArg for SoaBuffer<T> {
+    type Parameter = SoaBufferVar<T>;
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
+        encoder.soa_buffer(self);
+    }
+}
+impl<'a, T:SoaValue> KernelArg for SoaBufferView<'a, T> {
+    type Parameter = SoaBufferVar<T>;
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
+        encoder.soa_buffer_view(self);
     }
 }
 // impl KernelArg for ByteBuffer {
@@ -1396,7 +1433,12 @@ impl<T: Value> AsKernelArg for Buffer<T> {
 impl<'a, T: Value> AsKernelArg for BufferView<'a, T> {
     type Output = Buffer<T>;
 }
-
+impl<T: SoaValue> AsKernelArg for SoaBuffer<T> {
+    type Output = SoaBuffer<T>;
+}
+impl<'a, T: SoaValue> AsKernelArg for SoaBufferView<'a, T> {
+    type Output = SoaBuffer<T>;
+}
 impl<'a, T: IoTexel> AsKernelArg for Tex2dView<'a, T> {
     type Output = Tex2d<T>;
 }

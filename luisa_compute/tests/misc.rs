@@ -896,6 +896,49 @@ fn buffer_u8() {
     kernel.dispatch([1024, 1, 1]);
 }
 #[test]
+fn buffer_view_copy() {
+    let device = get_device();
+    let n = 1024;
+    let buf = device.create_buffer::<f32>(n);
+    let first_half = buf.view(0..n / 2);
+    let second_half = buf.view(n / 2..);
+    first_half.fill_fn(|i| i as f32);
+    second_half.fill_fn(|i| -(i as f32));
+    let data = buf.copy_to_vec();
+    for i in 0..n {
+        if i < n / 2 {
+            assert_eq!(data[i], i as f32);
+        } else {
+            assert_eq!(data[i], -((i - n / 2) as f32));
+        }
+    }
+}
+#[test]
+fn buffer_view() {
+    let device = get_device();
+    let n = 1024;
+    let buf = device.create_buffer::<f32>(n);
+    let first_half = buf.view(0..n / 2);
+    let second_half = buf.view(n / 2..);
+    let kernel = Kernel::<fn(Buffer<f32>, Buffer<f32>)>::new(
+        &device,
+        &track!(|a, b| {
+            let tid = dispatch_id().x;
+            a.write(tid, tid.as_f32());
+            b.write(tid, -tid.as_f32());
+        }),
+    );
+    kernel.dispatch([n as u32 / 2, 1, 1], &first_half, &second_half);
+    let data = buf.copy_to_vec();
+    for i in 0..n {
+        if i < n / 2 {
+            assert_eq!(data[i], i as f32);
+        } else {
+            assert_eq!(data[i], -((i - n / 2) as f32));
+        }
+    }
+}
+#[test]
 fn byte_buffer() {
     let device = get_device();
     let buf = device.create_byte_buffer(1024);
@@ -1130,7 +1173,7 @@ fn is_nan() {
 //     track!(*a + b)
 // }
 
-#[derive(Clone, Copy, Debug, Value, PartialEq)]
+#[derive(Clone, Copy, Debug, Value, Soa, PartialEq)]
 #[repr(C)]
 #[value_new(pub)]
 pub struct Foo {
@@ -1138,7 +1181,23 @@ pub struct Foo {
     v: Float2,
     a: [i32; 4],
 }
-
+#[test]
+fn soa() {
+    let device = get_device();
+    let mut rng = thread_rng();
+    let foos = device.create_buffer_from_fn(1024, |_| Foo {
+        i: rng.gen(),
+        v: Float2::new(rng.gen(), rng.gen()),
+        a: [rng.gen(), rng.gen(), rng.gen(), rng.gen()],
+    });
+    let foos_soa = device.create_soa_buffer::<Foo>(1024);
+    foos_soa.copy_from_buffer(&foos);
+    let also_foos = device.create_buffer(1024);
+    foos_soa.copy_to_buffer(&also_foos);
+    let foos_data = foos.view(..).copy_to_vec();
+    let also_foos_data = also_foos.view(..).copy_to_vec();
+    assert_eq!(foos_data, also_foos_data);
+}
 #[test]
 fn atomic() {
     let device = get_device();

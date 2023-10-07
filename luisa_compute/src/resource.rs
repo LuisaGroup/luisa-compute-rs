@@ -323,7 +323,9 @@ impl Drop for BufferHandle {
 #[derive(Clone, Copy)]
 pub struct BufferView<'a, T: Value> {
     pub(crate) buffer: &'a Buffer<T>,
+    /// offset in #elements
     pub(crate) offset: usize,
+    /// length in #elements
     pub(crate) len: usize,
 }
 impl<'a, T: Value> BufferView<'a, T> {

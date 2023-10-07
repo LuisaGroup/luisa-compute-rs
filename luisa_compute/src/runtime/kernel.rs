@@ -1,3 +1,5 @@
+use crate::lang::soa::SoaMetadata;
+
 use super::*;
 
 impl<T: Value> CallableParameter for Expr<T> {
@@ -129,7 +131,12 @@ impl<T: Value> KernelParameter for BufferVar<T> {
         builder.buffer()
     }
 }
-
+impl<T: SoaValue> KernelParameter for SoaBufferVar<T> {
+    type Arg = SoaBuffer<T>;
+    fn def_param(builder: &mut KernelBuilder) -> Self {
+        builder.soa_buffer()
+    }
+}
 // impl KernelParameter for ByteBufferVar {
 //     type Arg = ByteBuffer;
 //     fn def_param(builder: &mut KernelBuilder) -> Self {
@@ -244,6 +251,13 @@ impl KernelBuilder {
             handle: None,
         }
     }
+    pub fn soa_buffer<T: SoaValue>(&mut self) -> SoaBufferVar<T> {
+        let storage = self.buffer::<u8>();
+        let metadata = self.buffer::<SoaMetadata>();
+        SoaBufferVar{
+            proxy: T::SoaBuffer::from_soa_storage(storage, metadata.read(0), 0)
+        }
+    }
     pub fn tex2d<T: IoTexel>(&mut self) -> Tex2dVar<T> {
         let node = new_node(
             __module_pools(),
@@ -337,7 +351,6 @@ impl KernelBuilder {
             (resource_tracker, cpu_custom_ops, captured)
         })
     }
-
 
     /// Don't use this directly
     /// See [`Callable`] for how to create a callable

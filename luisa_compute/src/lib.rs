@@ -35,7 +35,7 @@ pub mod prelude {
     };
     pub use crate::lang::types::vector::swizzle::*;
     pub use crate::lang::types::vector::VectorExprProxy;
-    pub use crate::lang::types::{AsExpr, Expr, Value, Var};
+    pub use crate::lang::types::{AsExpr, Expr, Value, Var, SoaValue};
     pub use crate::lang::Aggregate;
     pub use crate::resource::{IoTexel, StorageTexel, *};
     pub use crate::runtime::api::StreamTag;
@@ -60,7 +60,7 @@ mod internal_prelude {
     };
     pub(crate) use crate::lang::ops::Linear;
     pub(crate) use crate::lang::types::vector::alias::*;
-    pub(crate) use crate::lang::types::vector::*;
+    pub(crate) use crate::lang::types::{SoaBufferProxy, vector::*};
     #[allow(unused_imports)]
     pub(crate) use crate::lang::{
         check_index_lt_usize, ir, CallFuncTrait, Recorder, __compose, __extract, __insert,
@@ -86,8 +86,7 @@ pub use {luisa_compute_backend as backend, luisa_compute_sys as sys};
 
 use lazy_static::lazy_static;
 use luisa_compute_backend::Backend;
-use parking_lot::lock_api::RawMutex as RawMutexTrait;
-use parking_lot::{Mutex, RawMutex};
+use parking_lot::Mutex;
 use runtime::{Device, DeviceHandle, StreamHandle};
 use std::collections::HashMap;
 use std::sync::Weak;

@@ -1,3 +1,9 @@
+use std::any::TypeId;
+
+use serde_json::value::Index;
+
+use crate::lang::soa::SoaBuffer;
+
 use super::*;
 
 mod private {
@@ -24,6 +30,7 @@ pub trait Primitive: private::Sealed + Copy + TypeOf + 'static {
 /**
  * This is the heart of SOA implementation.
  */
+#[derive(Clone)]
 pub struct PrimitiveSoaProxy<T> {
     /// this soa view starts from (self.global_offset * self.count * 4) of the global bytebuffer
     /// Each primitive must be stored in a 4-aligned region, due to dx12 does not support access <4 aligned values
@@ -36,23 +43,21 @@ pub struct PrimitiveSoaProxy<T> {
     pub(crate) data: ByteBufferVar,
     _marker: std::marker::PhantomData<T>,
 }
-impl<T: Primitive> IndexRead for PrimitiveSoaProxy<T> {
-    type Element = T;
+
+impl IndexRead for PrimitiveSoaProxy<bool> {
+    type Element = bool;
     #[tracked]
     fn read<I: crate::lang::index::IntoIndex>(&self, i: I) -> Expr<Self::Element> {
-        let i = i.to_u64();
-        if need_runtime_check() {
-            lc_assert!(i.lt(self.view_count));
-        }
-        unsafe {
-            self.data.read_as::<T>(
+        let v = unsafe {
+            self.data.read_as::<u32>(
                 self.global_offset * self.count * 4
-                    + (self.view_start + i) * std::mem::size_of::<T>() as u64,
+                    + (self.view_start + i.to_u64()) * std::mem::size_of::<u32>() as u64,
             )
-        }
+        };
+        v.ne(0)
     }
 }
-impl<T: Primitive> IndexWrite for PrimitiveSoaProxy<T> {
+impl IndexWrite for PrimitiveSoaProxy<bool> {
     #[tracked]
     fn write<I: crate::lang::index::IntoIndex, V: AsExpr<Value = Self::Element>>(
         &self,
@@ -61,19 +66,181 @@ impl<T: Primitive> IndexWrite for PrimitiveSoaProxy<T> {
     ) {
         let i = i.to_u64();
         let v = value.as_expr();
-        if need_runtime_check() {
-            lc_assert!(i.lt(self.view_count));
-        }
         unsafe {
-            self.data.write_as::<T>(
+            self.data.write_as::<u32>(
                 self.global_offset * self.count * 4
-                    + (self.view_start + i) * std::mem::size_of::<T>() as u64,
-                v,
+                    + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
+                select(v, 1u32.expr(), 0u32.expr()),
             );
         }
     }
 }
-impl<T: Primitive> SoaBufferProxy for PrimitiveSoaProxy<T> {
+macro_rules! impl_prim_soa_16 {
+    ($T:ty) => {
+        impl IndexRead for PrimitiveSoaProxy<$T> {
+            type Element = $T;
+            #[tracked]
+            fn read<I: crate::lang::index::IntoIndex>(&self, i: I) -> Expr<Self::Element> {
+                let i = i.to_u64();
+                if need_runtime_check() {
+                    lc_assert!(i.lt(self.view_count));
+                }
+
+                unsafe {
+                    let v = self.data.read_as::<u32>(
+                        self.global_offset * self.count * 4
+                            + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
+                    );
+                    let v = (v & 0xffff).as_u16();
+                    v.bitcast::<$T>()
+                }
+            }
+        }
+        impl IndexWrite for PrimitiveSoaProxy<$T> {
+            #[tracked]
+            fn write<I: crate::lang::index::IntoIndex, V: AsExpr<Value = Self::Element>>(
+                &self,
+                i: I,
+                value: V,
+            ) {
+                let i = i.to_u64();
+                let v = value.as_expr();
+                if need_runtime_check() {
+                    lc_assert!(i.lt(self.view_count));
+                }
+                unsafe {
+                    let v = v.bitcast::<u16>();
+                    let v = v.as_u32();
+                    self.data.write_as::<u32>(
+                        self.global_offset * self.count * 4
+                            + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
+                        v,
+                    );
+                }
+            }
+        }
+    };
+}
+macro_rules! impl_prim_soa_8 {
+    ($T:ty) => {
+        impl IndexRead for PrimitiveSoaProxy<$T> {
+            type Element = $T;
+            #[tracked]
+            fn read<I: crate::lang::index::IntoIndex>(&self, i: I) -> Expr<Self::Element> {
+                let i = i.to_u64();
+                if need_runtime_check() {
+                    lc_assert!(i.lt(self.view_count));
+                }
+
+                unsafe {
+                    let v = self.data.read_as::<u32>(
+                        self.global_offset * self.count * 4
+                            + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
+                    );
+                    let v = (v & 0xff).as_u8();
+                    v.bitcast::<$T>()
+                }
+            }
+        }
+        impl IndexWrite for PrimitiveSoaProxy<$T> {
+            #[tracked]
+            fn write<I: crate::lang::index::IntoIndex, V: AsExpr<Value = Self::Element>>(
+                &self,
+                i: I,
+                value: V,
+            ) {
+                let i = i.to_u64();
+                let v = value.as_expr();
+                if need_runtime_check() {
+                    lc_assert!(i.lt(self.view_count));
+                }
+                unsafe {
+                    let v = v.bitcast::<u8>();
+                    let v = v.as_u32();
+                    self.data.write_as::<u32>(
+                        self.global_offset * self.count * 4
+                            + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
+                        v,
+                    );
+                }
+            }
+        }
+    };
+}
+macro_rules! impl_prim_soa {
+    ($T:ty) => {
+        impl IndexRead for PrimitiveSoaProxy<$T> {
+            type Element = $T;
+            #[tracked]
+            fn read<I: crate::lang::index::IntoIndex>(&self, i: I) -> Expr<Self::Element> {
+                let i = i.to_u64();
+                if need_runtime_check() {
+                    lc_assert!(i.lt(self.view_count));
+                }
+
+                assert!(std::mem::align_of::<$T>() >= 4);
+                unsafe {
+                    self.data.read_as::<$T>(
+                        self.global_offset * self.count * 4
+                            + (self.view_start + i) * std::mem::size_of::<$T>() as u64,
+                    )
+                }
+            }
+        }
+        impl IndexWrite for PrimitiveSoaProxy<$T> {
+            #[tracked]
+            fn write<I: crate::lang::index::IntoIndex, V: AsExpr<Value = Self::Element>>(
+                &self,
+                i: I,
+                value: V,
+            ) {
+                let i = i.to_u64();
+                let v = value.as_expr();
+                if need_runtime_check() {
+                    lc_assert!(i.lt(self.view_count));
+                }
+                unsafe {
+                    self.data.write_as::<$T>(
+                        self.global_offset * self.count * 4
+                            + (self.view_start + i) * std::mem::size_of::<$T>() as u64,
+                        v,
+                    );
+                }
+            }
+        }
+    };
+}
+impl_prim_soa_8!(u8);
+impl_prim_soa_8!(i8);
+impl_prim_soa_16!(u16);
+impl_prim_soa_16!(i16);
+impl_prim_soa_16!(f16);
+impl_prim_soa!(f32);
+impl_prim_soa!(f64);
+impl_prim_soa!(i32);
+impl_prim_soa!(i64);
+impl_prim_soa!(u32);
+impl_prim_soa!(u64);
+#[allow(dead_code)]
+#[allow(unreachable_code)]
+fn check_soa_impl() {
+    let _bool: SoaBuffer<bool> = unimplemented!();
+    let _f16: SoaBuffer<f16> = unimplemented!();
+    let _f32: SoaBuffer<f32> = unimplemented!();
+    let _f64: SoaBuffer<f64> = unimplemented!();
+    let _i8: SoaBuffer<i8> = unimplemented!();
+    let _i16: SoaBuffer<i16> = unimplemented!();
+    let _i32: SoaBuffer<i32> = unimplemented!();
+    let _i64: SoaBuffer<i64> = unimplemented!();
+    let _u8: SoaBuffer<u8> = unimplemented!();
+    let _u16: SoaBuffer<u16> = unimplemented!();
+    let _u32: SoaBuffer<u32> = unimplemented!();
+    let _u64: SoaBuffer<u64> = unimplemented!();
+}
+impl<T: Primitive> SoaBufferProxy for PrimitiveSoaProxy<T>
+where
+    Self: IndexRead<Element = T> + IndexWrite,
+{
     type Value = T;
     fn from_soa_storage(
         storage: ByteBufferVar,
@@ -103,7 +270,10 @@ impl<T: Primitive> Value for T {
         Expr::<Self>::from_node(node)
     }
 }
-impl<T: Primitive> SoaValue for T {
+impl<T: Primitive> SoaValue for T
+where
+    PrimitiveSoaProxy<T>: IndexWrite + IndexRead<Element = T>,
+{
     type SoaBuffer = PrimitiveSoaProxy<T>;
 }
 

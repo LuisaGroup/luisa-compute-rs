@@ -155,56 +155,54 @@ impl Compiler {
         let field_types: Vec<_> = fields.iter().map(|f| &f.ty).collect();
         let field_names: Vec<_> = fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
         let soa_proxy_name = syn::Ident::new(&format!("{}Soa", name), name.span());
-        quote_spanned!(span=>{
-            #[repr(C)]
-            #[derive(Copy, Clone)]
-            pub struct #soa_proxy_name #generics #where_clause{
-                #(#field_vis #field_names: <#field_types as #lang_path::SoaValue>::SoaBuffer),*
+        quote_spanned!(span=>
+            #[derive(Clone)]
+            #vis struct #soa_proxy_name #generics #where_clause{
+                #(#field_vis #field_names: <#field_types as #lang_path::types::SoaValue>::SoaBuffer),*
             }
-            impl #impl_generics #lang_path::SoaValue for #name #ty_generics #where_clause{
+            impl #impl_generics #lang_path::types::SoaValue for #name #ty_generics #where_clause{
                 type SoaBuffer = #soa_proxy_name #ty_generics;
             }
-            impl #impl_generics #lang_path::SoaBufferProxy for #soa_proxy_name #ty_generics #where_clause{
+            impl #impl_generics #lang_path::types::SoaBufferProxy for #soa_proxy_name #ty_generics #where_clause{
                 type Value = #name #ty_generics;
 
                 #[allow(unused_assignments)]
                 fn from_soa_storage(
-                    storage: ByteBufferVar,
-                    meta: Expr<SoaMetadata>,
-                    global_offset: usize,
+                    ___storage: ::luisa_compute::resource::ByteBufferVar,
+                    ___meta: Expr<#lang_path::soa::SoaMetadata>,
+                    ___global_offset: usize,
                 ) -> Self {
-                    use #lang_path::SoaBufferProxy;
-                    let mut i = 0;
+                    use #lang_path::types::SoaBufferProxy;
+                    let mut ___i = 0usize;
                     #(
-                        let $field_names = T::SoaBuffer::from_soa_storage(
-                            storage.clone(),
-                            meta.clone(),
-                            global_offset + i,
+                        let #field_names = <#field_types as #lang_path::types::SoaValue>::SoaBuffer::from_soa_storage(
+                            ___storage.clone(),
+                            ___meta.clone(),
+                            ___global_offset + ___i,
                         );
-                        i += <#field_types::SoaBuffer as SoaBufferProxy>::num_buffers();
+                        ___i += <<#field_types as #lang_path::types::SoaValue>::SoaBuffer as #lang_path::types::SoaBufferProxy>::num_buffers();
                     )*
                     Self{
                         #(#field_names),*
                     }
                 }
                 fn num_buffers() -> usize {
-                    [#( <#field_types as #lang_path::SoaValue>::SoaBuffer::num_buffers()),*].iter().sum()
+                    [#( <#field_types as #lang_path::types::SoaValue>::SoaBuffer::num_buffers()),*].iter().sum()
                 }
             }
-            impl #impl_generics #lang_path::IndexRead for #soa_proxy_name #ty_generics #where_clause{
+            impl #impl_generics #lang_path::index::IndexRead for #soa_proxy_name #ty_generics #where_clause{
                 type Element = #name #ty_generics;
-                fn read<I:#lang_path::IntoIndex>(&self, i: I) -> Expr<Self::Element> {
-                    let i = i.to_u64();
+                fn read<I:#lang_path::index::IntoIndex>(&self, ___i: I) -> #lang_path::types::Expr<Self::Element> {
+                    let ___i = ___i.to_u64();
+                    use #lang_path::FromNode;
                     #(
-                        let #field_names = self.#field_names.read(i);
+                        let #field_names = self.#field_names.read(___i);
                     )*
-                    Self{
-                        #(#field_names),*
-                    }
+                    Expr::<Self::Element>::from_node(#lang_path::__compose::<Self::Element>(&[ #( #lang_path::ToNode::node(&#field_names) ),* ]))
                 }
             }
-            impl #impl_generics #lang_path::IndexWrite for #soa_proxy_name #ty_generics #where_clause{
-                fn write<I:#lang_path::IntoIndex, V: #lang_path::AsExpr<Value = Self::Element>>(&self, i: I, value: V) {
+            impl #impl_generics #lang_path::index::IndexWrite for #soa_proxy_name #ty_generics #where_clause{
+                fn write<I:#lang_path::index::IntoIndex, V: #lang_path::types::AsExpr<Value = Self::Element>>(&self, i: I, value: V) {
                     let i = i.to_u64();
                     let v = value.as_expr();
                     #(
@@ -212,7 +210,7 @@ impl Compiler {
                     )*
                 }
             }
-        })
+        )
     }
     pub fn derive_value(&self, struct_: &ItemStruct) -> TokenStream {
         let ordering = self.value_attributes(&struct_.attrs);

@@ -20,6 +20,56 @@ impl<T: Value, const N: usize> ArrayNewExpr<T, N> for [T; N] {
 impl_simple_expr_proxy!([T: Value, const N: usize] ArrayExpr[T, N] for [T; N]);
 impl_simple_var_proxy!([T: Value, const N: usize] ArrayVar[T, N] for [T; N]);
 impl_simple_atomic_ref_proxy!([T: Value, const N: usize] ArrayAtomicRef[T, N] for [T; N]);
+#[derive(Clone)]
+pub struct ArraySoa<T: SoaValue, const N: usize> {
+    pub(crate) elems: Vec<T::SoaBuffer>,
+    _marker: PhantomData<[T; N]>,
+}
+impl<T: SoaValue, const N: usize> SoaValue for [T; N] {
+    type SoaBuffer = ArraySoa<T, N>;
+}
+impl<T: SoaValue, const N: usize> SoaBufferProxy for ArraySoa<T, N> {
+    type Value = [T; N];
+    fn from_soa_storage(
+        storage: ByteBufferVar,
+        meta: Expr<SoaMetadata>,
+        global_offset: usize,
+    ) -> Self {
+        let elems = (0..N)
+            .map(|i| {
+                T::SoaBuffer::from_soa_storage(
+                    storage.clone(),
+                    meta,
+                    global_offset + i * T::SoaBuffer::num_buffers(),
+                )
+            })
+            .collect::<Vec<_>>();
+        Self {
+            elems,
+            _marker: PhantomData,
+        }
+    }
+    fn num_buffers() -> usize {
+        T::SoaBuffer::num_buffers() * N
+    }
+}
+impl<T: SoaValue, const N: usize> IndexRead for ArraySoa<T, N> {
+    type Element = [T; N];
+    fn read<I: IntoIndex>(&self, i: I) -> Expr<Self::Element> {
+        let i = i.to_u64();
+        let elems = (0..N).map(|j| self.elems[j].read(i)).collect::<Vec<_>>();
+        <[T; N]>::from_elems_expr(elems.try_into().unwrap_or_else(|_| unreachable!()))
+    }
+}
+impl<T: SoaValue, const N: usize> IndexWrite for ArraySoa<T, N> {
+    fn write<I: IntoIndex, V: AsExpr<Value = Self::Element>>(&self, i: I, value: V) {
+        let i = i.to_u64();
+        let value = value.as_expr();
+        for j in 0..N {
+            self.elems[j].write(i, value.read(j as u64));
+        }
+    }
+}
 impl<T: Value, const N: usize> ArrayExpr<T, N> {
     pub fn len(&self) -> Expr<u32> {
         (N as u32).expr()

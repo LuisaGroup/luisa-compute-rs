@@ -141,7 +141,8 @@ impl Compiler {
                     #(self.#field_names.encode(encoder);)*
                 }
             }
-            impl #impl_generics #runtime_path::AsKernelArg<#name #ty_generics> for #name #ty_generics #where_clause {
+            impl #impl_generics #runtime_path::AsKernelArg for #name #ty_generics #where_clause {
+                type Output = #name #ty_generics;
             }
         )
     }

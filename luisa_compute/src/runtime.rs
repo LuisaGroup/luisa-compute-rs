@@ -206,7 +206,7 @@ impl Device {
             view_start: 0,
             view_count: count as u64,
         };
-        let metadata_buf = self.create_buffer_from_slice(&[metadata]);
+        let metadata_buf = Arc::new(self.create_buffer_from_slice(&[metadata]));
         let buffer = SoaBuffer {
             storage,
             metadata_buf,

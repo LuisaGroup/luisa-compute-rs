@@ -1181,22 +1181,66 @@ pub struct Foo {
     v: Float2,
     a: [i32; 4],
 }
+#[derive(Clone, Copy, Debug, Value, Soa, PartialEq)]
+#[repr(C)]
+#[value_new(pub)]
+pub struct Bar {
+    i: u32,
+    v: Float2,
+    a: [i32; 4],
+    f: Foo,
+}
 #[test]
 fn soa() {
     let device = get_device();
     let mut rng = thread_rng();
-    let foos = device.create_buffer_from_fn(1024, |_| Foo {
+    let bars = device.create_buffer_from_fn(1024, |_| Bar {
         i: rng.gen(),
         v: Float2::new(rng.gen(), rng.gen()),
         a: [rng.gen(), rng.gen(), rng.gen(), rng.gen()],
+        f: Foo {
+            i: rng.gen(),
+            v: Float2::new(rng.gen(), rng.gen()),
+            a: [rng.gen(), rng.gen(), rng.gen(), rng.gen()],
+        },
     });
-    let foos_soa = device.create_soa_buffer::<Foo>(1024);
-    foos_soa.copy_from_buffer(&foos);
-    let also_foos = device.create_buffer(1024);
-    foos_soa.copy_to_buffer(&also_foos);
-    let foos_data = foos.view(..).copy_to_vec();
-    let also_foos_data = also_foos.view(..).copy_to_vec();
-    assert_eq!(foos_data, also_foos_data);
+    let bars_soa = device.create_soa_buffer::<Bar>(1024);
+    bars_soa.copy_from_buffer(&bars);
+    let also_bars = device.create_buffer(1024);
+    bars_soa.copy_to_buffer(&also_bars);
+    let bars_data = bars.view(..).copy_to_vec();
+    let also_bars_data = also_bars.view(..).copy_to_vec();
+    assert_eq!(bars_data, also_bars_data);
+}
+#[test]
+fn soa_view() {
+    let device = get_device();
+    let mut rng = thread_rng();
+    let bars = device.create_buffer_from_fn(1024, |_| Bar {
+        i: rng.gen(),
+        v: Float2::new(rng.gen(), rng.gen()),
+        a: [rng.gen(), rng.gen(), rng.gen(), rng.gen()],
+        f: Foo {
+            i: rng.gen(),
+            v: Float2::new(rng.gen(), rng.gen()),
+            a: [rng.gen(), rng.gen(), rng.gen(), rng.gen()],
+        },
+    });
+    let bars_soa = device.create_soa_buffer::<Bar>(2048);
+    bars_soa.view(..1024).copy_from_buffer(&bars);
+    bars_soa.view(1024..2048).copy_from_buffer(&bars);
+    
+    let also_bars = device.create_buffer(1024);
+    bars_soa.view(..1024).copy_to_buffer(&also_bars);
+    let bars_data = bars.view(..).copy_to_vec();
+    let also_bars_data = also_bars.view(..).copy_to_vec();
+    assert_eq!(bars_data, also_bars_data);
+
+    let also_bars = device.create_buffer(1024);
+    bars_soa.view(1024..2048).copy_to_buffer(&also_bars);
+    let bars_data = bars.view(..).copy_to_vec();
+    let also_bars_data = also_bars.view(..).copy_to_vec();
+    assert_eq!(bars_data, also_bars_data);
 }
 #[test]
 fn atomic() {

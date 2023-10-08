@@ -28,15 +28,15 @@ impl<T: SoaValue> SoaBufferCopyKernel<T> {
     fn new(device: &Device) -> Self {
         let copy_to =
             device.create_kernel::<fn(SoaBuffer<T>, Buffer<T>, u64)>(&|soa, buf, offset| {
-                let i = dispatch_id().x.as_u64() + offset;
-                let v = soa.read(i);
+                let i = dispatch_id().x.as_u64();
+                let v = soa.read(i + offset);
                 buf.write(i, v);
             });
         let copy_from =
             device.create_kernel::<fn(SoaBuffer<T>, Buffer<T>, u64)>(&|soa, buf, offset| {
-                let i = dispatch_id().x.as_u64() + offset;
+                let i = dispatch_id().x.as_u64();
                 let v = buf.read(i);
-                soa.write(i, v);
+                soa.write(i + offset, v);
             });
         Self { copy_to, copy_from }
     }
@@ -108,6 +108,7 @@ impl<'a, T: SoaValue> SoaBufferView<'a, T> {
     }
     pub fn copy_from_buffer_async(&self, buffer: &Buffer<T>) -> Command<'static, 'static> {
         self.init_copy_kernel();
+        assert_eq!(self.metadata.view_count, buffer.len() as u64);
         let copy_kernel = self.buffer.copy_kernel.lock();
         let copy_kernel = copy_kernel.as_ref().unwrap();
         copy_kernel.copy_from.dispatch_async(
@@ -122,6 +123,7 @@ impl<'a, T: SoaValue> SoaBufferView<'a, T> {
     }
     pub fn copy_to_buffer_async(&self, buffer: &Buffer<T>) -> Command<'static, 'static> {
         self.init_copy_kernel();
+        assert_eq!(self.metadata.view_count, buffer.len() as u64);
         let copy_kernel = self.buffer.copy_kernel.lock();
         let copy_kernel = copy_kernel.as_ref().unwrap();
         copy_kernel.copy_to.dispatch_async(
@@ -151,6 +153,12 @@ pub struct SoaBufferView<'a, T: SoaValue> {
 }
 pub struct SoaBufferVar<T: SoaValue> {
     pub(crate) proxy: T::SoaBuffer,
+}
+impl<T: SoaValue> std::ops::Deref for SoaBufferVar<T> {
+    type Target = T::SoaBuffer;
+    fn deref(&self) -> &Self::Target {
+        &self.proxy
+    }
 }
 impl<T: SoaValue> IndexRead for SoaBufferVar<T> {
     type Element = T;

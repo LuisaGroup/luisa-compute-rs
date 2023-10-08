@@ -340,6 +340,9 @@ impl<'a, T: Value> BufferView<'a, T> {
     pub fn handle(&self) -> api::Buffer {
         self.buffer.handle()
     }
+    pub fn len(&self) -> usize {
+        self.len
+    }
     pub fn copy_to_async<'b>(&'a self, data: &'b mut [T]) -> Command<'b, 'b> {
         assert_eq!(data.len(), self.len);
         let mut rt = ResourceTracker::new();

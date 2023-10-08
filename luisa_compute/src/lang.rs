@@ -35,6 +35,7 @@ pub mod ops;
 pub mod poly;
 pub mod soa;
 pub mod types;
+pub mod external;
 
 pub(crate) trait CallFuncTrait {
     fn call<T: Value, S: Value>(self, x: Expr<T>) -> Expr<S>;

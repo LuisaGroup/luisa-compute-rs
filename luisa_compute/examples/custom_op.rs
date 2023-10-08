@@ -1,6 +1,6 @@
 use std::env::current_exe;
 
-use luisa::lang::debug::CpuFn;
+use luisa::lang::external::CpuFn;
 use luisa::prelude::*;
 use luisa_compute as luisa;
 #[derive(Clone, Copy, Value, Debug)]

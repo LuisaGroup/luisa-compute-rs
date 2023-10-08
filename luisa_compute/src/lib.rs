@@ -35,7 +35,7 @@ pub mod prelude {
     };
     pub use crate::lang::types::vector::swizzle::*;
     pub use crate::lang::types::vector::VectorExprProxy;
-    pub use crate::lang::types::{AsExpr, Expr, Value, Var, SoaValue};
+    pub use crate::lang::types::{AsExpr, Expr, SoaValue, Value, Var};
     pub use crate::lang::Aggregate;
     pub use crate::resource::{IoTexel, StorageTexel, *};
     pub use crate::runtime::api::StreamTag;
@@ -52,7 +52,8 @@ pub mod prelude {
 }
 
 mod internal_prelude {
-    pub(crate) use crate::lang::debug::{__env_need_backtrace, is_cpu_backend, CpuFn};
+    pub(crate) use crate::lang::debug::{__env_need_backtrace, is_cpu_backend};
+    pub(crate) use crate::lang::external::CpuFn;
     pub(crate) use crate::lang::ir::ffi::*;
     pub(crate) use crate::lang::ir::{
         new_node, register_type, BasicBlock, Const, Func, Instruction, IrBuilder, Node,
@@ -60,7 +61,7 @@ mod internal_prelude {
     };
     pub(crate) use crate::lang::ops::Linear;
     pub(crate) use crate::lang::types::vector::alias::*;
-    pub(crate) use crate::lang::types::{SoaBufferProxy, vector::*};
+    pub(crate) use crate::lang::types::{vector::*, SoaBufferProxy};
     #[allow(unused_imports)]
     pub(crate) use crate::lang::{
         check_index_lt_usize, ir, CallFuncTrait, Recorder, __compose, __extract, __insert,

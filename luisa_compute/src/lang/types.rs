@@ -4,6 +4,7 @@ use std::ops::Deref;
 use crate::internal_prelude::*;
 
 use super::soa::SoaMetadata;
+use super::{process_potential_capture, with_recorder};
 
 pub mod alignment;
 pub mod array;
@@ -26,7 +27,7 @@ pub trait Value: Copy + TypeOf + 'static {
     type AtomicRef: AtomicRefProxy<Value = Self>;
 
     fn expr(self) -> Expr<Self> {
-        let node = __current_scope(|s| -> NodeRef {
+        let node = __current_scope(|s| {
             let mut buf = vec![0u8; std::mem::size_of::<Self>()];
             unsafe {
                 std::ptr::copy_nonoverlapping(
@@ -37,14 +38,14 @@ pub trait Value: Copy + TypeOf + 'static {
             }
             s.const_(Const::Generic(CBoxedSlice::new(buf), Self::type_()))
         });
-        Expr::<Self>::from_node(node)
+        Expr::<Self>::from_node(node.into())
     }
     fn var(self) -> Var<Self> {
         self.expr().var()
     }
 
     fn var_zeroed() -> Var<Self> {
-        Var::<Self>::from_node(__current_scope(|b| b.local_zero_init(Self::type_())))
+        Var::<Self>::from_node(__current_scope(|b| b.local_zero_init(Self::type_())).into())
     }
 }
 
@@ -167,7 +168,7 @@ impl<T: Value> AtomciRefProxyDataProxyData<T> {
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Expr<T: Value> {
-    pub(crate) node: NodeRef,
+    pub(crate) node: SafeNodeRef,
     _marker: PhantomData<T>,
     proxy: *mut ExprProxyData<T>,
 }
@@ -185,27 +186,26 @@ pub struct TypeTag<T: Value>(PhantomData<T>);
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct Var<T: Value> {
-    pub(crate) node: NodeRef,
+    pub(crate) node: SafeNodeRef,
     _marker: PhantomData<T>,
     proxy: *mut VarProxyData<T>,
 }
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct AtomicRef<T: Value> {
-    pub(crate) node: NodeRef,
+    pub(crate) node: SafeNodeRef,
     _marker: PhantomData<T>,
     proxy: *mut AtomciRefProxyDataProxyData<T>,
 }
 
 impl<T: Value> ToNode for AtomicRef<T> {
-    fn node(&self) -> NodeRef {
+    fn node(&self) -> SafeNodeRef {
         self.node
     }
 }
 impl<T: Value> FromNode for AtomicRef<T> {
-    fn from_node(node: NodeRef) -> Self {
-        let proxy = RECORDER.with(|r| {
-            let r = r.borrow();
+    fn from_node(node: SafeNodeRef) -> Self {
+        let proxy = with_recorder(|r| {
             let proxy = r.arena.alloc(AtomciRefProxyDataProxyData::<T>::new());
             proxy as *mut _
         });
@@ -217,18 +217,17 @@ impl<T: Value> FromNode for AtomicRef<T> {
     }
 }
 impl<T: Value> Aggregate for Expr<T> {
-    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+    fn to_nodes(&self, nodes: &mut Vec<SafeNodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = SafeNodeRef>>(iter: &mut I) -> Self {
         let node = iter.next().unwrap();
         Self::from_node(node)
     }
 }
 impl<T: Value> FromNode for Expr<T> {
-    fn from_node(node: NodeRef) -> Self {
-        let proxy = RECORDER.with(|r| {
-            let r = r.borrow();
+    fn from_node(node: SafeNodeRef) -> Self {
+        let proxy = with_recorder(|r| {
             let proxy = r.arena.alloc(ExprProxyData::<T>::new());
             proxy as *mut _
         });
@@ -240,24 +239,23 @@ impl<T: Value> FromNode for Expr<T> {
     }
 }
 impl<T: Value> ToNode for Expr<T> {
-    fn node(&self) -> NodeRef {
+    fn node(&self) -> SafeNodeRef {
         self.node
     }
 }
 
 impl<T: Value> Aggregate for Var<T> {
-    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
+    fn to_nodes(&self, nodes: &mut Vec<SafeNodeRef>) {
         nodes.push(self.node);
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = SafeNodeRef>>(iter: &mut I) -> Self {
         let node = iter.next().unwrap();
         Self::from_node(node)
     }
 }
 impl<T: Value> FromNode for Var<T> {
-    fn from_node(node: NodeRef) -> Self {
-        let proxy = RECORDER.with(|r| {
-            let r = r.borrow();
+    fn from_node(node: SafeNodeRef) -> Self {
+        let proxy = with_recorder(|r| {
             let proxy = r.arena.alloc(VarProxyData::<T>::new());
             proxy as *mut _
         });
@@ -269,7 +267,7 @@ impl<T: Value> FromNode for Var<T> {
     }
 }
 impl<T: Value> ToNode for Var<T> {
-    fn node(&self) -> NodeRef {
+    fn node(&self) -> SafeNodeRef {
         self.node
     }
 }
@@ -294,14 +292,14 @@ impl<T: Value> Deref for AtomicRef<T> {
 }
 impl<T: Value> Expr<T> {
     pub fn var(self) -> Var<T> {
-        Var::<T>::from_node(__current_scope(|b| b.local(self.node())))
+        let node = self.node().get();
+        Var::<T>::from_node(__current_scope(|b| b.local(node)).into())
     }
     pub fn zeroed() -> Self {
-        FromNode::from_node(__current_scope(|b| b.zero_initializer(T::type_())))
+        FromNode::from_node(__current_scope(|b| b.zero_initializer(T::type_())).into())
     }
     pub fn _ref<'a>(self) -> &'a Self {
-        RECORDER.with(|r| {
-            let r = r.borrow();
+        with_recorder(|r| {
             let v: &Expr<T> = r.arena.alloc(self);
             unsafe {
                 let v: &'a Expr<T> = std::mem::transmute(v);
@@ -312,8 +310,9 @@ impl<T: Value> Expr<T> {
     pub unsafe fn bitcast<S: Value>(self) -> Expr<S> {
         assert_eq!(std::mem::size_of::<T>(), std::mem::size_of::<S>());
         let ty = S::type_();
-        let node = __current_scope(|s| s.bitcast(self.node(), ty));
-        Expr::<S>::from_node(node)
+        let node = self.node().get();
+        let node = __current_scope(|s| s.bitcast(node, ty));
+        Expr::<S>::from_node(node.into())
     }
     pub fn _type_tag(&self) -> TypeTag<T> {
         TypeTag(PhantomData)
@@ -322,13 +321,10 @@ impl<T: Value> Expr<T> {
 
 impl<T: Value> Var<T> {
     pub fn zeroed() -> Self {
-        Self::from_node(__current_scope(|b| {
-            b.local_zero_init(<T as TypeOf>::type_())
-        }))
+        Self::from_node(__current_scope(|b| b.local_zero_init(<T as TypeOf>::type_())).into())
     }
     pub fn _ref<'a>(self) -> &'a Self {
-        RECORDER.with(|r| {
-            let r = r.borrow();
+        with_recorder(|r| {
             let v: &Var<T> = r.arena.alloc(self);
             unsafe {
                 let v: &'a Var<T> = std::mem::transmute(v);
@@ -337,17 +333,9 @@ impl<T: Value> Var<T> {
         })
     }
     pub fn load(&self) -> Expr<T> {
-        Expr::<T>::from_nodes(
-            &mut __current_scope(|b| {
-                let nodes = self.to_vec_nodes();
-                let mut ret = vec![];
-                for node in nodes {
-                    ret.push(b.call(Func::Load, &[node], node.type_().clone()));
-                }
-                ret
-            })
-            .into_iter(),
-        )
+        let self_node = self.node().get();
+        let node = __current_scope(|b| b.call(Func::Load, &[self_node], T::type_()));
+        Expr::<T>::from_node(node.into())
     }
     pub fn store(&self, value: impl AsExpr<Value = T>) {
         crate::lang::_store(self, &value.as_expr());
@@ -355,8 +343,7 @@ impl<T: Value> Var<T> {
 }
 impl<T: Value> AtomicRef<T> {
     pub fn _ref<'a>(self) -> &'a Self {
-        RECORDER.with(|r| {
-            let r = r.borrow();
+        with_recorder(|r| {
             let v: &AtomicRef<T> = r.arena.alloc(self);
             unsafe {
                 let v: &'a AtomicRef<T> = std::mem::transmute(v);

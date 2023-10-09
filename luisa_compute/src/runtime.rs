@@ -1298,7 +1298,7 @@ impl<S: CallableSignature> DynCallable<S> {
             let mut r = r.borrow_mut();
             let device = r.device.clone().unwrap();
             (
-                std::mem::replace(&mut *r, Recorder::new()),
+                std::mem::replace(&mut *r, FnRecorder::new()),
                 device.upgrade().unwrap(),
             )
         });

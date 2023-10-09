@@ -245,13 +245,15 @@ pub type ByteBufferVar = BufferVar<u8>;
 impl BufferVar<u8> {
     pub unsafe fn read_as<T: Value>(&self, index_bytes: impl IntoIndex) -> Expr<T> {
         let i = index_bytes.to_u64();
+        let self_node = self.node;
+        let i = i.node().get();
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(
                 Func::ByteBufferRead,
                 &[self.node, i.node],
                 <T as TypeOf>::type_(),
             )
-        }))
+        }).into())
     }
     pub fn len_bytes_expr(&self) -> Expr<u64> {
         Expr::<u64>::from_node(__current_scope(|b| {
@@ -1412,10 +1414,10 @@ pub struct BufferVar<T: Value> {
     pub(crate) marker: PhantomData<T>,
     #[allow(dead_code)]
     pub(crate) handle: Option<Arc<BufferHandle>>,
-    pub(crate) node: NodeRef,
+    pub(crate) node: SafeNodeRef,
 }
 impl<T: Value> ToNode for BufferVar<T> {
-    fn node(&self) -> NodeRef {
+    fn node(&self) -> SafeNodeRef {
         self.node
     }
 }
@@ -1424,18 +1426,18 @@ impl<T: Value> Drop for BufferVar<T> {
 }
 #[derive(Clone)]
 pub struct BindlessArrayVar {
-    pub(crate) node: NodeRef,
+    pub(crate) node: SafeNodeRef,
     #[allow(dead_code)]
     pub(crate) handle: Option<Arc<BindlessArrayHandle>>,
 }
 #[derive(Clone)]
 pub struct BindlessBufferVar<T> {
-    array: NodeRef,
+    array: SafeNodeRef,
     buffer_index: Expr<u32>,
     _marker: PhantomData<T>,
 }
 impl<T: Value> ToNode for BindlessBufferVar<T> {
-    fn node(&self) -> NodeRef {
+    fn node(&self) -> SafeNodeRef {
         self.array
     }
 }
@@ -1501,11 +1503,11 @@ impl<T: Value> BindlessBufferVar<T> {
 }
 #[derive(Clone)]
 pub struct BindlessByteBufferVar {
-    array: NodeRef,
+    array: SafeNodeRef,
     buffer_index: Expr<u32>,
 }
 impl ToNode for BindlessByteBufferVar {
-    fn node(&self) -> NodeRef {
+    fn node(&self) -> SafeNodeRef {
         self.array
     }
 }
@@ -1533,7 +1535,7 @@ impl BindlessByteBufferVar {
 }
 #[derive(Clone)]
 pub struct BindlessTex2dVar {
-    array: NodeRef,
+    array: SafeNodeRef,
     tex2d_index: Expr<u32>,
 }
 
@@ -1620,7 +1622,7 @@ impl BindlessTex2dVar {
 }
 #[derive(Clone)]
 pub struct BindlessTex3dVar {
-    array: NodeRef,
+    array: SafeNodeRef,
     tex3d_index: Expr<u32>,
 }
 
@@ -1790,7 +1792,7 @@ impl BindlessArrayVar {
     }
 }
 impl<T: Value> ToNode for Buffer<T> {
-    fn node(&self) -> NodeRef {
+    fn node(&self) -> SafeNodeRef {
         self.var().node()
     }
 }
@@ -2068,7 +2070,7 @@ impl_atomic_bit!(i32);
 impl_atomic_bit!(i64);
 #[derive(Clone)]
 pub struct Tex2dVar<T: IoTexel> {
-    pub(crate) node: NodeRef,
+    pub(crate) node: SafeNodeRef,
     #[allow(dead_code)]
     pub(crate) handle: Option<Arc<TextureHandle>>,
     pub(crate) marker: PhantomData<T>,
@@ -2189,7 +2191,7 @@ impl<T: IoTexel> Tex3dVar<T> {
 }
 #[derive(Clone)]
 pub struct Tex3dVar<T: IoTexel> {
-    pub(crate) node: NodeRef,
+    pub(crate) node: SafeNodeRef,
     #[allow(dead_code)]
     pub(crate) handle: Option<Arc<TextureHandle>>,
     pub(crate) marker: PhantomData<T>,

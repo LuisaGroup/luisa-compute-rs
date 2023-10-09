@@ -39,7 +39,8 @@ impl<T: VectorAlign<N>, const N: usize> Vector<T, N> {
         }
     }
     pub fn from_elems_expr(elements: [Expr<T>; N]) -> Expr<Self> {
-        Expr::<Self>::from_node(__compose::<Vector<T, N>>(&elements.map(|x| x.node())))
+        let elements = elements.map(|x| x.node().get());
+        Expr::<Self>::from_node(__compose::<Vector<T, N>>(&elements).into())
     }
 }
 

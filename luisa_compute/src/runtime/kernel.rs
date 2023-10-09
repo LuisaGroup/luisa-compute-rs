@@ -507,8 +507,9 @@ unsafe impl CallableRet for () {
 
 unsafe impl<V: Value> CallableRet for Expr<V> {
     fn _return(&self) -> CArc<Type> {
+        let ret = self.node().get();
         __current_scope(|b| {
-            b.return_(self.node());
+            b.return_(ret);
         });
         V::type_()
     }

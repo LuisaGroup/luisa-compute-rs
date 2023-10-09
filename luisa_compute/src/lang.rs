@@ -301,7 +301,7 @@ pub(crate) struct FnRecorder {
     pub(crate) device: Option<WeakDevice>,
     pub(crate) block_size: Option<[u32; 3]>,
     pub(crate) building_kernel: bool,
-    pub(crate) pools: Option<CArc<ModulePools>>,
+    pub(crate) pools: CArc<ModulePools>,
     pub(crate) arena: Bump,
     pub(crate) callable_ret_type: Option<CArc<Type>>,
 }
@@ -330,7 +330,7 @@ impl FnRecorder {
         if let Some((_, node, _, _)) = self.captured_resources.get(&binding) {
             *node
         } else {
-            let node = new_node(self.pools.as_ref().unwrap(), create_node());
+            let node = new_node(self.pools.as_ref(), create_node());
             let i = self.captured_resources.len();
             self.captured_resources
                 .insert(binding, (i, node, binding, handle.clone()));
@@ -347,7 +347,7 @@ impl FnRecorder {
             shared: vec![],
             device: None,
             block_size: None,
-            pools: None,
+            pools: CArc::new(ModulePools::new()),
             arena: Bump::new(),
             building_kernel: false,
             kernel_id: None,
@@ -377,7 +377,7 @@ impl FnRecorder {
         let arg = SafeNodeRef {
             recorder: self as *mut _,
             node: new_node(
-                self.pools.as_ref().unwrap(),
+                self.pools.as_ref(),
                 Node::new(
                     CArc::new(Instruction::Argument {
                         by_value: !node.node.is_lvalue(),
@@ -515,7 +515,7 @@ pub fn __pop_scope() -> Pooled<BasicBlock> {
 
 pub fn __module_pools() -> &'static CArc<ModulePools> {
     with_recorder(|r| {
-        let pool = r.pools.as_ref().unwrap();
+        let pool = &r.pools;
         unsafe { std::mem::transmute(pool) }
     })
 }
@@ -530,9 +530,7 @@ pub fn __module_pools() -> &'static CArc<ModulePools> {
  */
 pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
     let inst = &node.get().instruction;
-    RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
-
+    with_recorder(|r| {
         let pools = {
             let cur_builder = r.scopes.last_mut().unwrap();
             cur_builder.pools()
@@ -666,14 +664,15 @@ pub fn unpack_from<T>(
 where
     T: Value,
 {
-    let index = index.into();
+    let index = index.into().node().get();
+    let buffer = buffer.node().get();
     Expr::<T>::from_node(__current_scope(|b| {
         b.call(
             Func::Unpack,
-            &[buffer.node(), index.node()],
+            &[buffer, index],
             <T as TypeOf>::type_(),
         )
-    }))
+    }).into())
 }
 
 pub(crate) fn need_runtime_check() -> bool {
@@ -715,7 +714,7 @@ fn try_eval_const_index(index: NodeRef) -> Option<usize> {
 }
 pub(crate) fn check_index_lt_usize(index: impl IntoIndex, size: usize) {
     let index = index.to_u64();
-    let i: Option<usize> = try_eval_const_index(index.node());
+    let i: Option<usize> = try_eval_const_index(index.node().get());
     if let Some(i) = i {
         assert!(i < size, "Index out of bound, index: {}, size: {}", i, size);
     } else {

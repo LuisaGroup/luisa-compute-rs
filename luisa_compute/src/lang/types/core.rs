@@ -267,7 +267,7 @@ impl<T: Primitive> Value for T {
 
     fn expr(self) -> Expr<Self> {
         let node = __current_scope(|s| -> NodeRef { s.const_(self.const_()) });
-        Expr::<Self>::from_node(node)
+        Expr::<Self>::from_node(node.into())
     }
 }
 impl<T: Primitive> SoaValue for T
@@ -290,44 +290,44 @@ macro_rules! impl_atomic {
                 desired: impl AsExpr<Value = $t>,
             ) -> Expr<$t> {
                 lower_atomic_ref(
-                    self.node(),
+                    self.node().get(),
                     Func::AtomicCompareExchange,
-                    &[expected.as_expr().node(), desired.as_expr().node()],
+                    &[expected.as_expr().node().get(), desired.as_expr().node().get()],
                 )
             }
             pub fn exchange(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
                 lower_atomic_ref(
-                    self.node(),
+                    self.node().get(),
                     Func::AtomicExchange,
-                    &[operand.as_expr().node()],
+                    &[operand.as_expr().node().get()],
                 )
             }
             pub fn fetch_add(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
                 lower_atomic_ref(
-                    self.node(),
+                    self.node().get(),
                     Func::AtomicFetchAdd,
-                    &[operand.as_expr().node()],
+                    &[operand.as_expr().node().get()],
                 )
             }
             pub fn fetch_sub(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
                 lower_atomic_ref(
-                    self.node(),
+                    self.node().get(),
                     Func::AtomicFetchSub,
-                    &[operand.as_expr().node()],
+                    &[operand.as_expr().node().get()],
                 )
             }
             pub fn fetch_min(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
                 lower_atomic_ref(
-                    self.node(),
+                    self.node().get(),
                     Func::AtomicFetchMin,
-                    &[operand.as_expr().node()],
+                    &[operand.as_expr().node().get()],
                 )
             }
             pub fn fetch_max(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
                 lower_atomic_ref(
-                    self.node(),
+                    self.node().get(),
                     Func::AtomicFetchMax,
-                    &[operand.as_expr().node()],
+                    &[operand.as_expr().node().get()],
                 )
             }
         }
@@ -338,23 +338,23 @@ macro_rules! impl_atomic_bit {
         impl AtomicRef<$t> {
             pub fn fetch_and(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
                 lower_atomic_ref(
-                    self.node(),
+                    self.node().get(),
                     Func::AtomicFetchAnd,
-                    &[operand.as_expr().node()],
+                    &[operand.as_expr().node().get()],
                 )
             }
             pub fn fetch_or(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
                 lower_atomic_ref(
-                    self.node(),
+                    self.node().get(),
                     Func::AtomicFetchOr,
-                    &[operand.as_expr().node()],
+                    &[operand.as_expr().node().get()],
                 )
             }
             pub fn fetch_xor(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
                 lower_atomic_ref(
-                    self.node(),
+                    self.node().get(),
                     Func::AtomicFetchXor,
-                    &[operand.as_expr().node()],
+                    &[operand.as_expr().node().get()],
                 )
             }
         }
@@ -381,7 +381,7 @@ fn lower_atomic_ref<T: Value>(node: NodeRef, op: Func, args: &[NodeRef]) -> Expr
                     .collect::<Vec<_>>();
                 Expr::<T>::from_node(__current_scope(|b| {
                     b.call(op, &new_args, <T as TypeOf>::type_())
-                }))
+                }).into())
             }
             _ => unreachable!("{:?}", inst),
         },

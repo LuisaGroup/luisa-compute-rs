@@ -2,6 +2,8 @@ use std::cell::RefCell;
 
 use crate::internal_prelude::*;
 
+use super::with_recorder;
+
 struct AdContext {
     started: bool,
     backward_called: bool,
@@ -44,8 +46,9 @@ pub fn requires_grad<V: Value>(var: Expr<V>) {
         );
         assert!(!c.backward_called, "backward is already called");
     });
+    let var = var.node().get();
     __current_scope(|b| {
-        b.call(Func::RequiresGradient, &[var.node()], Type::void());
+        b.call(Func::RequiresGradient, &[var], Type::void());
     });
 }
 
@@ -61,7 +64,7 @@ pub fn backward<V: Value>(out: Expr<V>) {
                 ),
             );
             b.append(one);
-            one
+            one.into()
         })),
     );
 }
@@ -74,8 +77,8 @@ pub fn backward_with_grad<V: Value>(out: Expr<V>, grad: Expr<V>) {
         assert!(!c.backward_called, "backward is already called");
         c.backward_called = true;
     });
-    let out = out.node();
-    let grad = grad.node();
+    let out = out.node().get();
+    let grad = grad.node().get();
     __current_scope(|b| {
         b.call(Func::GradientMarker, &[out, grad], Type::void());
         b.call(Func::Backward, &[], Type::void());
@@ -90,9 +93,11 @@ pub fn gradient<V: Value>(var: Expr<V>) -> Expr<V> {
         assert!(!c.is_forward_mode, "gradient() is called in forward mode");
         assert!(c.backward_called, "backward is not called");
     });
-    Expr::<V>::from_node(__current_scope(|b| {
-        b.call(Func::Gradient, &[var.node()], var.node().type_().clone())
-    }))
+    let var = var.node().get();
+    Expr::<V>::from_node(
+        __current_scope(|b| b.call(Func::Gradient, &[var], var.type_().clone()))
+            .into(),
+    )
 }
 /// Gradient of a value in *Reverse mode* AD
 pub fn grad<V: Value>(var: Expr<V>) -> Expr<V> {
@@ -119,9 +124,9 @@ pub fn grad<V: Value>(var: Expr<V>) -> Expr<V> {
 //     R::from_vec_nodes(nodes)
 // }
 pub fn detach<T: NodeLike>(v: T) -> T {
-    let v = v.node();
+    let v = v.node().get();
     let node = __current_scope(|b| b.call(Func::Detach, &[v], v.type_().clone()));
-    T::from_node(node)
+    T::from_node(node.into())
 }
 
 /// Start a *Forward mode* AD section that propagates N gradients w.r.t to input
@@ -133,9 +138,8 @@ pub fn forward_autodiff(n_grads: usize, body: impl Fn()) {
         *c = AdContext::new_fwd(n_grads);
         c.started = true;
     });
-    RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
-        let pools = r.pools.clone().unwrap();
+    with_recorder(|r| {
+        let pools = r.pools.clone();
         let s = &mut r.scopes;
         s.push(IrBuilder::new(pools));
     });
@@ -163,9 +167,9 @@ pub fn propagate_gradient<V: Value>(v: Expr<V>, grads: &[Expr<V>]) {
             "propagate_gradient() is called in backward mode"
         );
     });
+    let mut nodes = vec![v.node().get()];
+    nodes.extend(grads.iter().map(|g| g.node().get()));
     __current_scope(|b| {
-        let mut nodes = vec![v.node()];
-        nodes.extend(grads.iter().map(|g| g.node()));
         b.call(Func::PropagateGrad, &nodes, Type::void());
     });
 }
@@ -181,11 +185,12 @@ pub fn output_gradients<V: Value>(v: Expr<V>) -> Vec<Expr<V>> {
         c.n_forward_grads
     });
     let mut grads = vec![];
+    let v = v.node().get();
     for i in 0..n {
         grads.push(Expr::<V>::from_node(__current_scope(|b| {
             let idx = b.const_(Const::Int32(i as i32));
-            b.call(Func::OutputGrad, &[v.node(), idx], v.node().type_().clone())
-        })));
+            b.call(Func::OutputGrad, &[v, idx], v.type_().clone())
+        }).into()));
     }
     grads
 }
@@ -197,11 +202,9 @@ pub fn autodiff(body: impl Fn()) {
         *c = AdContext::new_rev();
         c.started = true;
     });
-    RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
-        let pools = r.pools.clone().unwrap();
+    with_recorder(|r| {
         let s = &mut r.scopes;
-        s.push(IrBuilder::new(pools));
+        s.push(IrBuilder::new(r.pools.clone()));
     });
     body();
     AD_CONTEXT.with(|c| {

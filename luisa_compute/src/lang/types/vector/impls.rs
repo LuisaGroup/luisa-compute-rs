@@ -79,14 +79,15 @@ macro_rules! impl_sized {
                 if need_runtime_check() {
                     check_index_lt_usize(i, $N);
                 }
-
+                let self_node = self.self_.node().get();
+                let i = i.node().get();
                 Expr::<T>::from_node(__current_scope(|s| {
                     s.call(
                         Func::ExtractElement,
-                        &[self.node(), i.node()],
+                        &[self_node, i],
                         T::type_(),
                     )
-                }))._ref()
+                }).into())._ref()
             }
         }
         impl<T: VectorAlign<$N>, X: IntoIndex> Index<X> for $Vvar<T> {
@@ -97,14 +98,15 @@ macro_rules! impl_sized {
                 if need_runtime_check() {
                     check_index_lt_usize(i, $N);
                 }
-
+                let self_node = self.self_.node().get();
+                let i = i.node().get();
                 Var::<T>::from_node(__current_scope(|s| {
                     s.call(
                         Func::GetElementPtr,
-                        &[self.self_.node(), i.node()],
+                        &[self_node, i],
                         T::type_(),
                     )
-                }))._ref()
+                }).into())._ref()
             }
         }
     }
@@ -116,22 +118,22 @@ impl_sized!(Vec4(4), VectorExprProxy4, VectorVarProxy4: x, y, z, w);
 pub trait VectorExprProxy {
     const N: usize;
     type T: Primitive;
-    fn node(&self) -> NodeRef;
+    fn node(&self) -> SafeNodeRef;
     fn _permute2(&self, x: u32, y: u32) -> Expr<Vec2<Self::T>>
     where
         Self::T: VectorAlign<2>,
     {
         assert!(x < Self::N as u32);
         assert!(y < Self::N as u32);
-        let x = x.expr();
-        let y = y.expr();
-        Expr::<Vec2<Self::T>>::from_node(__current_scope(|s| {
-            s.call(
-                Func::Permute,
-                &[self.node(), x.node(), y.node()],
-                Vec2::<Self::T>::type_(),
-            )
-        }))
+        let x = x.expr().node().get();
+        let y = y.expr().node().get();
+        let self_node = self.node().get();
+        Expr::<Vec2<Self::T>>::from_node(
+            __current_scope(|s| {
+                s.call(Func::Permute, &[self_node, x, y], Vec2::<Self::T>::type_())
+            })
+            .into(),
+        )
     }
     fn _permute3(&self, x: u32, y: u32, z: u32) -> Expr<Vec3<Self::T>>
     where
@@ -140,16 +142,20 @@ pub trait VectorExprProxy {
         assert!(x < Self::N as u32);
         assert!(y < Self::N as u32);
         assert!(z < Self::N as u32);
-        let x = x.expr();
-        let y = y.expr();
-        let z = z.expr();
-        Expr::<Vec3<Self::T>>::from_node(__current_scope(|s| {
-            s.call(
-                Func::Permute,
-                &[self.node(), x.node(), y.node(), z.node()],
-                Vec3::<Self::T>::type_(),
-            )
-        }))
+        let x = x.expr().node().get();
+        let y = y.expr().node().get();
+        let z = z.expr().node().get();
+        let self_node = self.node().get();
+        Expr::<Vec3<Self::T>>::from_node(
+            __current_scope(|s| {
+                s.call(
+                    Func::Permute,
+                    &[self_node, x, y, z],
+                    Vec3::<Self::T>::type_(),
+                )
+            })
+            .into(),
+        )
     }
     fn _permute4(&self, x: u32, y: u32, z: u32, w: u32) -> Expr<Vec4<Self::T>>
     where
@@ -159,17 +165,21 @@ pub trait VectorExprProxy {
         assert!(y < Self::N as u32);
         assert!(z < Self::N as u32);
         assert!(w < Self::N as u32);
-        let x = x.expr();
-        let y = y.expr();
-        let z = z.expr();
-        let w = w.expr();
-        Expr::<Vec4<Self::T>>::from_node(__current_scope(|s| {
-            s.call(
-                Func::Permute,
-                &[self.node(), x.node(), y.node(), z.node(), w.node()],
-                Vec4::<Self::T>::type_(),
-            )
-        }))
+        let x = x.expr().node().get();
+        let y = y.expr().node().get();
+        let z = z.expr().node().get();
+        let w = w.expr().node().get();
+        let self_node = self.node().get();
+        Expr::<Vec4<Self::T>>::from_node(
+            __current_scope(|s| {
+                s.call(
+                    Func::Permute,
+                    &[self_node, x, y, z, w],
+                    Vec4::<Self::T>::type_(),
+                )
+            })
+            .into(),
+        )
     }
 }
 impl<T: VectorAlign<2>> VectorExprProxy2<T> {
@@ -196,7 +206,8 @@ where
     Self: Value,
 {
     pub fn from_elems_expr(elements: [Expr<Vector<f32, N>>; N]) -> Expr<Self> {
-        Expr::<Self>::from_node(__compose::<Self>(&elements.map(|x| x.node())))
+        let elements = elements.map(|x| x.node().get());
+        Expr::<Self>::from_node(__compose::<Self>(&elements).into())
     }
 }
 impl SquareMatrix<2> {
@@ -236,10 +247,10 @@ macro_rules! impl_mat_proxy {
                 Self::from_elems_expr([$($xs.as_expr()),+])
             }
             pub fn full_expr(scalar: impl AsExpr<Value = f32>) -> Expr<Self> {
-                let scalar = scalar.as_expr();
+                let scalar = scalar.as_expr().node().get();
                 Expr::<Self>::from_node(__current_scope(|b|{
-                    b.call(Func::Mat, &[scalar.node()], Self::type_())
-                }))
+                    b.call(Func::Mat, &[scalar], Self::type_())
+                }).into())
             }
         }
         impl AddExpr<Expr<$M>> for Expr<$M> {
@@ -354,9 +365,11 @@ macro_rules! impl_mat_proxy {
                 if need_runtime_check() {
                     check_index_lt_usize(i, $N);
                 }
+                let i = i.node().get();
+                let self_node  = self.node().get();
                 Expr::<$V>::from_node(__current_scope(|b| {
-                    b.call(Func::ExtractElement, &[self.0.node, i.node()], <$V>::type_())
-                }))
+                    b.call(Func::ExtractElement, &[self_node, i], <$V>::type_())
+                }).into())
                 ._ref()
             }
         }
@@ -367,9 +380,11 @@ macro_rules! impl_mat_proxy {
                 if need_runtime_check() {
                     lc_assert!(i.lt($N as u64));
                 }
+                let i = i.node().get();
+                let self_node  = self.node().get();
                 Expr::<$V>::from_node(__current_scope(|b| {
-                    b.call(Func::ExtractElement, &[self.node(), i.node()], <$V>::type_())
-                }))
+                    b.call(Func::ExtractElement, &[self_node, i], <$V>::type_())
+                }).into())
             }
         }
         impl IndexRead for Var<$M> {
@@ -379,10 +394,12 @@ macro_rules! impl_mat_proxy {
                 if need_runtime_check() {
                     lc_assert!(i.lt($N as u64));
                 }
+                let i = i.node().get();
+                let self_node  = self.node().get();
                 Expr::<$V>::from_node(__current_scope(|b| {
-                    let gep = b.call(Func::GetElementPtr, &[self.node(), i.node()], <$V>::type_());
+                    let gep = b.call(Func::GetElementPtr, &[self_node, i], <$V>::type_());
                     b.load(gep)
-                }))
+                }).into())
             }
         }
         impl IndexWrite for Var<$M> {
@@ -392,9 +409,12 @@ macro_rules! impl_mat_proxy {
                 if need_runtime_check() {
                     lc_assert!(i.lt($N as u64));
                 }
+                let i = i.node().get();
+                let self_node  = self.node().get();
+                let value  = value.node().get();
                 __current_scope(|b| {
-                    let gep = b.call(Func::GetElementPtr, &[self.node(), i.node()], <$V>::type_());
-                    b.update(gep, value.node());
+                    let gep = b.call(Func::GetElementPtr, &[self_node, i], <$V>::type_());
+                    b.update(gep, value);
                 });
             }
         }

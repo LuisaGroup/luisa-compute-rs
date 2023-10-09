@@ -343,7 +343,7 @@ impl<T: Value> VLArrayExpr<T> {
                 })),
             )
         });
-        Self::from_node(node)
+        Self::from_node(node.into())
     }
     pub fn len(&self) -> usize {
         match self.node.get().type_().as_ref() {

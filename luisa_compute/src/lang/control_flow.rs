@@ -129,27 +129,25 @@ pub fn if_then_else<R: Aggregate>(
         b.if_(cond, then_block, else_block);
     });
     assert_eq!(then_nodes.len(), else_nodes.len());
-    let phis = __current_scope(|b| {
-        then_nodes
-            .iter()
-            .zip(else_nodes.iter())
-            .map(|(then, else_)| {
-                let incomings = vec![
-                    PhiIncoming {
-                        value: *then,
-                        block: then_block,
-                    },
-                    PhiIncoming {
-                        value: *else_,
-                        block: else_block,
-                    },
-                ];
-                assert_eq!(then.type_(), else_.type_());
-                let phi = b.phi(&incomings, then.type_().clone());
-                phi.into()
-            })
-            .collect::<Vec<_>>()
-    });
+    let phis = then_nodes
+        .iter()
+        .zip(else_nodes.iter())
+        .map(|(then, else_)| {
+            let incomings = vec![
+                PhiIncoming {
+                    value: *then,
+                    block: then_block,
+                },
+                PhiIncoming {
+                    value: *else_,
+                    block: else_block,
+                },
+            ];
+            assert_eq!(then.type_(), else_.type_());
+            let phi = __current_scope(|b| b.phi(&incomings, then.type_().clone()));
+            phi.into()
+        })
+        .collect::<Vec<_>>();
     R::from_vec_nodes(phis)
 }
 

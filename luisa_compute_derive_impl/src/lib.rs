@@ -198,7 +198,7 @@ impl Compiler {
                     #(
                         let #field_names = self.#field_names.read(___i);
                     )*
-                    Expr::<Self::Element>::from_node(#lang_path::__compose::<Self::Element>(&[ #( #lang_path::ToNode::node(&#field_names) ),* ]))
+                    Expr::<Self::Element>::from_node(#lang_path::__compose::<Self::Element>(&[ #( #lang_path::ToNode::node(&#field_names).get() ),* ]).into())
                 }
             }
             impl #impl_generics #lang_path::index::IndexWrite for #soa_proxy_name #ty_generics #where_clause{
@@ -253,7 +253,7 @@ impl Compiler {
                 quote_spanned!(span=>
                     let #ident = < #lang_path::types::Expr::<#ty> as #lang_path::FromNode>::from_node(#lang_path::__extract::<#ty>(
                         __node, #i,
-                    ));
+                    ).into());
                 )
             })
             .collect();
@@ -266,7 +266,7 @@ impl Compiler {
                 quote_spanned!(span=>
                     let #ident = < #lang_path::types::Var::<#ty> as #lang_path::FromNode>::from_node(#lang_path::__extract::<#ty>(
                         __node, #i,
-                    ));
+                    ).into());
                 )
             })
             .collect();
@@ -279,7 +279,7 @@ impl Compiler {
             quote_spanned!(span=>
                 let #ident = < #lang_path::types::AtomicRef::<#ty> as #lang_path::FromNode>::from_node(#lang_path::__extract::<#ty>(
                     __node, #i,
-                ));
+                ).into());
             )
         })
         .collect();
@@ -305,8 +305,8 @@ impl Compiler {
                     #[allow(dead_code)]
                     #vis fn from_comps_expr(ctor: #ctor_proxy_name #ty_generics) -> #lang_path::types::Expr<#name #ty_generics> {
                         use #lang_path::*;
-                        let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&ctor.#field_names.as_expr()) ),* ]);
-                        let expr = <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node);
+                        let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&ctor.#field_names.as_expr()).get() ),* ]);
+                        let expr = <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node.into());
                         expr
                     }
                 }
@@ -362,7 +362,7 @@ impl Compiler {
                 type Value = #name #ty_generics;
                 fn from_expr(expr: #lang_path::types::Expr<#name #ty_generics>) -> Self {
                     use #lang_path::ToNode;
-                    let __node = expr.node();
+                    let __node = expr.node().get();
                     #(#extract_expr_fields)*
                     Self{
                         self_:expr,
@@ -380,7 +380,7 @@ impl Compiler {
                 type Value = #name #ty_generics;
                 fn from_var(var: #lang_path::types::Var<#name #ty_generics>) -> Self {
                     use #lang_path::ToNode;
-                    let __node = var.node();
+                    let __node = var.node().get();
                     #(#extract_var_fields)*
                     Self{
                         self_:var,
@@ -397,7 +397,7 @@ impl Compiler {
                 type Value = #name #ty_generics;
                 fn from_atomic_ref(var: #lang_path::types::AtomicRef<#name #ty_generics>) -> Self {
                     use #lang_path::ToNode;
-                    let __node = var.node();
+                    let __node = var.node().get();
                     #(#extract_atomic_ref_fields)*
                     Self{
                         self_:var,
@@ -453,8 +453,8 @@ impl Compiler {
                 impl #impl_generics #name #ty_generics #where_clause {
                     #vis fn new_expr(#(#field_names: impl #lang_path::types::AsExpr<Value = #field_types>),*) -> #lang_path::types::Expr::<#name> {
                         use #lang_path::*;
-                        let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&#field_names.as_expr()) ),* ]);
-                        let expr = <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node);
+                        let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&#field_names.as_expr()).get() ),* ]);
+                        let expr = <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node.into());
                         expr
                     }
                 }
@@ -483,10 +483,10 @@ impl Compiler {
         let field_names: Vec<_> = fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
         quote_spanned!(span=>
             impl #lang_path::Aggregate for #name {
-                fn to_nodes(&self, nodes: &mut Vec<#lang_path::NodeRef>) {
+                fn to_nodes(&self, nodes: &mut Vec<#lang_path::SafeNodeRef>) {
                     #(self.#field_names.to_nodes(nodes);)*
                 }
-                fn from_nodes<__I: Iterator<Item = #lang_path::NodeRef>>(iter: &mut __I) -> Self {
+                fn from_nodes<__I: Iterator<Item = #lang_path::SafeNodeRef>>(iter: &mut __I) -> Self {
                     #(let #field_names = <#field_types as #lang_path::Aggregate>::from_nodes(iter);)*
                     Self{
                         #(#field_names,)*
@@ -573,8 +573,8 @@ impl Compiler {
         quote_spanned! {span=>
             impl #lang_path::Aggregate for #name{
                 #[allow(non_snake_case)]
-                fn from_nodes<I: Iterator<Item = #lang_path::NodeRef>>(iter: &mut I) -> Self {
-                    let variant = iter.next().unwrap();
+                fn from_nodes<I: Iterator<Item = #lang_path::SafeNodeRef>>(iter: &mut I) -> Self {
+                    let variant = iter.next().unwrap().get();
                     let variant = variant.unwrap_user_data::<usize>();
                     match variant{
                         #(#from_nodes)*
@@ -582,7 +582,7 @@ impl Compiler {
                     }
                 }
                 #[allow(non_snake_case)]
-                fn to_nodes(&self, nodes: &mut Vec<#lang_path::NodeRef>){
+                fn to_nodes(&self, nodes: &mut Vec<#lang_path::SafeNodeRef>){
                     match self {
                         #(#to_nodes)*
                     }

@@ -197,10 +197,14 @@ impl Device {
         buffer
     }
     pub fn create_soa_buffer<T: SoaValue>(&self, count: usize) -> SoaBuffer<T> {
-        assert!(count <= u32::MAX as usize, "count must be less than u32::MAX. This limitation may be removed in the future.");
+        assert!(
+            count <= u32::MAX as usize,
+            "count must be less than u32::MAX. This limitation may be removed in the future."
+        );
         // let inner = self.create_byte_buffer(len)
         let num_buffers = T::SoaBuffer::num_buffers();
-        let storage = Arc::new(self.create_byte_buffer(count * num_buffers * std::mem::size_of::<u32>()));
+        let storage =
+            Arc::new(self.create_byte_buffer(count * num_buffers * std::mem::size_of::<u32>()));
         let metadata = SoaMetadata {
             count: count as u64,
             view_start: 0,
@@ -970,25 +974,25 @@ impl CallableArgEncoder {
         CallableArgEncoder { args: Vec::new() }
     }
     pub fn buffer<T: Value>(&mut self, buffer: &BufferVar<T>) {
-        self.args.push(buffer.node);
+        self.args.push(buffer.node.get());
     }
     pub fn byte_buffer(&mut self, buffer: &ByteBufferVar) {
-        self.args.push(buffer.node);
+        self.args.push(buffer.node.get());
     }
     pub fn tex2d<T: IoTexel>(&mut self, tex2d: &Tex2dVar<T>) {
-        self.args.push(tex2d.node);
+        self.args.push(tex2d.node.get());
     }
     pub fn tex3d<T: IoTexel>(&mut self, tex3d: &Tex3dVar<T>) {
-        self.args.push(tex3d.node);
+        self.args.push(tex3d.node.get());
     }
     pub fn bindless_array(&mut self, array: &BindlessArrayVar) {
-        self.args.push(array.node);
+        self.args.push(array.node.get());
     }
     pub fn var(&mut self, value: impl NodeLike) {
-        self.args.push(value.node());
+        self.args.push(value.node().get());
     }
     pub fn accel(&mut self, accel: &rtx::AccelVar) {
-        self.args.push(accel.node);
+        self.args.push(accel.node.get());
     }
 }
 
@@ -1042,7 +1046,7 @@ impl KernelArgEncoder {
     pub fn buffer_view<T: Value>(&mut self, buffer: &BufferView<T>) {
         self.args.push(api::Argument::Buffer(api::BufferArgument {
             buffer: buffer.handle(),
-            offset: buffer.offset* std::mem::size_of::<T>(),
+            offset: buffer.offset * std::mem::size_of::<T>(),
             size: buffer.len * std::mem::size_of::<T>(),
         }));
     }
@@ -1092,13 +1096,13 @@ impl<T: Value> KernelArg for Buffer<T> {
         encoder.buffer(self);
     }
 }
-impl<T:SoaValue> KernelArg for SoaBuffer<T> {
+impl<T: SoaValue> KernelArg for SoaBuffer<T> {
     type Parameter = SoaBufferVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.soa_buffer(self);
     }
 }
-impl<'a, T:SoaValue> KernelArg for SoaBufferView<'a, T> {
+impl<'a, T: SoaValue> KernelArg for SoaBufferView<'a, T> {
     type Parameter = SoaBufferVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.soa_buffer_view(self);
@@ -1269,8 +1273,8 @@ impl<S: CallableSignature> DynCallable<S> {
         }
     }
     fn call_impl(&self, args: std::rc::Rc<dyn Any>, nodes: &[NodeRef]) -> S::Ret {
-        RECORDER.with(|r| {
-            if let Some(device) = r.borrow().device.as_ref() {
+        with_recorder(|r| {
+            if let Some(device) = r.device.as_ref() {
                 assert!(
                     Arc::ptr_eq(&device.inner.upgrade().unwrap(), &self.device.inner),
                     "Callable created on a different device than the one it is called on"
@@ -1295,17 +1299,22 @@ impl<S: CallableSignature> DynCallable<S> {
             }
         }
         let (r_backup, device) = RECORDER.with(|r| {
-            let mut r = r.borrow_mut();
-            let device = r.device.clone().unwrap();
+            let mut r_ptr = r.borrow_mut();
+
+            let device = {
+                let r = r_ptr.as_mut().unwrap();
+                r.borrow().device.clone().unwrap()
+            };
             (
-                std::mem::replace(&mut *r, FnRecorder::new()),
+                std::mem::replace(&mut *r_ptr, Some(Rc::new(RefCell::new(FnRecorder::new())))),
                 device.upgrade().unwrap(),
             )
         });
         let mut builder = KernelBuilder::new(Some(device), false);
         let new_callable = (inner.builder)(args, &mut builder);
         RECORDER.with(|r| {
-            *r.borrow_mut() = r_backup;
+            let mut r_ptr = r.borrow_mut();
+            *r_ptr = r_backup;
         });
         assert!(
             crate::lang::__check_callable(&new_callable.inner.module, nodes),
@@ -1327,13 +1336,13 @@ pub struct RawCallable {
     pub(crate) module: ir::CallableModuleRef,
     #[allow(dead_code)]
     pub(crate) resource_tracker: ResourceTracker,
+    pub(crate) captured_args: Vec<NodeRef>,
 }
 impl RawCallable {
     pub(crate) fn check_on_same_device(&self) {
-        RECORDER.with(|r| {
-            let mut r =r.borrow_mut();
+        with_recorder(|r| {
             if let Some(device) = &self.device {
-                if let Some((a,b)) = r.check_on_same_device(device) {
+                if let Some((a, b)) = r.check_on_same_device(device) {
                     panic!("Callable created on a different device than the one it is called on: {:?} vs {:?}", a,b);
                 }
             }
@@ -1472,8 +1481,11 @@ macro_rules! impl_call_for_callable {
                 let mut encoder = CallableArgEncoder::new();
                 self.inner.check_on_same_device();
                 $($Ts.encode(&mut encoder);)*
+                let mut args = vec![];
+                args.extend_from_slice(&encoder.args);
+                args.extend_from_slice(&self.inner.captured_args);
                 CallableRet::_from_return(
-                    crate::lang::__invoke_callable(&self.inner.module, &encoder.args))
+                    crate::lang::__invoke_callable(&self.inner.module, &args))
             }
         }
         impl <R:CallableRet+'static, $($Ts: CallableParameter),*> DynCallable<fn($($Ts,)*)->R> {

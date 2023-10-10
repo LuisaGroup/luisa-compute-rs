@@ -55,17 +55,20 @@ pub fn requires_grad<V: Value>(var: Expr<V>) {
 pub fn backward<V: Value>(out: Expr<V>) {
     backward_with_grad(
         out,
-        FromNode::from_node(__current_scope(|b| {
-            let one = new_node(
-                b.pools(),
-                Node::new(
-                    CArc::new(Instruction::Const(Const::One(V::type_()))),
-                    V::type_(),
-                ),
-            );
-            b.append(one);
-            one.into()
-        })),
+        FromNode::from_node(
+            __current_scope(|b| {
+                let one = new_node(
+                    b.pools(),
+                    Node::new(
+                        CArc::new(Instruction::Const(Const::One(V::type_()))),
+                        V::type_(),
+                    ),
+                );
+                b.append(one);
+                one
+            })
+            .into(),
+        ),
     );
 }
 
@@ -95,8 +98,7 @@ pub fn gradient<V: Value>(var: Expr<V>) -> Expr<V> {
     });
     let var = var.node().get();
     Expr::<V>::from_node(
-        __current_scope(|b| b.call(Func::Gradient, &[var], var.type_().clone()))
-            .into(),
+        __current_scope(|b| b.call(Func::Gradient, &[var], var.type_().clone())).into(),
     )
 }
 /// Gradient of a value in *Reverse mode* AD
@@ -187,10 +189,13 @@ pub fn output_gradients<V: Value>(v: Expr<V>) -> Vec<Expr<V>> {
     let mut grads = vec![];
     let v = v.node().get();
     for i in 0..n {
-        grads.push(Expr::<V>::from_node(__current_scope(|b| {
-            let idx = b.const_(Const::Int32(i as i32));
-            b.call(Func::OutputGrad, &[v, idx], v.type_().clone())
-        }).into()));
+        grads.push(Expr::<V>::from_node(
+            __current_scope(|b| {
+                let idx = b.const_(Const::Int32(i as i32));
+                b.call(Func::OutputGrad, &[v, idx], v.type_().clone())
+            })
+            .into(),
+        ));
     }
     grads
 }

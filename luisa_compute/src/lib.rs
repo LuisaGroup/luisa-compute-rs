@@ -36,7 +36,7 @@ pub mod prelude {
     pub use crate::lang::types::vector::swizzle::*;
     pub use crate::lang::types::vector::VectorExprProxy;
     pub use crate::lang::types::{AsExpr, Expr, SoaValue, Value, Var};
-    pub use crate::lang::Aggregate;
+    pub use crate::lang::{outline, Aggregate};
     pub use crate::resource::{IoTexel, StorageTexel, *};
     pub use crate::runtime::api::StreamTag;
     pub use crate::runtime::{

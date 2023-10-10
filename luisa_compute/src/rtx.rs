@@ -321,7 +321,7 @@ impl Accel {
 }
 #[derive(Clone)]
 pub struct AccelVar {
-    pub(crate) node: NodeRef,
+    pub(crate) node: SafeNodeRef,
     #[allow(dead_code)]
     pub(crate) handle: Option<Arc<AccelHandle>>,
 }
@@ -446,29 +446,29 @@ impl HitExpr {
 
 #[derive(Clone, Copy)]
 pub struct TriangleCandidate {
-    query: NodeRef,
+    query: SafeNodeRef,
     hit: Expr<TriangleHit>,
 }
 #[derive(Clone, Copy)]
 pub struct ProceduralCandidate {
-    query: NodeRef,
+    query: SafeNodeRef,
     hit: Expr<ProceduralHit>,
 }
 impl TriangleCandidate {
     pub fn commit(&self) {
-        __current_scope(|b| b.call(Func::RayQueryCommitTriangle, &[self.query], Type::void()));
+        let query = self.query.get();
+        __current_scope(|b| b.call(Func::RayQueryCommitTriangle, &[query], Type::void()));
     }
     pub fn terminate(&self) {
-        __current_scope(|b| b.call(Func::RayQueryTerminate, &[self.query], Type::void()));
+        let query = self.query.get();
+        __current_scope(|b| b.call(Func::RayQueryTerminate, &[query], Type::void()));
     }
     pub fn ray(&self) -> Expr<Ray> {
-        Expr::<Ray>::from_node(__current_scope(|b| {
-            b.call(
-                Func::RayQueryWorldSpaceRay,
-                &[self.query],
-                rtx::Ray::type_(),
-            )
-        }))
+        let query = self.query.get();
+        Expr::<Ray>::from_node(
+            __current_scope(|b| b.call(Func::RayQueryWorldSpaceRay, &[query], rtx::Ray::type_()))
+                .into(),
+        )
     }
 }
 impl Deref for TriangleCandidate {
@@ -479,26 +479,20 @@ impl Deref for TriangleCandidate {
 }
 impl ProceduralCandidate {
     pub fn commit(&self, t: impl AsExpr<Value = f32>) {
-        let t = t.as_expr();
-        __current_scope(|b| {
-            b.call(
-                Func::RayQueryCommitProcedural,
-                &[self.query, t.node()],
-                Type::void(),
-            )
-        });
+        let t = t.as_expr().node().get();
+        let query = self.query.get();
+        __current_scope(|b| b.call(Func::RayQueryCommitProcedural, &[query, t], Type::void()));
     }
     pub fn terminate(&self) {
-        __current_scope(|b| b.call(Func::RayQueryTerminate, &[self.query], Type::void()));
+        let query = self.query.get();
+        __current_scope(|b| b.call(Func::RayQueryTerminate, &[query], Type::void()));
     }
     pub fn ray(&self) -> Expr<Ray> {
-        Expr::<Ray>::from_node(__current_scope(|b| {
-            b.call(
-                Func::RayQueryWorldSpaceRay,
-                &[self.query],
-                rtx::Ray::type_(),
-            )
-        }))
+        let query = self.query.get();
+        Expr::<Ray>::from_node(
+            __current_scope(|b| b.call(Func::RayQueryWorldSpaceRay, &[query], rtx::Ray::type_()))
+                .into(),
+        )
     }
 }
 impl Deref for ProceduralCandidate {
@@ -515,53 +509,66 @@ pub struct RayQuery<T, P> {
 impl AccelVar {
     #[inline]
     pub fn instance_transform(&self, index: Expr<u32>) -> Expr<Mat4> {
-        FromNode::from_node(__current_scope(|b| {
-            b.call(
-                Func::RayTracingInstanceTransform,
-                &[self.node, index.node()],
-                Mat4::type_(),
-            )
-        }))
+        let index = index.node().get();
+        let self_node = self.node.get();
+        FromNode::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::RayTracingInstanceTransform,
+                    &[self_node, index],
+                    Mat4::type_(),
+                )
+            })
+            .into(),
+        )
     }
 
     #[inline]
     pub fn trace_closest_masked(
         &self,
-        ray: impl Into<Expr<Ray>>,
-        mask: impl Into<Expr<u32>>,
+        ray: impl AsExpr<Value = Ray>,
+        mask: impl AsExpr<Value = u32>,
     ) -> Expr<Hit> {
-        let ray = ray.into();
-        let mask = mask.into();
-        FromNode::from_node(__current_scope(|b| {
-            b.call(
-                Func::RayTracingTraceClosest,
-                &[self.node, ray.node(), mask.node()],
-                Hit::type_(),
-            )
-        }))
+        let ray = ray.as_expr().node().get();
+        let mask = mask.as_expr().node().get();
+        let self_node = self.node.get();
+        FromNode::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::RayTracingTraceClosest,
+                    &[self_node, ray, mask],
+                    Hit::type_(),
+                )
+            })
+            .into(),
+        )
     }
     #[inline]
     pub fn trace_any_masked(
         &self,
-        ray: impl Into<Expr<Ray>>,
-        mask: impl Into<Expr<u32>>,
+        ray: impl AsExpr<Value = Ray>,
+        mask: impl AsExpr<Value = u32>,
     ) -> Expr<bool> {
-        let ray = ray.into();
-        let mask = mask.into();
-        FromNode::from_node(__current_scope(|b| {
-            b.call(
-                Func::RayTracingTraceAny,
-                &[self.node, ray.node(), mask.node()],
-                bool::type_(),
-            )
-        }))
+        let ray = ray.as_expr().node().get();
+        let mask = mask.as_expr().node().get();
+        let self_node = self.node.get();
+        FromNode::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::RayTracingTraceAny,
+                    &[self_node, ray, mask],
+                    bool::type_(),
+                )
+            })
+            .into(),
+        )
     }
     #[inline]
-    pub fn trace_closest(&self, ray: impl Into<Expr<Ray>>) -> Expr<Hit> {
+    pub fn trace_closest(&self, ray: impl AsExpr<Value = Ray>) -> Expr<Hit> {
         self.trace_closest_masked(ray, u32::MAX.expr())
     }
     #[inline]
-    pub fn trace_any(&self, ray: impl Into<Expr<Ray>>) -> Expr<bool> {
+    pub fn trace_any(&self, ray: impl AsExpr<Value = Ray>) -> Expr<bool> {
         self.trace_any_masked(ray, u32::MAX.expr())
     }
     #[inline]
@@ -602,8 +609,9 @@ impl AccelVar {
         T: FnOnce(TriangleCandidate),
         P: FnOnce(ProceduralCandidate),
     {
-        let ray = ray.as_expr();
-        let mask = mask.as_expr();
+        let ray = ray.as_expr().node().get();
+        let mask = mask.as_expr().node().get();
+        let self_node = self.node.get();
         let query = __current_scope(|b| {
             b.call(
                 if terminate_on_first {
@@ -611,7 +619,7 @@ impl AccelVar {
                 } else {
                     Func::RayTracingQueryAll
                 },
-                &[self.node, ray.node(), mask.node()],
+                &[self_node, ray, mask],
                 Type::opaque(
                     if terminate_on_first {
                         "LC_RayQueryAny"
@@ -623,51 +631,56 @@ impl AccelVar {
             )
         });
 
-        RECORDER.with(|r| {
-            let mut r = r.borrow_mut();
-            let pools = r.pools.clone().unwrap();
+        with_recorder(|r| {
+            let pools = r.pools.clone();
             let s = &mut r.scopes;
             s.push(IrBuilder::new(pools));
         });
         let triangle_candidate = TriangleCandidate {
-            query,
-            hit: FromNode::from_node(__current_scope(|b| {
-                b.call(
-                    Func::RayQueryTriangleCandidateHit,
-                    &[query],
-                    TriangleHit::type_(),
-                )
-            })),
+            query: query.into(),
+            hit: FromNode::from_node(
+                __current_scope(|b| {
+                    b.call(
+                        Func::RayQueryTriangleCandidateHit,
+                        &[query],
+                        TriangleHit::type_(),
+                    )
+                })
+                .into(),
+            ),
         };
         (ray_query.on_triangle_hit)(triangle_candidate);
         let on_triangle_hit = __pop_scope();
-        RECORDER.with(|r| {
-            let mut r = r.borrow_mut();
-            let pools = r.pools.clone().unwrap();
+        with_recorder(|r| {
+            let pools = r.pools.clone();
             let s = &mut r.scopes;
             s.push(IrBuilder::new(pools));
         });
         let procedural_candidate = ProceduralCandidate {
-            query,
-            hit: FromNode::from_node(__current_scope(|b| {
-                b.call(
-                    Func::RayQueryProceduralCandidateHit,
-                    &[query],
-                    ProceduralHit::type_(),
-                )
-            })),
+            query: query.into(),
+            hit: FromNode::from_node(
+                __current_scope(|b| {
+                    b.call(
+                        Func::RayQueryProceduralCandidateHit,
+                        &[query],
+                        ProceduralHit::type_(),
+                    )
+                })
+                .into(),
+            ),
         };
         (ray_query.on_procedural_hit)(procedural_candidate);
         let on_procedural_hit = __pop_scope();
-        FromNode::from_node(__current_scope(|b| {
-            b.ray_query(query, on_triangle_hit, on_procedural_hit, Type::void());
-            b.call(Func::RayQueryCommittedHit, &[query], CommittedHit::type_())
-        }))
+        FromNode::from_node(
+            __current_scope(|b| {
+                b.ray_query(query, on_triangle_hit, on_procedural_hit, Type::void());
+                b.call(Func::RayQueryCommittedHit, &[query], CommittedHit::type_())
+            })
+            .into(),
+        )
     }
     pub fn new(accel: &rtx::Accel) -> Self {
-        let node = RECORDER.with(|r| {
-            let mut r = r.borrow_mut();
-            assert!(r.lock, "AccelVar must be created from within a kernel");
+        let node = with_recorder(|r| {
             let handle: u64 = accel.handle().0;
             let binding = Binding::Accel(AccelBinding { handle });
             if let Some((a, b)) = r.check_on_same_device(&accel.handle.device) {
@@ -679,7 +692,8 @@ impl AccelVar {
             r.capture_or_get(binding, &accel.handle, || {
                 Node::new(CArc::new(Instruction::Accel), Type::void())
             })
-        });
+        })
+        .into();
         Self {
             node,
             handle: Some(accel.handle.clone()),

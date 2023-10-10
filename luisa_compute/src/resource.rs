@@ -2235,7 +2235,7 @@ impl<T: IoTexel> Tex2dVar<T> {
             r.capture_or_get(binding, &view.tex.handle, || {
                 Node::new(CArc::new(Instruction::Texture2D), T::RwType::type_())
             })
-        });
+        }).into();
         Self {
             node,
             handle: Some(view.tex.handle.clone()),
@@ -2244,31 +2244,27 @@ impl<T: IoTexel> Tex2dVar<T> {
         }
     }
     pub fn read(&self, uv: impl AsExpr<Value = Uint2>) -> Expr<T> {
-        let uv = uv.as_expr();
-        T::convert_from_read(Expr::<T::RwType>::from_node(__current_scope(|b| {
-            b.call(
-                Func::Texture2dRead,
-                &[self.node, uv.node()],
-                T::RwType::type_(),
-            )
-        })))
+        let uv = uv.as_expr().node().get();
+        let self_node = self.node.get();
+        T::convert_from_read(Expr::<T::RwType>::from_node(
+            __current_scope(|b| b.call(Func::Texture2dRead, &[self_node, uv], T::RwType::type_()))
+                .into(),
+        ))
     }
     pub fn write(&self, uv: impl AsExpr<Value = Uint2>, v: impl AsExpr<Value = T>) {
-        let uv = uv.as_expr();
+        let uv = uv.as_expr().node().get();
         let v = v.as_expr();
-        let v = T::convert_to_write(v);
+        let v = T::convert_to_write(v).node().get();
+        let self_node = self.node.get();
         __current_scope(|b| {
-            b.call(
-                Func::Texture2dWrite,
-                &[self.node, uv.node(), v.node()],
-                Type::void(),
-            );
+            b.call(Func::Texture2dWrite, &[self_node, uv, v], Type::void());
         })
     }
     pub fn size(&self) -> Expr<Uint2> {
-        Expr::<Uint2>::from_node(__current_scope(|b| {
-            b.call(Func::Texture2dSize, &[self.node], Uint2::type_())
-        }))
+        let self_node = self.node.get();
+        Expr::<Uint2>::from_node(
+            __current_scope(|b| b.call(Func::Texture2dSize, &[self_node], Uint2::type_())).into(),
+        )
     }
 }
 
@@ -2289,7 +2285,7 @@ impl<T: IoTexel> Tex3dVar<T> {
             r.capture_or_get(binding, &view.tex.handle, || {
                 Node::new(CArc::new(Instruction::Texture3D), T::RwType::type_())
             })
-        });
+        }).into();
         Self {
             node,
             handle: Some(view.tex.handle.clone()),
@@ -2298,31 +2294,27 @@ impl<T: IoTexel> Tex3dVar<T> {
         }
     }
     pub fn read(&self, uv: impl AsExpr<Value = Uint3>) -> Expr<T> {
-        let uv = uv.as_expr();
-        T::convert_from_read(Expr::<T::RwType>::from_node(__current_scope(|b| {
-            b.call(
-                Func::Texture3dRead,
-                &[self.node, uv.node()],
-                T::RwType::type_(),
-            )
-        })))
+        let uv = uv.as_expr().node().get();
+        let self_node = self.node.get();
+        T::convert_from_read(Expr::<T::RwType>::from_node(
+            __current_scope(|b| b.call(Func::Texture3dRead, &[self_node, uv], T::RwType::type_()))
+                .into(),
+        ))
     }
     pub fn write(&self, uv: impl AsExpr<Value = Uint3>, v: impl AsExpr<Value = T>) {
-        let uv = uv.as_expr();
+        let uv = uv.as_expr().node().get();
         let v = v.as_expr();
-        let v = T::convert_to_write(v);
+        let v = T::convert_to_write(v).node().get();
+        let self_node = self.node.get();
         __current_scope(|b| {
-            b.call(
-                Func::Texture3dWrite,
-                &[self.node, uv.node(), v.node()],
-                Type::void(),
-            );
+            b.call(Func::Texture3dWrite, &[self_node, uv, v], Type::void());
         })
     }
     pub fn size(&self) -> Expr<Uint3> {
-        Expr::<Uint3>::from_node(__current_scope(|b| {
-            b.call(Func::Texture3dSize, &[self.node], Uint3::type_())
-        }))
+        let self_node = self.node.get();
+        Expr::<Uint3>::from_node(
+            __current_scope(|b| b.call(Func::Texture3dSize, &[self_node], Uint3::type_())).into(),
+        )
     }
 }
 #[derive(Clone)]

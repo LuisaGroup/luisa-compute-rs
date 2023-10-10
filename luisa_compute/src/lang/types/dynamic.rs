@@ -6,25 +6,31 @@ use std::rc::Rc;
 
 #[derive(Clone, Copy)]
 pub struct DynExpr {
-    node: SafeNodeRef,
+    /// we need the actuall node to be resolved here
+    /// so it must be a [`NodeRef`]
+    node: NodeRef,
 }
 
 impl<V: Value> From<Expr<V>> for DynExpr {
     fn from(value: Expr<V>) -> Self {
-        Self { node: value.node() }
+        Self {
+            node: value.node().get(),
+        }
     }
 }
 
 impl<V: Value> From<Var<V>> for DynVar {
     fn from(value: Var<V>) -> Self {
-        Self { node: value.node() }
+        Self {
+            node: value.node().get(),
+        }
     }
 }
 
 impl DynExpr {
     pub fn downcast<T: Value>(&self) -> Option<Expr<T>> {
-        if ir::context::is_type_equal(self.node.get().type_(), &T::type_()) {
-            Some(Expr::<T>::from_node(self.node))
+        if ir::context::is_type_equal(self.node.type_(), &T::type_()) {
+            Some(Expr::<T>::from_node(self.node.into()))
         } else {
             None
         }
@@ -34,7 +40,7 @@ impl DynExpr {
             panic!(
                 "DynExpr::get: type mismatch: expected {}, got {}",
                 std::any::type_name::<T>(),
-                self.node.get().type_().to_string()
+                self.node.type_().to_string()
             )
         })
     }
@@ -43,8 +49,8 @@ impl DynExpr {
             element: T::type_(),
             length: len,
         }));
-        if ir::context::is_type_equal(self.node.get().type_(), &array_type) {
-            Some(VLArrayExpr::<T>::from_node(self.node))
+        if ir::context::is_type_equal(self.node.type_(), &array_type) {
+            Some(VLArrayExpr::<T>::from_node(self.node.into()))
         } else {
             None
         }
@@ -58,12 +64,14 @@ impl DynExpr {
             panic!(
                 "DynExpr::get: type mismatch: expected {}, got {}",
                 array_type,
-                self.node.get().type_().to_string()
+                self.node.type_().to_string()
             )
         })
     }
     pub fn new<V: Value>(expr: Expr<V>) -> Self {
-        Self { node: expr.node() }
+        Self {
+            node: expr.node().get(),
+        }
     }
 }
 
@@ -71,44 +79,44 @@ impl CallableParameter for DynExpr {
     fn def_param(arg: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         let arg = arg.unwrap_or_else(|| panic!("DynExpr should be used in DynCallable only!"));
         let arg = arg.downcast_ref::<Self>().unwrap();
-        let node = builder.arg(arg.node.get().type_().clone(), true).into();
+        let node = builder.arg(arg.node.type_().clone(), true).into();
         Self { node }
     }
     fn encode(&self, encoder: &mut CallableArgEncoder) {
-        encoder.args.push(self.node.get())
+        encoder.args.push(self.node)
     }
 }
 
 impl Aggregate for DynExpr {
     fn to_nodes(&self, nodes: &mut Vec<SafeNodeRef>) {
-        nodes.push(self.node)
+        nodes.push(self.node.into())
     }
     fn from_nodes<I: Iterator<Item = SafeNodeRef>>(iter: &mut I) -> Self {
         Self {
-            node: iter.next().unwrap(),
+            node: iter.next().unwrap().get(),
         }
     }
 }
 
 impl FromNode for DynExpr {
     fn from_node(node: SafeNodeRef) -> Self {
-        Self { node }
+        Self { node: node.get() }
     }
 }
 
 impl ToNode for DynExpr {
     fn node(&self) -> SafeNodeRef {
-        self.node
+        self.node.into()
     }
 }
 
 unsafe impl CallableRet for DynExpr {
     fn _return(&self) -> CArc<Type> {
-        let node = self.node.get();
+        let node = self.node;
         __current_scope(|b| {
             b.return_(node);
         });
-        self.node.get().type_().clone()
+        self.node.type_().clone()
     }
     fn _from_return(node: NodeRef) -> Self {
         Self::from_node(node.into())
@@ -117,48 +125,48 @@ unsafe impl CallableRet for DynExpr {
 
 impl Aggregate for DynVar {
     fn to_nodes(&self, nodes: &mut Vec<SafeNodeRef>) {
-        nodes.push(self.node)
+        nodes.push(self.node.into())
     }
     fn from_nodes<I: Iterator<Item = SafeNodeRef>>(iter: &mut I) -> Self {
         Self {
-            node: iter.next().unwrap(),
+            node: iter.next().unwrap().get(),
         }
     }
 }
 
 impl FromNode for DynVar {
     fn from_node(node: SafeNodeRef) -> Self {
-        Self { node }
+        Self { node: node.get() }
     }
 }
 
 impl ToNode for DynVar {
     fn node(&self) -> SafeNodeRef {
-        self.node
+        self.node.into()
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct DynVar {
-    node: SafeNodeRef,
+    node: NodeRef,
 }
 
 impl CallableParameter for DynVar {
     fn def_param(arg: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         let arg = arg.unwrap_or_else(|| panic!("DynVar should be used in DynCallable only!"));
         let arg = arg.downcast_ref::<Self>().unwrap();
-        let node = builder.arg(arg.node.get().type_().clone(), false).into();
+        let node = builder.arg(arg.node.type_().clone(), false).into();
         Self { node }
     }
     fn encode(&self, encoder: &mut CallableArgEncoder) {
-        encoder.args.push(self.node.get())
+        encoder.args.push(self.node)
     }
 }
 
 impl DynVar {
     pub fn downcast<T: Value>(&self) -> Option<Var<T>> {
-        if ir::context::is_type_equal(self.node.get().type_(), &T::type_()) {
-            Some(Var::<T>::from_node(self.node))
+        if ir::context::is_type_equal(self.node.type_(), &T::type_()) {
+            Some(Var::<T>::from_node(self.node.into()))
         } else {
             None
         }
@@ -168,7 +176,7 @@ impl DynVar {
             panic!(
                 "DynVar::get: type mismatch: expected {}, got {}",
                 std::any::type_name::<T>(),
-                self.node.get().type_().to_string()
+                self.node.type_().to_string()
             )
         })
     }
@@ -177,8 +185,8 @@ impl DynVar {
             element: T::type_(),
             length: len,
         }));
-        if ir::context::is_type_equal(self.node.get().type_(), &array_type) {
-            Some(VLArrayVar::<T>::from_node(self.node))
+        if ir::context::is_type_equal(self.node.type_(), &array_type) {
+            Some(VLArrayVar::<T>::from_node(self.node.into()))
         } else {
             None
         }
@@ -192,23 +200,26 @@ impl DynVar {
             panic!(
                 "DynExpr::get: type mismatch: expected {}, got {}",
                 array_type,
-                self.node.get().type_().to_string()
+                self.node.type_().to_string()
             )
         })
     }
     pub fn load(&self) -> DynExpr {
-        let self_node = self.node.get();
+        let self_node = self.node;
         DynExpr {
-            node: __current_scope(|b| b.call(Func::Load, &[self_node], self_node.type_().clone())).into(),
+            node: __current_scope(|b| b.call(Func::Load, &[self_node], self_node.type_().clone()))
+                .into(),
         }
     }
     pub fn store(&self, value: &DynExpr) {
-        let self_node = self.node.get();
-        let value = value.node.get();
+        let self_node = self.node;
+        let value = value.node;
         __current_scope(|b| b.update(self_node, value));
     }
     pub fn zero<T: Value>() -> Self {
         let v = Var::<T>::zeroed();
-        Self { node: v.node() }
+        Self {
+            node: v.node().get(),
+        }
     }
 }

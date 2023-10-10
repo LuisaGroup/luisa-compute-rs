@@ -162,8 +162,8 @@ impl<T: Aggregate> Aggregate for Vec<T> {
     }
 
     fn from_nodes<I: Iterator<Item = SafeNodeRef>>(iter: &mut I) -> Self {
-        let len_node = iter.next().unwrap();
-        let len = len_node.get().unwrap_user_data::<usize>();
+        let len_node = iter.next().unwrap().get();
+        let len = len_node.unwrap_user_data::<usize>();
         let mut ret = Vec::with_capacity(*len);
         for _ in 0..*len {
             ret.push(T::from_nodes(iter));
@@ -206,8 +206,8 @@ impl<T: Aggregate> Aggregate for Option<T> {
     }
 
     fn from_nodes<I: Iterator<Item = SafeNodeRef>>(iter: &mut I) -> Self {
-        let node = iter.next().unwrap();
-        let tag = node.get().unwrap_user_data::<usize>();
+        let node = iter.next().unwrap().get();
+        let tag = node.unwrap_user_data::<usize>();
         match *tag {
             0 => None,
             1 => Some(T::from_nodes(iter)),
@@ -292,7 +292,6 @@ impl_aggregate_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15)
 pub(crate) struct FnRecorder {
     pub(crate) parent: Option<FnRecorderPtr>,
     pub(crate) scopes: Vec<IrBuilder>,
-    pub(crate) kernel_id: Option<usize>,
     pub(crate) captured_resources: IndexMap<Binding, (usize, NodeRef, Binding, Arc<dyn Any>)>,
     pub(crate) cpu_custom_ops: IndexMap<u64, (usize, CArc<CpuCustomOp>)>,
     pub(crate) callables: IndexMap<u64, CallableModuleRef>,
@@ -330,7 +329,7 @@ impl FnRecorder {
         if let Some((_, node, _, _)) = self.captured_resources.get(&binding) {
             *node
         } else {
-            let node = new_node(self.pools.as_ref(), create_node());
+            let node = new_node(&self.pools, create_node());
             let i = self.captured_resources.len();
             self.captured_resources
                 .insert(binding, (i, node, binding, handle.clone()));
@@ -350,7 +349,6 @@ impl FnRecorder {
             pools: CArc::new(ModulePools::new()),
             arena: Bump::new(),
             building_kernel: false,
-            kernel_id: None,
             callable_ret_type: None,
             parent: None,
         }
@@ -362,6 +360,7 @@ impl FnRecorder {
         if self.captured_vars.contains_key(&node) {
             return self.captured_vars[&node];
         }
+        let ptr = self as *mut _;
         let parent = self
             .parent
             .as_mut()
@@ -375,9 +374,9 @@ impl FnRecorder {
             }
         }
         let arg = SafeNodeRef {
-            recorder: self as *mut _,
+            recorder: ptr,
             node: new_node(
-                self.pools.as_ref(),
+                &self.pools,
                 Node::new(
                     CArc::new(Instruction::Argument {
                         by_value: !node.node.is_lvalue(),
@@ -647,13 +646,12 @@ pub fn pack_to<V: Value, B>(expr: Expr<V>, buffer: &B, index: impl AsExpr<Value 
 where
     B: IndexWrite<Element = u32> + ToNode,
 {
-    let index = index.as_expr();
+    let index = index.as_expr().node().get();
+    let expor = expr.node().get();
+    let buffer = buffer.node().get();
+    let expr = expr.node().get();
     __current_scope(|b| {
-        b.call(
-            Func::Pack,
-            &[expr.node(), buffer.node(), index.node()],
-            Type::void(),
-        );
+        b.call(Func::Pack, &[expr, buffer, index], Type::void());
     });
 }
 
@@ -666,13 +664,9 @@ where
 {
     let index = index.into().node().get();
     let buffer = buffer.node().get();
-    Expr::<T>::from_node(__current_scope(|b| {
-        b.call(
-            Func::Unpack,
-            &[buffer, index],
-            <T as TypeOf>::type_(),
-        )
-    }).into())
+    Expr::<T>::from_node(
+        __current_scope(|b| b.call(Func::Unpack, &[buffer, index], <T as TypeOf>::type_())).into(),
+    )
 }
 
 pub(crate) fn need_runtime_check() -> bool {
@@ -720,4 +714,17 @@ pub(crate) fn check_index_lt_usize(index: impl IntoIndex, size: usize) {
     } else {
         lc_assert!(index.lt(size as u64));
     }
+}
+
+/// Outline a code snippet.
+/// Snippets that have the same code will be deduplicated.
+/// It helps reduce compilation time.
+pub fn outline<F: Fn()>(f: F) {
+    let device = RECORDER.with(|r| {
+        let r = r.borrow();
+        let r = r.as_ref().unwrap();
+        let r = r.borrow();
+        r.device.clone().map(|x| x.upgrade().unwrap())
+    });
+    Callable::<fn()>::new_maybe_device(device, f).call();
 }

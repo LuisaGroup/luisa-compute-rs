@@ -102,7 +102,8 @@ impl<T: Value, const N: usize, X: IntoIndex> Index<X> for ArrayAtomicRef<T, N> {
         if need_runtime_check() {
             check_index_lt_usize(i, N);
         }
-        let inst = self.0.node.get().get().instruction.as_ref();
+        let node = self.0.node.get();
+        let inst = node.get().instruction.as_ref();
         let mut args = match inst {
             Instruction::Call(f, args) => match f {
                 Func::AtomicRef => args.to_vec(),
@@ -256,10 +257,13 @@ impl<T: Value> IndexRead for VLArrayVar<T> {
         }
         let self_node = self.node.get();
         let i = i.node().get();
-        Expr::<T>::from_node(__current_scope(|b| {
-            let gep = b.call(Func::GetElementPtr, &[self_node, i], T::type_());
-            b.call(Func::Load, &[gep], T::type_())
-        }).into())
+        Expr::<T>::from_node(
+            __current_scope(|b| {
+                let gep = b.call(Func::GetElementPtr, &[self_node, i], T::type_());
+                b.call(Func::Load, &[gep], T::type_())
+            })
+            .into(),
+        )
     }
 }
 impl<T: Value> IndexWrite for VLArrayVar<T> {
@@ -326,9 +330,9 @@ impl<T: Value> IndexRead for VLArrayExpr<T> {
         }
         let node = self.node.get();
         let i = i.node().get();
-        Expr::<T>::from_node(__current_scope(|b| {
-            b.call(Func::ExtractElement, &[node, i], T::type_())
-        }).into())
+        Expr::<T>::from_node(
+            __current_scope(|b| b.call(Func::ExtractElement, &[node, i], T::type_())).into(),
+        )
     }
 }
 impl<T: Value> VLArrayExpr<T> {

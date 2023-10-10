@@ -299,7 +299,7 @@ pub(crate) struct FnRecorder {
     pub(crate) captured_resources: IndexMap<Binding, (usize, NodeRef, Binding, Arc<dyn Any>)>,
     pub(crate) cpu_custom_ops: IndexMap<u64, (usize, CArc<CpuCustomOp>)>,
     pub(crate) callables: IndexMap<u64, CallableModuleRef>,
-    pub(crate) captured_vars: IndexMap<SafeNodeRef, SafeNodeRef>,
+    pub(crate) captured_vars: IndexMap<NodeRef, (NodeRef, SafeNodeRef)>,
     pub(crate) shared: Vec<NodeRef>,
     pub(crate) device: Option<WeakDevice>,
     pub(crate) block_size: Option<[u32; 3]>,
@@ -372,8 +372,8 @@ impl FnRecorder {
         if node0.recorder == self as *mut _ {
             return node0;
         }
-        if self.captured_vars.contains_key(&node0) {
-            return self.captured_vars[&node0];
+        if self.captured_vars.contains_key(&node0.node) {
+            return self.captured_vars[&node0.node].1;
         }
         let ptr = self as *mut _;
         let node = {
@@ -431,7 +431,7 @@ impl FnRecorder {
                 panic!("cannot capture node {:?}", node.node.get().instruction)
             }
         };
-        self.captured_vars.insert(node0, arg);
+        self.captured_vars.insert(node0.node, (node.node, arg));
         arg
     }
 }
@@ -478,7 +478,7 @@ pub(crate) fn push_recorder(kernel_id: usize) {
         let mut r = r.borrow_mut();
         let old = (*r).clone();
         let new = Rc::new(RefCell::new(FnRecorder::new(kernel_id, old)));
-        std::mem::replace(&mut *r, Some(new.clone()));
+        *r = Some(new.clone());
     })
 }
 pub(crate) fn pop_recorder() -> FnRecorderPtr {

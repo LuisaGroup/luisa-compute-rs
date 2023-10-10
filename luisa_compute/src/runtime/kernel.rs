@@ -398,7 +398,7 @@ impl KernelBuilder {
             let ir_module = luisa_compute_ir::transform::luisa_compute_ir_transform_auto(ir_module);
 
             let mut args = self.args.clone();
-            args.extend(r.captured_vars.values().map(|x| unsafe { x.get_raw() }));
+            args.extend(r.captured_vars.values().map(|x| unsafe { x.1.get_raw() }));
             for a in &args {
                 r.inaccessible.borrow_mut().insert(*a);
             }
@@ -416,11 +416,7 @@ impl KernelBuilder {
                 device: self.device.clone(),
                 module,
                 resource_tracker: rt,
-                captured_args: r
-                    .captured_vars
-                    .keys()
-                    .map(|x| unsafe { x.get_raw() })
-                    .collect(),
+                captured_args: r.captured_vars.values().map(|x| x.0).collect(),
             }
         });
         pop_recorder();

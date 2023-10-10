@@ -317,6 +317,20 @@ fn callable_return_void_mismatch() {
 }
 #[test]
 #[should_panic]
+#[tracked]
+fn illegal_scope_sharing() {
+    let device = get_device();
+    let tid = RefCell::new(None);
+    Kernel::<fn()>::new(&device, &|| {
+        let i = dispatch_id().x;
+        if i % 2 == 0 {
+            *tid.borrow_mut() = Some(i + 1);
+        }
+        let _v = tid.borrow().unwrap() + 1;
+    });
+}
+#[test]
+#[should_panic]
 fn callable_illegal_sharing() {
     let device = get_device();
     let tid = RefCell::new(None);

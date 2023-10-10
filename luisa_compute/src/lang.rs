@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
@@ -53,14 +54,14 @@ pub(crate) trait CallFuncTrait {
 }
 impl CallFuncTrait for Func {
     fn call<T: Value, S: Value>(self, x: Expr<T>) -> Expr<S> {
-        let x = process_potential_capture(x.node()).node;
+        let x = x.node().get();
         Expr::<S>::from_node(make_safe_node(__current_scope(|b| {
             b.call(self, &[x], <S as TypeOf>::type_())
         })))
     }
     fn call2<T: Value, S: Value, U: Value>(self, x: Expr<T>, y: Expr<S>) -> Expr<U> {
-        let x = process_potential_capture(x.node()).node;
-        let y = process_potential_capture(y.node()).node;
+        let x = x.node().get();
+        let y = y.node().get();
         Expr::<U>::from_node(make_safe_node(__current_scope(|b| {
             b.call(self, &[x, y], <U as TypeOf>::type_())
         })))
@@ -71,31 +72,31 @@ impl CallFuncTrait for Func {
         y: Expr<S>,
         z: Expr<U>,
     ) -> Expr<V> {
-        let x = process_potential_capture(x.node()).node;
-        let y = process_potential_capture(y.node()).node;
-        let z = process_potential_capture(z.node()).node;
+        let x = x.node().get();
+        let y = y.node().get();
+        let z = z.node().get();
 
         Expr::<V>::from_node(make_safe_node(__current_scope(|b| {
             b.call(self, &[x, y, z], <V as TypeOf>::type_())
         })))
     }
     fn call_void<T: Value>(self, x: Expr<T>) {
-        let x = process_potential_capture(x.node()).node;
+        let x = x.node().get();
         __current_scope(|b| {
             b.call(self, &[x], Type::void());
         });
     }
     fn call2_void<T: Value, S: Value>(self, x: Expr<T>, y: Expr<S>) {
-        let x = process_potential_capture(x.node()).node;
-        let y = process_potential_capture(y.node()).node;
+        let x = x.node().get();
+        let y = y.node().get();
         __current_scope(|b| {
             b.call(self, &[x, y], Type::void());
         });
     }
     fn call3_void<T: Value, S: Value, U: Value>(self, x: Expr<T>, y: Expr<S>, z: Expr<U>) {
-        let x = process_potential_capture(x.node()).node;
-        let y = process_potential_capture(y.node()).node;
-        let z = process_potential_capture(z.node()).node;
+        let x = x.node().get();
+        let y = y.node().get();
+        let z = z.node().get();
         __current_scope(|b| {
             b.call(self, &[x, y, z], Type::void());
         });
@@ -291,6 +292,9 @@ impl_aggregate_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15)
 pub(crate) struct FnRecorder {
     pub(crate) parent: Option<FnRecorderPtr>,
     pub(crate) scopes: Vec<IrBuilder>,
+    /// Nodes that are should not be acess
+    /// Once a basicblock is finished, all nodes in it are added to this set
+    pub(crate) inaccessible: Rc<RefCell<HashSet<NodeRef>>>,
     pub(crate) kernel_id: usize,
     pub(crate) captured_resources: IndexMap<Binding, (usize, NodeRef, Binding, Arc<dyn Any>)>,
     pub(crate) cpu_custom_ops: IndexMap<u64, (usize, CArc<CpuCustomOp>)>,
@@ -306,6 +310,12 @@ pub(crate) struct FnRecorder {
 }
 pub(crate) type FnRecorderPtr = Rc<RefCell<FnRecorder>>;
 impl FnRecorder {
+    pub(crate) fn add_block_to_inaccessible(&self, block: &BasicBlock) {
+        let mut inaccessible = self.inaccessible.borrow_mut();
+        for n in block.iter() {
+            inaccessible.insert(n);
+        }
+    }
     pub(crate) fn check_on_same_device(&mut self, other: &Device) -> Option<(String, String)> {
         if let Some(device) = &self.device {
             let device = device.upgrade().unwrap();
@@ -336,8 +346,12 @@ impl FnRecorder {
             node
         }
     }
-    pub(crate) fn new(kernel_id: usize) -> Self {
+    pub(crate) fn new(kernel_id: usize, parent: Option<FnRecorderPtr>) -> Self {
         FnRecorder {
+            inaccessible: parent
+                .as_ref()
+                .map(|p| p.borrow().inaccessible.clone())
+                .unwrap_or_else(|| Rc::new(RefCell::new(HashSet::new()))),
             scopes: vec![],
             captured_resources: IndexMap::new(),
             cpu_custom_ops: IndexMap::new(),
@@ -351,45 +365,73 @@ impl FnRecorder {
             building_kernel: false,
             callable_ret_type: None,
             kernel_id,
-            parent: None,
+            parent,
         }
     }
-    pub(crate) fn map_captured_vars(&mut self, node: SafeNodeRef) -> SafeNodeRef {
-        if node.recorder == self as *mut _ {
-            return node;
+    pub(crate) fn map_captured_vars(&mut self, node0: SafeNodeRef) -> SafeNodeRef {
+        if node0.recorder == self as *mut _ {
+            return node0;
         }
-        if self.captured_vars.contains_key(&node) {
-            return self.captured_vars[&node];
+        if self.captured_vars.contains_key(&node0) {
+            return self.captured_vars[&node0];
         }
         let ptr = self as *mut _;
-        let parent = self
-            .parent
-            .as_mut()
-            .unwrap_or_else(|| panic!("Captured var outside kernel"));
-        match node.node.get().instruction.as_ref() {
-            Instruction::Local { .. } => {}
-            Instruction::Call { .. } => {}
-            Instruction::Argument { .. } => {}
+        let node = {
+            let parent = self.parent.as_mut().unwrap_or_else(|| {
+                panic!(
+                    "Captured var outside kernel {:?}",
+                    node0.node.get().instruction
+                )
+            });
+            let mut parent = parent.borrow_mut();
+            let node = parent.map_captured_vars(node0);
+            assert_eq!(node.recorder, &mut *parent as *mut _);
+            assert_ne!(node.recorder, ptr);
+            node
+        };
+
+        let arg = match node.node.get().instruction.as_ref() {
+            Instruction::Local { .. }
+            | Instruction::Call { .. }
+            | Instruction::Argument { .. }
+            | Instruction::Phi(_)
+            | Instruction::Const(_)
+            | Instruction::Uniform => SafeNodeRef {
+                recorder: ptr,
+                node: new_node(
+                    &self.pools,
+                    Node::new(
+                        CArc::new(Instruction::Argument {
+                            by_value: !node.node.is_lvalue(),
+                        }),
+                        node.node.type_().clone(),
+                    ),
+                ),
+                kernel_id: node.kernel_id,
+            },
+            Instruction::Buffer
+            | Instruction::Accel
+            | Instruction::Bindless
+            | Instruction::Texture2D
+            | Instruction::Texture3D => {
+                // captured resource
+                SafeNodeRef {
+                    recorder: ptr,
+                    node: new_node(
+                        &self.pools,
+                        Node::new(
+                            node.node.get().instruction.clone(),
+                            node.node.type_().clone(),
+                        ),
+                    ),
+                    kernel_id: node.kernel_id,
+                }
+            }
             _ => {
                 panic!("cannot capture node {:?}", node.node.get().instruction)
             }
-        }
-        let arg = SafeNodeRef {
-            recorder: ptr,
-            node: new_node(
-                &self.pools,
-                Node::new(
-                    CArc::new(Instruction::Argument {
-                        by_value: !node.node.is_lvalue(),
-                    }),
-                    node.node.type_().clone(),
-                ),
-            ),
-            kernel_id: node.kernel_id,
         };
-        self.captured_vars.insert(node, arg);
-        let mut parent = parent.borrow_mut();
-        parent.map_captured_vars(node);
+        self.captured_vars.insert(node0, arg);
         arg
     }
 }
@@ -416,6 +458,13 @@ fn process_potential_capture(node: SafeNodeRef) -> SafeNodeRef {
             cur_kernel_id, node.kernel_id,
             "Referencing node from another kernel!"
         );
+        if r.inaccessible.borrow().contains(&node.node) {
+            panic!(
+                r#"Detected using node outside of its scope. It is possible that you use `RefCell` or `Cell` to store an `Expr<T>` or `Var<T>` 
+that is defined inside an if branch/loop body/switch case and use it outside its scope.
+Please define a `Var<T>` in the parent scope and assign to it instead!"#
+            );
+        }
         let ptr = r as *mut _;
         // defined in same callable, no need to capture
         if ptr == node.recorder {
@@ -427,9 +476,9 @@ fn process_potential_capture(node: SafeNodeRef) -> SafeNodeRef {
 pub(crate) fn push_recorder(kernel_id: usize) {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
-        let new = Rc::new(RefCell::new(FnRecorder::new(kernel_id)));
-        let old = std::mem::replace(&mut *r, Some(new.clone()));
-        new.borrow_mut().parent = old;
+        let old = (*r).clone();
+        let new = Rc::new(RefCell::new(FnRecorder::new(kernel_id, old)));
+        std::mem::replace(&mut *r, Some(new.clone()));
     })
 }
 pub(crate) fn pop_recorder() -> FnRecorderPtr {
@@ -510,7 +559,9 @@ pub(crate) fn __check_callable(callable: &CallableModuleRef, args: &[NodeRef]) -
 pub fn __pop_scope() -> Pooled<BasicBlock> {
     with_recorder(|r| {
         let s = &mut r.scopes;
-        s.pop().unwrap().finish()
+        let bb = s.pop().unwrap().finish();
+        r.add_block_to_inaccessible(&bb);
+        bb
     })
 }
 
@@ -529,9 +580,16 @@ pub fn __module_pools() -> &'static CArc<ModulePools> {
  * scope might not be up to date  Thus, for IrBuilder of each scope, it
  * updates the insertion point to the end of the current basic block
  */
-pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
+pub fn __extract<T: Value>(safe_node: SafeNodeRef, index: usize) -> SafeNodeRef {
+    let node = unsafe { safe_node.get_raw() };
     let inst = &node.get().instruction;
-    with_recorder(|r| {
+    let r = unsafe {
+        safe_node
+            .recorder
+            .as_mut()
+            .unwrap_or_else(|| panic!("Node {:?} not in any kernel", node.get().instruction))
+    };
+    {
         let pools = {
             let cur_builder = r.scopes.last_mut().unwrap();
             cur_builder.pools()
@@ -560,6 +618,15 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
                 }
             };
         }
+        macro_rules! wrap_up {
+            ($n:expr) => {
+                SafeNodeRef {
+                    recorder: safe_node.recorder,
+                    node: $n,
+                    kernel_id: safe_node.kernel_id,
+                }
+            };
+        }
         let op = match inst.as_ref() {
             Instruction::Local { .. } => Func::GetElementPtr,
             Instruction::Argument { by_value } => {
@@ -575,14 +642,14 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
                     indices.push(i);
                     let n = b.call_no_append(Func::AtomicRef, &indices, <T as TypeOf>::type_());
                     update_builders!();
-                    return n;
+                    return wrap_up!(n);
                 }
                 Func::GetElementPtr => {
                     let mut indices = args.to_vec();
                     indices.push(i);
                     let n = b.call(Func::GetElementPtr, &indices, <T as TypeOf>::type_());
                     update_builders!();
-                    return n;
+                    return wrap_up!(n);
                 }
                 _ => Func::ExtractElement,
             },
@@ -591,8 +658,8 @@ pub fn __extract<T: Value>(node: NodeRef, index: usize) -> NodeRef {
         let node = b.call(op, &[node, i], <T as TypeOf>::type_());
 
         update_builders!();
-        node
-    })
+        wrap_up!(node)
+    }
 }
 
 pub fn __insert<T: Value>(node: NodeRef, index: usize, value: NodeRef) -> NodeRef {

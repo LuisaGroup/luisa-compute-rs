@@ -118,6 +118,145 @@ fn nested_callable_capture_by_ref() {
     }
 }
 #[test]
+fn nested_callable_outline_twice() {
+    let device = get_device();
+
+    let x = device.create_buffer::<f32>(1024);
+    let y = device.create_buffer::<f32>(1024);
+    let z = device.create_buffer::<f32>(1024);
+    x.view(..).fill_fn(|i| i as f32);
+    y.view(..).fill_fn(|i| 1000.0 * i as f32);
+    let kernel = Kernel::<fn(Buffer<f32>)>::new(
+        &device,
+        &track!(|buf_z| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            let z = 0.0f32.var();
+            outline(|| {
+                outline(|| {
+                    *z += y;
+                });
+                outline(|| {
+                    *z += x;
+                })
+            });
+            buf_z.write(tid, z);
+        }),
+    );
+    kernel.dispatch([1024, 1, 1], &z);
+    let z_data = z.view(..).copy_to_vec();
+    for i in 0..x.len() {
+        assert_eq!(z_data[i], (i as f32 + 1000.0 * i as f32));
+    }
+}
+
+#[derive(Clone, Copy, Debug, Value, Soa, PartialEq)]
+#[repr(C)]
+#[value_new(pub)]
+pub struct A {
+    v: Float3,
+}
+#[test]
+fn nested_callable_capture_gep() {
+    let device = get_device();
+
+    let x = device.create_buffer::<f32>(1024);
+    let y = device.create_buffer::<f32>(1024);
+    let z = device.create_buffer::<f32>(1024);
+    x.view(..).fill_fn(|i| i as f32);
+    y.view(..).fill_fn(|i| 1000.0 * i as f32);
+    let kernel = Kernel::<fn(Buffer<f32>)>::new(
+        &device,
+        &track!(|buf_z| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let tid = dispatch_id().x;
+            let a = Var::<A>::zeroed();
+            outline(|| {
+                let x = buf_x.read(tid);
+                let y = buf_y.read(tid);
+                *a.v = Float3::expr(x, y, 0.0);
+                outline(|| {
+                    let v = a.v;
+                    *v.z += v.x;
+                });
+                outline(|| {
+                    let v = a.v;
+                    *a.v.z += v.y;
+                });
+                buf_z.write(tid, a.v.z);
+            });
+        }),
+    );
+    kernel.dispatch([1024, 1, 1], &z);
+    let z_data = z.view(..).copy_to_vec();
+    for i in 0..x.len() {
+        assert_eq!(z_data[i], (i as f32 + 1000.0 * i as f32));
+    }
+}
+#[test]
+fn nested_callable_capture_buffer() {
+    let device = get_device();
+    let x = device.create_buffer::<f32>(1024);
+    let y = device.create_buffer::<f32>(1024);
+    let z = device.create_buffer::<f32>(1024);
+    x.view(..).fill_fn(|i| i as f32);
+    y.view(..).fill_fn(|i| 1000.0 * i as f32);
+    let kernel = Kernel::<fn(Buffer<f32>)>::new(
+        &device,
+        &track!(|buf_z| {
+            let tid = dispatch_id().x;
+            let z = 0.0f32.var();
+            outline(|| {
+                let buf_x = x.var();
+                let buf_y = y.var();
+                let x = buf_x.read(tid);
+                let y = buf_y.read(tid);
+                *z = x + y;
+            });
+            buf_z.write(tid, z);
+        }),
+    );
+    kernel.dispatch([1024, 1, 1], &z);
+    let z_data = z.view(..).copy_to_vec();
+    for i in 0..x.len() {
+        assert_eq!(z_data[i], (i as f32 + 1000.0 * i as f32));
+    }
+}
+#[test]
+fn nested_callable_capture_buffer_var() {
+    let device = get_device();
+    let x = device.create_buffer::<f32>(1024);
+    let y = device.create_buffer::<f32>(1024);
+    let z = device.create_buffer::<f32>(1024);
+    x.view(..).fill_fn(|i| i as f32);
+    y.view(..).fill_fn(|i| 1000.0 * i as f32);
+    let kernel = Kernel::<fn(Buffer<f32>)>::new(
+        &device,
+        &track!(|buf_z| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let tid = dispatch_id().x;
+
+            let z = 0.0f32.var();
+            outline(|| {
+                let x = buf_x.read(tid);
+                let y = buf_y.read(tid);
+                *z = x + y;
+            });
+            buf_z.write(tid, z);
+        }),
+    );
+    kernel.dispatch([1024, 1, 1], &z);
+    let z_data = z.view(..).copy_to_vec();
+    for i in 0..x.len() {
+        assert_eq!(z_data[i], (i as f32 + 1000.0 * i as f32));
+    }
+}
+#[test]
 #[should_panic]
 fn callable_different_device() {
     let device1 = get_device();

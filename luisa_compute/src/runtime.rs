@@ -1306,13 +1306,15 @@ impl<S: CallableSignature> DynCallable<S> {
                 r.borrow().device.clone().unwrap()
             };
             let kernel_id = r_ptr.as_ref().unwrap().borrow().kernel_id;
-            (
-                std::mem::replace(
-                    &mut *r_ptr,
-                    Some(Rc::new(RefCell::new(FnRecorder::new(kernel_id)))),
-                ),
-                device.upgrade().unwrap(),
-            )
+            let r_backup = (*r_ptr).clone();
+            std::mem::replace(
+                &mut *r_ptr,
+                Some(Rc::new(RefCell::new(FnRecorder::new(
+                    kernel_id,
+                    r_backup.clone(),
+                )))),
+            );
+            (r_backup, device.upgrade().unwrap())
         });
         let mut builder = KernelBuilder::new(Some(device), false);
         let new_callable = (inner.builder)(args, &mut builder);

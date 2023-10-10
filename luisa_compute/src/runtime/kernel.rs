@@ -387,6 +387,7 @@ impl KernelBuilder {
             assert_eq!(r.scopes.len(), 1);
             let scope = r.scopes.pop().unwrap();
             let entry = scope.finish();
+            r.add_block_to_inaccessible(&entry);
             let ir_module = Module {
                 entry,
                 kind: ModuleKind::Kernel,
@@ -398,7 +399,9 @@ impl KernelBuilder {
 
             let mut args = self.args.clone();
             args.extend(r.captured_vars.values().map(|x| unsafe { x.get_raw() }));
-
+            for a in &args {
+                r.inaccessible.borrow_mut().insert(*a);
+            }
             let module = CallableModule {
                 module: ir_module,
                 ret_type,
@@ -562,7 +565,8 @@ macro_rules! impl_callable {
                 let r_backup = RECORDER.with(|r| {
                     let mut r = r.borrow_mut();
                     let kernel_id = r.as_ref().unwrap().borrow().kernel_id;
-                    std::mem::replace(&mut *r, Some(Rc::new(RefCell::new(FnRecorder::new(kernel_id)))))
+                    let old = r.clone();
+                    std::mem::replace(&mut *r, Some(Rc::new(RefCell::new(FnRecorder::new(kernel_id, old)))))
                 });
                 let mut builder = KernelBuilder::new(None, false);
                 let raw_callable = CallableBuildFn::build_callable(&f, None, &mut builder);

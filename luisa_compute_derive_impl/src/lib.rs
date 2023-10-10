@@ -253,7 +253,7 @@ impl Compiler {
                 quote_spanned!(span=>
                     let #ident = < #lang_path::types::Expr::<#ty> as #lang_path::FromNode>::from_node(#lang_path::__extract::<#ty>(
                         __node, #i,
-                    ).into());
+                    ));
                 )
             })
             .collect();
@@ -266,7 +266,7 @@ impl Compiler {
                 quote_spanned!(span=>
                     let #ident = < #lang_path::types::Var::<#ty> as #lang_path::FromNode>::from_node(#lang_path::__extract::<#ty>(
                         __node, #i,
-                    ).into());
+                    ));
                 )
             })
             .collect();
@@ -279,7 +279,7 @@ impl Compiler {
             quote_spanned!(span=>
                 let #ident = < #lang_path::types::AtomicRef::<#ty> as #lang_path::FromNode>::from_node(#lang_path::__extract::<#ty>(
                     __node, #i,
-                ).into());
+                ));
             )
         })
         .collect();
@@ -362,7 +362,7 @@ impl Compiler {
                 type Value = #name #ty_generics;
                 fn from_expr(expr: #lang_path::types::Expr<#name #ty_generics>) -> Self {
                     use #lang_path::ToNode;
-                    let __node = expr.node().get();
+                    let __node = expr.node();
                     #(#extract_expr_fields)*
                     Self{
                         self_:expr,
@@ -380,7 +380,7 @@ impl Compiler {
                 type Value = #name #ty_generics;
                 fn from_var(var: #lang_path::types::Var<#name #ty_generics>) -> Self {
                     use #lang_path::ToNode;
-                    let __node = var.node().get();
+                    let __node = var.node();
                     #(#extract_var_fields)*
                     Self{
                         self_:var,
@@ -397,7 +397,7 @@ impl Compiler {
                 type Value = #name #ty_generics;
                 fn from_atomic_ref(var: #lang_path::types::AtomicRef<#name #ty_generics>) -> Self {
                     use #lang_path::ToNode;
-                    let __node = var.node().get();
+                    let __node = var.node();
                     #(#extract_atomic_ref_fields)*
                     Self{
                         self_:var,

@@ -48,7 +48,7 @@ pub struct VectorExprData<T: VectorAlign<N>, const N: usize>([Expr<T>; N]);
 impl<T: VectorAlign<N>, const N: usize> FromNode for VectorExprData<T, N> {
     fn from_node(node: SafeNodeRef) -> Self {
         Self(std::array::from_fn(|i| {
-            FromNode::from_node(__extract::<T>(node.get(), i).into())
+            FromNode::from_node(__extract::<T>(node, i))
         }))
     }
 }
@@ -58,7 +58,7 @@ pub struct VectorVarData<T: VectorAlign<N>, const N: usize>([Var<T>; N]);
 impl<T: VectorAlign<N>, const N: usize> FromNode for VectorVarData<T, N> {
     fn from_node(node: SafeNodeRef) -> Self {
         Self(std::array::from_fn(|i| {
-            FromNode::from_node(__extract::<T>(node.get(), i).into())
+            FromNode::from_node(__extract::<T>(node, i))
         }))
     }
 }
@@ -69,7 +69,7 @@ pub struct VectorAtomicRefData<T: VectorAlign<N>, const N: usize>([AtomicRef<T>;
 impl<T: VectorAlign<N>, const N: usize> FromNode for VectorAtomicRefData<T, N> {
     fn from_node(node: SafeNodeRef) -> Self {
         Self(std::array::from_fn(|i| {
-            FromNode::from_node(__extract::<T>(node.get(), i).into())
+            FromNode::from_node(__extract::<T>(node, i))
         }))
     }
 }
@@ -161,7 +161,7 @@ macro_rules! vector_proxies {
                 let mut comp = 0;
                 $(
                     {
-                        let el = Expr::<T>::from_node(__extract::<T>(v.node().get(), comp).into());
+                        let el = Expr::<T>::from_node(__extract::<T>(v.node(), comp));
                         self.$real_c.write(i, el);
                         comp += 1;
                     }

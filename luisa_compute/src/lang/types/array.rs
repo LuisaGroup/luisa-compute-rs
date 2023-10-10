@@ -131,7 +131,7 @@ macro_rules! impl_array_vec_conversion{
             where T: vector::VectorAlign<$N>,
         {
             fn from(vec:Expr<Vector<T,$N>>)->Self{
-                let elems = (0..$N).map(|i| __extract::<T>(vec.node().get(), i)).collect::<Vec<_>>();
+                let elems = (0..$N).map(|i| __extract::<T>(vec.node(), i).get()).collect::<Vec<_>>();
                 let node = __current_scope(|b| b.call(Func::Array, &elems, <[T;$N]>::type_()));
                 Self::from_node(node.into())
             }

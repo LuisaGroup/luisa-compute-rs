@@ -113,6 +113,7 @@ pub fn if_then_else<R: Aggregate>(
         let s = &mut r.scopes;
         let then_block = s.pop().unwrap().finish();
         s.push(IrBuilder::new(pools));
+        r.add_block_to_inaccessible(&then_block);
         then_block
     });
     let else_ = else_();
@@ -123,7 +124,9 @@ pub fn if_then_else<R: Aggregate>(
         .collect::<Vec<_>>();
     let else_block = with_recorder(|r| {
         let s = &mut r.scopes;
-        s.pop().unwrap().finish()
+        let else_block = s.pop().unwrap().finish();
+        r.add_block_to_inaccessible(&else_block);
+        else_block
     });
     __current_scope(|b| {
         b.if_(cond, then_block, else_block);
@@ -210,6 +213,7 @@ pub fn generic_loop(
         let s = &mut r.scopes;
         let prepare = s.pop().unwrap().finish();
         s.push(IrBuilder::new(pools));
+        r.add_block_to_inaccessible(&prepare);
         prepare
     });
     body();
@@ -218,12 +222,15 @@ pub fn generic_loop(
         let s = &mut r.scopes;
         let body = s.pop().unwrap().finish();
         s.push(IrBuilder::new(pools));
+        r.add_block_to_inaccessible(&body);
         body
     });
     update();
     let update = with_recorder(|r| {
         let s = &mut r.scopes;
-        s.pop().unwrap().finish()
+        let update_block = s.pop().unwrap().finish();
+        r.add_block_to_inaccessible(&update_block);
+        update_block
     });
     __current_scope(|b| {
         b.generic_loop(prepare, cond_v, body, update);

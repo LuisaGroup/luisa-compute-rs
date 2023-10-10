@@ -1,7 +1,6 @@
 use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
-use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
@@ -647,7 +646,6 @@ where
     B: IndexWrite<Element = u32> + ToNode,
 {
     let index = index.as_expr().node().get();
-    let expor = expr.node().get();
     let buffer = buffer.node().get();
     let expr = expr.node().get();
     __current_scope(|b| {

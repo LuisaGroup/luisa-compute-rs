@@ -4,7 +4,7 @@ use std::ops::Deref;
 use crate::internal_prelude::*;
 
 use super::soa::SoaMetadata;
-use super::{process_potential_capture, with_recorder};
+use super::with_recorder;
 
 pub mod alignment;
 pub mod array;

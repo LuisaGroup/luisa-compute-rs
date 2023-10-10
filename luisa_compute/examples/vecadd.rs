@@ -1,8 +1,5 @@
 use std::env::current_exe;
-
-use luisa::lang::types::vector::alias::*;
 use luisa::prelude::*;
-use luisa::runtime::{Kernel, KernelDef};
 use luisa_compute as luisa;
 #[tracked]
 fn main() {

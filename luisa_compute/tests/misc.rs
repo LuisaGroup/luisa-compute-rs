@@ -1,11 +1,8 @@
 use std::cell::RefCell;
 
-use luisa::lang::ops::AddMaybeExpr;
 use luisa::lang::types::array::VLArrayVar;
-use luisa::lang::types::core::*;
 use luisa::lang::types::dynamic::*;
 use luisa::lang::types::vector::alias::*;
-use luisa::lang::types::ExprProxy;
 use luisa::prelude::*;
 use luisa_compute as luisa;
 use luisa_compute_api_types::StreamTag;
@@ -1101,6 +1098,7 @@ fn byte_buffer() {
 }
 
 #[test]
+#[allow(unused_assignments)]
 fn bindless_byte_buffer() {
     let device = get_device();
     let buf = device.create_byte_buffer(1024);
@@ -1119,6 +1117,7 @@ fn bindless_byte_buffer() {
             let view = buf.view(cnt..cnt + s);
             let bytes = unsafe { std::slice::from_raw_parts(&$v as *const $t as *const u8, s) };
             view.copy_from(bytes);
+
             cnt += s;
             old
         }};

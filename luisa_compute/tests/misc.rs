@@ -178,7 +178,7 @@ fn callable_return_void_mismatch() {
 }
 #[test]
 #[should_panic]
-fn callable_illegall_sharing() {
+fn callable_illegal_sharing() {
     let device = get_device();
     let tid = RefCell::new(None);
     Kernel::<fn()>::new(&device, &|| {

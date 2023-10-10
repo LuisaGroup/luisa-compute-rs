@@ -1,4 +1,4 @@
-use crate::lang::{pop_recorder, push_recorder, soa::SoaMetadata};
+use crate::lang::{pop_recorder, push_recorder, soa::SoaMetadata, KERNEL_ID};
 
 use super::*;
 
@@ -191,6 +191,7 @@ impl KernelBuilder {
             let r = r.borrow();
             if is_kernel {
                 assert!(r.is_none(), "Cannot record a kernel inside another kernel");
+                KERNEL_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
         });
         push_recorder();

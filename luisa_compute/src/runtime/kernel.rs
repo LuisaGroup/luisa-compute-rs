@@ -187,14 +187,21 @@ macro_rules! impl_kernel_param_for_tuple {
 impl_kernel_param_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
 impl KernelBuilder {
     pub fn new(device: Option<crate::runtime::Device>, is_kernel: bool) -> Self {
-        RECORDER.with(|r| {
+        let kernel_id = RECORDER.with(|r| {
             let r = r.borrow();
             if is_kernel {
                 assert!(r.is_none(), "Cannot record a kernel inside another kernel");
-                KERNEL_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                KERNEL_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            } else {
+                let r = r.as_ref();
+                if let Some(r) = r {
+                    r.borrow().kernel_id
+                } else {
+                    KERNEL_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                }
             }
         });
-        push_recorder();
+        push_recorder(kernel_id);
         with_recorder(|r| {
             r.device = device.as_ref().map(|d| WeakDevice::new(d));
             r.pools = CArc::new(ModulePools::new());
@@ -554,7 +561,8 @@ macro_rules! impl_callable {
             pub fn new_static(f:fn($($Ts,)*)->R)->Self  where fn($($Ts,)*)->R :CallableBuildFn<fn($($Ts,)*)->R> {
                 let r_backup = RECORDER.with(|r| {
                     let mut r = r.borrow_mut();
-                    std::mem::replace(&mut *r, Some(Rc::new(RefCell::new(FnRecorder::new()))))
+                    let kernel_id = r.as_ref().unwrap().borrow().kernel_id;
+                    std::mem::replace(&mut *r, Some(Rc::new(RefCell::new(FnRecorder::new(kernel_id)))))
                 });
                 let mut builder = KernelBuilder::new(None, false);
                 let raw_callable = CallableBuildFn::build_callable(&f, None, &mut builder);

@@ -1305,8 +1305,12 @@ impl<S: CallableSignature> DynCallable<S> {
                 let r = r_ptr.as_mut().unwrap();
                 r.borrow().device.clone().unwrap()
             };
+            let kernel_id = r_ptr.as_ref().unwrap().borrow().kernel_id;
             (
-                std::mem::replace(&mut *r_ptr, Some(Rc::new(RefCell::new(FnRecorder::new())))),
+                std::mem::replace(
+                    &mut *r_ptr,
+                    Some(Rc::new(RefCell::new(FnRecorder::new(kernel_id)))),
+                ),
                 device.upgrade().unwrap(),
             )
         });

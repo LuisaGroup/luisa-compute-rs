@@ -291,6 +291,7 @@ impl_aggregate_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15)
 pub(crate) struct FnRecorder {
     pub(crate) parent: Option<FnRecorderPtr>,
     pub(crate) scopes: Vec<IrBuilder>,
+    pub(crate) kernel_id: usize,
     pub(crate) captured_resources: IndexMap<Binding, (usize, NodeRef, Binding, Arc<dyn Any>)>,
     pub(crate) cpu_custom_ops: IndexMap<u64, (usize, CArc<CpuCustomOp>)>,
     pub(crate) callables: IndexMap<u64, CallableModuleRef>,
@@ -335,7 +336,7 @@ impl FnRecorder {
             node
         }
     }
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(kernel_id: usize) -> Self {
         FnRecorder {
             scopes: vec![],
             captured_resources: IndexMap::new(),
@@ -349,6 +350,7 @@ impl FnRecorder {
             arena: Bump::new(),
             building_kernel: false,
             callable_ret_type: None,
+            kernel_id,
             parent: None,
         }
     }
@@ -398,7 +400,7 @@ fn make_safe_node(node: NodeRef) -> SafeNodeRef {
     with_recorder(|r| SafeNodeRef {
         recorder: r as *mut _,
         node,
-        kernel_id: KERNEL_ID.load(std::sync::atomic::Ordering::Relaxed),
+        kernel_id: r.kernel_id,
     })
 }
 /// check if the node belongs to the current kernel/callable
@@ -407,12 +409,13 @@ fn process_potential_capture(node: SafeNodeRef) -> SafeNodeRef {
     if node.node.is_user_data() {
         return node;
     }
-    let cur_kernel_id = KERNEL_ID.load(std::sync::atomic::Ordering::Relaxed);
-    assert_eq!(
-        cur_kernel_id, node.kernel_id,
-        "Referencing node from another kernel!"
-    );
+
     with_recorder(|r| {
+        let cur_kernel_id = r.kernel_id;
+        assert_eq!(
+            cur_kernel_id, node.kernel_id,
+            "Referencing node from another kernel!"
+        );
         let ptr = r as *mut _;
         // defined in same callable, no need to capture
         if ptr == node.recorder {
@@ -421,10 +424,10 @@ fn process_potential_capture(node: SafeNodeRef) -> SafeNodeRef {
         r.map_captured_vars(node)
     })
 }
-pub(crate) fn push_recorder() {
-    let mut new = Rc::new(RefCell::new(FnRecorder::new()));
+pub(crate) fn push_recorder(kernel_id: usize) {
     RECORDER.with(|r| {
         let mut r = r.borrow_mut();
+        let new = Rc::new(RefCell::new(FnRecorder::new(kernel_id)));
         let old = std::mem::replace(&mut *r, Some(new.clone()));
         new.borrow_mut().parent = old;
     })

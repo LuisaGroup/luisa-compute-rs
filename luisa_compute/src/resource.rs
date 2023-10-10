@@ -245,33 +245,37 @@ pub type ByteBufferVar = BufferVar<u8>;
 impl BufferVar<u8> {
     pub unsafe fn read_as<T: Value>(&self, index_bytes: impl IntoIndex) -> Expr<T> {
         let i = index_bytes.to_u64();
-        Expr::<T>::from_node(__current_scope(|b| {
-            b.call(
-                Func::ByteBufferRead,
-                &[self.node, i.node],
-                <T as TypeOf>::type_(),
-            )
-        }))
+        let self_node = self.node.get();
+        let i = i.node().get();
+        Expr::<T>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::ByteBufferRead,
+                    &[self_node, i],
+                    <T as TypeOf>::type_(),
+                )
+            })
+            .into(),
+        )
     }
     pub fn len_bytes_expr(&self) -> Expr<u64> {
-        Expr::<u64>::from_node(__current_scope(|b| {
-            b.call(Func::ByteBufferSize, &[self.node], <u64 as TypeOf>::type_())
-        }))
+        let self_node = self.node.get();
+        Expr::<u64>::from_node(
+            __current_scope(|b| {
+                b.call(Func::ByteBufferSize, &[self_node], <u64 as TypeOf>::type_())
+            })
+            .into(),
+        )
     }
     pub unsafe fn write_as<T: Value>(
         &self,
         index_bytes: impl IntoIndex,
-        value: impl Into<Expr<T>>,
+        value: impl AsExpr<Value = T>,
     ) {
-        let i = index_bytes.to_u64();
-        let value: Expr<T> = value.into();
-        __current_scope(|b| {
-            b.call(
-                Func::ByteBufferWrite,
-                &[self.node, i.node, value.node()],
-                Type::void(),
-            )
-        });
+        let i = index_bytes.to_u64().node().get();
+        let value = value.as_expr().node().get();
+        let self_node = self.node.get();
+        __current_scope(|b| b.call(Func::ByteBufferWrite, &[self_node, i, value], Type::void()));
     }
 }
 pub struct Buffer<T: Value> {
@@ -847,7 +851,8 @@ impl BindlessArray {
     pub fn update(&self) {
         submit_default_stream_and_sync(&self.device, [self.update_async()]);
     }
-    pub fn update_async<'a>(&'a self) -> Command<'a, 'a> { // What lifetime should this be?
+    pub fn update_async<'a>(&'a self) -> Command<'a, 'a> {
+        // What lifetime should this be?
         self.lock();
         let mut rt = ResourceTracker::new();
         let modifications = Arc::new(std::mem::replace(
@@ -1163,7 +1168,10 @@ impl<T: IoTexel> Tex3d<T> {
 macro_rules! impl_tex_view {
     ($name:ident) => {
         impl<'a, T: IoTexel> $name<'a, T> {
-            pub fn copy_to_async<U: StorageTexel<T>>(&'a self, data: &'a mut [U]) -> Command<'a, 'a> {
+            pub fn copy_to_async<U: StorageTexel<T>>(
+                &'a self,
+                data: &'a mut [U],
+            ) -> Command<'a, 'a> {
                 assert_eq!(data.len(), self.texel_count() as usize);
                 assert_eq!(self.tex.handle.storage, U::pixel_storage());
                 let mut rt = ResourceTracker::new();
@@ -1194,7 +1202,10 @@ macro_rules! impl_tex_view {
                 self.copy_to(&mut data);
                 data
             }
-            pub fn copy_from_async<'b, U: StorageTexel<T>>(&'a self, data: &'b [U]) -> Command<'b, 'static> {
+            pub fn copy_from_async<'b, U: StorageTexel<T>>(
+                &'a self,
+                data: &'b [U],
+            ) -> Command<'b, 'static> {
                 assert_eq!(data.len(), self.texel_count() as usize);
                 assert_eq!(self.tex.handle.storage, U::pixel_storage());
                 let mut rt = ResourceTracker::new();
@@ -1412,10 +1423,10 @@ pub struct BufferVar<T: Value> {
     pub(crate) marker: PhantomData<T>,
     #[allow(dead_code)]
     pub(crate) handle: Option<Arc<BufferHandle>>,
-    pub(crate) node: NodeRef,
+    pub(crate) node: SafeNodeRef,
 }
 impl<T: Value> ToNode for BufferVar<T> {
-    fn node(&self) -> NodeRef {
+    fn node(&self) -> SafeNodeRef {
         self.node
     }
 }
@@ -1424,18 +1435,18 @@ impl<T: Value> Drop for BufferVar<T> {
 }
 #[derive(Clone)]
 pub struct BindlessArrayVar {
-    pub(crate) node: NodeRef,
+    pub(crate) node: SafeNodeRef,
     #[allow(dead_code)]
     pub(crate) handle: Option<Arc<BindlessArrayHandle>>,
 }
 #[derive(Clone)]
 pub struct BindlessBufferVar<T> {
-    array: NodeRef,
+    array: SafeNodeRef,
     buffer_index: Expr<u32>,
     _marker: PhantomData<T>,
 }
 impl<T: Value> ToNode for BindlessBufferVar<T> {
-    fn node(&self) -> NodeRef {
+    fn node(&self) -> SafeNodeRef {
         self.array
     }
 }
@@ -1447,14 +1458,19 @@ impl<T: Value> IndexRead for BindlessBufferVar<T> {
         if need_runtime_check() {
             lc_assert!(i.lt(self.len_expr()));
         }
-
-        Expr::<T>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessBufferRead,
-                &[self.array, self.buffer_index.node(), ToNode::node(&i)],
-                T::type_(),
-            )
-        }))
+        let array = self.array.get();
+        let buffer_index = self.buffer_index.node().get();
+        let i = i.node().get();
+        Expr::<T>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessBufferRead,
+                    &[array, buffer_index, i],
+                    T::type_(),
+                )
+            })
+            .into(),
+        )
     }
 }
 impl<T: Value> IndexWrite for BindlessBufferVar<T> {
@@ -1463,16 +1479,14 @@ impl<T: Value> IndexWrite for BindlessBufferVar<T> {
         if need_runtime_check() {
             lc_assert!(i.lt(self.len_expr()));
         }
-        let value = value.as_expr();
+        let array = self.array.get();
+        let buffer_index = self.buffer_index.node().get();
+        let i = i.node().get();
+        let value = value.as_expr().node().get();
         __current_scope(|b| {
             b.call(
                 Func::BindlessBufferWrite,
-                &[
-                    self.array,
-                    self.buffer_index.node(),
-                    ToNode::node(&i),
-                    value.node(),
-                ],
+                &[array, buffer_index, i, value],
                 Type::void(),
             )
         });
@@ -1480,229 +1494,333 @@ impl<T: Value> IndexWrite for BindlessBufferVar<T> {
 }
 impl<T: Value> BindlessBufferVar<T> {
     pub fn len_expr(&self) -> Expr<u64> {
-        let stride = (T::type_().size() as u64).expr();
-        Expr::<u64>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessBufferSize,
-                &[self.array, self.buffer_index.node(), stride.node()],
-                u32::type_(),
-            )
-        }))
+        let stride = (T::type_().size() as u64).expr().node().get();
+        let array = self.array.get();
+        let buffer_index = self.buffer_index.node().get();
+        Expr::<u64>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessBufferSize,
+                    &[array, buffer_index, stride],
+                    u32::type_(),
+                )
+            })
+            .into(),
+        )
     }
     pub fn __type(&self) -> Expr<u64> {
-        Expr::<u64>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessBufferType,
-                &[self.array, self.buffer_index.node()],
-                u64::type_(),
-            )
-        }))
+        let array = self.array.get();
+        let buffer_index = self.buffer_index.node().get();
+        Expr::<u64>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessBufferType,
+                    &[array, buffer_index],
+                    u64::type_(),
+                )
+            })
+            .into(),
+        )
     }
 }
 #[derive(Clone)]
 pub struct BindlessByteBufferVar {
-    array: NodeRef,
+    array: SafeNodeRef,
     buffer_index: Expr<u32>,
 }
 impl ToNode for BindlessByteBufferVar {
-    fn node(&self) -> NodeRef {
+    fn node(&self) -> SafeNodeRef {
         self.array
     }
 }
 impl BindlessByteBufferVar {
     pub unsafe fn read_as<T: Value>(&self, index_bytes: impl IntoIndex) -> Expr<T> {
-        let i = index_bytes.to_u64();
-        Expr::<T>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessByteBufferRead,
-                &[self.array, self.buffer_index.node(), i.node],
-                <T as TypeOf>::type_(),
-            )
-        }))
+        let i = index_bytes.to_u64().node().get();
+        let array = self.array.get();
+        let buffer_index = self.buffer_index.node().get();
+        Expr::<T>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessByteBufferRead,
+                    &[array, buffer_index, i],
+                    <T as TypeOf>::type_(),
+                )
+            })
+            .into(),
+        )
     }
     pub fn len(&self) -> Expr<u64> {
-        let s = (1u64).expr();
-        Expr::<u64>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessBufferSize,
-                &[self.array, self.buffer_index.node(), s.node()],
-                <u64 as TypeOf>::type_(),
-            )
-        }))
+        let s = (1u64).expr().node().get();
+        let array = self.array.get();
+        let buffer_index = self.buffer_index.node().get();
+        Expr::<u64>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessBufferSize,
+                    &[array, buffer_index, s],
+                    <u64 as TypeOf>::type_(),
+                )
+            })
+            .into(),
+        )
     }
 }
 #[derive(Clone)]
 pub struct BindlessTex2dVar {
-    array: NodeRef,
+    array: SafeNodeRef,
     tex2d_index: Expr<u32>,
 }
 
 impl BindlessTex2dVar {
-    pub fn sample(&self, uv: Expr<Float2>) -> Expr<Float4> {
-        Expr::<Float4>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessTexture2dSample,
-                &[self.array, self.tex2d_index.node(), uv.node()],
-                Float4::type_(),
-            )
-        }))
+    pub fn sample(&self, uv: impl AsExpr<Value = Float2>) -> Expr<Float4> {
+        let array = self.array.get();
+        let tex2d_index = self.tex2d_index.node().get();
+        let uv = uv.as_expr().node().get();
+        Expr::<Float4>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessTexture2dSample,
+                    &[array, tex2d_index, uv],
+                    Float4::type_(),
+                )
+            })
+            .into(),
+        )
     }
-    pub fn sample_level(&self, uv: Expr<Float2>, level: Expr<f32>) -> Expr<Float4> {
-        Expr::<Float4>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessTexture2dSampleLevel,
-                &[self.array, self.tex2d_index.node(), uv.node(), level.node()],
-                Float4::type_(),
-            )
-        }))
+    pub fn sample_level(
+        &self,
+        uv: impl AsExpr<Value = Float2>,
+        level: impl AsExpr<Value = u32>,
+    ) -> Expr<Float4> {
+        let array = self.array.get();
+        let tex2d_index = self.tex2d_index.node().get();
+        let uv = uv.as_expr().node().get();
+        let level = level.as_expr().node().get();
+        Expr::<Float4>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessTexture2dSampleLevel,
+                    &[array, tex2d_index, uv, level],
+                    Float4::type_(),
+                )
+            })
+            .into(),
+        )
     }
     pub fn sample_grad(
         &self,
-        uv: Expr<Float2>,
-        ddx: Expr<Float2>,
-        ddy: Expr<Float2>,
+        uv: impl AsExpr<Value = Float2>,
+        ddx: impl AsExpr<Value = Float2>,
+        ddy: impl AsExpr<Value = Float2>,
     ) -> Expr<Float4> {
-        Expr::<Float4>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessTexture2dSampleLevel,
-                &[
-                    self.array,
-                    self.tex2d_index.node(),
-                    uv.node(),
-                    ddx.node(),
-                    ddy.node(),
-                ],
-                Float4::type_(),
-            )
-        }))
+        let array = self.array.get();
+        let tex2d_index = self.tex2d_index.node().get();
+        let uv = uv.as_expr().node().get();
+        let ddx = ddx.as_expr().node().get();
+        let ddy = ddy.as_expr().node().get();
+        Expr::<Float4>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessTexture2dSampleLevel,
+                    &[array, tex2d_index, uv, ddx, ddy],
+                    Float4::type_(),
+                )
+            })
+            .into(),
+        )
     }
-    pub fn read(&self, coord: Expr<Uint2>) -> Expr<Float4> {
-        Expr::<Float4>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessTexture2dRead,
-                &[self.array, self.tex2d_index.node(), coord.node()],
-                Float4::type_(),
-            )
-        }))
+    pub fn read(&self, coord: impl AsExpr<Value = Uint2>) -> Expr<Float4> {
+        let array = self.array.get();
+        let tex2d_index = self.tex2d_index.node().get();
+        let coord = coord.as_expr().node().get();
+        Expr::<Float4>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessTexture2dRead,
+                    &[array, tex2d_index, coord],
+                    Float4::type_(),
+                )
+            })
+            .into(),
+        )
     }
-    pub fn read_level(&self, coord: Expr<Uint2>, level: Expr<u32>) -> Expr<Float4> {
-        Expr::<Float4>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessTexture2dReadLevel,
-                &[
-                    self.array,
-                    self.tex2d_index.node(),
-                    coord.node(),
-                    level.node(),
-                ],
-                Float4::type_(),
-            )
-        }))
+    pub fn read_level(
+        &self,
+        coord: impl AsExpr<Value = Uint2>,
+        level: impl AsExpr<Value = u32>,
+    ) -> Expr<Float4> {
+        let array = self.array.get();
+        let tex2d_index = self.tex2d_index.node().get();
+        let coord = coord.as_expr().node().get();
+        let level = level.as_expr().node().get();
+        Expr::<Float4>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessTexture2dReadLevel,
+                    &[array, tex2d_index, coord, level],
+                    Float4::type_(),
+                )
+            })
+            .into(),
+        )
     }
     pub fn size(&self) -> Expr<Uint2> {
-        Expr::<Uint2>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessTexture2dSize,
-                &[self.array, self.tex2d_index.node()],
-                Uint2::type_(),
-            )
-        }))
+        Expr::<Uint2>::from_node(
+            __current_scope(|b| {
+                let array = self.array.get();
+                let tex2d_index = self.tex2d_index.node().get();
+                b.call(
+                    Func::BindlessTexture2dSize,
+                    &[array, tex2d_index],
+                    Uint2::type_(),
+                )
+            })
+            .into(),
+        )
     }
-    pub fn size_level(&self, level: Expr<u32>) -> Expr<Uint2> {
-        Expr::<Uint2>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessTexture2dSizeLevel,
-                &[self.array, self.tex2d_index.node(), level.node()],
-                Uint2::type_(),
-            )
-        }))
+    pub fn size_level(&self, level: impl AsExpr<Value = u32>) -> Expr<Uint2> {
+        let array = self.array.get();
+        let tex2d_index = self.tex2d_index.node().get();
+        let level = level.as_expr().node().get();
+        Expr::<Uint2>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessTexture2dSizeLevel,
+                    &[array, tex2d_index, level],
+                    Uint2::type_(),
+                )
+            })
+            .into(),
+        )
     }
 }
 #[derive(Clone)]
 pub struct BindlessTex3dVar {
-    array: NodeRef,
+    array: SafeNodeRef,
     tex3d_index: Expr<u32>,
 }
 
 impl BindlessTex3dVar {
-    pub fn sample(&self, uv: Expr<Float3>) -> Expr<Float4> {
-        Expr::<Float4>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessTexture3dSample,
-                &[self.array, self.tex3d_index.node(), uv.node()],
-                Float4::type_(),
-            )
-        }))
+    pub fn sample(&self, uv: impl AsExpr<Value = Float3>) -> Expr<Float4> {
+        let array = self.array.get();
+        let tex3d_index = self.tex3d_index.node().get();
+        let uv = uv.as_expr().node().get();
+        Expr::<Float4>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessTexture3dSample,
+                    &[array, tex3d_index, uv],
+                    Float4::type_(),
+                )
+            })
+            .into(),
+        )
     }
-    pub fn sample_level(&self, uv: Expr<Float3>, level: Expr<f32>) -> Expr<Float4> {
-        Expr::<Float4>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessTexture3dSampleLevel,
-                &[self.array, self.tex3d_index.node(), uv.node(), level.node()],
-                Float4::type_(),
-            )
-        }))
+    pub fn sample_level(
+        &self,
+        uv: impl AsExpr<Value = Float3>,
+        level: impl AsExpr<Value = f32>,
+    ) -> Expr<Float4> {
+        let array = self.array.get();
+        let tex3d_index = self.tex3d_index.node().get();
+        let uv = uv.as_expr().node().get();
+        let level = level.as_expr().node().get();
+        Expr::<Float4>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessTexture3dSampleLevel,
+                    &[array, tex3d_index, uv, level],
+                    Float4::type_(),
+                )
+            })
+            .into(),
+        )
     }
     pub fn sample_grad(
         &self,
-        uv: Expr<Float3>,
-        ddx: Expr<Float3>,
-        ddy: Expr<Float3>,
+        uv: impl AsExpr<Value = Float3>,
+        ddx: impl AsExpr<Value = Float3>,
+        ddy: impl AsExpr<Value = Float3>,
     ) -> Expr<Float4> {
-        Expr::<Float4>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessTexture3dSampleLevel,
-                &[
-                    self.array,
-                    self.tex3d_index.node(),
-                    uv.node(),
-                    ddx.node(),
-                    ddy.node(),
-                ],
-                Float4::type_(),
-            )
-        }))
+        let array = self.array.get();
+        let tex3d_index = self.tex3d_index.node().get();
+        let uv = uv.as_expr().node().get();
+        let ddx = ddx.as_expr().node().get();
+        let ddy = ddy.as_expr().node().get();
+        Expr::<Float4>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessTexture3dSampleLevel,
+                    &[array, tex3d_index, uv, ddx, ddy],
+                    Float4::type_(),
+                )
+            })
+            .into(),
+        )
     }
-    pub fn read(&self, coord: Expr<Uint3>) -> Expr<Float4> {
-        Expr::<Float4>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessTexture3dRead,
-                &[self.array, self.tex3d_index.node(), coord.node()],
-                Float4::type_(),
-            )
-        }))
+    pub fn read(&self, coord: impl AsExpr<Value = Uint3>) -> Expr<Float4> {
+        let array = self.array.get();
+        let tex3d_index = self.tex3d_index.node().get();
+        let coord = coord.as_expr().node().get();
+        Expr::<Float4>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessTexture3dRead,
+                    &[array, tex3d_index, coord],
+                    Float4::type_(),
+                )
+            })
+            .into(),
+        )
     }
-    pub fn read_level(&self, coord: Expr<Uint3>, level: Expr<u32>) -> Expr<Float4> {
-        Expr::<Float4>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessTexture3dReadLevel,
-                &[
-                    self.array,
-                    self.tex3d_index.node(),
-                    coord.node(),
-                    level.node(),
-                ],
-                Float4::type_(),
-            )
-        }))
+    pub fn read_level(
+        &self,
+        coord: impl AsExpr<Value = Uint3>,
+        level: impl AsExpr<Value = f32>,
+    ) -> Expr<Float4> {
+        let array = self.array.get();
+        let tex3d_index = self.tex3d_index.node().get();
+        let coord = coord.as_expr().node().get();
+        let level = level.as_expr().node().get();
+        Expr::<Float4>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessTexture3dReadLevel,
+                    &[array, tex3d_index, coord, level],
+                    Float4::type_(),
+                )
+            })
+            .into(),
+        )
     }
     pub fn size(&self) -> Expr<Uint3> {
-        Expr::<Uint3>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessTexture3dSize,
-                &[self.array, self.tex3d_index.node()],
-                Uint3::type_(),
-            )
-        }))
+        let array = self.array.get();
+        let tex3d_index = self.tex3d_index.node().get();
+        Expr::<Uint3>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessTexture3dSize,
+                    &[array, tex3d_index],
+                    Uint3::type_(),
+                )
+            })
+            .into(),
+        )
     }
-    pub fn size_level(&self, level: Expr<u32>) -> Expr<Uint3> {
-        Expr::<Uint3>::from_node(__current_scope(|b| {
-            b.call(
-                Func::BindlessTexture3dSizeLevel,
-                &[self.array, self.tex3d_index.node(), level.node()],
-                Uint3::type_(),
-            )
-        }))
+    pub fn size_level(&self, level: impl AsExpr<Value = f32>) -> Expr<Uint3> {
+        let array = self.array.get();
+        let tex3d_index = self.tex3d_index.node().get();
+        let level = level.as_expr().node().get();
+        Expr::<Uint3>::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessTexture3dSizeLevel,
+                    &[array, tex3d_index, level],
+                    Uint3::type_(),
+                )
+            })
+            .into(),
+        )
     }
 }
 
@@ -1765,12 +1883,7 @@ impl BindlessArrayVar {
     }
 
     pub fn new(array: &BindlessArray) -> Self {
-        let node = RECORDER.with(|r| {
-            let mut r = r.borrow_mut();
-            assert!(
-                r.lock,
-                "BindlessArrayVar must be created from within a kernel"
-            );
+        let node = with_recorder(|r| {
             let handle: u64 = array.handle().0;
             let binding = Binding::BindlessArray(BindlessArrayBinding { handle });
             if let Some((a, b)) = r.check_on_same_device(&array.device) {
@@ -1782,7 +1895,8 @@ impl BindlessArrayVar {
             r.capture_or_get(binding, &array.handle, || {
                 Node::new(CArc::new(Instruction::Bindless), Type::void())
             })
-        });
+        })
+        .into();
         Self {
             node,
             handle: Some(array.handle.clone()),
@@ -1790,7 +1904,7 @@ impl BindlessArrayVar {
     }
 }
 impl<T: Value> ToNode for Buffer<T> {
-    fn node(&self) -> NodeRef {
+    fn node(&self) -> SafeNodeRef {
         self.var().node()
     }
 }
@@ -1812,32 +1926,28 @@ impl<T: Value> IndexRead for BufferVar<T> {
         if need_runtime_check() {
             lc_assert!(i.lt(self.len_expr()));
         }
-        Expr::<T>::from_node(__current_scope(|b| {
-            b.call(Func::BufferRead, &[self.node, ToNode::node(&i)], T::type_())
-        }))
+        let self_node = self.node.get();
+        let i = i.node.get();
+        Expr::<T>::from_node(
+            __current_scope(|b| b.call(Func::BufferRead, &[self_node, i], T::type_())).into(),
+        )
     }
 }
 impl<T: Value> IndexWrite for BufferVar<T> {
     fn write<I: IntoIndex, V: AsExpr<Value = T>>(&self, i: I, v: V) {
         let i = i.to_u64();
-        let v = v.as_expr();
+        let v = v.as_expr().node().get();
         if need_runtime_check() {
             lc_assert!(i.lt(self.len_expr()));
         }
-        __current_scope(|b| {
-            b.call(
-                Func::BufferWrite,
-                &[self.node, ToNode::node(&i), v.node()],
-                Type::void(),
-            )
-        });
+        let i = i.node().get();
+        let self_node = self.node.get();
+        __current_scope(|b| b.call(Func::BufferWrite, &[self_node, i, v], Type::void()));
     }
 }
 impl<T: Value> BufferVar<T> {
     pub fn new(buffer: &BufferView<'_, T>) -> Self {
-        let node = RECORDER.with(|r| {
-            let mut r = r.borrow_mut();
-            assert!(r.lock, "BufferVar must be created from within a kernel");
+        let node = with_recorder(|r| {
             let binding = Binding::Buffer(BufferBinding {
                 handle: buffer.handle().0,
                 size: buffer.len * std::mem::size_of::<T>(),
@@ -1852,7 +1962,8 @@ impl<T: Value> BufferVar<T> {
             r.capture_or_get(binding, &buffer.buffer.handle, || {
                 Node::new(CArc::new(Instruction::Buffer), T::type_())
             })
-        });
+        })
+        .into();
         Self {
             node,
             marker: PhantomData,
@@ -1861,18 +1972,26 @@ impl<T: Value> BufferVar<T> {
     }
     pub fn atomic_ref(&self, i: impl IntoIndex) -> AtomicRef<T> {
         let i = i.to_u64();
-        AtomicRef::<T>::from_node(__current_scope(|b| {
-            b.call_no_append(Func::AtomicRef, &[self.node, i.node()], T::type_())
-        }))
+        if need_runtime_check() {
+            lc_assert!(i.lt(self.len_expr()));
+        }
+        let i = i.node().get();
+        let self_node = self.node.get();
+        AtomicRef::<T>::from_node(
+            __current_scope(|b| b.call_no_append(Func::AtomicRef, &[self_node, i], T::type_()))
+                .into(),
+        )
     }
     pub fn len_expr(&self) -> Expr<u64> {
+        let self_node = self.node.get();
         FromNode::from_node(
-            __current_scope(|b| b.call(Func::BufferSize, &[self.node], u64::type_())).into(),
+            __current_scope(|b| b.call(Func::BufferSize, &[self_node], u64::type_())).into(),
         )
     }
     pub fn len_expr_u32(&self) -> Expr<u32> {
+        let self_node = self.node.get();
         FromNode::from_node(
-            __current_scope(|b| b.call(Func::BufferSize, &[self.node], u32::type_())).into(),
+            __current_scope(|b| b.call(Func::BufferSize, &[self_node], u32::type_())).into(),
         )
     }
 }
@@ -1890,13 +2009,15 @@ macro_rules! impl_atomic {
                 if need_runtime_check() {
                     lc_assert!(i.lt(self.len_expr()));
                 }
-                Expr::<$t>::from_node(__current_scope(|b| {
-                    b.call(
-                        Func::AtomicExchange,
-                        &[self.node, ToNode::node(&i), v.node()],
-                        <$t>::type_(),
-                    )
-                }))
+                let self_node = self.node.get();
+                let i = i.node().get();
+                let v = v.node().get();
+                Expr::<$t>::from_node(
+                    __current_scope(|b| {
+                        b.call(Func::AtomicExchange, &[self_node, i, v], <$t>::type_())
+                    })
+                    .into(),
+                )
             }
             pub fn atomic_compare_exchange<
                 I: IntoIndex,
@@ -1914,13 +2035,20 @@ macro_rules! impl_atomic {
                 if need_runtime_check() {
                     lc_assert!(i.lt(self.len_expr()));
                 }
-                Expr::<$t>::from_node(__current_scope(|b| {
-                    b.call(
-                        Func::AtomicCompareExchange,
-                        &[self.node, ToNode::node(&i), expected.node(), desired.node()],
-                        <$t>::type_(),
-                    )
-                }))
+                let self_node = self.node.get();
+                let i = i.node().get();
+                let expected = expected.node().get();
+                let desired = desired.node().get();
+                Expr::<$t>::from_node(
+                    __current_scope(|b| {
+                        b.call(
+                            Func::AtomicCompareExchange,
+                            &[self_node, i, expected, desired],
+                            <$t>::type_(),
+                        )
+                    })
+                    .into(),
+                )
             }
             pub fn atomic_fetch_add<I: IntoIndex, V: AsExpr<Value = $t>>(
                 &self,
@@ -1932,13 +2060,15 @@ macro_rules! impl_atomic {
                 if need_runtime_check() {
                     lc_assert!(i.lt(self.len_expr()));
                 }
-                Expr::<$t>::from_node(__current_scope(|b| {
-                    b.call(
-                        Func::AtomicFetchAdd,
-                        &[self.node, ToNode::node(&i), v.node()],
-                        <$t>::type_(),
-                    )
-                }))
+                let self_node = self.node.get();
+                let i = i.node().get();
+                let v = v.node().get();
+                Expr::<$t>::from_node(
+                    __current_scope(|b| {
+                        b.call(Func::AtomicFetchAdd, &[self_node, i, v], <$t>::type_())
+                    })
+                    .into(),
+                )
             }
             pub fn atomic_fetch_sub<I: IntoIndex, V: AsExpr<Value = $t>>(
                 &self,
@@ -1950,13 +2080,15 @@ macro_rules! impl_atomic {
                 if need_runtime_check() {
                     lc_assert!(i.lt(self.len_expr()));
                 }
-                Expr::<$t>::from_node(__current_scope(|b| {
-                    b.call(
-                        Func::AtomicFetchSub,
-                        &[self.node, ToNode::node(&i), v.node()],
-                        <$t>::type_(),
-                    )
-                }))
+                let self_node = self.node.get();
+                let i = i.node().get();
+                let v = v.node().get();
+                Expr::<$t>::from_node(
+                    __current_scope(|b| {
+                        b.call(Func::AtomicFetchSub, &[self_node, i, v], <$t>::type_())
+                    })
+                    .into(),
+                )
             }
             pub fn atomic_fetch_min<I: IntoIndex, V: AsExpr<Value = $t>>(
                 &self,
@@ -1968,13 +2100,15 @@ macro_rules! impl_atomic {
                 if need_runtime_check() {
                     lc_assert!(i.lt(self.len_expr()));
                 }
-                Expr::<$t>::from_node(__current_scope(|b| {
-                    b.call(
-                        Func::AtomicFetchMin,
-                        &[self.node, ToNode::node(&i), v.node()],
-                        <$t>::type_(),
-                    )
-                }))
+                let self_node = self.node.get();
+                let i = i.node().get();
+                let v = v.node().get();
+                Expr::<$t>::from_node(
+                    __current_scope(|b| {
+                        b.call(Func::AtomicFetchMin, &[self_node, i, v], <$t>::type_())
+                    })
+                    .into(),
+                )
             }
             pub fn atomic_fetch_max<I: IntoIndex, V: AsExpr<Value = $t>>(
                 &self,
@@ -1986,13 +2120,15 @@ macro_rules! impl_atomic {
                 if need_runtime_check() {
                     lc_assert!(i.lt(self.len_expr()));
                 }
-                Expr::<$t>::from_node(__current_scope(|b| {
-                    b.call(
-                        Func::AtomicFetchMax,
-                        &[self.node, ToNode::node(&i), v.node()],
-                        <$t>::type_(),
-                    )
-                }))
+                let self_node = self.node.get();
+                let i = i.node().get();
+                let v = v.node().get();
+                Expr::<$t>::from_node(
+                    __current_scope(|b| {
+                        b.call(Func::AtomicFetchMax, &[self_node, i, v], <$t>::type_())
+                    })
+                    .into(),
+                )
             }
         }
     };
@@ -2010,13 +2146,15 @@ macro_rules! impl_atomic_bit {
                 if need_runtime_check() {
                     lc_assert!(i.lt(self.len_expr()));
                 }
-                Expr::<$t>::from_node(__current_scope(|b| {
-                    b.call(
-                        Func::AtomicFetchAnd,
-                        &[self.node, ToNode::node(&i), v.node()],
-                        <$t>::type_(),
-                    )
-                }))
+                let self_node = self.node.get();
+                let i = i.node().get();
+                let v = v.node().get();
+                Expr::<$t>::from_node(
+                    __current_scope(|b| {
+                        b.call(Func::AtomicFetchAnd, &[self_node, i, v], <$t>::type_())
+                    })
+                    .into(),
+                )
             }
             pub fn atomic_fetch_or<I: IntoIndex, V: AsExpr<Value = $t>>(
                 &self,
@@ -2028,13 +2166,15 @@ macro_rules! impl_atomic_bit {
                 if need_runtime_check() {
                     lc_assert!(i.lt(self.len_expr()));
                 }
-                Expr::<$t>::from_node(__current_scope(|b| {
-                    b.call(
-                        Func::AtomicFetchOr,
-                        &[self.node, ToNode::node(&i), v.node()],
-                        <$t>::type_(),
-                    )
-                }))
+                let self_node = self.node.get();
+                let i = i.node().get();
+                let v = v.node().get();
+                Expr::<$t>::from_node(
+                    __current_scope(|b| {
+                        b.call(Func::AtomicFetchOr, &[self_node, i, v], <$t>::type_())
+                    })
+                    .into(),
+                )
             }
             pub fn atomic_fetch_xor<I: IntoIndex, V: AsExpr<Value = $t>>(
                 &self,
@@ -2046,13 +2186,15 @@ macro_rules! impl_atomic_bit {
                 if need_runtime_check() {
                     lc_assert!(i.lt(self.len_expr()));
                 }
-                Expr::<$t>::from_node(__current_scope(|b| {
-                    b.call(
-                        Func::AtomicFetchXor,
-                        &[self.node, ToNode::node(&i), v.node()],
-                        <$t>::type_(),
-                    )
-                }))
+                let self_node = self.node.get();
+                let i = i.node().get();
+                let v = v.node().get();
+                Expr::<$t>::from_node(
+                    __current_scope(|b| {
+                        b.call(Func::AtomicFetchXor, &[self_node, i, v], <$t>::type_())
+                    })
+                    .into(),
+                )
             }
         }
     };
@@ -2068,7 +2210,7 @@ impl_atomic_bit!(i32);
 impl_atomic_bit!(i64);
 #[derive(Clone)]
 pub struct Tex2dVar<T: IoTexel> {
-    pub(crate) node: NodeRef,
+    pub(crate) node: SafeNodeRef,
     #[allow(dead_code)]
     pub(crate) handle: Option<Arc<TextureHandle>>,
     pub(crate) marker: PhantomData<T>,
@@ -2078,9 +2220,7 @@ pub struct Tex2dVar<T: IoTexel> {
 
 impl<T: IoTexel> Tex2dVar<T> {
     pub fn new(view: Tex2dView<'_, T>) -> Self {
-        let node = RECORDER.with(|r| {
-            let mut r = r.borrow_mut();
-            assert!(r.lock, "Tex2dVar<T> must be created from within a kernel");
+        let node = with_recorder(|r| {
             let handle: u64 = view.tex.handle().0;
             let binding = Binding::Texture(TextureBinding {
                 handle,
@@ -2095,7 +2235,7 @@ impl<T: IoTexel> Tex2dVar<T> {
             r.capture_or_get(binding, &view.tex.handle, || {
                 Node::new(CArc::new(Instruction::Texture2D), T::RwType::type_())
             })
-        });
+        }).into();
         Self {
             node,
             handle: Some(view.tex.handle.clone()),
@@ -2104,39 +2244,33 @@ impl<T: IoTexel> Tex2dVar<T> {
         }
     }
     pub fn read(&self, uv: impl AsExpr<Value = Uint2>) -> Expr<T> {
-        let uv = uv.as_expr();
-        T::convert_from_read(Expr::<T::RwType>::from_node(__current_scope(|b| {
-            b.call(
-                Func::Texture2dRead,
-                &[self.node, uv.node()],
-                T::RwType::type_(),
-            )
-        })))
+        let uv = uv.as_expr().node().get();
+        let self_node = self.node.get();
+        T::convert_from_read(Expr::<T::RwType>::from_node(
+            __current_scope(|b| b.call(Func::Texture2dRead, &[self_node, uv], T::RwType::type_()))
+                .into(),
+        ))
     }
     pub fn write(&self, uv: impl AsExpr<Value = Uint2>, v: impl AsExpr<Value = T>) {
-        let uv = uv.as_expr();
+        let uv = uv.as_expr().node().get();
         let v = v.as_expr();
-        let v = T::convert_to_write(v);
+        let v = T::convert_to_write(v).node().get();
+        let self_node = self.node.get();
         __current_scope(|b| {
-            b.call(
-                Func::Texture2dWrite,
-                &[self.node, uv.node(), v.node()],
-                Type::void(),
-            );
+            b.call(Func::Texture2dWrite, &[self_node, uv, v], Type::void());
         })
     }
     pub fn size(&self) -> Expr<Uint2> {
-        Expr::<Uint2>::from_node(__current_scope(|b| {
-            b.call(Func::Texture2dSize, &[self.node], Uint2::type_())
-        }))
+        let self_node = self.node.get();
+        Expr::<Uint2>::from_node(
+            __current_scope(|b| b.call(Func::Texture2dSize, &[self_node], Uint2::type_())).into(),
+        )
     }
 }
 
 impl<T: IoTexel> Tex3dVar<T> {
     pub fn new(view: Tex3dView<'_, T>) -> Self {
-        let node = RECORDER.with(|r| {
-            let mut r = r.borrow_mut();
-            assert!(r.lock, "Tex3dVar<T> must be created from within a kernel");
+        let node = with_recorder(|r| {
             let handle: u64 = view.tex.handle().0;
             let binding = Binding::Texture(TextureBinding {
                 handle,
@@ -2151,7 +2285,7 @@ impl<T: IoTexel> Tex3dVar<T> {
             r.capture_or_get(binding, &view.tex.handle, || {
                 Node::new(CArc::new(Instruction::Texture3D), T::RwType::type_())
             })
-        });
+        }).into();
         Self {
             node,
             handle: Some(view.tex.handle.clone()),
@@ -2160,36 +2294,32 @@ impl<T: IoTexel> Tex3dVar<T> {
         }
     }
     pub fn read(&self, uv: impl AsExpr<Value = Uint3>) -> Expr<T> {
-        let uv = uv.as_expr();
-        T::convert_from_read(Expr::<T::RwType>::from_node(__current_scope(|b| {
-            b.call(
-                Func::Texture3dRead,
-                &[self.node, uv.node()],
-                T::RwType::type_(),
-            )
-        })))
+        let uv = uv.as_expr().node().get();
+        let self_node = self.node.get();
+        T::convert_from_read(Expr::<T::RwType>::from_node(
+            __current_scope(|b| b.call(Func::Texture3dRead, &[self_node, uv], T::RwType::type_()))
+                .into(),
+        ))
     }
     pub fn write(&self, uv: impl AsExpr<Value = Uint3>, v: impl AsExpr<Value = T>) {
-        let uv = uv.as_expr();
+        let uv = uv.as_expr().node().get();
         let v = v.as_expr();
-        let v = T::convert_to_write(v);
+        let v = T::convert_to_write(v).node().get();
+        let self_node = self.node.get();
         __current_scope(|b| {
-            b.call(
-                Func::Texture3dWrite,
-                &[self.node, uv.node(), v.node()],
-                Type::void(),
-            );
+            b.call(Func::Texture3dWrite, &[self_node, uv, v], Type::void());
         })
     }
     pub fn size(&self) -> Expr<Uint3> {
-        Expr::<Uint3>::from_node(__current_scope(|b| {
-            b.call(Func::Texture3dSize, &[self.node], Uint3::type_())
-        }))
+        let self_node = self.node.get();
+        Expr::<Uint3>::from_node(
+            __current_scope(|b| b.call(Func::Texture3dSize, &[self_node], Uint3::type_())).into(),
+        )
     }
 }
 #[derive(Clone)]
 pub struct Tex3dVar<T: IoTexel> {
-    pub(crate) node: NodeRef,
+    pub(crate) node: SafeNodeRef,
     #[allow(dead_code)]
     pub(crate) handle: Option<Arc<TextureHandle>>,
     pub(crate) marker: PhantomData<T>,

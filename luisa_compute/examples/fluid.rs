@@ -225,18 +225,6 @@ fn main() {
         }),
     );
 
-    let init_grid = Kernel::<fn()>::new_async(&device, &|| {
-        let idx = index(dispatch_id().xy());
-        u0.var().write(idx, Float2::expr(0.0f32, 0.0f32));
-        u1.var().write(idx, Float2::expr(0.0f32, 0.0f32));
-
-        rho0.var().write(idx, 0.0f32);
-        rho1.var().write(idx, 0.0f32);
-
-        p0.var().write(idx, 0.0f32);
-        p1.var().write(idx, 0.0f32);
-        div.var().write(idx, 0.0f32);
-    });
 
     let clear_pressure = Kernel::<fn()>::new_async(&device, &|| {
         let idx = index(dispatch_id().xy());

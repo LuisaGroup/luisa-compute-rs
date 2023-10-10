@@ -432,19 +432,20 @@ let a = 1.0f32.var();
 pass_by_ref.call(a);
 cpu_dbg!(*a); // prints 2.0
 ```
-***Note***: You cannot record a callable when recording another kernel or callables. This is because a callable can capture outer variables such as buffers. However, capturing local variables define in another callable is undefined behavior. To avoid this, we disallow recording a callable when recording another callable or kernel. 
+***Note***: You create callables within another callable and even capture variables from the outer callable. The only limitation is that you cannot return a callable from another callable.
 ```rust
-let add = Callable::<fn(Expr<f32>, Expr<f32>)-> Expr<f32>>::new(&device, track!(|a, b| {
-    // runtime error!
-    let another_add = Callable::<fn(Expr<f32>, Expr<f32>)-> Expr<f32>>::new(&device, track!(|a, b| {
-        a + b
-    }));
-    a + b
-}));
+let add = track!(Callable::<fn(Expr<f32>, Expr<f32>) -> Expr<f32>>::new(
+    &device,
+    |a, b| {
+        // callables can be defined within callables
+        let partial_add = Callable::<fn(Expr<f32>) -> Expr<f32>>::new(&device, |y| a + y);
+        partial_add.call(b)
+    }
+));
 ```
 
-***However, we acknowledge that recording a callable inside another callable/kernel is a useful feature***. Thus we provide two ways to workaround this limitation:
-1. Use static callables. A static callable does not capture any resources and thus can be safely recorded inside any callable/kernel. To create a static callable, use `create_static_callable(fn)`. For example,
+#### Static callables
+A static callable does not capture any resources and thus can be safely recorded inside any callable/kernel. To create a static callable, use `create_static_callable(fn)`. For example,
 ```rust
 lazy_static! {
     static ref ADD:Callable<fn(Expr<f32>, Expr<f32>)->Expr<f32>> = Callable::<fn(Expr<f32>, Expr<f32>)->Expr<f32>>::new_static(|a, b| {
@@ -454,16 +455,24 @@ lazy_static! {
 ADD.call(x, y);
 ```
 
-2. Use `DynCallable`. These are callables that defer recording until being called. As a result, it requires you to pass a `'static` closure, avoiding the capture issue. To create a `DynCallable`, use `Device::create_dyn_callable(Box::new(fn))`. The syntax is the same as `create_callable`. Furthermore, `DynCallable` supports `DynExpr` and `DynVar`, which provides some capablitiy of implementing template/overloading inside EDSL.
+#### Dynamic callables (templates)
+Use `DynCallable`. These are callables that defer recording until being called. As a result, it requires you to pass a `'static` closure, avoiding the capture issue. To create a `DynCallable`, use `Device::create_dyn_callable(Box::new(fn))`. The syntax is the same as `create_callable`. Furthermore, `DynCallable` supports `DynExpr` and `DynVar`, which provides some capablitiy of implementing template/overloading inside EDSL.
 
 ```rust
-let add = Callable::<fn(Expr<f32>, Expr<f32>)-> Expr<f32>>::new(&device, track!(|a, b| {
-    // no error!
-    let another_add = DynCallable::<fn(Expr<f32>, Expr<f32>)-> Expr<f32>>::new(&device, track!(Box::new(|a, b| {
-        a + b
-    })));
-    a + b
-}));
+let add = DynCallable::<fn(DynExpr, DynExpr) -> DynExpr>::new(
+    &device,
+    Box::new(|a: DynExpr, b: DynExpr| -> DynExpr {
+        if let Some(a) = a.downcast::<f32>() {
+            let b = b.downcast::<f32>().unwrap();
+            return DynExpr::new(track!(a + b));
+        } else if let Some(a) = a.downcast::<i32>() {
+            let b = b.downcast::<i32>().unwrap();
+            return DynExpr::new(track!(a + b));
+        } else {
+            unreachable!()
+        }
+    }),
+);
 ```
 
 ### Kernel

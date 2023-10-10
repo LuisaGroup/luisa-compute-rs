@@ -46,9 +46,9 @@ pub struct Vector<T: VectorAlign<N>, const N: usize> {
 #[derive(Copy, Clone)]
 pub struct VectorExprData<T: VectorAlign<N>, const N: usize>([Expr<T>; N]);
 impl<T: VectorAlign<N>, const N: usize> FromNode for VectorExprData<T, N> {
-    fn from_node(node: NodeRef) -> Self {
+    fn from_node(node: SafeNodeRef) -> Self {
         Self(std::array::from_fn(|i| {
-            FromNode::from_node(__extract::<T>(node, i))
+            FromNode::from_node(__extract::<T>(node.get(), i).into())
         }))
     }
 }
@@ -56,9 +56,9 @@ impl<T: VectorAlign<N>, const N: usize> FromNode for VectorExprData<T, N> {
 #[derive(Copy, Clone)]
 pub struct VectorVarData<T: VectorAlign<N>, const N: usize>([Var<T>; N]);
 impl<T: VectorAlign<N>, const N: usize> FromNode for VectorVarData<T, N> {
-    fn from_node(node: NodeRef) -> Self {
+    fn from_node(node: SafeNodeRef) -> Self {
         Self(std::array::from_fn(|i| {
-            FromNode::from_node(__extract::<T>(node, i))
+            FromNode::from_node(__extract::<T>(node.get(), i).into())
         }))
     }
 }
@@ -67,9 +67,9 @@ impl<T: VectorAlign<N>, const N: usize> FromNode for VectorVarData<T, N> {
 #[derive(Copy, Clone)]
 pub struct VectorAtomicRefData<T: VectorAlign<N>, const N: usize>([AtomicRef<T>; N]);
 impl<T: VectorAlign<N>, const N: usize> FromNode for VectorAtomicRefData<T, N> {
-    fn from_node(node: NodeRef) -> Self {
+    fn from_node(node: SafeNodeRef) -> Self {
         Self(std::array::from_fn(|i| {
-            FromNode::from_node(__extract::<T>(node, i))
+            FromNode::from_node(__extract::<T>(node.get(), i).into())
         }))
     }
 }
@@ -78,7 +78,7 @@ impl<T: VectorAlign<N>, const N: usize> FromNode for VectorAtomicRefData<T, N> {
 #[derive(Debug, Copy, Clone)]
 pub struct DoubledProxyData<X: FromNode + Copy>(X, X);
 impl<X: FromNode + Copy> FromNode for DoubledProxyData<X> {
-    fn from_node(node: NodeRef) -> Self {
+    fn from_node(node: SafeNodeRef) -> Self {
         Self(X::from_node(node), X::from_node(node))
     }
 }
@@ -161,7 +161,7 @@ macro_rules! vector_proxies {
                 let mut comp = 0;
                 $(
                     {
-                        let el = Expr::<T>::from_node(__extract::<T>(v.node(), comp));
+                        let el = Expr::<T>::from_node(__extract::<T>(v.node().get(), comp).into());
                         self.$real_c.write(i, el);
                         comp += 1;
                     }
@@ -191,7 +191,7 @@ macro_rules! vector_proxies {
         impl<T: VectorAlign<$N>> VectorExprProxy for $ExprName<T> {
             const N: usize = $N;
             type T = T;
-            fn node(&self) -> NodeRef {
+            fn node(&self) -> SafeNodeRef {
                 self.self_.node()
             }
         }

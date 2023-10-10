@@ -6,25 +6,31 @@ use std::rc::Rc;
 
 #[derive(Clone, Copy)]
 pub struct DynExpr {
+    /// we need the actuall node to be resolved here
+    /// so it must be a [`NodeRef`]
     node: NodeRef,
 }
 
 impl<V: Value> From<Expr<V>> for DynExpr {
     fn from(value: Expr<V>) -> Self {
-        Self { node: value.node() }
+        Self {
+            node: value.node().get(),
+        }
     }
 }
 
 impl<V: Value> From<Var<V>> for DynVar {
     fn from(value: Var<V>) -> Self {
-        Self { node: value.node() }
+        Self {
+            node: value.node().get(),
+        }
     }
 }
 
 impl DynExpr {
     pub fn downcast<T: Value>(&self) -> Option<Expr<T>> {
         if ir::context::is_type_equal(self.node.type_(), &T::type_()) {
-            Some(Expr::<T>::from_node(self.node))
+            Some(Expr::<T>::from_node(self.node.into()))
         } else {
             None
         }
@@ -44,7 +50,7 @@ impl DynExpr {
             length: len,
         }));
         if ir::context::is_type_equal(self.node.type_(), &array_type) {
-            Some(VLArrayExpr::<T>::from_node(self.node))
+            Some(VLArrayExpr::<T>::from_node(self.node.into()))
         } else {
             None
         }
@@ -63,7 +69,9 @@ impl DynExpr {
         })
     }
     pub fn new<V: Value>(expr: Expr<V>) -> Self {
-        Self { node: expr.node() }
+        Self {
+            node: expr.node().get(),
+        }
     }
 }
 
@@ -71,7 +79,7 @@ impl CallableParameter for DynExpr {
     fn def_param(arg: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         let arg = arg.unwrap_or_else(|| panic!("DynExpr should be used in DynCallable only!"));
         let arg = arg.downcast_ref::<Self>().unwrap();
-        let node = builder.arg(arg.node.type_().clone(), true);
+        let node = builder.arg(arg.node.type_().clone(), true).into();
         Self { node }
     }
     fn encode(&self, encoder: &mut CallableArgEncoder) {
@@ -80,60 +88,61 @@ impl CallableParameter for DynExpr {
 }
 
 impl Aggregate for DynExpr {
-    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
-        nodes.push(self.node)
+    fn to_nodes(&self, nodes: &mut Vec<SafeNodeRef>) {
+        nodes.push(self.node.into())
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = SafeNodeRef>>(iter: &mut I) -> Self {
         Self {
-            node: iter.next().unwrap(),
+            node: iter.next().unwrap().get(),
         }
     }
 }
 
 impl FromNode for DynExpr {
-    fn from_node(node: NodeRef) -> Self {
-        Self { node }
+    fn from_node(node: SafeNodeRef) -> Self {
+        Self { node: node.get() }
     }
 }
 
 impl ToNode for DynExpr {
-    fn node(&self) -> NodeRef {
-        self.node
+    fn node(&self) -> SafeNodeRef {
+        self.node.into()
     }
 }
 
 unsafe impl CallableRet for DynExpr {
     fn _return(&self) -> CArc<Type> {
+        let node = self.node;
         __current_scope(|b| {
-            b.return_(self.node);
+            b.return_(node);
         });
         self.node.type_().clone()
     }
     fn _from_return(node: NodeRef) -> Self {
-        Self::from_node(node)
+        Self::from_node(node.into())
     }
 }
 
 impl Aggregate for DynVar {
-    fn to_nodes(&self, nodes: &mut Vec<NodeRef>) {
-        nodes.push(self.node)
+    fn to_nodes(&self, nodes: &mut Vec<SafeNodeRef>) {
+        nodes.push(self.node.into())
     }
-    fn from_nodes<I: Iterator<Item = NodeRef>>(iter: &mut I) -> Self {
+    fn from_nodes<I: Iterator<Item = SafeNodeRef>>(iter: &mut I) -> Self {
         Self {
-            node: iter.next().unwrap(),
+            node: iter.next().unwrap().get(),
         }
     }
 }
 
 impl FromNode for DynVar {
-    fn from_node(node: NodeRef) -> Self {
-        Self { node }
+    fn from_node(node: SafeNodeRef) -> Self {
+        Self { node: node.get() }
     }
 }
 
 impl ToNode for DynVar {
-    fn node(&self) -> NodeRef {
-        self.node
+    fn node(&self) -> SafeNodeRef {
+        self.node.into()
     }
 }
 
@@ -146,7 +155,7 @@ impl CallableParameter for DynVar {
     fn def_param(arg: Option<Rc<dyn Any>>, builder: &mut KernelBuilder) -> Self {
         let arg = arg.unwrap_or_else(|| panic!("DynVar should be used in DynCallable only!"));
         let arg = arg.downcast_ref::<Self>().unwrap();
-        let node = builder.arg(arg.node.type_().clone(), false);
+        let node = builder.arg(arg.node.type_().clone(), false).into();
         Self { node }
     }
     fn encode(&self, encoder: &mut CallableArgEncoder) {
@@ -157,7 +166,7 @@ impl CallableParameter for DynVar {
 impl DynVar {
     pub fn downcast<T: Value>(&self) -> Option<Var<T>> {
         if ir::context::is_type_equal(self.node.type_(), &T::type_()) {
-            Some(Var::<T>::from_node(self.node))
+            Some(Var::<T>::from_node(self.node.into()))
         } else {
             None
         }
@@ -177,7 +186,7 @@ impl DynVar {
             length: len,
         }));
         if ir::context::is_type_equal(self.node.type_(), &array_type) {
-            Some(VLArrayVar::<T>::from_node(self.node))
+            Some(VLArrayVar::<T>::from_node(self.node.into()))
         } else {
             None
         }
@@ -196,15 +205,21 @@ impl DynVar {
         })
     }
     pub fn load(&self) -> DynExpr {
+        let self_node = self.node;
         DynExpr {
-            node: __current_scope(|b| b.call(Func::Load, &[self.node], self.node.type_().clone())),
+            node: __current_scope(|b| b.call(Func::Load, &[self_node], self_node.type_().clone()))
+                .into(),
         }
     }
     pub fn store(&self, value: &DynExpr) {
-        __current_scope(|b| b.update(self.node, value.node));
+        let self_node = self.node;
+        let value = value.node;
+        __current_scope(|b| b.update(self_node, value));
     }
     pub fn zero<T: Value>() -> Self {
         let v = Var::<T>::zeroed();
-        Self { node: v.node() }
+        Self {
+            node: v.node().get(),
+        }
     }
 }

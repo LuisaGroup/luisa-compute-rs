@@ -1,9 +1,8 @@
-use luisa::lang::ops::AddMaybeExpr;
+use std::cell::RefCell;
+
 use luisa::lang::types::array::VLArrayVar;
-use luisa::lang::types::core::*;
 use luisa::lang::types::dynamic::*;
 use luisa::lang::types::vector::alias::*;
-use luisa::lang::types::ExprProxy;
 use luisa::prelude::*;
 use luisa_compute as luisa;
 use luisa_compute_api_types::StreamTag;
@@ -48,7 +47,76 @@ fn event() {
     let v = a.copy_to_vec();
     assert_eq!(v[0], (1 + 3) * (4 + 5));
 }
+#[test]
+fn nested_callable_capture_by_value() {
+    let device = get_device();
+    let add = track!(Callable::<fn(Expr<f32>, Expr<f32>) -> Expr<f32>>::new(
+        &device,
+        |a, b| {
+            // callables can be defined within callables
+            let partial_add = Callable::<fn(Expr<f32>) -> Expr<f32>>::new(&device, |y| a + y);
+            partial_add.call(b)
+        }
+    ));
+    let x = device.create_buffer::<f32>(1024);
+    let y = device.create_buffer::<f32>(1024);
+    let z = device.create_buffer::<f32>(1024);
+    x.view(..).fill_fn(|i| i as f32);
+    y.view(..).fill_fn(|i| 1000.0 * i as f32);
+    let kernel = Kernel::<fn(Buffer<f32>)>::new(
+        &device,
+        &track!(|buf_z| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
 
+            buf_z.write(tid, add.call(x, y));
+        }),
+    );
+    kernel.dispatch([1024, 1, 1], &z);
+    let z_data = z.view(..).copy_to_vec();
+    for i in 0..x.len() {
+        assert_eq!(z_data[i], (i as f32 + 1000.0 * i as f32));
+    }
+}
+#[test]
+fn nested_callable_capture_by_ref() {
+    let device = get_device();
+    let add = track!(Callable::<fn(Expr<f32>, Expr<f32>) -> Expr<f32>>::new(
+        &device,
+        |a, b| {
+            let ret = a.var();
+            // callables can be defined within callables
+            let partial_add = Callable::<fn(Expr<f32>)>::new(&device, |y| *ret += y);
+            partial_add.call(b);
+            **ret
+        }
+    ));
+    let x = device.create_buffer::<f32>(1024);
+    let y = device.create_buffer::<f32>(1024);
+    let z = device.create_buffer::<f32>(1024);
+    x.view(..).fill_fn(|i| i as f32);
+    y.view(..).fill_fn(|i| 1000.0 * i as f32);
+    let kernel = Kernel::<fn(Buffer<f32>)>::new(
+        &device,
+        &track!(|buf_z| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+
+            buf_z.write(tid, add.call(x, y));
+        }),
+    );
+    kernel.dispatch([1024, 1, 1], &z);
+    let z_data = z.view(..).copy_to_vec();
+    for i in 0..x.len() {
+        assert_eq!(z_data[i], (i as f32 + 1000.0 * i as f32));
+    }
+}
 #[test]
 #[should_panic]
 fn callable_different_device() {
@@ -105,6 +173,23 @@ fn callable_return_void_mismatch() {
                 return true.expr();
             }
             *x = -x;
+        }),
+    );
+}
+#[test]
+#[should_panic]
+fn callable_illegall_sharing() {
+    let device = get_device();
+    let tid = RefCell::new(None);
+    Kernel::<fn()>::new(&device, &|| {
+        let i = dispatch_id().x;
+        *tid.borrow_mut() = Some(i);
+    });
+    Kernel::<fn()>::new(
+        &device,
+        &track!(|| {
+            let tid = tid.borrow().unwrap();
+            let _i = dispatch_id().x + tid;
         }),
     );
 }
@@ -1013,6 +1098,7 @@ fn byte_buffer() {
 }
 
 #[test]
+#[allow(unused_assignments)]
 fn bindless_byte_buffer() {
     let device = get_device();
     let buf = device.create_byte_buffer(1024);
@@ -1031,6 +1117,7 @@ fn bindless_byte_buffer() {
             let view = buf.view(cnt..cnt + s);
             let bytes = unsafe { std::slice::from_raw_parts(&$v as *const $t as *const u8, s) };
             view.copy_from(bytes);
+
             cnt += s;
             old
         }};
@@ -1229,7 +1316,7 @@ fn soa_view() {
     let bars_soa = device.create_soa_buffer::<Bar>(2048);
     bars_soa.view(..1024).copy_from_buffer(&bars);
     bars_soa.view(1024..2048).copy_from_buffer(&bars);
-    
+
     let also_bars = device.create_buffer(1024);
     bars_soa.view(..1024).copy_to_buffer(&also_bars);
     let bars_data = bars.view(..).copy_to_vec();

@@ -1,4 +1,4 @@
-use crate::lang::soa::SoaMetadata;
+use crate::lang::{pop_recorder, push_recorder, soa::SoaMetadata};
 
 use super::*;
 
@@ -188,18 +188,18 @@ impl_kernel_param_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T
 impl KernelBuilder {
     pub fn new(device: Option<crate::runtime::Device>, is_kernel: bool) -> Self {
         RECORDER.with(|r| {
-            let mut r = r.borrow_mut();
-            assert!(!r.lock, "Cannot record multiple kernels at the same time");
-            assert!(
-                r.scopes.is_empty(),
-                "Cannot record multiple kernels at the same time"
-            );
-            r.lock = true;
+            let r = r.borrow();
+            if is_kernel {
+                assert!(r.is_none(), "Cannot record a kernel inside another kernel");
+            }
+        });
+        push_recorder();
+        with_recorder(|r| {
             r.device = device.as_ref().map(|d| WeakDevice::new(d));
-            r.pools = Some(CArc::new(ModulePools::new()));
+            r.pools = CArc::new(ModulePools::new());
             r.scopes.clear();
             r.building_kernel = is_kernel;
-            let pools = r.pools.clone().unwrap();
+            let pools = r.pools.clone();
             r.scopes.push(IrBuilder::new(pools));
         });
         Self {
@@ -217,11 +217,11 @@ impl KernelBuilder {
     }
     pub fn value<T: Value>(&mut self) -> Expr<T> {
         let node = self.arg(T::type_(), true);
-        FromNode::from_node(node)
+        FromNode::from_node(node.into())
     }
     pub fn var<T: Value>(&mut self) -> Var<T> {
         let node = self.arg(T::type_(), false);
-        FromNode::from_node(node)
+        FromNode::from_node(node.into())
     }
     pub fn uniform<T: Value>(&mut self) -> Expr<T> {
         let node = new_node(
@@ -229,7 +229,7 @@ impl KernelBuilder {
             Node::new(CArc::new(Instruction::Uniform), T::type_()),
         );
         self.args.push(node);
-        FromNode::from_node(node)
+        FromNode::from_node(node.into())
     }
     // pub fn byte_buffer(&mut self) -> ByteBufferVar {
     //     let node = new_node(
@@ -246,7 +246,7 @@ impl KernelBuilder {
         );
         self.args.push(node);
         BufferVar {
-            node,
+            node: node.into(),
             marker: PhantomData,
             handle: None,
         }
@@ -254,8 +254,8 @@ impl KernelBuilder {
     pub fn soa_buffer<T: SoaValue>(&mut self) -> SoaBufferVar<T> {
         let storage = self.buffer::<u8>();
         let metadata = self.buffer::<SoaMetadata>();
-        SoaBufferVar{
-            proxy: T::SoaBuffer::from_soa_storage(storage, metadata.read(0), 0)
+        SoaBufferVar {
+            proxy: T::SoaBuffer::from_soa_storage(storage, metadata.read(0), 0),
         }
     }
     pub fn tex2d<T: IoTexel>(&mut self) -> Tex2dVar<T> {
@@ -265,7 +265,7 @@ impl KernelBuilder {
         );
         self.args.push(node);
         Tex2dVar {
-            node,
+            node: node.into(),
             marker: PhantomData,
             handle: None,
             level: None,
@@ -278,7 +278,7 @@ impl KernelBuilder {
         );
         self.args.push(node);
         Tex3dVar {
-            node,
+            node: node.into(),
             marker: PhantomData,
             handle: None,
             level: None,
@@ -290,7 +290,10 @@ impl KernelBuilder {
             Node::new(CArc::new(Instruction::Bindless), Type::void()),
         );
         self.args.push(node);
-        BindlessArrayVar { node, handle: None }
+        BindlessArrayVar {
+            node: node.into(),
+            handle: None,
+        }
     }
     pub fn accel(&mut self) -> rtx::AccelVar {
         let node = new_node(
@@ -298,12 +301,14 @@ impl KernelBuilder {
             Node::new(CArc::new(Instruction::Accel), Type::void()),
         );
         self.args.push(node);
-        rtx::AccelVar { node, handle: None }
+        rtx::AccelVar {
+            node: node.into(),
+            handle: None,
+        }
     }
     fn collect_module_info(&self) -> (ResourceTracker, Vec<CArc<CpuCustomOp>>, Vec<Capture>) {
-        RECORDER.with(|r| {
+        with_recorder(|r| {
             let mut resource_tracker = ResourceTracker::new();
-            let r = r.borrow_mut();
             let mut captured: Vec<Capture> = Vec::new();
             let mut captured_resources: Vec<_> = r.captured_resources.values().cloned().collect();
             captured_resources.sort_by_key(|(i, _, _, _)| *i);
@@ -362,10 +367,7 @@ impl KernelBuilder {
         let ret = body(self);
         let ret_type = ret._return();
         let (rt, cpu_custom_ops, captures) = self.collect_module_info();
-        RECORDER.with(|r| {
-            let mut r = r.borrow_mut();
-            assert!(r.lock);
-            r.lock = false;
+        let ret = with_recorder(|r| {
             if let Some(t) = &r.callable_ret_type {
                 assert!(
                     luisa_compute_ir::context::is_type_equal(t, &ret_type),
@@ -380,27 +382,38 @@ impl KernelBuilder {
             let ir_module = Module {
                 entry,
                 kind: ModuleKind::Kernel,
-                pools: r.pools.clone().unwrap(),
+                pools: r.pools.clone(),
                 flags: ModuleFlags::REQUIRES_REV_AD_TRANSFORM
                     | ModuleFlags::REQUIRES_FWD_AD_TRANSFORM,
             };
             let ir_module = luisa_compute_ir::transform::luisa_compute_ir_transform_auto(ir_module);
+
+            let mut args = self.args.clone();
+            args.extend(r.captured_vars.values().map(|x| unsafe { x.get_raw() }));
+
             let module = CallableModule {
                 module: ir_module,
                 ret_type,
                 cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),
                 captures: CBoxedSlice::new(captures),
-                args: CBoxedSlice::new(self.args.clone()),
-                pools: r.pools.clone().unwrap(),
+                args: CBoxedSlice::new(args.clone()),
+                pools: r.pools.clone(),
             };
             let module = CallableModuleRef(CArc::new(module));
-            r.reset();
+
             RawCallable {
                 device: self.device.clone(),
                 module,
                 resource_tracker: rt,
+                captured_args: r
+                    .captured_vars
+                    .keys()
+                    .map(|x| unsafe { x.get_raw() })
+                    .collect(),
             }
-        })
+        });
+        pop_recorder();
+        ret
     }
 
     /// Don't use this directly
@@ -412,18 +425,15 @@ impl KernelBuilder {
     ) -> crate::runtime::KernelDef<S> {
         body(self);
         let (rt, cpu_custom_ops, captures) = self.collect_module_info();
-        RECORDER.with(|r| -> crate::runtime::KernelDef<S> {
-            let mut r = r.borrow_mut();
-            assert!(r.lock);
-            r.lock = false;
+        let ret = with_recorder(|r| {
             assert_eq!(r.scopes.len(), 1);
             let scope = r.scopes.pop().unwrap();
             let entry = scope.finish();
-
+            assert!(r.captured_vars.is_empty());
             let ir_module = Module {
                 entry,
                 kind: ModuleKind::Kernel,
-                pools: r.pools.clone().unwrap(),
+                pools: r.pools.clone(),
                 flags: ModuleFlags::REQUIRES_REV_AD_TRANSFORM
                     | ModuleFlags::REQUIRES_FWD_AD_TRANSFORM,
             };
@@ -435,9 +445,8 @@ impl KernelBuilder {
                 shared: CBoxedSlice::new(r.shared.clone()),
                 args: CBoxedSlice::new(self.args.clone()),
                 block_size: r.block_size.unwrap_or([64, 1, 1]),
-                pools: r.pools.clone().unwrap(),
+                pools: r.pools.clone(),
             };
-            r.reset();
 
             KernelDef {
                 inner: RawKernelDef {
@@ -447,7 +456,9 @@ impl KernelBuilder {
                 },
                 _marker: PhantomData,
             }
-        })
+        });
+        pop_recorder();
+        ret
     }
 }
 
@@ -507,13 +518,14 @@ unsafe impl CallableRet for () {
 
 unsafe impl<V: Value> CallableRet for Expr<V> {
     fn _return(&self) -> CArc<Type> {
+        let ret = self.node().get();
         __current_scope(|b| {
-            b.return_(self.node());
+            b.return_(ret);
         });
         V::type_()
     }
     fn _from_return(node: NodeRef) -> Self {
-        Self::from_node(node)
+        Self::from_node(node.into())
     }
 }
 
@@ -528,7 +540,10 @@ macro_rules! impl_callable {
          }
         impl<R:CallableRet +'static, $($Ts: CallableParameter +'static),*> Callable<fn($($Ts,)*)->R> {
             pub fn new<F:Fn($($Ts,)*)->R>(device: &Device, f:F)->Self where F:CallableBuildFn<fn($($Ts,)*)->R> {
-                let mut builder = KernelBuilder::new(Some(device.clone()), false);
+                Self::new_maybe_device(Some(device.clone()), f)
+            }
+            pub fn new_maybe_device<F:Fn($($Ts,)*)->R>(device: Option<Device>, f:F)->Self where F:CallableBuildFn<fn($($Ts,)*)->R> {
+                let mut builder = KernelBuilder::new(device, false);
                 let raw_callable = CallableBuildFn::build_callable(&f, None, &mut builder);
                 Self{
                     inner: raw_callable,
@@ -538,12 +553,13 @@ macro_rules! impl_callable {
             pub fn new_static(f:fn($($Ts,)*)->R)->Self  where fn($($Ts,)*)->R :CallableBuildFn<fn($($Ts,)*)->R> {
                 let r_backup = RECORDER.with(|r| {
                     let mut r = r.borrow_mut();
-                    std::mem::replace(&mut *r, Recorder::new())
+                    std::mem::replace(&mut *r, Some(Rc::new(RefCell::new(FnRecorder::new()))))
                 });
                 let mut builder = KernelBuilder::new(None, false);
                 let raw_callable = CallableBuildFn::build_callable(&f, None, &mut builder);
                 RECORDER.with(|r| {
-                    *r.borrow_mut() = r_backup;
+                    let mut r = r.borrow_mut();
+                    *r = r_backup;
                 });
                 Self{
                     inner: raw_callable,

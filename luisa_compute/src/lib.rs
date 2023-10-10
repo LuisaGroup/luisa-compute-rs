@@ -36,7 +36,7 @@ pub mod prelude {
     pub use crate::lang::types::vector::swizzle::*;
     pub use crate::lang::types::vector::VectorExprProxy;
     pub use crate::lang::types::{AsExpr, Expr, SoaValue, Value, Var};
-    pub use crate::lang::Aggregate;
+    pub use crate::lang::{outline, Aggregate};
     pub use crate::resource::{IoTexel, StorageTexel, *};
     pub use crate::runtime::api::StreamTag;
     pub use crate::runtime::{
@@ -64,9 +64,9 @@ mod internal_prelude {
     pub(crate) use crate::lang::types::{vector::*, SoaBufferProxy};
     #[allow(unused_imports)]
     pub(crate) use crate::lang::{
-        check_index_lt_usize, ir, CallFuncTrait, Recorder, __compose, __extract, __insert,
-        __module_pools, need_runtime_check, FromNode, NodeLike, NodeRef, ToNode, __current_scope,
-        __pop_scope, RECORDER,
+        check_index_lt_usize, ir, CallFuncTrait, FnRecorder, SafeNodeRef, __compose, __extract,
+        __insert, __module_pools, need_runtime_check, FromNode, NodeLike, NodeRef, ToNode,
+        __current_scope, __pop_scope, with_recorder, RECORDER,
     };
     pub(crate) use crate::prelude::*;
     pub(crate) use crate::runtime::{

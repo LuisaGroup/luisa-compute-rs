@@ -5,15 +5,15 @@ use ir::ArrayType;
 
 pub struct Shared<T: Value> {
     marker: PhantomData<T>,
-    node: NodeRef,
+    node: SafeNodeRef,
 }
 impl<T: Value> Shared<T> {
     pub fn new(length: usize) -> Self {
         Self {
             marker: PhantomData,
-            node: __current_scope(|b| {
+            node: with_recorder(|r| {
                 let shared = new_node(
-                    b.pools(),
+                    &r.pools,
                     Node::new(
                         CArc::new(Instruction::Shared),
                         ir::context::register_type(Type::Array(ArrayType {
@@ -21,23 +21,22 @@ impl<T: Value> Shared<T> {
                             length,
                         })),
                     ),
-                );
-                RECORDER.with(|r| {
-                    let mut r = r.borrow_mut();
-                    r.shared.push(shared);
-                });
-                shared
+                )
+                .into();
+
+                r.shared.push(shared);
+                shared.into()
             }),
         }
     }
-    pub fn len(&self) -> Expr<u64> {
-        match self.node.type_().as_ref() {
+    pub fn len_expr(&self) -> Expr<u64> {
+        match self.node.get().type_().as_ref() {
             Type::Array(ArrayType { element: _, length }) => (*length as u64).expr(),
             _ => unreachable!(),
         }
     }
-    pub fn static_len(&self) -> usize {
-        match self.node.type_().as_ref() {
+    pub fn len(&self) -> usize {
+        match self.node.get().type_().as_ref() {
             Type::Array(ArrayType { element: _, length }) => *length,
             _ => unreachable!(),
         }
@@ -47,22 +46,27 @@ impl<T: Value> Shared<T> {
         let value = value.into();
 
         if need_runtime_check() {
-            lc_assert!(i.lt(self.len()), "VLArrayVar::read out of bounds");
+            check_index_lt_usize(i, self.len());
         }
-
+        let i = i.node().get();
+        let value = value.node().get();
+        let self_node = self.node.get();
         __current_scope(|b| {
-            let gep = b.call(Func::GetElementPtr, &[self.node, i.node()], T::type_());
-            b.update(gep, value.node());
+            let gep = b.call(Func::GetElementPtr, &[self_node, i], T::type_());
+            b.update(gep, value);
         });
     }
     pub fn load(&self) -> VLArrayExpr<T> {
-        VLArrayExpr::from_node(__current_scope(|b| {
-            b.call(Func::Load, &[self.node], self.node.type_().clone())
-        }))
+        let self_node = self.node.get();
+        VLArrayExpr::from_node(
+            __current_scope(|b| b.call(Func::Load, &[self_node], self_node.type_().clone())).into(),
+        )
     }
     pub fn store(&self, value: VLArrayExpr<T>) {
+        let self_node = self.node.get();
+        let value = value.node().get();
         __current_scope(|b| {
-            b.update(self.node, value.node);
+            b.update(self_node, value);
         });
     }
 }

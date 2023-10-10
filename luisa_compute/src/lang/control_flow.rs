@@ -52,30 +52,29 @@ pub fn continue_() {
 }
 
 pub fn return_v<T: NodeLike>(v: T) {
-    RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
+    let v = v.node().get();
+    with_recorder(|r| {
         if r.building_kernel {
             panic!("cannot return value from kernel!");
         }
         if r.callable_ret_type.is_none() {
-            r.callable_ret_type = Some(v.node().type_().clone());
+            r.callable_ret_type = Some(v.type_().clone());
         } else {
             assert!(
                 luisa_compute_ir::context::is_type_equal(
                     r.callable_ret_type.as_ref().unwrap(),
-                    v.node().type_()
+                    v.type_()
                 ),
                 "return type mismatch"
             );
         }
     });
     __current_scope(|b| {
-        b.return_(v.node());
+        b.return_(v);
     });
 }
 pub fn return_() {
-    RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
+    with_recorder(|r| {
         if !r.building_kernel {
             if r.callable_ret_type.is_none() {
                 r.callable_ret_type = Some(Type::void());
@@ -97,61 +96,73 @@ pub fn if_then_else<R: Aggregate>(
     then: impl Fn() -> R,
     else_: impl Fn() -> R,
 ) -> R {
-    let cond = cond.node();
-    RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
-        let pools = r.pools.clone().unwrap();
+    let cond = cond.node().get();
+    with_recorder(|r| {
+        let pools = r.pools.clone();
         let s = &mut r.scopes;
         s.push(IrBuilder::new(pools));
     });
     let then = then();
-    let then_block = RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
-        let pools = r.pools.clone().unwrap();
+    let then_nodes = then
+        .to_vec_nodes()
+        .into_iter()
+        .map(|x| x.get())
+        .collect::<Vec<_>>();
+    let then_block = with_recorder(|r| {
+        let pools = r.pools.clone();
         let s = &mut r.scopes;
         let then_block = s.pop().unwrap().finish();
         s.push(IrBuilder::new(pools));
         then_block
     });
     let else_ = else_();
-    let else_block = RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
+    let else_nodes = else_
+        .to_vec_nodes()
+        .into_iter()
+        .map(|x| x.get())
+        .collect::<Vec<_>>();
+    let else_block = with_recorder(|r| {
         let s = &mut r.scopes;
         s.pop().unwrap().finish()
     });
-    let then_nodes = then.to_vec_nodes();
-    let else_nodes = else_.to_vec_nodes();
     __current_scope(|b| {
         b.if_(cond, then_block, else_block);
     });
     assert_eq!(then_nodes.len(), else_nodes.len());
-    let phis = __current_scope(|b| {
-        then_nodes
-            .iter()
-            .zip(else_nodes.iter())
-            .map(|(then, else_)| {
-                let incomings = vec![
-                    PhiIncoming {
-                        value: *then,
-                        block: then_block,
-                    },
-                    PhiIncoming {
-                        value: *else_,
-                        block: else_block,
-                    },
-                ];
-                assert_eq!(then.type_(), else_.type_());
-                let phi = b.phi(&incomings, then.type_().clone());
-                phi
-            })
-            .collect::<Vec<_>>()
-    });
+    let phis = then_nodes
+        .iter()
+        .zip(else_nodes.iter())
+        .map(|(then, else_)| {
+            let incomings = vec![
+                PhiIncoming {
+                    value: *then,
+                    block: then_block,
+                },
+                PhiIncoming {
+                    value: *else_,
+                    block: else_block,
+                },
+            ];
+            assert_eq!(then.type_(), else_.type_());
+            let phi = __current_scope(|b| b.phi(&incomings, then.type_().clone()));
+            phi.into()
+        })
+        .collect::<Vec<_>>();
     R::from_vec_nodes(phis)
 }
 
 pub fn select<A: Aggregate>(mask: Expr<bool>, a: A, b: A) -> A {
-    let a_nodes = a.to_vec_nodes();
-    let b_nodes = b.to_vec_nodes();
+    let a_nodes = a
+        .to_vec_nodes()
+        .into_iter()
+        .map(|x| x.get())
+        .collect::<Vec<_>>();
+    let b_nodes = b
+        .to_vec_nodes()
+        .into_iter()
+        .map(|x| x.get())
+        .collect::<Vec<_>>();
+    let mask = mask.node().get();
     assert_eq!(a_nodes.len(), b_nodes.len());
     let mut ret = vec![];
     __current_scope(|b| {
@@ -173,12 +184,13 @@ pub fn select<A: Aggregate>(mask: Expr<bool>, a: A, b: A) -> A {
             } else {
                 ret.push(b.call(
                     Func::Select,
-                    &[mask.node(), a_node, b_node],
+                    &[mask, a_node, b_node],
                     a_node.type_().clone(),
                 ));
             }
         }
     });
+    let ret = ret.into_iter().map(|x| x.into()).collect::<Vec<_>>();
     A::from_vec_nodes(ret)
 }
 
@@ -187,33 +199,29 @@ pub fn generic_loop(
     mut body: impl FnMut(),
     mut update: impl FnMut(),
 ) {
-    RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
-        let pools = r.pools.clone().unwrap();
+    with_recorder(|r| {
+        let pools = r.pools.clone();
         let s = &mut r.scopes;
         s.push(IrBuilder::new(pools));
     });
-    let cond_v = cond().node();
-    let prepare = RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
-        let pools = r.pools.clone().unwrap();
+    let cond_v = cond().node().get();
+    let prepare = with_recorder(|r| {
+        let pools = r.pools.clone();
         let s = &mut r.scopes;
         let prepare = s.pop().unwrap().finish();
         s.push(IrBuilder::new(pools));
         prepare
     });
     body();
-    let body = RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
-        let pools = r.pools.clone().unwrap();
+    let body = with_recorder(|r| {
+        let pools = r.pools.clone();
         let s = &mut r.scopes;
         let body = s.pop().unwrap().finish();
         s.push(IrBuilder::new(pools));
         body
     });
     update();
-    let update = RECORDER.with(|r| {
-        let mut r = r.borrow_mut();
+    let update = with_recorder(|r| {
         let s = &mut r.scopes;
         s.pop().unwrap().finish()
     });
@@ -224,18 +232,18 @@ pub fn generic_loop(
 
 pub trait ForLoopRange {
     type Element: Value;
-    fn start(&self) -> NodeRef;
-    fn end(&self) -> NodeRef;
+    fn start(&self) -> SafeNodeRef;
+    fn end(&self) -> SafeNodeRef;
     fn end_inclusive(&self) -> bool;
 }
 macro_rules! impl_range {
     ($t:ty) => {
         impl ForLoopRange for std::ops::RangeInclusive<$t> {
             type Element = $t;
-            fn start(&self) -> NodeRef {
+            fn start(&self) -> SafeNodeRef {
                 (*self.start()).expr().node()
             }
-            fn end(&self) -> NodeRef {
+            fn end(&self) -> SafeNodeRef {
                 (*self.end()).expr().node()
             }
             fn end_inclusive(&self) -> bool {
@@ -244,10 +252,10 @@ macro_rules! impl_range {
         }
         impl ForLoopRange for std::ops::RangeInclusive<Expr<$t>> {
             type Element = $t;
-            fn start(&self) -> NodeRef {
+            fn start(&self) -> SafeNodeRef {
                 self.start().node()
             }
-            fn end(&self) -> NodeRef {
+            fn end(&self) -> SafeNodeRef {
                 self.end().node()
             }
             fn end_inclusive(&self) -> bool {
@@ -256,10 +264,10 @@ macro_rules! impl_range {
         }
         impl ForLoopRange for std::ops::Range<$t> {
             type Element = $t;
-            fn start(&self) -> NodeRef {
+            fn start(&self) -> SafeNodeRef {
                 (self.start).expr().node()
             }
-            fn end(&self) -> NodeRef {
+            fn end(&self) -> SafeNodeRef {
                 (self.end).expr().node()
             }
             fn end_inclusive(&self) -> bool {
@@ -268,10 +276,10 @@ macro_rules! impl_range {
         }
         impl ForLoopRange for std::ops::Range<Expr<$t>> {
             type Element = $t;
-            fn start(&self) -> NodeRef {
+            fn start(&self) -> SafeNodeRef {
                 self.start.node()
             }
-            fn end(&self) -> NodeRef {
+            fn end(&self) -> SafeNodeRef {
                 self.end.node()
             }
             fn end_inclusive(&self) -> bool {
@@ -298,8 +306,8 @@ pub fn for_unrolled<I: IntoIterator>(iter: I, body: impl Fn(I::Item)) {
 }
 
 pub fn for_range<R: ForLoopRange>(r: R, body: impl Fn(Expr<R::Element>)) {
-    let start = r.start();
-    let end = r.end();
+    let start = r.start().get();
+    let end = r.end().get();
     let inc = |v: NodeRef| {
         __current_scope(|b| {
             let one = b.const_(Const::One(v.type_().clone()));
@@ -309,22 +317,25 @@ pub fn for_range<R: ForLoopRange>(r: R, body: impl Fn(Expr<R::Element>)) {
     let i = __current_scope(|b| b.local(start));
     generic_loop(
         || {
-            Expr::<bool>::from_node(__current_scope(|b| {
-                let i = b.call(Func::Load, &[i], i.type_().clone());
-                b.call(
-                    if r.end_inclusive() {
-                        Func::Le
-                    } else {
-                        Func::Lt
-                    },
-                    &[i, end],
-                    <bool as TypeOf>::type_(),
-                )
-            }))
+            Expr::<bool>::from_node(
+                __current_scope(|b| {
+                    let i = b.call(Func::Load, &[i], i.type_().clone());
+                    b.call(
+                        if r.end_inclusive() {
+                            Func::Le
+                        } else {
+                            Func::Lt
+                        },
+                        &[i, end],
+                        <bool as TypeOf>::type_(),
+                    )
+                })
+                .into(),
+            )
         },
         move || {
             let i = __current_scope(|b| b.call(Func::Load, &[i], i.type_().clone()));
-            body(Expr::<R::Element>::from_node(i));
+            body(Expr::<R::Element>::from_node(i.into()));
         },
         || {
             let i_old = __current_scope(|b| b.call(Func::Load, &[i], i.type_().clone()));
@@ -351,40 +362,37 @@ impl<R: Aggregate> SwitchBuilder<R> {
         SwitchBuilder {
             cases: vec![],
             default: None,
-            value: node.node(),
+            value: node.node().get(),
             _marker: PhantomData,
-            depth: RECORDER.with(|r| r.borrow().scopes.len()),
+            depth: with_recorder(|r| r.scopes.len()),
         }
     }
     pub fn case(mut self, value: i32, then: impl Fn() -> R) -> Self {
-        RECORDER.with(|r| {
-            let mut r = r.borrow_mut();
-            let pools = r.pools.clone().unwrap();
+        with_recorder(|r| {
+            let pools = r.pools.clone();
             let s = &mut r.scopes;
             assert_eq!(s.len(), self.depth);
             s.push(IrBuilder::new(pools));
         });
-        let then = then();
+        let then = then().to_vec_nodes().into_iter().map(|x| x.get()).collect();
         let block = __pop_scope();
-        self.cases.push((value, block, then.to_vec_nodes()));
+        self.cases.push((value, block, then));
         self
     }
     pub fn default(mut self, then: impl Fn() -> R) -> Self {
-        RECORDER.with(|r| {
-            let mut r = r.borrow_mut();
-            let pools = r.pools.clone().unwrap();
+        with_recorder(|r| {
+            let pools = r.pools.clone();
             let s = &mut r.scopes;
             assert_eq!(s.len(), self.depth);
             s.push(IrBuilder::new(pools));
         });
-        let then = then();
+        let then = then().to_vec_nodes().into_iter().map(|x| x.get()).collect();
         let block = __pop_scope();
-        self.default = Some((block, then.to_vec_nodes()));
+        self.default = Some((block, then));
         self
     }
     pub fn finish(self) -> R {
-        RECORDER.with(|r| {
-            let mut r = r.borrow_mut();
+        with_recorder(|r| {
             let s = &mut r.scopes;
             assert_eq!(s.len(), self.depth);
         });
@@ -404,9 +412,8 @@ impl<R: Aggregate> SwitchBuilder<R> {
         let phi_count = case_phis[0].len();
         let mut default_nodes = vec![];
         let default_block = if self.default.is_none() {
-            RECORDER.with(|r| {
-                let mut r = r.borrow_mut();
-                let pools = r.pools.clone().unwrap();
+            with_recorder(|r| {
+                let pools = r.pools.clone();
                 let s = &mut r.scopes;
                 assert_eq!(s.len(), self.depth);
                 s.push(IrBuilder::new(pools));
@@ -446,6 +453,7 @@ impl<R: Aggregate> SwitchBuilder<R> {
             let phi = __current_scope(|b| b.phi(&incomings, case_phis[0][i].type_().clone()));
             phis.push(phi);
         }
+        let phis = phis.into_iter().map(|x| x.into()).collect::<Vec<_>>();
         R::from_vec_nodes(phis)
     }
 }

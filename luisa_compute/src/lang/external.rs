@@ -31,9 +31,7 @@ impl<T: Value> CpuFn<T> {
         }
     }
     pub fn call(&self, arg: impl AsExpr<Value = T>) -> Expr<T> {
-        RECORDER.with(|r| {
-            let mut r = r.borrow_mut();
-            assert!(r.lock);
+        with_recorder(|r| {
             assert_eq!(
                 r.device
                     .as_ref()
@@ -54,13 +52,14 @@ impl<T: Value> CpuFn<T> {
                 r.cpu_custom_ops.insert(addr, (i, self.op.clone()));
             }
         });
+        let arg = arg.as_expr().node().get();
         Expr::<T>::from_node(__current_scope(|b| {
             b.call(
                 Func::CpuCustomOp(self.op.clone()),
-                &[arg.as_expr().node()],
+                &[arg],
                 T::type_(),
             )
-        }))
+        }).into())
     }
 }
 

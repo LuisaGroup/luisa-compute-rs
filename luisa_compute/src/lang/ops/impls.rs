@@ -224,10 +224,14 @@ where
         self.clone().mul(self.clone()).mul(self.clone())
     }
     fn recip(&self) -> Self {
-        <Self as FromNode>::from_node(__current_scope(|b| {
-            let one = b.const_(Const::One(<X as TypeOf>::type_()));
-            b.call(Func::Div, &[one, self.node()], <X as TypeOf>::type_())
-        }))
+        let self_node = self.node().get();
+        <Self as FromNode>::from_node(
+            __current_scope(|b| {
+                let one = b.const_(Const::One(<X as TypeOf>::type_()));
+                b.call(Func::Div, &[one, self_node], <X as TypeOf>::type_())
+            })
+            .into(),
+        )
     }
     fn sin_cos(&self) -> (Self, Self) {
         (self.sin(), self.cos())

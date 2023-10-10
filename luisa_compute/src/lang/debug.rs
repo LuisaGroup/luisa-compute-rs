@@ -3,6 +3,8 @@ use std::fmt::Debug;
 
 use crate::internal_prelude::*;
 
+use super::with_recorder;
+
 #[macro_export]
 macro_rules! cpu_dbg {
     ($arg:expr) => {{
@@ -41,8 +43,7 @@ pub fn __cpu_dbg<V: Value + Debug>(arg: Expr<V>, file: &'static str, line: u32) 
 }
 
 pub fn is_cpu_backend() -> bool {
-    RECORDER.with(|r| {
-        let r = r.borrow();
+    with_recorder(|r| {
         if r.device.is_none() {
             return false;
         }
@@ -125,12 +126,13 @@ pub fn __assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, c
             msg, pretty_filename, line, col
         )
     };
+    let cond = cond.node().get();
     __current_scope(|b| {
         b.call(
             Func::Assert(CBoxedSlice::new(
                 CString::new(msg).unwrap().into_bytes_with_nul(),
             )),
-            &[cond.node()],
+            &[cond],
             Type::void(),
         );
     });

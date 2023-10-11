@@ -281,7 +281,7 @@ impl Device {
                 handle: api::BindlessArray(array.handle),
                 native_handle: array.native_handle,
             }),
-            modifications: RefCell::new(Vec::new()),
+            modifications: RefCell::new(HashMap::new()),
             slots: RefCell::new(vec![
                 BindlessArraySlot {
                     buffer: None,

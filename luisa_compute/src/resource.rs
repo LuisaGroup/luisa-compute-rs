@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::fmt;
 use std::ops::RangeBounds;
 use std::process::abort;
@@ -601,7 +602,7 @@ impl<T: Value> BufferHeapVar<T> {
 pub struct BindlessArray {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BindlessArrayHandle>,
-    pub(crate) modifications: RefCell<Vec<api::BindlessArrayUpdateModification>>,
+    pub(crate) modifications: RefCell<HashMap<usize, api::BindlessArrayUpdateModification>>,
     pub(crate) slots: RefCell<Vec<BindlessArraySlot>>,
     pub(crate) lock: Arc<RawMutex>,
 }
@@ -657,16 +658,18 @@ impl BindlessArray {
         self.lock();
         self.modifications
             .borrow_mut()
-            .push(api::BindlessArrayUpdateModification {
+            .entry(index)
+            .or_insert(api::BindlessArrayUpdateModification {
                 slot: index,
-                buffer: api::BindlessArrayUpdateBuffer {
-                    op: api::BindlessArrayUpdateOperation::Emplace,
-                    handle: bufferview.handle(),
-                    offset: bufferview.offset,
-                },
-                tex2d: api::BindlessArrayUpdateTexture::default(),
-                tex3d: api::BindlessArrayUpdateTexture::default(),
-            });
+                buffer: Default::default(),
+                tex2d: Default::default(),
+                tex3d: Default::default(),
+            })
+            .buffer = api::BindlessArrayUpdateBuffer {
+            op: api::BindlessArrayUpdateOperation::Emplace,
+            handle: bufferview.handle(),
+            offset: bufferview.offset,
+        };
         let mut slots = self.slots.borrow_mut();
         slots[index].buffer = Some(bufferview.buffer.handle.clone());
         self.unlock();
@@ -680,16 +683,18 @@ impl BindlessArray {
         self.lock();
         self.modifications
             .borrow_mut()
-            .push(api::BindlessArrayUpdateModification {
+            .entry(index)
+            .or_insert(api::BindlessArrayUpdateModification {
                 slot: index,
-                buffer: api::BindlessArrayUpdateBuffer::default(),
-                tex2d: api::BindlessArrayUpdateTexture {
-                    op: api::BindlessArrayUpdateOperation::Emplace,
-                    handle: texture.handle(),
-                    sampler,
-                },
-                tex3d: api::BindlessArrayUpdateTexture::default(),
-            });
+                buffer: Default::default(),
+                tex2d: Default::default(),
+                tex3d: Default::default(),
+            })
+            .tex2d = api::BindlessArrayUpdateTexture {
+            op: api::BindlessArrayUpdateOperation::Emplace,
+            handle: texture.handle(),
+            sampler,
+        };
         let mut slots = self.slots.borrow_mut();
         slots[index].tex2d = Some(texture.handle.clone());
         self.unlock();
@@ -703,16 +708,18 @@ impl BindlessArray {
         self.lock();
         self.modifications
             .borrow_mut()
-            .push(api::BindlessArrayUpdateModification {
+            .entry(index)
+            .or_insert(api::BindlessArrayUpdateModification {
                 slot: index,
-                buffer: api::BindlessArrayUpdateBuffer::default(),
-                tex2d: api::BindlessArrayUpdateTexture::default(),
-                tex3d: api::BindlessArrayUpdateTexture {
-                    op: api::BindlessArrayUpdateOperation::Emplace,
-                    handle: texture.handle(),
-                    sampler,
-                },
-            });
+                buffer: Default::default(),
+                tex2d: Default::default(),
+                tex3d: Default::default(),
+            })
+            .tex3d = api::BindlessArrayUpdateTexture {
+            op: api::BindlessArrayUpdateOperation::Emplace,
+            handle: texture.handle(),
+            sampler,
+        };
         let mut slots = self.slots.borrow_mut();
         slots[index].tex3d = Some(texture.handle.clone());
         self.unlock();
@@ -721,16 +728,18 @@ impl BindlessArray {
         self.lock();
         self.modifications
             .borrow_mut()
-            .push(api::BindlessArrayUpdateModification {
+            .entry(index)
+            .or_insert(api::BindlessArrayUpdateModification {
                 slot: index,
-                buffer: api::BindlessArrayUpdateBuffer {
-                    op: api::BindlessArrayUpdateOperation::Remove,
-                    handle: api::Buffer(INVALID_RESOURCE_HANDLE),
-                    offset: 0,
-                },
-                tex2d: api::BindlessArrayUpdateTexture::default(),
-                tex3d: api::BindlessArrayUpdateTexture::default(),
-            });
+                buffer: Default::default(),
+                tex2d: Default::default(),
+                tex3d: Default::default(),
+            })
+            .buffer = api::BindlessArrayUpdateBuffer {
+            op: api::BindlessArrayUpdateOperation::Remove,
+            handle: api::Buffer(INVALID_RESOURCE_HANDLE),
+            offset: 0,
+        };
         let mut slots = self.slots.borrow_mut();
         slots[index].buffer = None;
         self.unlock();
@@ -739,16 +748,18 @@ impl BindlessArray {
         self.lock();
         self.modifications
             .borrow_mut()
-            .push(api::BindlessArrayUpdateModification {
+            .entry(index)
+            .or_insert(api::BindlessArrayUpdateModification {
                 slot: index,
-                buffer: api::BindlessArrayUpdateBuffer::default(),
-                tex2d: api::BindlessArrayUpdateTexture {
-                    op: api::BindlessArrayUpdateOperation::Remove,
-                    handle: api::Texture(INVALID_RESOURCE_HANDLE),
-                    sampler: Sampler::default(),
-                },
-                tex3d: api::BindlessArrayUpdateTexture::default(),
-            });
+                buffer: Default::default(),
+                tex2d: Default::default(),
+                tex3d: Default::default(),
+            })
+            .tex2d = api::BindlessArrayUpdateTexture {
+            op: api::BindlessArrayUpdateOperation::Remove,
+            handle: api::Texture(INVALID_RESOURCE_HANDLE),
+            sampler: Sampler::default(),
+        };
         let mut slots = self.slots.borrow_mut();
         slots[index].tex2d = None;
         self.unlock();
@@ -757,16 +768,18 @@ impl BindlessArray {
         self.lock();
         self.modifications
             .borrow_mut()
-            .push(api::BindlessArrayUpdateModification {
+            .entry(index)
+            .or_insert(api::BindlessArrayUpdateModification {
                 slot: index,
-                buffer: api::BindlessArrayUpdateBuffer::default(),
-                tex2d: api::BindlessArrayUpdateTexture::default(),
-                tex3d: api::BindlessArrayUpdateTexture {
-                    op: api::BindlessArrayUpdateOperation::Remove,
-                    handle: api::Texture(INVALID_RESOURCE_HANDLE),
-                    sampler: Sampler::default(),
-                },
-            });
+                buffer: Default::default(),
+                tex2d: Default::default(),
+                tex3d: Default::default(),
+            })
+            .tex3d = api::BindlessArrayUpdateTexture {
+            op: api::BindlessArrayUpdateOperation::Remove,
+            handle: api::Texture(INVALID_RESOURCE_HANDLE),
+            sampler: Sampler::default(),
+        };
         let mut slots = self.slots.borrow_mut();
         slots[index].tex3d = None;
         self.unlock();
@@ -824,10 +837,8 @@ impl BindlessArray {
         // What lifetime should this be?
         self.lock();
         let mut rt = ResourceTracker::new();
-        let modifications = Arc::new(std::mem::replace(
-            &mut *self.modifications.borrow_mut(),
-            Vec::new(),
-        ));
+        let mut modifications = self.modifications.borrow_mut();
+        let modifications = Arc::new(modifications.drain().map(|(k, v)| v).collect::<Vec<_>>());
         rt.add(modifications.clone());
         let lock = self.lock.clone();
         Command {

@@ -290,9 +290,7 @@ impl Device {
                 };
                 slots
             ]),
-            pending_slots: RefCell::new(Vec::new()),
             lock: Arc::new(RawMutex::INIT),
-            dirty: Cell::new(false),
         }
     }
     pub fn create_tex2d<T: IoTexel>(

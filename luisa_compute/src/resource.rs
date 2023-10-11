@@ -603,9 +603,7 @@ pub struct BindlessArray {
     pub(crate) handle: Arc<BindlessArrayHandle>,
     pub(crate) modifications: RefCell<Vec<api::BindlessArrayUpdateModification>>,
     pub(crate) slots: RefCell<Vec<BindlessArraySlot>>,
-    pub(crate) pending_slots: RefCell<Vec<BindlessArraySlot>>,
     pub(crate) lock: Arc<RawMutex>,
-    pub(crate) dirty: Cell<bool>,
 }
 impl BindlessArray {
     #[inline]
@@ -618,22 +616,14 @@ impl BindlessArray {
             self.lock.unlock();
         }
     }
-    #[inline]
-    fn make_pending_slots(&self) {
-        let mut pending = self.pending_slots.borrow_mut();
-        if self.dirty.get() {
-            let mut slots = self.slots.borrow_mut();
-            *slots = pending.clone();
-            self.dirty.set(false);
-        }
-        if pending.is_empty() {
-            *pending = self.slots.borrow().clone();
-        }
-    }
+
     #[inline]
     pub fn var(&self) -> BindlessArrayVar {
         self.lock();
-        assert!(!self.dirty.get(), "Did you forget to call update()?");
+        assert!(
+            self.modifications.borrow().is_empty(),
+            "Did not call update() after last modification"
+        );
         let var = BindlessArrayVar::new(self);
         self.unlock();
         var
@@ -656,29 +646,6 @@ impl BindlessArray {
     ) {
         self.emplace_buffer_view_async(index, bufferview)
     }
-    // pub fn emplace_byte_buffer_view_async<'a>(
-    //     &self,
-    //     index: usize,
-    //     bufferview: &ByteBufferView<'a>,
-    // ) {
-    //     self.lock();
-    //     self.modifications
-    //         .borrow_mut()
-    //         .push(api::BindlessArrayUpdateModification {
-    //             slot: index,
-    //             buffer: api::BindlessArrayUpdateBuffer {
-    //                 op: api::BindlessArrayUpdateOperation::Emplace,
-    //                 handle: bufferview.handle(),
-    //                 offset: bufferview.offset,
-    //             },
-    //             tex2d: api::BindlessArrayUpdateTexture::default(),
-    //             tex3d: api::BindlessArrayUpdateTexture::default(),
-    //         });
-    //     self.make_pending_slots();
-    //     let mut pending = self.pending_slots.borrow_mut();
-    //     pending[index].buffer = Some(bufferview.buffer.handle.clone());
-    //     self.unlock();
-    // }
     pub fn emplace_buffer_async<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
         self.emplace_buffer_view_async(index, &buffer.view(..))
     }
@@ -700,9 +667,8 @@ impl BindlessArray {
                 tex2d: api::BindlessArrayUpdateTexture::default(),
                 tex3d: api::BindlessArrayUpdateTexture::default(),
             });
-        self.make_pending_slots();
-        let mut pending = self.pending_slots.borrow_mut();
-        pending[index].buffer = Some(bufferview.buffer.handle.clone());
+        let mut slots = self.slots.borrow_mut();
+        slots[index].buffer = Some(bufferview.buffer.handle.clone());
         self.unlock();
     }
     pub fn emplace_tex2d_async<T: IoTexel>(
@@ -724,9 +690,8 @@ impl BindlessArray {
                 },
                 tex3d: api::BindlessArrayUpdateTexture::default(),
             });
-        self.make_pending_slots();
-        let mut pending = self.pending_slots.borrow_mut();
-        pending[index].tex2d = Some(texture.handle.clone());
+        let mut slots = self.slots.borrow_mut();
+        slots[index].tex2d = Some(texture.handle.clone());
         self.unlock();
     }
     pub fn emplace_tex3d_async<T: IoTexel>(
@@ -748,9 +713,8 @@ impl BindlessArray {
                     sampler,
                 },
             });
-        self.make_pending_slots();
-        let mut pending = self.pending_slots.borrow_mut();
-        pending[index].tex3d = Some(texture.handle.clone());
+        let mut slots = self.slots.borrow_mut();
+        slots[index].tex3d = Some(texture.handle.clone());
         self.unlock();
     }
     pub fn remove_buffer_async(&self, index: usize) {
@@ -767,9 +731,8 @@ impl BindlessArray {
                 tex2d: api::BindlessArrayUpdateTexture::default(),
                 tex3d: api::BindlessArrayUpdateTexture::default(),
             });
-        self.make_pending_slots();
-        let mut pending = self.pending_slots.borrow_mut();
-        pending[index].buffer = None;
+        let mut slots = self.slots.borrow_mut();
+        slots[index].buffer = None;
         self.unlock();
     }
     pub fn remove_tex2d_async(&self, index: usize) {
@@ -786,9 +749,8 @@ impl BindlessArray {
                 },
                 tex3d: api::BindlessArrayUpdateTexture::default(),
             });
-        self.make_pending_slots();
-        let mut pending = self.pending_slots.borrow_mut();
-        pending[index].tex2d = None;
+        let mut slots = self.slots.borrow_mut();
+        slots[index].tex2d = None;
         self.unlock();
     }
     pub fn remove_tex3d_async(&self, index: usize) {
@@ -805,9 +767,8 @@ impl BindlessArray {
                     sampler: Sampler::default(),
                 },
             });
-        self.make_pending_slots();
-        let mut pending = self.pending_slots.borrow_mut();
-        pending[index].tex3d = None;
+        let mut slots = self.slots.borrow_mut();
+        slots[index].tex3d = None;
         self.unlock();
     }
     #[inline]
@@ -868,7 +829,6 @@ impl BindlessArray {
             Vec::new(),
         ));
         rt.add(modifications.clone());
-        self.dirty.set(true);
         let lock = self.lock.clone();
         Command {
             inner: api::Command::BindlessArrayUpdate(api::BindlessArrayUpdateCommand {

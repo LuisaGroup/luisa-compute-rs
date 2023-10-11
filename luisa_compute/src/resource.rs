@@ -528,6 +528,10 @@ pub(crate) struct BindlessArraySlot {
     pub(crate) tex2d: Option<Arc<TextureHandle>>,
     pub(crate) tex3d: Option<Arc<TextureHandle>>,
 }
+
+#[deprecated(
+    note = "Spamming BufferHeap can cause serious performance issue on CUDA backend. Use BindlessArray instead."
+)]
 pub struct BufferHeap<T: Value> {
     pub(crate) inner: BindlessArray,
     pub(crate) _marker: PhantomData<T>,
@@ -628,7 +632,11 @@ impl BindlessArray {
     }
     #[inline]
     pub fn var(&self) -> BindlessArrayVar {
-        BindlessArrayVar::new(self)
+        self.lock();
+        assert!(!self.dirty.get(), "Did you forget to call update()?");
+        let var = BindlessArrayVar::new(self);
+        self.unlock();
+        var
     }
     #[inline]
     pub fn handle(&self) -> api::BindlessArray {
@@ -2235,7 +2243,8 @@ impl<T: IoTexel> Tex2dVar<T> {
             r.capture_or_get(binding, &view.tex.handle, || {
                 Node::new(CArc::new(Instruction::Texture2D), T::RwType::type_())
             })
-        }).into();
+        })
+        .into();
         Self {
             node,
             handle: Some(view.tex.handle.clone()),
@@ -2285,7 +2294,8 @@ impl<T: IoTexel> Tex3dVar<T> {
             r.capture_or_get(binding, &view.tex.handle, || {
                 Node::new(CArc::new(Instruction::Texture3D), T::RwType::type_())
             })
-        }).into();
+        })
+        .into();
         Self {
             node,
             handle: Some(view.tex.handle.clone()),

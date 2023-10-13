@@ -81,6 +81,44 @@ fn nested_callable_capture_by_value() {
         assert_eq!(z_data[i], (i as f32 + 1000.0 * i as f32));
     }
 }
+
+// this is broken on dx!!!
+#[test]
+fn nested_callable_capture_by_ref_alias() {
+    let device = get_device();
+
+    let x = device.create_buffer::<f32>(1024);
+    let y = device.create_buffer::<f32>(1024);
+    let z = device.create_buffer::<f32>(1024);
+    z.view(..).fill(0.0);
+    x.view(..).fill_fn(|i| i as f32);
+    y.view(..).fill_fn(|i| 1000.0 * i as f32);
+    let kernel = Kernel::<fn(Buffer<f32>)>::new(
+        &device,
+        &track!(|buf_z| {
+            let tid = dispatch_id().x;
+            let v = Var::<Float2>::zeroed();
+            *v.x = 0.0;
+            let u = Var::<Float2>::zeroed();
+            let acc = |x: Expr<f32>| {
+                outline(|| {
+                    *v.x += x;
+                    *u = Float2::expr(v.x, v.x);
+                    buf_z.write(tid, v.load().x);
+                })
+            };
+            acc(x.read(tid));
+            acc(y.read(tid));
+            acc(1.23f32.expr());
+        }),
+    );
+    kernel.dispatch([1024, 1, 1], &z);
+    let z_data = z.view(..).copy_to_vec();
+    for i in 0..x.len() {
+        assert!((z_data[i] - (i as f32 + 1000.0 * i as f32 + 1.23f32)).abs() < 1e-6);
+    }
+}
+
 #[test]
 fn nested_callable_capture_by_ref() {
     let device = get_device();

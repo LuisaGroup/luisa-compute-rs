@@ -338,7 +338,6 @@ impl KernelBuilder {
             let callables: Vec<CallableModuleRef> = r.callables.values().cloned().collect();
             let mut captured_set = HashSet::<Capture>::new();
             let mut cpu_custom_ops_set = HashSet::<u64>::new();
-            let mut callable_set = HashSet::<u64>::new();
             for capture in captured.iter() {
                 captured_set.insert(*capture);
             }
@@ -346,7 +345,6 @@ impl KernelBuilder {
                 cpu_custom_ops_set.insert(CArc::as_ptr(op) as u64);
             }
             for c in &callables {
-                callable_set.insert(CArc::as_ptr(&c.0) as u64);
                 for capture in c.0.captures.as_ref() {
                     if !captured_set.contains(capture) {
                         captured_set.insert(*capture);

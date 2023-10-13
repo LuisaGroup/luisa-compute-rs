@@ -1,4 +1,4 @@
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::RangeBounds;
@@ -537,16 +537,18 @@ pub struct BufferHeap<T: Value> {
     pub(crate) inner: BindlessArray,
     pub(crate) _marker: PhantomData<T>,
 }
+#[allow(deprecated)]
 impl<T: Value + fmt::Debug> fmt::Debug for BufferHeap<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "BufferHeap<{}>", std::any::type_name::<T>(),)
     }
 }
-
+#[deprecated]
 pub struct BufferHeapVar<T: Value> {
     inner: BindlessArrayVar,
     _marker: PhantomData<T>,
 }
+#[allow(deprecated)]
 impl<T: Value> BufferHeap<T> {
     #[inline]
     pub fn var(&self) -> BufferHeapVar<T> {
@@ -593,6 +595,7 @@ impl<T: Value> BufferHeap<T> {
         self.inner.buffer(index)
     }
 }
+#[allow(deprecated)]
 impl<T: Value> BufferHeapVar<T> {
     #[inline]
     pub fn buffer(&self, index: impl AsExpr<Value = u32>) -> BindlessBufferVar<T> {
@@ -838,7 +841,7 @@ impl BindlessArray {
         self.lock();
         let mut rt = ResourceTracker::new();
         let mut modifications = self.modifications.borrow_mut();
-        let modifications = Arc::new(modifications.drain().map(|(k, v)| v).collect::<Vec<_>>());
+        let modifications = Arc::new(modifications.drain().map(|(_k, v)| v).collect::<Vec<_>>());
         rt.add(modifications.clone());
         let lock = self.lock.clone();
         Command {

@@ -10,7 +10,7 @@ use std::{env, unreachable};
 use crate::internal_prelude::*;
 
 use bumpalo::Bump;
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 
 use crate::runtime::WeakDevice;
 

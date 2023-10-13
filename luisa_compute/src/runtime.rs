@@ -264,6 +264,10 @@ impl Device {
         buffer.view(..).fill_fn(f);
         buffer
     }
+    #[deprecated(
+        note = "Spamming BufferHeap can cause serious performance issue on CUDA backend. Use BindlessArray instead."
+    )]
+    #[allow(deprecated)]
     pub fn create_buffer_heap<T: Value>(&self, slots: usize) -> BufferHeap<T> {
         let array = self.create_bindless_array(slots);
         BufferHeap {
@@ -1222,6 +1226,7 @@ impl RawKernel {
         rt.add(self.clone());
         let args = args.args;
         let args = Arc::new(args);
+        assert_eq!(args.len(), self.module.args.len());
         rt.add(args.clone());
         Command {
             inner: api::Command::ShaderDispatch(api::ShaderDispatchCommand {
@@ -1420,6 +1425,16 @@ impl<T: KernelSignature> Kernel<T> {
     }
     pub fn dump(&self) -> String {
         ir::debug::dump_ir_human_readable(&self.inner.module.module)
+    }
+    pub fn num_arguments(&self) -> usize {
+        self.inner.module.args.len()
+    }
+    pub fn num_capture_arguments(&self) -> usize {
+        let mut unique_bindings = HashSet::new();
+        for c in self.inner.module.captures.iter() {
+            unique_bindings.insert(c.binding);
+        }
+        unique_bindings.len()
     }
     #[doc(hidden)]
     pub fn raw(&self) -> &RawKernel {

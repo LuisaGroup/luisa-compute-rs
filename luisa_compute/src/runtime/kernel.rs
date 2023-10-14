@@ -1,4 +1,4 @@
-use crate::lang::{pop_recorder, push_recorder, soa::SoaMetadata, KERNEL_ID};
+use crate::lang::{check_arg_alias, pop_recorder, push_recorder, soa::SoaMetadata, KERNEL_ID};
 
 use super::*;
 
@@ -221,14 +221,23 @@ impl KernelBuilder {
             Node::new(CArc::new(Instruction::Argument { by_value }), ty),
         );
         self.args.push(node);
+        with_recorder(|r| {
+            r.defined.insert(node, true);
+        });
         node
     }
     pub fn value<T: Value>(&mut self) -> Expr<T> {
         let node = self.arg(T::type_(), true);
+        with_recorder(|r| {
+            r.defined.insert(node, true);
+        });
         FromNode::from_node(node.into())
     }
     pub fn var<T: Value>(&mut self) -> Var<T> {
         let node = self.arg(T::type_(), false);
+        with_recorder(|r| {
+            r.defined.insert(node, true);
+        });
         FromNode::from_node(node.into())
     }
     pub fn uniform<T: Value>(&mut self) -> Expr<T> {
@@ -237,6 +246,9 @@ impl KernelBuilder {
             Node::new(CArc::new(Instruction::Uniform), T::type_()),
         );
         self.args.push(node);
+        with_recorder(|r| {
+            r.defined.insert(node, true);
+        });
         FromNode::from_node(node.into())
     }
     // pub fn byte_buffer(&mut self) -> ByteBufferVar {
@@ -253,6 +265,9 @@ impl KernelBuilder {
             Node::new(CArc::new(Instruction::Buffer), T::type_()),
         );
         self.args.push(node);
+        with_recorder(|r| {
+            r.defined.insert(node, true);
+        });
         BufferVar {
             node: node.into(),
             marker: PhantomData,
@@ -272,6 +287,9 @@ impl KernelBuilder {
             Node::new(CArc::new(Instruction::Texture2D), T::type_()),
         );
         self.args.push(node);
+        with_recorder(|r| {
+            r.defined.insert(node, true);
+        });
         Tex2dVar {
             node: node.into(),
             marker: PhantomData,
@@ -285,6 +303,9 @@ impl KernelBuilder {
             Node::new(CArc::new(Instruction::Texture3D), T::type_()),
         );
         self.args.push(node);
+        with_recorder(|r| {
+            r.defined.insert(node, true);
+        });
         Tex3dVar {
             node: node.into(),
             marker: PhantomData,
@@ -298,6 +319,9 @@ impl KernelBuilder {
             Node::new(CArc::new(Instruction::Bindless), Type::void()),
         );
         self.args.push(node);
+        with_recorder(|r| {
+            r.defined.insert(node, true);
+        });
         BindlessArrayVar {
             node: node.into(),
             handle: None,
@@ -309,6 +333,9 @@ impl KernelBuilder {
             Node::new(CArc::new(Instruction::Accel), Type::void()),
         );
         self.args.push(node);
+        with_recorder(|r| {
+            r.defined.insert(node, true);
+        });
         rtx::AccelVar {
             node: node.into(),
             handle: None,
@@ -396,7 +423,9 @@ impl KernelBuilder {
             let ir_module = luisa_compute_ir::transform::luisa_compute_ir_transform_auto(ir_module);
 
             let mut args = self.args.clone();
+
             args.extend(r.captured_vars.values().map(|x| unsafe { x.1.get_raw() }));
+    
             for a in &args {
                 r.inaccessible.borrow_mut().insert(*a);
             }
@@ -409,12 +438,13 @@ impl KernelBuilder {
                 pools: r.pools.clone(),
             };
             let module = CallableModuleRef(CArc::new(module));
-
+            let captured = r.captured_vars.values().map(|x| x.0).collect::<Vec<_>>();
+            check_arg_alias(&captured);
             RawCallable {
                 device: self.device.clone(),
                 module,
                 resource_tracker: rt,
-                captured_args: r.captured_vars.values().map(|x| x.0).collect(),
+                captured_args: captured,
             }
         });
         pop_recorder();

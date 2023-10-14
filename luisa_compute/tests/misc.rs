@@ -82,7 +82,6 @@ fn nested_callable_capture_by_value() {
     }
 }
 
-// this is broken on dx!!!
 #[test]
 fn nested_callable_capture_by_ref_alias() {
     let device = get_device();
@@ -102,10 +101,12 @@ fn nested_callable_capture_by_ref_alias() {
             let u = Var::<Float2>::zeroed();
             let acc = |x: Expr<f32>| {
                 outline(|| {
-                    *v.x += x;
-                    *u = Float2::expr(v.x, v.x);
-                    buf_z.write(tid, v.load().x);
-                })
+                    outline(|| {
+                        *v.x += x;
+                        *u = Float2::expr(v.x, v.x);
+                        buf_z.write(tid, v.load().x);
+                    });
+                });
             };
             acc(x.read(tid));
             acc(y.read(tid));

@@ -9,8 +9,6 @@ use syn::*;
 // TODO: Impl x as f32 -> .cast()  <- Don't
 // TOOD: Impl switch! macro.  <- Don't
 
-#[cfg(test)]
-use pretty_assertions::assert_eq;
 
 struct TraceVisitor {
     trait_path: TokenStream,

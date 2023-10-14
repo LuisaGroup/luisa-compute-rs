@@ -2,7 +2,7 @@ use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::{quote, quote_spanned};
 use syn::parse::Parse;
 use syn::spanned::Spanned;
-use syn::{Attribute, Item, ItemEnum, ItemFn, ItemStruct, Token, Visibility};
+use syn::{Attribute, Item, ItemEnum, ItemStruct, Token, Visibility};
 
 struct ValueNewOrdering {
     vis: Visibility,

@@ -185,6 +185,14 @@ macro_rules! impl_kernel_param_for_tuple {
     }
 }
 impl_kernel_param_for_tuple!(T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15);
+
+fn transform_module(module: Module) -> Module {
+    // use luisa_compute_ir::transform::Transform;
+    // let module = luisa_compute_ir::transform::dce::Dce.transform(module);
+    let module = luisa_compute_ir::transform::luisa_compute_ir_transform_auto(module);
+    module
+}
+
 impl KernelBuilder {
     pub fn new(device: Option<crate::runtime::Device>, is_kernel: bool) -> Self {
         let kernel_id = RECORDER.with(|r| {
@@ -204,8 +212,7 @@ impl KernelBuilder {
         push_recorder(kernel_id);
         with_recorder(|r| {
             r.device = device.as_ref().map(|d| WeakDevice::new(d));
-            r.pools = CArc::new(ModulePools::new());
-            r.scopes.clear();
+            assert!(r.scopes.is_empty());
             r.building_kernel = is_kernel;
             let pools = r.pools.clone();
             r.scopes.push(IrBuilder::new(pools));
@@ -412,6 +419,13 @@ impl KernelBuilder {
             assert_eq!(r.scopes.len(), 1);
             let scope = r.scopes.pop().unwrap();
             let entry = scope.finish();
+            let const_block = std::mem::replace(
+                &mut r.const_builder,
+                IrBuilder::new_without_bb(r.pools.clone()),
+            )
+            .finish();
+            const_block.merge(entry);
+            let entry = const_block;
             r.add_block_to_inaccessible(&entry);
             let ir_module = Module {
                 entry,
@@ -420,12 +434,12 @@ impl KernelBuilder {
                 flags: ModuleFlags::REQUIRES_REV_AD_TRANSFORM
                     | ModuleFlags::REQUIRES_FWD_AD_TRANSFORM,
             };
-            let ir_module = luisa_compute_ir::transform::luisa_compute_ir_transform_auto(ir_module);
+            let ir_module = transform_module(ir_module);
 
             let mut args = self.args.clone();
 
             args.extend(r.captured_vars.values().map(|x| unsafe { x.1.get_raw() }));
-    
+
             for a in &args {
                 r.inaccessible.borrow_mut().insert(*a);
             }
@@ -463,7 +477,14 @@ impl KernelBuilder {
         let ret = with_recorder(|r| {
             assert_eq!(r.scopes.len(), 1);
             let scope = r.scopes.pop().unwrap();
+            let const_block = std::mem::replace(
+                &mut r.const_builder,
+                IrBuilder::new_without_bb(r.pools.clone()),
+            )
+            .finish();
             let entry = scope.finish();
+            const_block.merge(entry);
+            let entry = const_block;
             assert!(r.captured_vars.is_empty());
             let ir_module = Module {
                 entry,
@@ -472,7 +493,7 @@ impl KernelBuilder {
                 flags: ModuleFlags::REQUIRES_REV_AD_TRANSFORM
                     | ModuleFlags::REQUIRES_FWD_AD_TRANSFORM,
             };
-            let ir_module = luisa_compute_ir::transform::luisa_compute_ir_transform_auto(ir_module);
+            let ir_module = transform_module(ir_module);
             let module = KernelModule {
                 module: ir_module,
                 cpu_custom_ops: CBoxedSlice::new(cpu_custom_ops),

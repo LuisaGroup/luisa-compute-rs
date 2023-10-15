@@ -309,9 +309,21 @@ pub(crate) struct FnRecorder {
     pub(crate) pools: CArc<ModulePools>,
     pub(crate) arena: Bump,
     pub(crate) callable_ret_type: Option<CArc<Type>>,
+    pub(crate) const_builder: IrBuilder,
+    pub(crate) index_const_pool: IndexMap<i32, NodeRef>,
 }
 pub(crate) type FnRecorderPtr = Rc<RefCell<FnRecorder>>;
 impl FnRecorder {
+    pub(crate) fn make_index_const(&mut self, idx: i32) -> NodeRef {
+        if let Some(node) = self.index_const_pool.get(&idx) {
+            return *node;
+        }
+        let b = &mut self.const_builder;
+        let node = b.const_(Const::Int32(idx));
+        self.defined.insert(node, true);
+        self.index_const_pool.insert(idx, node);
+        node
+    }
     pub(crate) fn add_block_to_inaccessible(&self, block: &BasicBlock) {
         let mut inaccessible = self.inaccessible.borrow_mut();
         for n in block.iter() {
@@ -390,6 +402,7 @@ impl FnRecorder {
         }
     }
     pub(crate) fn new(kernel_id: usize, parent: Option<FnRecorderPtr>) -> Self {
+        let pools = CArc::new(ModulePools::new());
         FnRecorder {
             inaccessible: parent
                 .as_ref()
@@ -404,12 +417,14 @@ impl FnRecorder {
             shared: vec![],
             device: None,
             block_size: None,
-            pools: CArc::new(ModulePools::new()),
+            pools: pools.clone(),
             arena: Bump::new(),
             building_kernel: false,
             callable_ret_type: None,
             kernel_id,
             parent,
+            index_const_pool: IndexMap::new(),
+            const_builder: IrBuilder::new(pools.clone()),
         }
     }
     pub(crate) fn map_captured_vars(&mut self, node0: SafeNodeRef) -> SafeNodeRef {
@@ -564,6 +579,12 @@ pub(crate) fn pop_recorder() -> FnRecorderPtr {
         let parent = r.as_mut().unwrap().borrow_mut().parent.take();
         let cur = std::mem::replace(&mut *r, parent);
         cur.unwrap()
+    })
+}
+pub(crate) fn recording_started() -> bool {
+    RECORDER.with(|r| {
+        let r = r.borrow();
+        r.is_some()
     })
 }
 
@@ -741,7 +762,7 @@ fn __extract_impl(safe_node: SafeNodeRef, index: usize, ty: CArc<Type>) -> SafeN
             b.set_insert_point(first_scope_bb.first());
         }
 
-        let i = b.const_(Const::Int32(index as i32));
+        let i = r.make_index_const(index as i32);
         // Since we have inserted something, the insertion point in cur_builder might
         // not be up to date So we need to set it to the end of the current
         // basic block

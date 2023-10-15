@@ -4,7 +4,7 @@ use image::Rgb;
 use luisa::lang::types::vector::alias::*;
 use luisa::lang::types::vector::*;
 use luisa::lang::types::*;
-use luisa::lang::*;
+
 use luisa::prelude::*;
 use luisa::rtx::{AccelBuildRequest, AccelOption, Ray};
 use luisa_compute as luisa;

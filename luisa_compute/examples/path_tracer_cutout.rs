@@ -253,7 +253,7 @@ fn main() {
         s.submit(cmds);
         s.synchronize();
     });
-    let spp_per_dispatch = 1;;
+    let spp_per_dispatch = 1;
     // use create_kernel_async to compile multiple kernels in parallel
     let path_tracer = Kernel::<fn(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>::new_async(
         &device,

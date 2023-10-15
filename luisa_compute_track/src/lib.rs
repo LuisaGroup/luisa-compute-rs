@@ -9,7 +9,6 @@ use syn::*;
 // TODO: Impl x as f32 -> .cast()  <- Don't
 // TOOD: Impl switch! macro.  <- Don't
 
-
 struct TraceVisitor {
     trait_path: TokenStream,
     flow_path: TokenStream,
@@ -99,11 +98,21 @@ impl VisitMut for TraceVisitor {
                 if let Expr::Let(_) = **cond {
                 } else if let Some((_, else_branch)) = else_branch {
                     *node = parse_quote_spanned! {span=>
-                        <_ as #trait_path::SelectMaybeExpr<_>>::if_then_else(#cond, || #then_branch, || #else_branch)
+                        {
+                            ::luisa_compute::lc_comment_lineno!("if stmt begin");
+                            let __ret = <_ as #trait_path::SelectMaybeExpr<_>>::if_then_else(#cond, || #then_branch, || #else_branch);
+                            ::luisa_compute::lc_comment_lineno!("if stmt end");
+                            __ret
+                        }
                     }
                 } else {
                     *node = parse_quote_spanned! {span=>
-                        <_ as #trait_path::ActivateMaybeExpr>::activate(#cond, || #then_branch)
+                        {
+                            ::luisa_compute::lc_comment_lineno!("if stmt begin");
+                            let __ret = <_ as #trait_path::ActivateMaybeExpr>::activate(#cond, || #then_branch);
+                            ::luisa_compute::lc_comment_lineno!("if stmt end");
+                            __ret
+                        }
                     }
                 }
             }
@@ -111,13 +120,23 @@ impl VisitMut for TraceVisitor {
                 let cond = &expr.cond;
                 let body = &expr.body;
                 *node = parse_quote_spanned! {span=>
-                    <_ as #trait_path::LoopMaybeExpr>::while_loop(|| #cond, || #body)
+                    {
+                        ::luisa_compute::lc_comment_lineno!("while stmt begin");
+                        let __ret = <_ as #trait_path::LoopMaybeExpr>::while_loop(|| #cond, || #body);
+                        ::luisa_compute::lc_comment_lineno!("while stmt end");
+                        __ret
+                    }
                 }
             }
             Expr::Loop(expr) => {
                 let body = &expr.body;
                 *node = parse_quote_spanned! {span=>
-                    #flow_path::loop_(|| #body)
+                    {
+                        ::luisa_compute::lc_comment_lineno!("loop stmt begin");
+                        let __ret = #flow_path::loop_(|| #body);
+                        ::luisa_compute::lc_comment_lineno!("loop stmt end");
+                        __ret
+                    }
                 }
             }
             Expr::ForLoop(expr) => {
@@ -127,19 +146,25 @@ impl VisitMut for TraceVisitor {
                 if let Expr::Range(range) = &**expr {
                     let attrs = &range.attrs;
                     // check if #[unroll] is present
-                    let unroll = attrs.iter().any(|attr| {
-                        attr.path().is_ident("unroll")
-                    });
+                    let unroll = attrs.iter().any(|attr| attr.path().is_ident("unroll"));
                     if unroll {
                         *node = parse_quote_spanned! {span=>
-                            #range.for_each(|#pat| #body)
+                            {
+                                ::luisa_compute::lc_comment_lineno!("for loop stmt begin");
+                                let __ret = #range.for_each(|#pat| #body);
+                                ::luisa_compute::lc_comment_lineno!("for loop stmt end");
+                                __ret
+                            }
                         }
                     } else {
-                        *node = parse_quote_spanned! {span=>
-                            #flow_path::for_range(#range, |#pat| #body)
+                        *node = parse_quote_spanned! {span=> {
+                                ::luisa_compute::lc_comment_lineno!("for loop stmt begin");
+                                let __ret = #flow_path::for_range(#range, |#pat| #body);
+                                ::luisa_compute::lc_comment_lineno!("for loop stmt end");
+                                __ret
+                            }
                         }
                     }
-                    
                 }
             }
             // Expr::Unary(op) => {
@@ -345,8 +370,32 @@ pub fn tracked(
 ) -> proc_macro::TokenStream {
     let item = syn::parse_macro_input!(item as ItemFn);
     let body = &item.block;
+    let body_span = body.span();
+    let ret_type = match &item.sig.output {
+        ReturnType::Default => quote_spanned! {body_span=> () },
+        ReturnType::Type(_, ty) => quote_spanned! {body_span=> #ty },
+    };
     let body = proc_macro::TokenStream::from(quote!({ #body }));
     let body = track_impl(parse_macro_input!(body as Expr));
+    let body = quote_spanned! {body_span=>
+        {
+            let __fn_name = {
+                fn f() {}
+                fn type_name_of<T>(_: T) -> &'static str {
+                    std::any::type_name::<T>()
+                }
+                let name = type_name_of(f);
+                name.strip_suffix("::f").unwrap()
+            };
+            ::luisa_compute::lang::debug::comment(&format!("begin fn {} at {}:{}:{}", __fn_name, file!(), line!(), column!()));
+            let __ret: #ret_type = #body;
+            #[allow(unreachable_code)]
+            {
+                ::luisa_compute::lang::debug::comment(&format!("end fn {} at {}:{}:{}", __fn_name, file!(), line!(), column!()));
+                __ret
+            }
+        }
+    };
     let attrs = &item.attrs;
     let sig = &item.sig;
     let vis = &item.vis;

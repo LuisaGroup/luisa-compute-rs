@@ -3,7 +3,7 @@ use std::fmt::Debug;
 
 use crate::internal_prelude::*;
 
-use super::with_recorder;
+use super::{with_recorder, recording_started};
 
 #[macro_export]
 macro_rules! cpu_dbg {
@@ -139,6 +139,9 @@ pub fn __assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, c
 }
 
 pub fn comment(msg: &str) {
+    if !recording_started() {
+        return;
+    }
     __current_scope(|b| {
         b.comment(CBoxedSlice::new(
             CString::new(msg).unwrap().into_bytes_with_nul(),
@@ -152,6 +155,12 @@ macro_rules! lc_comment_lineno {
         $crate::lang::debug::comment(&format!("{}:{}:{}", file!(), line!(), column!()))
     };
     ($msg:literal) => {
-        $crate::lang::debug::comment(&format!("`{}` at {}:{}:{}", $msg, file!(), line!(), column!()))
+        $crate::lang::debug::comment(&format!(
+            "`{}` at {}:{}:{}",
+            $msg,
+            file!(),
+            line!(),
+            column!()
+        ))
     };
 }

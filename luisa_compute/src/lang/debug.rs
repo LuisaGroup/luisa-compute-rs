@@ -3,7 +3,7 @@ use std::fmt::Debug;
 
 use crate::internal_prelude::*;
 
-use super::{with_recorder, recording_started};
+use super::{recording_started, with_recorder};
 
 #[macro_export]
 macro_rules! cpu_dbg {
@@ -163,4 +163,20 @@ macro_rules! lc_comment_lineno {
             column!()
         ))
     };
+    ($msg:literal, $e:expr) => {
+        $crate::lang::debug::with_lineno(
+            $msg,
+            file!(),
+            line!(),
+            column!(),
+            || $e,
+        )
+    };
+}
+
+pub fn with_lineno<T>(msg: &str, file: &str, line: u32, col: u32, f: impl FnOnce() -> T) -> T {
+    comment(&format!("`{}` begin at {}:{}:{}", msg, file, line, col));
+    let ret = f();
+    comment(&format!("`{}` end at {}:{}:{}", msg, file, line, col));
+    ret
 }

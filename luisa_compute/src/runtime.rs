@@ -20,7 +20,7 @@ use crate::lang::soa::{SoaBuffer, SoaBufferVar, SoaBufferView, SoaMetadata};
 use crate::lang::types::SoaValue;
 use ir::{
     CallableModule, CallableModuleRef, Capture, CpuCustomOp, KernelModule, Module, ModuleFlags,
-    ModuleKind, ModulePools,
+    ModuleKind,
 };
 
 use crate::backend::Backend;

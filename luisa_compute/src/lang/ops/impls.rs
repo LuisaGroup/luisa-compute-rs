@@ -333,7 +333,7 @@ impl_ops_trait!([X: Linear] FloatMulAddExpr[FloatMulAddThis] for Expr<X> where [
 });
 
 impl_ops_trait!([X: Linear] FloatCopySignExpr[FloatCopySignThis] for Expr<X> where [X::Scalar: Floating] {
-    fn copy_sign[_copy_sign](self, sign) { Func::Copysign.call2(self, sign) }
+    fn copysign[_copysign](self, sign) { Func::Copysign.call2(self, sign) }
 });
 
 impl_ops_trait!([X: Linear] FloatStepExpr[FloatStepThis] for Expr<X> where [X::Scalar: Floating] {

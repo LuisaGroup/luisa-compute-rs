@@ -292,8 +292,8 @@ where
     Expr<T::Join>: FloatCopySignThis,
 {
     type Output = Expr<T::Join>;
-    fn copy_sign(self, sign: S) -> Self::Output {
-        Expr::<T::Join>::_copy_sign(Self::lift_self(self), Self::lift_other(sign))
+    fn copysign(self, sign: S) -> Self::Output {
+        Expr::<T::Join>::_copysign(Self::lift_self(self), Self::lift_other(sign))
     }
 }
 impl<T, S> FloatStepExpr<S> for T

@@ -301,7 +301,7 @@ ops_trait!(FloatMulAddExpr<A, B>[FloatMulAddThis] {
 });
 
 ops_trait!(FloatCopySignExpr<T>[FloatCopySignThis] {
-    fn copy_sign[_copy_sign](self, sign: T);
+    fn copysign[_copysign](self, sign: T);
 });
 
 ops_trait!(FloatStepExpr<T>[FloatStepThis] {

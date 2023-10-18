@@ -306,8 +306,7 @@ impl Compiler {
                     #vis fn from_comps_expr(ctor: #ctor_proxy_name #ty_generics) -> #lang_path::types::Expr<#name #ty_generics> {
                         use #lang_path::*;
                         let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&ctor.#field_names.as_expr()).get() ),* ]);
-                        let expr = <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node.into());
-                        expr
+                        <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node.into())
                     }
                 }
             )
@@ -454,8 +453,7 @@ impl Compiler {
                     #vis fn new_expr(#(#field_names: impl #lang_path::types::AsExpr<Value = #field_types>),*) -> #lang_path::types::Expr::<#name> {
                         use #lang_path::*;
                         let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&#field_names.as_expr()).get() ),* ]);
-                        let expr = <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node.into());
-                        expr
+                        <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node.into())
                     }
                 }
             }

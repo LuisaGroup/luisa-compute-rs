@@ -55,14 +55,11 @@ impl VisitMut for TraceVisitor {
                     }
                 }
             }
-            Stmt::Item(item) => match item {
-                Item::Const(c) => match c.expr.as_ref() {
-                    Expr::Lit(_) => {}
-                    _ => {
-                        panic!("Please wrap CONST statments with `escape!`");
-                    }
-                },
-                _ => {}
+            Stmt::Item(Item::Const(c)) => match c.expr.as_ref() {
+                Expr::Lit(_) => {}
+                _ => {
+                    panic!("Please wrap CONST statments with `escape!`");
+                }
             },
             _ => {}
         }
@@ -99,7 +96,7 @@ impl VisitMut for TraceVisitor {
                 if let Expr::Let(_) = **cond {
                 } else if let Some((_, else_branch)) = else_branch {
                     *node = parse_quote_spanned! {span=>
-                        #debug_path::with_lineno("if", 
+                        #debug_path::with_lineno("if",
                             file!(),
                             line!(),
                             column!(),
@@ -107,7 +104,7 @@ impl VisitMut for TraceVisitor {
                     }
                 } else {
                     *node = parse_quote_spanned! {span=>
-                        #debug_path::with_lineno("if", 
+                        #debug_path::with_lineno("if",
                             file!(),
                             line!(),
                             column!(),
@@ -119,7 +116,7 @@ impl VisitMut for TraceVisitor {
                 let cond = &expr.cond;
                 let body = &expr.body;
                 *node = parse_quote_spanned! {span=>
-                    #debug_path::with_lineno("while", 
+                    #debug_path::with_lineno("while",
                             file!(),
                             line!(),
                             column!(), ||<_ as #trait_path::LoopMaybeExpr>::while_loop(|| #cond, || #body))
@@ -128,7 +125,7 @@ impl VisitMut for TraceVisitor {
             Expr::Loop(expr) => {
                 let body = &expr.body;
                 *node = parse_quote_spanned! {span=>
-                    #debug_path::with_lineno("loop", 
+                    #debug_path::with_lineno("loop",
                         file!(),
                         line!(),
                         column!(), || #flow_path::loop_(|| #body))
@@ -144,14 +141,14 @@ impl VisitMut for TraceVisitor {
                     let unroll = attrs.iter().any(|attr| attr.path().is_ident("unroll"));
                     if unroll {
                         *node = parse_quote_spanned! {span=>
-                            #debug_path::with_lineno("for range", 
+                            #debug_path::with_lineno("for range",
                                 file!(),
                                 line!(),
                                 column!(), || #range.for_each(|#pat| #body))
                         }
                     } else {
-                        *node = parse_quote_spanned! {span=> 
-                            #debug_path::with_lineno("for range", 
+                        *node = parse_quote_spanned! {span=>
+                            #debug_path::with_lineno("for range",
                                 file!(),
                                 line!(),
                                 column!(), ||#flow_path::for_range(#range, |#pat| #body))
@@ -380,6 +377,7 @@ pub fn tracked(
                 name.strip_suffix("::f").unwrap()
             };
             ::luisa_compute::lang::debug::comment(&format!("begin fn {} at {}:{}:{}", __fn_name, file!(), line!(), column!()));
+            #[allow(clippy::let_unit_value)]
             let __ret: #ret_type = #body;
             #[allow(unreachable_code)]
             {

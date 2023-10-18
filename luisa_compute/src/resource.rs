@@ -340,6 +340,9 @@ impl<'a, T: Value> BufferView<'a, T> {
     pub fn handle(&self) -> api::Buffer {
         self.buffer.handle()
     }
+    pub fn len(&self) -> usize {
+        self.len
+    }
     pub fn copy_to_async<'b>(&'a self, data: &'b mut [T]) -> Command<'b, 'b> {
         assert_eq!(data.len(), self.len);
         let mut rt = ResourceTracker::new();
@@ -1075,6 +1078,7 @@ impl_storage_texel!([f16; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uin
 // `T` is the read out type of the texture, which is not necessarily the same as
 // the storage type In fact, the texture can be stored in any format as long as
 // it can be converted to `T`
+#[derive(Clone)]
 pub struct Tex2d<T: IoTexel> {
     #[allow(dead_code)]
     pub(crate) width: u32,
@@ -1098,6 +1102,7 @@ impl<T: IoTexel + fmt::Debug> fmt::Debug for Tex2d<T> {
 // `T` is the read out type of the texture, which is not necessarily the same as
 // the storage type In fact, the texture can be stored in any format as long as
 // it can be converted to `T`
+#[derive(Clone)]
 pub struct Tex3d<T: IoTexel> {
     #[allow(dead_code)]
     pub(crate) width: u32,

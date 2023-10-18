@@ -888,7 +888,6 @@ pub(crate) struct TextureHandle {
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) depth: u32,
-    #[allow(dead_code)]
     pub(crate) levels: u32,
 }
 unsafe impl Send for TextureHandle {}
@@ -1078,7 +1077,6 @@ impl_storage_texel!([f16; 4], Byte4, f32, Float2, Float4, Int2, Int4, Uint2, Uin
 // `T` is the read out type of the texture, which is not necessarily the same as
 // the storage type In fact, the texture can be stored in any format as long as
 // it can be converted to `T`
-#[derive(Clone)]
 pub struct Tex2d<T: IoTexel> {
     #[allow(dead_code)]
     pub(crate) width: u32,
@@ -1087,6 +1085,25 @@ pub struct Tex2d<T: IoTexel> {
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: PhantomData<T>,
 }
+
+impl<T: IoTexel> Clone for Tex2d<T> {
+    fn clone(&self) -> Self {
+        let h = self.handle.as_ref();
+        let width = self.width;
+        let height = self.height;
+        let storage = h.storage;
+        let mips = h.levels;
+        let device = &h.device;
+        let copy = device.create_tex2d::<T>(storage, width, height, mips);
+        device.default_stream().with_scope(|s| {
+            s.submit(
+                (0..mips).map(|level| self.view(level).copy_to_texture_async(copy.view(level))),
+            );
+        });
+        todo!()
+    }
+}
+
 impl<T: IoTexel + fmt::Debug> fmt::Debug for Tex2d<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -1102,7 +1119,6 @@ impl<T: IoTexel + fmt::Debug> fmt::Debug for Tex2d<T> {
 // `T` is the read out type of the texture, which is not necessarily the same as
 // the storage type In fact, the texture can be stored in any format as long as
 // it can be converted to `T`
-#[derive(Clone)]
 pub struct Tex3d<T: IoTexel> {
     #[allow(dead_code)]
     pub(crate) width: u32,
@@ -1112,6 +1128,24 @@ pub struct Tex3d<T: IoTexel> {
     pub(crate) depth: u32,
     pub(crate) handle: Arc<TextureHandle>,
     pub(crate) marker: PhantomData<T>,
+}
+impl<T: IoTexel> Clone for Tex3d<T> {
+    fn clone(&self) -> Self {
+        let h = self.handle.as_ref();
+        let width = self.width;
+        let height = self.height;
+        let depth = self.depth;
+        let storage = h.storage;
+        let mips = h.levels;
+        let device = &h.device;
+        let copy = device.create_tex3d::<T>(storage, width, height, depth, mips);
+        device.default_stream().with_scope(|s| {
+            s.submit(
+                (0..mips).map(|level| self.view(level).copy_to_texture_async(copy.view(level))),
+            );
+        });
+        todo!()
+    }
 }
 impl<T: IoTexel + fmt::Debug> fmt::Debug for Tex3d<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -1100,7 +1100,7 @@ impl<T: IoTexel> Clone for Tex2d<T> {
                 (0..mips).map(|level| self.view(level).copy_to_texture_async(copy.view(level))),
             );
         });
-        todo!()
+        copy
     }
 }
 
@@ -1144,7 +1144,7 @@ impl<T: IoTexel> Clone for Tex3d<T> {
                 (0..mips).map(|level| self.view(level).copy_to_texture_async(copy.view(level))),
             );
         });
-        todo!()
+        copy
     }
 }
 impl<T: IoTexel + fmt::Debug> fmt::Debug for Tex3d<T> {

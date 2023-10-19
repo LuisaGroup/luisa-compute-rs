@@ -61,6 +61,7 @@ fn nested_callable_capture_by_value() {
     let x = device.create_buffer::<f32>(1024);
     let y = device.create_buffer::<f32>(1024);
     let z = device.create_buffer::<f32>(1024);
+    
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
     let kernel = Kernel::<fn(Buffer<f32>)>::new(

@@ -1829,6 +1829,17 @@ impl<T: Value> ToNode for Buffer<T> {
         self.var().node()
     }
 }
+impl<T: Value> IndexRead for BufferView<T> {
+    type Element = T;
+    fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
+        self.var().read(i)
+    }
+}
+impl<T: Value> IndexWrite for BufferView<T> {
+    fn write<I: IntoIndex, V: AsExpr<Value = T>>(&self, i: I, v: V) {
+        self.var().write(i, v)
+    }
+}
 impl<T: Value> IndexRead for Buffer<T> {
     type Element = T;
     fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
@@ -1840,7 +1851,6 @@ impl<T: Value> IndexWrite for Buffer<T> {
         self.var().write(i, v)
     }
 }
-
 impl<T: Value> IndexRead for BufferVar<T> {
     type Element = T;
     fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {

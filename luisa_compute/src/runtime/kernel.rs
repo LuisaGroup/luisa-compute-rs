@@ -350,14 +350,14 @@ impl KernelBuilder {
     }
     fn collect_module_info(&self) -> (ResourceTracker, Vec<CArc<CpuCustomOp>>, Vec<Capture>) {
         with_recorder(|r| {
-            let mut resource_tracker = ResourceTracker::new();
+            let mut resource_tracker = std::mem::replace(&mut r.rt, ResourceTracker::new());
             let mut captured: Vec<Capture> = Vec::new();
             let mut captured_resources: Vec<_> = r.captured_resources.values().cloned().collect();
             captured_resources.sort_by_key(|(i, _, _, _)| *i);
             for (j, (i, node, binding, handle)) in captured_resources.into_iter().enumerate() {
                 assert_eq!(j, i);
                 captured.push(Capture { node, binding });
-                resource_tracker.add_any(handle);
+                resource_tracker.add_weak_any(handle);
             }
             let mut cpu_custom_ops: Vec<_> = r.cpu_custom_ops.values().cloned().collect();
             cpu_custom_ops.sort_by_key(|(i, _)| *i);

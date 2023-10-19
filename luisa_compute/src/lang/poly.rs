@@ -36,7 +36,7 @@ pub trait PolymorphicImpl<T: ?Sized + 'static>: Value {
 #[macro_export]
 macro_rules! impl_new_poly_array {
     ($buffer:expr, $tag:expr, $key:expr) => {{
-        let buffer = unsafe { $buffer.shallow_clone() };
+        let buffer = $buffer.view(..);
         luisa_compute::PolyArray::new(
             $tag,
             $key,
@@ -53,7 +53,7 @@ macro_rules! impl_polymorphic {
                 tag: i32,
                 key: K,
             ) -> luisa_compute::lang::poly::PolyArray<K, dyn $trait_> {
-                let buffer = unsafe { buffer.shallow_clone() };
+                let buffer = buffer.view(..);
                 luisa_compute::lang::poly::PolyArray::new(
                     tag,
                     key,

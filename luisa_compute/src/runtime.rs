@@ -175,6 +175,8 @@ impl Device {
         };
         swapchain
     }
+
+    /// Creates an **unintialized** buffer of `len` bytes.
     pub fn create_byte_buffer(&self, len: usize) -> Buffer<u8> {
         let name = self.name();
         if name == "dx" {
@@ -184,18 +186,25 @@ impl Device {
             );
         }
         let buffer = self.inner.create_buffer(&Type::void(), len);
-        let buffer = Buffer {
+        let handle = Arc::new(BufferHandle {
             device: self.clone(),
-            handle: Arc::new(BufferHandle {
+            handle: api::Buffer(buffer.resource.handle),
+            native_handle: buffer.resource.native_handle,
+        });
+        let buffer = Buffer {
+            handle: handle.clone(),
+            full_view: BufferView {
                 device: self.clone(),
-                handle: api::Buffer(buffer.resource.handle),
-                native_handle: buffer.resource.native_handle,
-            }),
-            len,
-            _marker: PhantomData,
+                handle: Arc::downgrade(&handle),
+                offset: 0,
+                len,
+                _marker: PhantomData,
+            },
         };
         buffer
     }
+
+    /// Creates an **unintialized** buffer of `count` elements of type `T` in SOA layout.
     pub fn create_soa_buffer<T: SoaValue>(&self, count: usize) -> SoaBuffer<T> {
         assert!(
             count <= u32::MAX as usize,
@@ -221,6 +230,8 @@ impl Device {
         };
         buffer
     }
+
+    /// Creates an **unintialized** buffer of `count` elements of type `T`.
     pub fn create_buffer<T: Value>(&self, count: usize) -> Buffer<T> {
         let name = self.name();
         if name == "dx" {
@@ -238,15 +249,20 @@ impl Device {
             "size of T must be greater than 0"
         );
         let buffer = self.inner.create_buffer(&T::type_(), count);
-        let buffer = Buffer {
+        let handle = Arc::new(BufferHandle {
             device: self.clone(),
-            handle: Arc::new(BufferHandle {
+            handle: api::Buffer(buffer.resource.handle),
+            native_handle: buffer.resource.native_handle,
+        });
+        let buffer = Buffer {
+            handle: handle.clone(),
+            full_view: BufferView {
                 device: self.clone(),
-                handle: api::Buffer(buffer.resource.handle),
-                native_handle: buffer.resource.native_handle,
-            }),
-            _marker: PhantomData {},
-            len: count,
+                handle: Arc::downgrade(&handle),
+                offset: 0,
+                len: count,
+                _marker: PhantomData,
+            },
         };
         buffer
     }
@@ -263,17 +279,6 @@ impl Device {
         let buffer = self.create_buffer(count);
         buffer.view(..).fill_fn(f);
         buffer
-    }
-    #[deprecated(
-        note = "Spamming BufferHeap can cause serious performance issue on CUDA backend. Use BindlessArray instead."
-    )]
-    #[allow(deprecated)]
-    pub fn create_buffer_heap<T: Value>(&self, slots: usize) -> BufferHeap<T> {
-        let array = self.create_bindless_array(slots);
-        BufferHeap {
-            inner: array,
-            _marker: PhantomData {},
-        }
     }
     pub fn create_bindless_array(&self, slots: usize) -> BindlessArray {
         assert!(slots > 0, "slots must be greater than 0");
@@ -319,11 +324,23 @@ impl Device {
             depth: 1,
             storage: format.storage(),
         });
+        let weak = Arc::downgrade(&handle);
         let tex = Tex2d {
             width,
             height,
             handle,
-            marker: PhantomData {},
+            views: (0..mips)
+                .map(|level| Tex2dView {
+                    device: self.clone(),
+                    width,
+                    height,
+                    storage,
+                    format,
+                    handle: weak.clone(),
+                    level,
+                    marker: PhantomData,
+                })
+                .collect(),
         };
         tex
     }
@@ -350,12 +367,25 @@ impl Device {
             depth,
             storage: format.storage(),
         });
+        let weak = Arc::downgrade(&handle);
         let tex = Tex3d {
             width,
             height,
             depth,
             handle,
-            marker: PhantomData {},
+            views: (0..mips)
+                .map(|level| Tex3dView {
+                    device: self.clone(),
+                    width,
+                    height,
+                    depth,
+                    storage,
+                    format,
+                    handle: weak.clone(),
+                    level,
+                    marker: PhantomData,
+                })
+                .collect(),
         };
         tex
     }
@@ -389,7 +419,7 @@ impl Device {
     }
     pub fn create_procedural_primitive(
         &self,
-        aabb_buffer: BufferView<'_, rtx::Aabb>,
+        aabb_buffer: BufferView<rtx::Aabb>,
         option: AccelOption,
     ) -> rtx::ProceduralPrimitive {
         let primitive = self.inner.create_procedural_primitive(option);
@@ -398,7 +428,7 @@ impl Device {
                 device: self.clone(),
                 handle: api::ProceduralPrimitive(primitive.handle),
                 native_handle: primitive.native_handle,
-                aabb_buffer: aabb_buffer.buffer.handle.clone(),
+                aabb_buffer: aabb_buffer._handle(),
             }),
             aabb_buffer: aabb_buffer.handle(),
             aabb_buffer_offset: aabb_buffer.offset * std::mem::size_of::<rtx::Aabb>() as usize,
@@ -407,8 +437,8 @@ impl Device {
     }
     pub fn create_mesh<V: Value>(
         &self,
-        vbuffer: BufferView<'_, V>,
-        tbuffer: BufferView<'_, rtx::Index>,
+        vbuffer: BufferView<V>,
+        tbuffer: BufferView<rtx::Index>,
         option: AccelOption,
     ) -> Mesh {
         let mesh = self.inner.create_mesh(option);
@@ -419,8 +449,8 @@ impl Device {
                 device: self.clone(),
                 handle: api::Mesh(handle),
                 native_handle,
-                vbuffer: vbuffer.buffer.handle.clone(),
-                ibuffer: tbuffer.buffer.handle.clone(),
+                vbuffer: vbuffer._handle(),
+                ibuffer: tbuffer._handle(),
             }),
             vertex_buffer: vbuffer.handle(),
             vertex_buffer_offset: vbuffer.offset * std::mem::size_of::<V>() as usize,
@@ -1129,7 +1159,7 @@ impl<T: Value> KernelArg for T {
     }
 }
 
-impl<'a, T: Value> KernelArg for BufferView<'a, T> {
+impl<T: Value> KernelArg for BufferView<T> {
     type Parameter = BufferVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.buffer_view(self);
@@ -1150,14 +1180,14 @@ impl<T: IoTexel> KernelArg for Tex3d<T> {
     }
 }
 
-impl<'a, T: IoTexel> KernelArg for Tex2dView<'a, T> {
+impl<T: IoTexel> KernelArg for Tex2dView<T> {
     type Parameter = Tex2dVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex2d(self);
     }
 }
 
-impl<'a, T: IoTexel> KernelArg for Tex3dView<'a, T> {
+impl<T: IoTexel> KernelArg for Tex3dView<T> {
     type Parameter = Tex3dVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.tex3d(self);
@@ -1228,6 +1258,9 @@ impl RawKernel {
         let args = Arc::new(args);
         assert_eq!(args.len(), self.module.args.len());
         rt.add(args.clone());
+        let mut captures = self.resource_tracker.clone();
+        captures.upgrade();
+        rt.merge(captures);
         Command {
             inner: api::Command::ShaderDispatch(api::ShaderDispatchCommand {
                 shader: self.unwrap(),
@@ -1291,8 +1324,7 @@ impl<S: CallableSignature> DynCallable<S> {
             for c in callables {
                 if crate::lang::__check_callable(&c.inner.module, nodes) {
                     return CallableRet::_from_return(crate::lang::__invoke_callable(
-                        &c.inner.module,
-                        nodes,
+                        &c.inner, nodes,
                     ));
                 }
             }
@@ -1329,7 +1361,7 @@ impl<S: CallableSignature> DynCallable<S> {
         let callables = &mut inner.callables;
         callables.push(new_callable);
         CallableRet::_from_return(crate::lang::__invoke_callable(
-            &callables.last().unwrap().inner.module,
+            &callables.last().unwrap().inner,
             nodes,
         ))
     }
@@ -1455,7 +1487,7 @@ impl<T: Value> AsKernelArg for Buffer<T> {
     type Output = Buffer<T>;
 }
 
-impl<'a, T: Value> AsKernelArg for BufferView<'a, T> {
+impl<'a, T: Value> AsKernelArg for BufferView<T> {
     type Output = Buffer<T>;
 }
 impl<T: SoaValue> AsKernelArg for SoaBuffer<T> {
@@ -1464,11 +1496,11 @@ impl<T: SoaValue> AsKernelArg for SoaBuffer<T> {
 impl<'a, T: SoaValue> AsKernelArg for SoaBufferView<'a, T> {
     type Output = SoaBuffer<T>;
 }
-impl<'a, T: IoTexel> AsKernelArg for Tex2dView<'a, T> {
+impl<'a, T: IoTexel> AsKernelArg for Tex2dView<T> {
     type Output = Tex2d<T>;
 }
 
-impl<'a, T: IoTexel> AsKernelArg for Tex3dView<'a, T> {
+impl<'a, T: IoTexel> AsKernelArg for Tex3dView<T> {
     type Output = Tex3d<T>;
 }
 
@@ -1501,7 +1533,7 @@ macro_rules! impl_call_for_callable {
                 args.extend_from_slice(&encoder.args);
                 args.extend_from_slice(&self.inner.captured_args);
                 CallableRet::_from_return(
-                    crate::lang::__invoke_callable(&self.inner.module, &args))
+                    crate::lang::__invoke_callable(&self.inner, &args))
             }
         }
         impl <R:CallableRet+'static, $($Ts: CallableParameter),*> DynCallable<fn($($Ts,)*)->R> {

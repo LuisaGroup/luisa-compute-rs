@@ -1681,7 +1681,96 @@ fn buffer_size() {
     let out = out.view(..).copy_to_vec();
     assert_eq!(out[0], 1024);
 }
+#[test]
+#[should_panic]
+fn drop_buffer_before_kernel() {
+    let device = get_device();
+    let x = device.create_buffer::<f32>(1024);
+    let k = device.create_kernel::<fn()>(track!(&|| {
+        let tid = dispatch_id().x;
+        let x = x.var();
+        x.write(tid, tid.as_f32());
+    }));
+    std::mem::drop(x);
+    k.dispatch([1024, 1, 1]);
+}
+#[test]
+#[should_panic]
+fn drop_buffer_before_callable() {
+    let device = get_device();
+    let x = device.create_buffer::<f32>(1024);
+    let k = device.create_kernel::<fn()>(track!(&|| {
+        let tid = dispatch_id().x;
+        outline(|| {
+            let x = x.var();
+            x.write(tid, tid.as_f32());
+        })
+    }));
+    std::mem::drop(x);
+    k.dispatch([1024, 1, 1]);
+}
 
+#[test]
+#[should_panic]
+fn drop_buffer_before_callable_captured_outside_kernel() {
+    let device = get_device();
+    let x = device.create_buffer::<f32>(1024);
+    let c = Callable::<fn()>::new(&device, || {
+        let tid = dispatch_id().x;
+        let x = x.var();
+        outline(|| {
+            x.write(tid, tid.as_f32());
+        });
+    });
+    let k = device.create_kernel::<fn()>(track!(&|| {
+        c.call();
+    }));
+    std::mem::drop(x);
+    k.dispatch([1024, 1, 1]);
+}
+#[test]
+#[should_panic]
+fn drop_texture_before_kernel() {
+    let device = get_device();
+    let t = device.create_tex2d::<Float4>(PixelStorage::Byte4, 512, 512, 1);
+    let k = device.create_kernel::<fn()>(track!(&|| {
+        let tid = dispatch_id().xy();
+        t.write(tid, Float4::splat_expr(1.0f32));
+    }));
+    std::mem::drop(t);
+    k.dispatch([512, 512, 1]);
+}
+#[test]
+#[should_panic]
+fn drop_texture_before_callable() {
+    let device = get_device();
+    let t = device.create_tex2d::<Float4>(PixelStorage::Byte4, 512, 512, 1);
+    let k = device.create_kernel::<fn()>(track!(&|| {
+        let tid = dispatch_id().xy();
+        outline(|| {
+            t.write(tid, Float4::splat_expr(1.0f32));
+        });
+    }));
+    std::mem::drop(t);
+    k.dispatch([512, 512, 1]);
+}
+#[test]
+#[should_panic]
+fn drop_texture_before_callable_captured_outside_kernel() {
+    let device = get_device();
+    let t = device.create_tex2d::<Float4>(PixelStorage::Byte4, 512, 512, 1);
+    let c = Callable::<fn()>::new(&device, || {
+        let tid = dispatch_id().xy();
+        outline(|| {
+            t.write(tid, Float4::splat_expr(1.0f32));
+        });
+    });
+    let k = device.create_kernel::<fn()>(track!(&|| {
+        c.call();
+    }));
+    std::mem::drop(t);
+    k.dispatch([512, 512, 1]);
+}
 #[test]
 #[tracked]
 fn test_tracked() {

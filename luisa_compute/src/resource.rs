@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::ops::RangeBounds;
 use std::process::abort;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
 use parking_lot::RawMutex;
@@ -18,7 +18,7 @@ use api::{BufferDownloadCommand, BufferUploadCommand, INVALID_RESOURCE_HANDLE};
 use libc::c_void;
 
 pub type ByteBuffer = Buffer<u8>;
-pub type ByteBufferView<'a> = BufferView<'a, u8>;
+pub type ByteBufferView = BufferView<u8>;
 pub type ByteBufferVar = BufferVar<u8>;
 
 // Uncomment if the alias blowup again...
@@ -280,10 +280,19 @@ impl BufferVar<u8> {
     }
 }
 pub struct Buffer<T: Value> {
-    pub(crate) device: Device,
     pub(crate) handle: Arc<BufferHandle>,
-    pub(crate) len: usize,
-    pub(crate) _marker: PhantomData<T>,
+    pub(crate) full_view: BufferView<T>,
+}
+impl<T: Value> BufferView<T> {
+    pub fn copy_async<'a>(&self, s: &'a Scope<'a>) -> Buffer<T> {
+        let copy = self.device.create_buffer(self.len);
+        s.submit([self.copy_to_buffer_async(copy.view(..))]);
+        copy
+    }
+    pub fn copy(&self) -> Buffer<T> {
+        let default_stream = self.device.default_stream();
+        default_stream.with_scope(|s| self.copy_async(s))
+    }
 }
 impl<T: Value + fmt::Debug> fmt::Debug for Buffer<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -325,28 +334,44 @@ impl Drop for BufferHandle {
         self.device.inner.destroy_buffer(self.handle);
     }
 }
-#[derive(Clone, Copy)]
-pub struct BufferView<'a, T: Value> {
-    pub(crate) buffer: &'a Buffer<T>,
+#[derive(Clone)]
+pub struct BufferView<T: Value> {
+    pub(crate) device: Device,
+    pub(crate) handle: Weak<BufferHandle>,
     /// offset in #elements
     pub(crate) offset: usize,
     /// length in #elements
     pub(crate) len: usize,
+    pub(crate) _marker: PhantomData<T>,
 }
-impl<'a, T: Value> BufferView<'a, T> {
+impl<T: Value> BufferView<T> {
+    #[inline]
     pub fn var(&self) -> BufferVar<T> {
         BufferVar::new(self)
     }
-    pub fn handle(&self) -> api::Buffer {
-        self.buffer.handle()
+    pub(crate) fn _handle(&self) -> Arc<BufferHandle> {
+        Weak::upgrade(&self.handle).unwrap()
     }
+    #[inline]
+    pub fn handle(&self) -> api::Buffer {
+        self._handle().handle
+    }
+    #[inline]
+    pub fn native_handle(&self) -> *mut c_void {
+        self._handle().native_handle
+    }
+    #[inline]
     pub fn len(&self) -> usize {
         self.len
     }
-    pub fn copy_to_async<'b>(&'a self, data: &'b mut [T]) -> Command<'b, 'b> {
+    #[inline]
+    pub fn size_bytes(&self) -> usize {
+        self.len * std::mem::size_of::<T>()
+    }
+    pub fn copy_to_async<'a>(&self, data: &'a mut [T]) -> Command<'a, 'a> {
         assert_eq!(data.len(), self.len);
         let mut rt = ResourceTracker::new();
-        rt.add(self.buffer.handle.clone());
+        rt.add(self._handle());
         Command {
             inner: api::Command::BufferDownload(BufferDownloadCommand {
                 buffer: self.handle(),
@@ -370,14 +395,14 @@ impl<'a, T: Value> BufferView<'a, T> {
     }
     pub fn copy_to(&self, data: &mut [T]) {
         unsafe {
-            submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_async(data)]);
+            submit_default_stream_and_sync(&self.device, [self.copy_to_async(data)]);
         }
     }
 
-    pub fn copy_from_async<'b>(&'a self, data: &'b [T]) -> Command<'b, 'static> {
+    pub fn copy_from_async<'a>(&self, data: &'a [T]) -> Command<'a, 'static> {
         assert_eq!(data.len(), self.len);
         let mut rt = ResourceTracker::new();
-        rt.add(self.buffer.handle.clone());
+        rt.add(self._handle());
         Command {
             inner: api::Command::BufferUpload(BufferUploadCommand {
                 buffer: self.handle(),
@@ -391,7 +416,7 @@ impl<'a, T: Value> BufferView<'a, T> {
         }
     }
     pub fn copy_from(&self, data: &[T]) {
-        submit_default_stream_and_sync(&self.buffer.device, [self.copy_from_async(data)]);
+        submit_default_stream_and_sync(&self.device, [self.copy_from_async(data)]);
     }
     pub fn fill_fn<F: FnMut(usize) -> T>(&self, f: F) {
         self.copy_from(&(0..self.len).map(f).collect::<Vec<_>>());
@@ -399,11 +424,11 @@ impl<'a, T: Value> BufferView<'a, T> {
     pub fn fill(&self, value: T) {
         self.fill_fn(|_| value);
     }
-    pub fn copy_to_buffer_async(&self, dst: BufferView<'a, T>) -> Command<'static, 'static> {
+    pub fn copy_to_buffer_async(&self, dst: BufferView<T>) -> Command<'static, 'static> {
         assert_eq!(self.len, dst.len);
         let mut rt = ResourceTracker::new();
-        rt.add(self.buffer.handle.clone());
-        rt.add(dst.buffer.handle.clone());
+        rt.add(self._handle());
+        rt.add(dst._handle());
         Command {
             inner: api::Command::BufferCopy(api::BufferCopyCommand {
                 src: self.handle(),
@@ -418,62 +443,7 @@ impl<'a, T: Value> BufferView<'a, T> {
         }
     }
     pub fn copy_to_buffer(&self, dst: BufferView<T>) {
-        submit_default_stream_and_sync(&self.buffer.device, [self.copy_to_buffer_async(dst)]);
-    }
-}
-impl<T: Value> Buffer<T> {
-    #[inline]
-    pub fn handle(&self) -> api::Buffer {
-        self.handle.handle
-    }
-    #[inline]
-    pub unsafe fn shallow_clone(&self) -> Buffer<T> {
-        Buffer {
-            device: self.device.clone(),
-            handle: self.handle.clone(),
-            len: self.len,
-            _marker: PhantomData,
-        }
-    }
-    #[inline]
-    pub fn native_handle(&self) -> *mut c_void {
-        self.handle.native_handle
-    }
-    #[inline]
-    pub fn copy_from(&self, data: &[T]) {
-        self.view(..).copy_from(data);
-    }
-    #[inline]
-    pub fn copy_from_async<'a>(&self, data: &'a [T]) -> Command<'a, 'static> {
-        self.view(..).copy_from_async(data)
-    }
-    #[inline]
-    pub fn copy_to(&self, data: &mut [T]) {
-        self.view(..).copy_to(data);
-    }
-    #[inline]
-    pub fn copy_to_async<'a>(&self, data: &'a mut [T]) -> Command<'a, 'a> {
-        self.view(..).copy_to_async(data)
-    }
-    #[inline]
-    pub fn copy_to_vec(&self) -> Vec<T> {
-        self.view(..).copy_to_vec()
-    }
-    #[inline]
-    pub fn copy_to_buffer(&self, dst: &Buffer<T>) {
-        self.view(..).copy_to_buffer(dst.view(..));
-    }
-    #[inline]
-    pub fn copy_to_buffer_async<'a>(&'a self, dst: &'a Buffer<T>) -> Command<'static, 'static> {
-        self.view(..).copy_to_buffer_async(dst.view(..))
-    }
-    #[inline]
-    pub fn fill_fn<F: FnMut(usize) -> T>(&self, f: F) {
-        self.view(..).fill_fn(f);
-    }
-    #[inline]
-    pub fn fill(&self, value: T) {
-        self.view(..).fill(value);
+        submit_default_stream_and_sync(&self.device, [self.copy_to_buffer_async(dst)]);
     }
     pub fn view<S: RangeBounds<usize>>(&self, range: S) -> BufferView<T> {
         let lower = range.start_bound();
@@ -491,31 +461,15 @@ impl<T: Value> Buffer<T> {
         assert!(lower <= upper);
         assert!(upper <= self.len);
         BufferView {
-            buffer: self,
+            device: self.device.clone(),
+            handle: self.handle.clone(),
             offset: lower,
             len: upper - lower,
+            _marker: PhantomData,
         }
     }
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.len
-    }
-    #[inline]
-    pub fn size_bytes(&self) -> usize {
-        self.len * std::mem::size_of::<T>()
-    }
-    #[inline]
-    pub fn var(&self) -> BufferVar<T> {
-        BufferVar::new(&self.view(..))
-    }
 }
-impl<T: Value> Clone for Buffer<T> {
-    fn clone(&self) -> Self {
-        let cloned = self.device.create_buffer(self.len);
-        self.copy_to_buffer(&cloned);
-        cloned
-    }
-}
+
 pub(crate) struct BindlessArrayHandle {
     pub(crate) device: Device,
     pub(crate) handle: api::BindlessArray,
@@ -533,78 +487,6 @@ pub(crate) struct BindlessArraySlot {
     pub(crate) tex3d: Option<Arc<TextureHandle>>,
 }
 
-#[deprecated(
-    note = "Spamming BufferHeap can cause serious performance issue on CUDA backend. Use BindlessArray instead."
-)]
-pub struct BufferHeap<T: Value> {
-    pub(crate) inner: BindlessArray,
-    pub(crate) _marker: PhantomData<T>,
-}
-#[allow(deprecated)]
-impl<T: Value + fmt::Debug> fmt::Debug for BufferHeap<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "BufferHeap<{}>", std::any::type_name::<T>(),)
-    }
-}
-#[deprecated]
-pub struct BufferHeapVar<T: Value> {
-    inner: BindlessArrayVar,
-    _marker: PhantomData<T>,
-}
-#[allow(deprecated)]
-impl<T: Value> BufferHeap<T> {
-    #[inline]
-    pub fn var(&self) -> BufferHeapVar<T> {
-        BufferHeapVar {
-            inner: self.inner.var(),
-            _marker: PhantomData,
-        }
-    }
-    #[inline]
-    pub fn handle(&self) -> api::BindlessArray {
-        self.inner.handle()
-    }
-    #[inline]
-    pub fn native_handle(&self) -> *mut std::ffi::c_void {
-        self.inner.native_handle()
-    }
-    pub fn emplace_buffer_async(&self, index: usize, buffer: &Buffer<T>) {
-        self.inner.emplace_buffer_async(index, buffer);
-    }
-    pub fn emplace_buffer_view_async<'a>(&self, index: usize, bufferview: &BufferView<'a, T>) {
-        self.inner.emplace_buffer_view_async(index, bufferview);
-    }
-    pub fn remove_buffer_async(&self, index: usize) {
-        self.inner.remove_buffer_async(index);
-    }
-    #[inline]
-    pub fn emplace_buffer(&self, index: usize, buffer: &Buffer<T>) {
-        self.inner.emplace_buffer(index, buffer);
-    }
-    #[inline]
-    pub fn emplace_buffer_view<'a>(&self, index: usize, bufferview: &BufferView<'a, T>) {
-        self.inner.emplace_buffer_view_async(index, bufferview);
-    }
-    #[inline]
-    pub fn remove_buffer(&self, index: usize) {
-        self.inner.remove_buffer(index);
-    }
-    #[inline]
-    pub fn update(&self) {
-        self.inner.update();
-    }
-    #[inline]
-    pub fn buffer(&self, index: impl AsExpr<Value = u32>) -> BindlessBufferVar<T> {
-        self.inner.buffer(index)
-    }
-}
-#[allow(deprecated)]
-impl<T: Value> BufferHeapVar<T> {
-    #[inline]
-    pub fn buffer(&self, index: impl AsExpr<Value = u32>) -> BindlessBufferVar<T> {
-        self.inner.buffer(index)
-    }
-}
 pub struct BindlessArray {
     pub(crate) device: Device,
     pub(crate) handle: Arc<BindlessArrayHandle>,
@@ -646,21 +528,13 @@ impl BindlessArray {
     pub fn emplace_byte_buffer_async(&self, index: usize, buffer: &ByteBuffer) {
         self.emplace_byte_buffer_view_async(index, &buffer.view(..))
     }
-    pub fn emplace_byte_buffer_view_async<'a>(
-        &self,
-        index: usize,
-        bufferview: &ByteBufferView<'a>,
-    ) {
+    pub fn emplace_byte_buffer_view_async(&self, index: usize, bufferview: &ByteBufferView) {
         self.emplace_buffer_view_async(index, bufferview)
     }
     pub fn emplace_buffer_async<T: Value>(&self, index: usize, buffer: &Buffer<T>) {
         self.emplace_buffer_view_async(index, &buffer.view(..))
     }
-    pub fn emplace_buffer_view_async<'a, T: Value>(
-        &self,
-        index: usize,
-        bufferview: &BufferView<'a, T>,
-    ) {
+    pub fn emplace_buffer_view_async<T: Value>(&self, index: usize, bufferview: &BufferView<T>) {
         self.lock();
         self.modifications
             .borrow_mut()
@@ -677,7 +551,7 @@ impl BindlessArray {
             offset: bufferview.offset,
         };
         let mut slots = self.slots.borrow_mut();
-        slots[index].buffer = Some(bufferview.buffer.handle.clone());
+        slots[index].buffer = Some(bufferview._handle());
         self.unlock();
     }
     pub fn emplace_tex2d_async<T: IoTexel>(
@@ -796,7 +670,7 @@ impl BindlessArray {
         self.update();
     }
     #[inline]
-    pub fn emplace_byte_buffer_view(&self, index: usize, buffer: &ByteBufferView<'_>) {
+    pub fn emplace_byte_buffer_view(&self, index: usize, buffer: &ByteBufferView) {
         self.emplace_byte_buffer_view_async(index, buffer);
         self.update();
     }
@@ -1083,11 +957,13 @@ pub struct Tex2d<T: IoTexel> {
     #[allow(dead_code)]
     pub(crate) height: u32,
     pub(crate) handle: Arc<TextureHandle>,
-    pub(crate) marker: PhantomData<T>,
+    pub(crate) views: Vec<Tex2dView<T>>,
 }
 
-impl<T: IoTexel> Clone for Tex2d<T> {
-    fn clone(&self) -> Self {
+impl<T: IoTexel> Tex2d<T> {
+    /// Create a new texture with the same dimensions and storage as `self`
+    /// and copy the contents of `self` to it asynchronously
+    pub fn copy_async<'a>(&self, s: &Scope<'a>) -> Self {
         let h = self.handle.as_ref();
         let width = self.width;
         let height = self.height;
@@ -1095,12 +971,15 @@ impl<T: IoTexel> Clone for Tex2d<T> {
         let mips = h.levels;
         let device = &h.device;
         let copy = device.create_tex2d::<T>(storage, width, height, mips);
-        device.default_stream().with_scope(|s| {
-            s.submit(
-                (0..mips).map(|level| self.view(level).copy_to_texture_async(copy.view(level))),
-            );
-        });
+        s.submit((0..mips).map(|level| self.view(level).copy_to_texture_async(copy.view(level))));
         copy
+    }
+
+    /// Create a new texture with the same dimensions and storage as `self`
+    /// and copy the contents of `self` to it.
+    pub fn copy(&self) -> Self {
+        let default_stream = self.handle.device.default_stream();
+        default_stream.with_scope(|s| self.copy_async(s))
     }
 }
 
@@ -1127,10 +1006,12 @@ pub struct Tex3d<T: IoTexel> {
     #[allow(dead_code)]
     pub(crate) depth: u32,
     pub(crate) handle: Arc<TextureHandle>,
-    pub(crate) marker: PhantomData<T>,
+    pub(crate) views: Vec<Tex3dView<T>>,
 }
-impl<T: IoTexel> Clone for Tex3d<T> {
-    fn clone(&self) -> Self {
+impl<T: IoTexel> Tex3d<T> {
+    /// Create a new texture with the same dimensions and storage as `self`
+    /// and copy the contents of `self` to it asynchronously
+    pub fn copy_async(&self, s: &Scope) -> Self {
         let h = self.handle.as_ref();
         let width = self.width;
         let height = self.height;
@@ -1139,12 +1020,15 @@ impl<T: IoTexel> Clone for Tex3d<T> {
         let mips = h.levels;
         let device = &h.device;
         let copy = device.create_tex3d::<T>(storage, width, height, depth, mips);
-        device.default_stream().with_scope(|s| {
-            s.submit(
-                (0..mips).map(|level| self.view(level).copy_to_texture_async(copy.view(level))),
-            );
-        });
+        s.submit((0..mips).map(|level| self.view(level).copy_to_texture_async(copy.view(level))));
         copy
+    }
+
+    /// Create a new texture with the same dimensions and storage as `self`
+    /// and copy the contents of `self` to it.
+    pub fn copy(&self) -> Self {
+        let default_stream = self.handle.device.default_stream();
+        default_stream.with_scope(|s| self.copy_async(s))
     }
 }
 impl<T: IoTexel + fmt::Debug> fmt::Debug for Tex3d<T> {
@@ -1160,15 +1044,33 @@ impl<T: IoTexel + fmt::Debug> fmt::Debug for Tex3d<T> {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct Tex2dView<'a, T: IoTexel> {
-    pub(crate) tex: &'a Tex2d<T>,
+#[derive(Clone)]
+pub struct Tex2dView<T: IoTexel> {
+    pub(crate) device: Device,
+    #[allow(dead_code)]
+    pub(crate) width: u32,
+    #[allow(dead_code)]
+    pub(crate) height: u32,
+    pub(crate) storage: PixelStorage,
+    pub(crate) format: PixelFormat,
+    pub(crate) handle: Weak<TextureHandle>,
     pub(crate) level: u32,
+    pub(crate) marker: PhantomData<T>,
 }
-#[derive(Clone, Copy)]
-pub struct Tex3dView<'a, T: IoTexel> {
-    pub(crate) tex: &'a Tex3d<T>,
+#[derive(Clone)]
+pub struct Tex3dView<T: IoTexel> {
+    pub(crate) device: Device,
+    #[allow(dead_code)]
+    pub(crate) width: u32,
+    #[allow(dead_code)]
+    pub(crate) height: u32,
+    #[allow(dead_code)]
+    pub(crate) depth: u32,
+    pub(crate) storage: PixelStorage,
+    pub(crate) format: PixelFormat,
+    pub(crate) handle: Weak<TextureHandle>,
     pub(crate) level: u32,
+    pub(crate) marker: PhantomData<T>,
 }
 impl<T: IoTexel> Tex2d<T> {
     pub fn handle(&self) -> api::Texture {
@@ -1188,19 +1090,22 @@ impl<T: IoTexel> Tex3d<T> {
 }
 macro_rules! impl_tex_view {
     ($name:ident) => {
-        impl<'a, T: IoTexel> $name<'a, T> {
-            pub fn copy_to_async<U: StorageTexel<T>>(
-                &'a self,
+        impl<T: IoTexel> $name<T> {
+            pub(crate) fn _handle(&self) -> Arc<TextureHandle> {
+                self.handle.upgrade().unwrap()
+            }
+            pub fn copy_to_async<'a, U: StorageTexel<T>>(
+                &self,
                 data: &'a mut [U],
             ) -> Command<'a, 'a> {
                 assert_eq!(data.len(), self.texel_count() as usize);
-                assert_eq!(self.tex.handle.storage, U::pixel_storage());
+                assert_eq!(self.storage, U::pixel_storage());
                 let mut rt = ResourceTracker::new();
-                rt.add(self.tex.handle.clone());
+                rt.add(self._handle());
                 Command {
                     inner: api::Command::TextureDownload(api::TextureDownloadCommand {
                         texture: self.handle(),
-                        storage: self.tex.handle.storage,
+                        storage: self.storage,
                         level: self.level,
                         size: self.size(),
                         data: data.as_mut_ptr() as *mut u8,
@@ -1210,12 +1115,12 @@ macro_rules! impl_tex_view {
                     callback: None,
                 }
             }
-            pub fn copy_to<U: StorageTexel<T>>(&'a self, data: &'a mut [U]) {
+            pub fn copy_to<U: StorageTexel<T>>(&self, data: &mut [U]) {
                 assert_eq!(data.len(), self.texel_count() as usize);
 
-                submit_default_stream_and_sync(&self.tex.handle.device, [self.copy_to_async(data)]);
+                submit_default_stream_and_sync(&self.device, [self.copy_to_async(data)]);
             }
-            pub fn copy_to_vec<U: StorageTexel<T>>(&'a self) -> Vec<U> {
+            pub fn copy_to_vec<U: StorageTexel<T>>(&self) -> Vec<U> {
                 let mut data = Vec::with_capacity(self.texel_count() as usize);
                 unsafe {
                     data.set_len(self.texel_count() as usize);
@@ -1223,18 +1128,18 @@ macro_rules! impl_tex_view {
                 self.copy_to(&mut data);
                 data
             }
-            pub fn copy_from_async<'b, U: StorageTexel<T>>(
-                &'a self,
-                data: &'b [U],
-            ) -> Command<'b, 'static> {
+            pub fn copy_from_async<U: StorageTexel<T>>(
+                &self,
+                data: &[U],
+            ) -> Command<'static, 'static> {
                 assert_eq!(data.len(), self.texel_count() as usize);
-                assert_eq!(self.tex.handle.storage, U::pixel_storage());
+                assert_eq!(self.storage, U::pixel_storage());
                 let mut rt = ResourceTracker::new();
-                rt.add(self.tex.handle.clone());
+                rt.add(self._handle());
                 Command {
                     inner: api::Command::TextureUpload(api::TextureUploadCommand {
                         texture: self.handle(),
-                        storage: self.tex.handle.storage,
+                        storage: self.storage,
                         level: self.level,
                         size: self.size(),
                         data: data.as_ptr() as *const u8,
@@ -1244,25 +1149,22 @@ macro_rules! impl_tex_view {
                     callback: None,
                 }
             }
-            pub fn copy_from<U: StorageTexel<T>>(&'a self, data: &[U]) {
-                submit_default_stream_and_sync(
-                    &self.tex.handle.device,
-                    [self.copy_from_async(data)],
-                );
+            pub fn copy_from<U: StorageTexel<T>>(&self, data: &[U]) {
+                submit_default_stream_and_sync(&self.device, [self.copy_from_async(data)]);
             }
-            pub fn copy_to_buffer_async<'b, U: StorageTexel<T> + Value>(
-                &'a self,
-                buffer_view: &'b BufferView<U>,
+            pub fn copy_to_buffer_async<U: StorageTexel<T> + Value>(
+                &self,
+                buffer_view: &BufferView<U>,
             ) -> Command<'static, 'static> {
                 let mut rt = ResourceTracker::new();
-                rt.add(self.tex.handle.clone());
-                rt.add(buffer_view.buffer.handle.clone());
+                rt.add(self._handle());
+                rt.add(buffer_view._handle());
                 assert_eq!(buffer_view.len, self.texel_count() as usize);
-                assert_eq!(self.tex.handle.storage, U::pixel_storage());
+                assert_eq!(self.storage, U::pixel_storage());
                 Command {
                     inner: api::Command::TextureToBufferCopy(api::TextureToBufferCopyCommand {
                         texture: self.handle(),
-                        storage: self.tex.handle.storage,
+                        storage: self.storage,
                         texture_level: self.level,
                         texture_size: self.size(),
                         buffer: buffer_view.handle(),
@@ -1273,28 +1175,25 @@ macro_rules! impl_tex_view {
                     callback: None,
                 }
             }
-            pub fn copy_to_buffer<U: StorageTexel<T> + Value>(
-                &'a self,
-                buffer_view: &BufferView<U>,
-            ) {
+            pub fn copy_to_buffer<U: StorageTexel<T> + Value>(&self, buffer_view: &BufferView<U>) {
                 submit_default_stream_and_sync(
-                    &self.tex.handle.device,
+                    &self.device,
                     [self.copy_to_buffer_async(buffer_view)],
                 );
             }
-            pub fn copy_from_buffer_async<'b, U: StorageTexel<T> + Value>(
-                &'a self,
+            pub fn copy_from_buffer_async<U: StorageTexel<T> + Value>(
+                &self,
                 buffer_view: BufferView<U>,
             ) -> Command<'static, 'static> {
                 let mut rt = ResourceTracker::new();
-                rt.add(self.tex.handle.clone());
-                rt.add(buffer_view.buffer.handle.clone());
+                rt.add(self._handle());
+                rt.add(buffer_view._handle());
                 assert_eq!(buffer_view.len, self.texel_count() as usize);
-                assert_eq!(self.tex.handle.storage, U::pixel_storage());
+                assert_eq!(self.storage, U::pixel_storage());
                 Command {
                     inner: api::Command::BufferToTextureCopy(api::BufferToTextureCopyCommand {
                         texture: self.handle(),
-                        storage: self.tex.handle.storage,
+                        storage: self.storage,
                         texture_level: self.level,
                         texture_size: self.size(),
                         buffer: buffer_view.handle(),
@@ -1305,26 +1204,23 @@ macro_rules! impl_tex_view {
                     callback: None,
                 }
             }
-            pub fn copy_from_buffer<U: StorageTexel<T> + Value>(
-                &'a self,
-                buffer_view: BufferView<U>,
-            ) {
+            pub fn copy_from_buffer<U: StorageTexel<T> + Value>(&self, buffer_view: BufferView<U>) {
                 submit_default_stream_and_sync(
-                    &self.tex.handle.device,
+                    &self.device,
                     [self.copy_from_buffer_async(buffer_view)],
                 );
             }
-            pub fn copy_to_texture_async(&'a self, other: $name<T>) -> Command<'static, 'static> {
+            pub fn copy_to_texture_async(&self, other: $name<T>) -> Command<'static, 'static> {
                 let mut rt = ResourceTracker::new();
-                rt.add(self.tex.handle.clone());
-                rt.add(other.tex.handle.clone());
+                rt.add(self._handle());
+                rt.add(other._handle());
                 assert_eq!(self.size(), other.size());
-                assert_eq!(self.tex.handle.storage, other.tex.handle.storage);
-                assert_eq!(self.tex.handle.format, other.tex.handle.format);
+                assert_eq!(self.storage, other.storage);
+                assert_eq!(self.format, other.format);
                 Command {
                     inner: api::Command::TextureCopy(api::TextureCopyCommand {
                         src: self.handle(),
-                        storage: self.tex.handle.storage,
+                        storage: self.storage,
                         src_level: self.level,
                         size: self.size(),
                         dst: other.handle(),
@@ -1335,18 +1231,15 @@ macro_rules! impl_tex_view {
                     callback: None,
                 }
             }
-            pub fn copy_to_texture(&'a self, other: $name<T>) {
-                submit_default_stream_and_sync(
-                    &self.tex.handle.device,
-                    [self.copy_to_texture_async(other)],
-                );
+            pub fn copy_to_texture(&self, other: $name<T>) {
+                submit_default_stream_and_sync(&self.device, [self.copy_to_texture_async(other)]);
             }
         }
     };
 }
-impl<'a, T: IoTexel> Tex2dView<'a, T> {
+impl<T: IoTexel> Tex2dView<T> {
     pub fn handle(&self) -> api::Texture {
-        self.tex.handle.handle
+        self._handle().handle
     }
     pub fn texel_count(&self) -> u32 {
         let s = self.size();
@@ -1354,19 +1247,19 @@ impl<'a, T: IoTexel> Tex2dView<'a, T> {
     }
     pub fn size(&self) -> [u32; 3] {
         [
-            (self.tex.handle.width >> self.level).max(1),
-            (self.tex.handle.height >> self.level).max(1),
+            (self.width >> self.level).max(1),
+            (self.height >> self.level).max(1),
             1,
         ]
     }
     pub fn var(&self) -> Tex2dVar<T> {
-        Tex2dVar::new(*self)
+        Tex2dVar::new(self.clone())
     }
 }
 impl_tex_view!(Tex2dView);
-impl<'a, T: IoTexel> Tex3dView<'a, T> {
+impl<T: IoTexel> Tex3dView<T> {
     pub fn handle(&self) -> api::Texture {
-        self.tex.handle.handle
+        self._handle().handle
     }
     pub fn texel_count(&self) -> u32 {
         let s = self.size();
@@ -1374,13 +1267,13 @@ impl<'a, T: IoTexel> Tex3dView<'a, T> {
     }
     pub fn size(&self) -> [u32; 3] {
         [
-            (self.tex.handle.width >> self.level).max(1),
-            (self.tex.handle.height >> self.level).max(1),
-            (self.tex.handle.depth >> self.level).max(1),
+            (self.width >> self.level).max(1),
+            (self.height >> self.level).max(1),
+            (self.depth >> self.level).max(1),
         ]
     }
     pub fn var(&self) -> Tex3dVar<T> {
-        Tex3dVar::new(*self)
+        Tex3dVar::new(self.clone())
     }
 }
 impl_tex_view!(Tex3dView);
@@ -1392,7 +1285,7 @@ impl Drop for TextureHandle {
 
 impl<T: IoTexel> Tex2d<T> {
     pub fn view(&self, level: u32) -> Tex2dView<T> {
-        Tex2dView { tex: self, level }
+        self.views[level as usize].clone()
     }
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         self.handle.native_handle
@@ -1415,7 +1308,7 @@ impl<T: IoTexel> Tex2d<T> {
 }
 impl<T: IoTexel> Tex3d<T> {
     pub fn view(&self, level: u32) -> Tex3dView<T> {
-        Tex3dView { tex: self, level }
+        self.views[level as usize].clone()
     }
     pub fn native_handle(&self) -> *mut std::ffi::c_void {
         self.handle.native_handle
@@ -1913,7 +1806,7 @@ impl BindlessArrayVar {
                     b, a
                 );
             }
-            r.capture_or_get(binding, &array.handle, || {
+            r.capture_or_get(binding, &Arc::downgrade(&array.handle), || {
                 Node::new(CArc::new(Instruction::Bindless), Type::void())
             })
         })
@@ -1922,6 +1815,13 @@ impl BindlessArrayVar {
             node,
             handle: Some(array.handle.clone()),
         }
+    }
+}
+
+impl<T: Value> std::ops::Deref for Buffer<T> {
+    type Target = BufferView<T>;
+    fn deref(&self) -> &Self::Target {
+        &self.full_view
     }
 }
 impl<T: Value> ToNode for Buffer<T> {
@@ -1940,6 +1840,7 @@ impl<T: Value> IndexWrite for Buffer<T> {
         self.var().write(i, v)
     }
 }
+
 impl<T: Value> IndexRead for BufferVar<T> {
     type Element = T;
     fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
@@ -1967,20 +1868,20 @@ impl<T: Value> IndexWrite for BufferVar<T> {
     }
 }
 impl<T: Value> BufferVar<T> {
-    pub fn new(buffer: &BufferView<'_, T>) -> Self {
+    pub fn new(buffer: &BufferView<T>) -> Self {
         let node = with_recorder(|r| {
             let binding = Binding::Buffer(BufferBinding {
                 handle: buffer.handle().0,
                 size: buffer.len * std::mem::size_of::<T>(),
                 offset: (buffer.offset * std::mem::size_of::<T>()) as u64,
             });
-            if let Some((a, b)) = r.check_on_same_device(&buffer.buffer.device) {
+            if let Some((a, b)) = r.check_on_same_device(&buffer.device) {
                 panic!(
                     "Buffer created for a device: `{:?}` but used in `{:?}`",
                     b, a
                 );
             }
-            r.capture_or_get(binding, &buffer.buffer.handle, || {
+            r.capture_or_get(binding, &buffer.handle, || {
                 Node::new(CArc::new(Instruction::Buffer), T::type_())
             })
         })
@@ -1988,7 +1889,7 @@ impl<T: Value> BufferVar<T> {
         Self {
             node,
             marker: PhantomData,
-            handle: Some(buffer.buffer.handle.clone()),
+            handle: Some(buffer._handle()),
         }
     }
     pub fn atomic_ref(&self, i: impl IntoIndex) -> AtomicRef<T> {
@@ -2240,27 +2141,27 @@ pub struct Tex2dVar<T: IoTexel> {
 }
 
 impl<T: IoTexel> Tex2dVar<T> {
-    pub fn new(view: Tex2dView<'_, T>) -> Self {
+    pub fn new(view: Tex2dView<T>) -> Self {
         let node = with_recorder(|r| {
-            let handle: u64 = view.tex.handle().0;
+            let handle: u64 = view.handle().0;
             let binding = Binding::Texture(TextureBinding {
                 handle,
                 level: view.level,
             });
-            if let Some((a, b)) = r.check_on_same_device(&view.tex.handle.device) {
+            if let Some((a, b)) = r.check_on_same_device(&view.device) {
                 panic!(
                     "Tex2d created for a device: `{:?}` but used in `{:?}`",
                     b, a
                 );
             }
-            r.capture_or_get(binding, &view.tex.handle, || {
+            r.capture_or_get(binding, &view.handle, || {
                 Node::new(CArc::new(Instruction::Texture2D), T::RwType::type_())
             })
         })
         .into();
         Self {
             node,
-            handle: Some(view.tex.handle.clone()),
+            handle: Some(view._handle()),
             level: Some(view.level),
             marker: PhantomData,
         }
@@ -2291,27 +2192,27 @@ impl<T: IoTexel> Tex2dVar<T> {
 }
 
 impl<T: IoTexel> Tex3dVar<T> {
-    pub fn new(view: Tex3dView<'_, T>) -> Self {
+    pub fn new(view: Tex3dView<T>) -> Self {
         let node = with_recorder(|r| {
-            let handle: u64 = view.tex.handle().0;
+            let handle: u64 = view.handle().0;
             let binding = Binding::Texture(TextureBinding {
                 handle,
                 level: view.level,
             });
-            if let Some((a, b)) = r.check_on_same_device(&view.tex.handle.device) {
+            if let Some((a, b)) = r.check_on_same_device(&view.device) {
                 panic!(
                     "Tex3d created for a device: `{:?}` but used in `{:?}`",
                     b, a
                 );
             }
-            r.capture_or_get(binding, &view.tex.handle, || {
+            r.capture_or_get(binding, &view.handle, || {
                 Node::new(CArc::new(Instruction::Texture3D), T::RwType::type_())
             })
         })
         .into();
         Self {
             node,
-            handle: Some(view.tex.handle.clone()),
+            handle: Some(view._handle()),
             level: Some(view.level),
             marker: PhantomData,
         }

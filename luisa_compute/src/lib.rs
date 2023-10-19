@@ -159,20 +159,47 @@ impl Context {
 
 #[derive(Clone)]
 pub struct ResourceTracker {
-    resources: Vec<Arc<dyn Any>>,
+    strong_refs: Vec<Arc<dyn Any>>,
+    weak_refs: Vec<Weak<dyn Any>>,
 }
 
 impl ResourceTracker {
     pub fn add<T: Any>(&mut self, ptr: Arc<T>) -> &mut Self {
-        self.resources.push(ptr);
+        self.strong_refs.push(ptr);
         self
     }
     pub fn add_any(&mut self, ptr: Arc<dyn Any>) -> &mut Self {
-        self.resources.push(ptr);
+        self.strong_refs.push(ptr);
         self
     }
+    pub fn add_weak<T: Any>(&mut self, ptr: Weak<T>) -> &mut Self {
+        self.weak_refs.push(ptr);
+        self
+    }
+    pub fn add_weak_any(&mut self, ptr: Weak<dyn Any>) -> &mut Self {
+        self.weak_refs.push(ptr);
+        self
+    }
+    pub fn merge(&mut self, other: Self) {
+        self.strong_refs.extend(other.strong_refs);
+        self.weak_refs.extend(other.weak_refs);
+    }
+    pub fn upgrade(&self) -> Self {
+        let mut strong_refs = vec![];
+        for r in self.weak_refs.iter() {
+            strong_refs.push(r.upgrade().unwrap_or_else(|| panic!("Bad weak ref. Kernel captured resources might be dropped.")));
+        }
+        strong_refs.extend(self.strong_refs.iter().cloned());
+        Self {
+            strong_refs,
+            weak_refs: vec![],
+        }
+    }
     pub fn new() -> Self {
-        Self { resources: vec![] }
+        Self {
+            strong_refs: vec![],
+            weak_refs: vec![],
+        }
     }
 }
 

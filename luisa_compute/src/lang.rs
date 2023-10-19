@@ -2,9 +2,9 @@ use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
+use std::sync::{Arc, Weak as WeakArc};
 use std::{env, unreachable};
 
 use crate::internal_prelude::*;
@@ -12,7 +12,7 @@ use crate::internal_prelude::*;
 use bumpalo::Bump;
 use indexmap::IndexMap;
 
-use crate::runtime::WeakDevice;
+use crate::runtime::{RawCallable, WeakDevice};
 
 pub mod ir {
     pub use luisa_compute_ir::context::register_type;
@@ -298,7 +298,7 @@ pub(crate) struct FnRecorder {
     /// Once a basicblock is finished, all nodes in it are added to this set
     pub(crate) inaccessible: Rc<RefCell<HashSet<NodeRef>>>,
     pub(crate) kernel_id: usize,
-    pub(crate) captured_resources: IndexMap<Binding, (usize, NodeRef, Binding, Arc<dyn Any>)>,
+    pub(crate) captured_resources: IndexMap<Binding, (usize, NodeRef, Binding, WeakArc<dyn Any>)>,
     pub(crate) cpu_custom_ops: IndexMap<u64, (usize, CArc<CpuCustomOp>)>,
     pub(crate) callables: IndexMap<u64, CallableModuleRef>,
     pub(crate) captured_vars: IndexMap<NodeRef, (NodeRef, SafeNodeRef)>,
@@ -311,6 +311,7 @@ pub(crate) struct FnRecorder {
     pub(crate) callable_ret_type: Option<CArc<Type>>,
     pub(crate) const_builder: IrBuilder,
     pub(crate) index_const_pool: IndexMap<i32, NodeRef>,
+    pub(crate) rt: ResourceTracker,
 }
 pub(crate) type FnRecorderPtr = Rc<RefCell<FnRecorder>>;
 impl FnRecorder {
@@ -372,7 +373,7 @@ impl FnRecorder {
     pub(crate) fn capture_or_get<T: Any>(
         &mut self,
         binding: ir::Binding,
-        handle: &Arc<T>,
+        handle: &WeakArc<T>,
         create_node: impl FnOnce() -> Node,
     ) -> NodeRef {
         if let Some((_, node, _, _)) = self.captured_resources.get(&binding) {
@@ -425,6 +426,7 @@ impl FnRecorder {
             parent,
             index_const_pool: IndexMap::new(),
             const_builder: IrBuilder::new(pools.clone()),
+            rt: ResourceTracker::new(),
         }
     }
     pub(crate) fn map_captured_vars(&mut self, node0: SafeNodeRef) -> SafeNodeRef {
@@ -660,21 +662,23 @@ pub(crate) fn check_arg_alias(args: &[NodeRef]) {
         }
     }
 }
-pub(crate) fn __invoke_callable(callable: &CallableModuleRef, args: &[NodeRef]) -> NodeRef {
+pub(crate) fn __invoke_callable(callable: &RawCallable, args: &[NodeRef]) -> NodeRef {
+    let inner = &callable.module;
     with_recorder(|r| {
-        let id = CArc::as_ptr(&callable.0) as u64;
+        let id = CArc::as_ptr(&inner.0) as u64;
         if let Some(c) = r.callables.get(&id) {
-            assert_eq!(CArc::as_ptr(&c.0), CArc::as_ptr(&callable.0));
+            assert_eq!(CArc::as_ptr(&c.0), CArc::as_ptr(&inner.0));
         } else {
-            r.callables.insert(id, callable.clone());
+            r.callables.insert(id, inner.clone());
+            r.rt.merge(callable.resource_tracker.clone());
         }
     });
     check_arg_alias(args);
     __current_scope(|b| {
         b.call(
-            Func::Callable(callable.clone()),
+            Func::Callable(inner.clone()),
             args,
-            callable.0.ret_type.clone(),
+            inner.0.ret_type.clone(),
         )
     })
 }

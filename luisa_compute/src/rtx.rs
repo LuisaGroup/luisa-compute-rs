@@ -687,7 +687,7 @@ impl AccelVar {
                     b, a
                 );
             }
-            r.capture_or_get(binding, &accel.handle, || {
+            r.capture_or_get(binding, &Arc::downgrade(&accel.handle), || {
                 Node::new(CArc::new(Instruction::Accel), Type::void())
             })
         })

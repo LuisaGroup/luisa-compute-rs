@@ -1371,11 +1371,15 @@ fn autodiff_callable2() {
     let callable = Callable::<fn(Expr<f32>, Expr<f32>, Expr<i32>) -> Expr<f32>>::new(
         &device,
         track!(|x, y, t| {
-            switch::<Expr<f32>>(t)
-                .case(0, || x * 4.0)
-                .case(1, || x * 2.0)
-                .case(2, || y * 0.5)
-                .finish()
+            let ret = 0.0f32.var();
+            outline(|| {
+                *ret = switch::<Expr<f32>>(t)
+                    .case(0, || x * 4.0)
+                    .case(1, || x * 2.0)
+                    .case(2, || y * 0.5)
+                    .finish();
+            });
+            **ret
         }),
     );
     let kernel = Kernel::<fn()>::new(

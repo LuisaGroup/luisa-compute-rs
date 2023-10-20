@@ -350,7 +350,9 @@ impl<T: Value> BufferView<T> {
         BufferVar::new(self)
     }
     pub(crate) fn _handle(&self) -> Arc<BufferHandle> {
-        Weak::upgrade(&self.handle).unwrap()
+        Weak::upgrade(&self.handle).unwrap_or_else(|| {
+            panic!("BufferView was created from a Buffer that has already been dropped.")
+        })
     }
     #[inline]
     pub fn handle(&self) -> api::Buffer {

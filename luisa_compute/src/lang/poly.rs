@@ -31,33 +31,32 @@ impl<K, T: ?Sized + 'static> PolyArray<K, T> {
 }
 
 pub trait PolymorphicImpl<T: ?Sized + 'static>: Value {
-    fn new_poly_array<K>(buffer: &Buffer<Self>, tag: i32, key: K) -> PolyArray<K, T>;
+    fn new_poly_array<K>(
+        buffer: &BufferView<Self>,
+        tag: i32,
+        key: K,
+        owned: Box<dyn Any>,
+    ) -> PolyArray<K, T>;
 }
-#[macro_export]
-macro_rules! impl_new_poly_array {
-    ($buffer:expr, $tag:expr, $key:expr) => {{
-        let buffer = $buffer.view(..);
-        luisa_compute::PolyArray::new(
-            $tag,
-            $key,
-            Box::new(move |_, index| Box::new(buffer.var().read(index))),
-        )
-    }};
-}
+
 #[macro_export]
 macro_rules! impl_polymorphic {
     ($trait_:ident, $ty:ty) => {
         impl luisa_compute::lang::poly::PolymorphicImpl<dyn $trait_> for $ty {
             fn new_poly_array<K>(
-                buffer: &luisa_compute::resource::Buffer<Self>,
+                buffer: &luisa_compute::resource::BufferView<Self>,
                 tag: i32,
                 key: K,
+                owned: Box<dyn std::any::Any>,
             ) -> luisa_compute::lang::poly::PolyArray<K, dyn $trait_> {
                 let buffer = buffer.view(..);
                 luisa_compute::lang::poly::PolyArray::new(
                     tag,
                     key,
-                    Box::new(move |_, index| Box::new(*buffer.var().read(index))),
+                    Box::new(move |_, index| {
+                        let _owned = &owned;
+                        Box::new(*buffer.var().read(index))
+                    }),
                 )
             }
         }
@@ -162,8 +161,13 @@ impl<K: Hash + Eq + Clone + 'static + Debug, T: ?Sized + 'static> PolymorphicBui
                 }),
                 build: Box::new(move |array: &dyn Any, device: Device| -> PolyArray<K, T> {
                     let array = array.downcast_ref::<Vec<U>>().unwrap();
-                    let buffer = device.create_buffer_from_slice(&array);
-                    PolymorphicImpl::<T>::new_poly_array(&buffer, tag as i32, key.clone())
+                    let buffer = Box::new(device.create_buffer_from_slice(&array));
+                    PolymorphicImpl::<T>::new_poly_array(
+                        &buffer.view(..),
+                        tag as i32,
+                        key.clone(),
+                        buffer,
+                    )
                 }),
                 array: Box::new(Vec::<U>::new()),
             });
@@ -285,7 +289,7 @@ impl<K: Hash + Eq + Clone, T: ?Sized + 'static> Polymorphic<K, T> {
         }
     }
     #[inline]
-    pub fn register<U>(&mut self, key: K, array: &Buffer<U>) -> u32
+    pub fn register<U>(&mut self, key: K, array: &BufferView<U>) -> u32
     where
         U: PolymorphicImpl<T> + 'static,
     {
@@ -301,7 +305,7 @@ impl<K: Hash + Eq + Clone, T: ?Sized + 'static> Polymorphic<K, T> {
         } else {
             self.key_to_tag.insert(key.clone(), Some(tag));
         }
-        let array = U::new_poly_array(array, tag as i32, key);
+        let array = U::new_poly_array(array, tag as i32, key, Box::new(()));
         self.arrays.push(array);
         tag
     }

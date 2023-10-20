@@ -212,7 +212,89 @@ impl Compiler {
             }
         )
     }
-    pub fn derive_value(&self, struct_: &ItemStruct) -> TokenStream {
+    pub fn derive_value(&self, item: &Item) -> TokenStream {
+        match item {
+            Item::Struct(struct_) => self.derive_value_for_struct(struct_),
+            Item::Enum(enum_) => self.derive_value_for_enum(enum_),
+            _ => todo!(),
+        }
+    }
+    pub fn derive_value_for_enum(&self, enum_: &ItemEnum) -> TokenStream {
+        let repr = enum_
+            .attrs
+            .iter()
+            .find_map(|attr| {
+                let meta = &attr.meta;
+                match meta {
+                    syn::Meta::List(list) => {
+                        let path = &list.path;
+                        if path.is_ident("repr") {
+                            list.parse_args::<Ident>().ok()
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                }
+            })
+            .expect("Enum must have repr attribute.");
+        let span = enum_.span();
+        let lang_path = self.lang_path();
+        let name = &enum_.ident;
+        let expr_proxy_name = syn::Ident::new(&format!("{}Expr", name), name.span());
+        let var_proxy_name = syn::Ident::new(&format!("{}Var", name), name.span());
+        let atomic_ref_proxy_name = syn::Ident::new(&format!("{}AtomicRef", name), name.span());
+        let as_repr = syn::Ident::new(&format!("as_{}", repr), repr.span());
+        if !(["bool", "u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64"]
+            .contains(&&*repr.to_string()))
+        {
+            panic!("Enum repr must be one of bool, u8, u16, u32, u64, i8, i16, i32, i64");
+        }
+        quote_spanned! {span=>
+            impl #lang_path::types::Value for #name {
+                type Expr = #expr_proxy_name;
+                type Var = #var_proxy_name;
+                type AtomicRef = #atomic_ref_proxy_name;
+
+                fn expr(self) -> Expr<Self> {
+                    let node = #lang_path::__current_scope(|s| s.const_(<#repr as #lang_path::types::core::Primitive>::const_(&(self as #repr))));
+                    <Expr::<Self> as #lang_path::FromNode>::from_node(node.into())
+                }
+            }
+            impl #lang_path::ir::TypeOf for #name {
+                fn type_() -> #lang_path::ir::CArc<#lang_path::ir::Type> {
+                    <#repr as #lang_path::ir::TypeOf>::type_()
+                }
+            }
+
+            ::luisa_compute::impl_simple_expr_proxy!(#expr_proxy_name for #name);
+            ::luisa_compute::impl_simple_var_proxy!(#var_proxy_name for #name);
+            ::luisa_compute::impl_simple_atomic_ref_proxy!(#atomic_ref_proxy_name for #name);
+
+            impl #expr_proxy_name {
+                pub fn #as_repr(&self) -> #lang_path::types::Expr<#repr> {
+                    use #lang_path::ToNode;
+                    use #lang_path::types::ExprProxy;
+                    #lang_path::FromNode::from_node(self.as_expr_from_proxy().node())
+                }
+            }
+            impl #var_proxy_name {
+                pub fn #as_repr(&self) -> #lang_path::types::Var<#repr> {
+                    use #lang_path::ToNode;
+                    use #lang_path::types::VarProxy;
+                    #lang_path::FromNode::from_node(self.as_var_from_proxy().node())
+                }
+            }
+            impl #atomic_ref_proxy_name {
+                pub fn #as_repr(&self) -> #lang_path::types::AtomicRef<#repr> {
+                    use #lang_path::ToNode;
+                    use #lang_path::types::AtomicRefProxy;
+                    #lang_path::FromNode::from_node(self.as_atomic_ref_from_proxy().node())
+                }
+            }
+        }
+    }
+    pub fn derive_value_for_struct(&self, struct_: &ItemStruct) -> TokenStream {
         let ordering = self.value_attributes(&struct_.attrs);
         let span = struct_.span();
         let lang_path = self.lang_path();

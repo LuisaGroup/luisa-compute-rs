@@ -262,7 +262,7 @@ impl<T: Primitive> Value for T {
     type AtomicRef = PrimitiveAtomicRef<T>;
 
     fn expr(self) -> Expr<Self> {
-        let node = __current_scope(|s| -> NodeRef { s.const_(self.const_()) });
+        let node = __current_scope(|s| s.const_(self.const_()));
         Expr::<Self>::from_node(node.into())
     }
 }
@@ -288,7 +288,10 @@ macro_rules! impl_atomic {
                 lower_atomic_ref(
                     self.node().get(),
                     Func::AtomicCompareExchange,
-                    &[expected.as_expr().node().get(), desired.as_expr().node().get()],
+                    &[
+                        expected.as_expr().node().get(),
+                        desired.as_expr().node().get(),
+                    ],
                 )
             }
             pub fn exchange(&self, operand: impl AsExpr<Value = $t>) -> Expr<$t> {
@@ -375,9 +378,9 @@ fn lower_atomic_ref<T: Value>(node: NodeRef, op: Func, args: &[NodeRef]) -> Expr
                     .chain(args.iter())
                     .map(|n| *n)
                     .collect::<Vec<_>>();
-                Expr::<T>::from_node(__current_scope(|b| {
-                    b.call(op, &new_args, <T as TypeOf>::type_())
-                }).into())
+                Expr::<T>::from_node(
+                    __current_scope(|b| b.call(op, &new_args, <T as TypeOf>::type_())).into(),
+                )
             }
             _ => unreachable!("{:?}", inst),
         },

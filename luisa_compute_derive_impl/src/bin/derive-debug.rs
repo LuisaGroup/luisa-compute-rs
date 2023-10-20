@@ -15,6 +15,6 @@ fn main() {
     )
     .unwrap();
     println!("{:?}", item.to_token_stream());
-    let out = compiler.derive_value(&item);
+    let out = compiler.derive_value_for_struct(&item);
     println!("{:?}", out.to_string());
 }

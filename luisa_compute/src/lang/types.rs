@@ -76,7 +76,7 @@ pub trait VarProxy: Copy + 'static + Deref<Target = Expr<Self::Value>> {
     fn from_var(expr: Var<Self::Value>) -> Self;
 }
 
-pub unsafe trait AtomicRefProxy: Copy + 'static {
+pub trait AtomicRefProxy: Copy + 'static {
     type Value: Value<AtomicRef = Self>;
 
     fn as_atomic_ref_from_proxy(&self) -> &AtomicRef<Self::Value>;
@@ -405,7 +405,7 @@ macro_rules! impl_simple_atomic_ref_proxy {
         #[derive(Clone, Copy)]
         #[repr(transparent)]
         pub struct $name $(< $($bounds)* >)? ($crate::lang::types::AtomicRef<$t>) $(where $($where_bounds)+)?;
-        unsafe impl $(< $($bounds)* >)? $crate::lang::types::AtomicRefProxy for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {
+        impl $(< $($bounds)* >)? $crate::lang::types::AtomicRefProxy for $name $(< $($qualifiers)* >)? $(where $($where_bounds)+)? {
             type Value = $t;
             fn from_atomic_ref(var: $crate::lang::types::AtomicRef<$t>) -> Self {
                 Self(var)

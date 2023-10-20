@@ -474,7 +474,7 @@ impl Compiler {
                 }
             }
             #[allow(unused_parens)]
-            unsafe impl #impl_generics #lang_path::types::AtomicRefProxy for #atomic_ref_proxy_name #ty_generics #where_clause {
+            impl #impl_generics #lang_path::types::AtomicRefProxy for #atomic_ref_proxy_name #ty_generics #where_clause {
                 type Value = #name #ty_generics;
                 fn from_atomic_ref(var: #lang_path::types::AtomicRef<#name #ty_generics>) -> Self {
                     use #lang_path::ToNode;

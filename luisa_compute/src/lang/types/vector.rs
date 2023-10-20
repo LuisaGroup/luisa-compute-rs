@@ -221,7 +221,7 @@ macro_rules! vector_proxies {
                 _deref_proxy(self)
             }
         }
-        unsafe impl<T: VectorAlign<$N, VectorAtomicRef = $AtomicName<T>>> AtomicRefProxy for $AtomicName<T> {
+        impl<T: VectorAlign<$N, VectorAtomicRef = $AtomicName<T>>> AtomicRefProxy for $AtomicName<T> {
             type Value = Vector<T, $N>;
             #[allow(unused_assignments)]
             fn from_atomic_ref(e:AtomicRef<Self::Value>) -> Self {

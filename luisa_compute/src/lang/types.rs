@@ -60,8 +60,8 @@ pub trait SoaValue: Value {
 pub trait ExprProxy: Copy + 'static {
     type Value: Value<Expr = Self>;
 
-    fn from_expr(expr: Expr<Self::Value>) -> Self;
     fn as_expr_from_proxy(&self) -> &Expr<Self::Value>;
+    fn from_expr(expr: Expr<Self::Value>) -> Self;
 }
 
 /// A trait for implementing remote impls on top of an [`Var`] using [`Deref`].
@@ -71,15 +71,15 @@ pub trait ExprProxy: Copy + 'static {
 /// impls.
 pub trait VarProxy: Copy + 'static + Deref<Target = Expr<Self::Value>> {
     type Value: Value<Var = Self>;
-    fn as_var_from_proxy(&self) -> &Var<Self::Value>;
 
+    fn as_var_from_proxy(&self) -> &Var<Self::Value>;
     fn from_var(expr: Var<Self::Value>) -> Self;
 }
 
 pub unsafe trait AtomicRefProxy: Copy + 'static {
     type Value: Value<AtomicRef = Self>;
-    fn as_atomic_ref_from_proxy(&self) -> &AtomicRef<Self::Value>;
 
+    fn as_atomic_ref_from_proxy(&self) -> &AtomicRef<Self::Value>;
     fn from_atomic_ref(expr: AtomicRef<Self::Value>) -> Self;
 }
 

@@ -1258,8 +1258,7 @@ impl RawKernel {
         let args = Arc::new(args);
         assert_eq!(args.len(), self.module.args.len());
         rt.add(args.clone());
-        let mut captures = self.resource_tracker.clone();
-        captures.upgrade();
+        let captures = self.resource_tracker.upgrade();
         rt.merge(captures);
         Command {
             inner: api::Command::ShaderDispatch(api::ShaderDispatchCommand {

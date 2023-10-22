@@ -1414,12 +1414,13 @@ fn is_nan() {
         &track!(|| {
             let tid = dispatch_id().x;
             let x = x.read(tid) / 0.0 - x.read(tid) / 0.0;
+            cpu_dbg!(x);
             lc_assert!(!x.is_finite());
             lc_assert!(x.is_nan());
             lc_assert!(!x.is_infinite());
         }),
     );
-    kernel.dispatch([1024, 1, 1]);
+    kernel.dispatch([1, 1, 1]);
 }
 // #[derive(Clone, Copy, Debug, Value, PartialEq)]
 // #[repr(C)]

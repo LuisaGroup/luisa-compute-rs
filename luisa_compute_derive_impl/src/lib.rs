@@ -55,13 +55,10 @@ impl Compiler {
                     let path = &list.path;
                     if path.is_ident("repr") {
                         for tok in list.tokens.clone().into_iter() {
-                            match tok {
-                                TokenTree::Ident(ident) => {
-                                    if ident == "C" {
-                                        has_repr_c = true;
-                                    }
+                            if let TokenTree::Ident(ident) = tok {
+                                if ident == "C" || ident == "transparent" {
+                                    has_repr_c = true;
                                 }
-                                _ => {}
                             }
                         }
                     } else if path.is_ident("value_new") {

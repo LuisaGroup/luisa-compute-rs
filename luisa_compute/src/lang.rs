@@ -36,6 +36,7 @@ pub mod functions;
 pub mod index;
 pub mod ops;
 pub mod poly;
+pub mod print;
 pub mod soa;
 pub mod types;
 

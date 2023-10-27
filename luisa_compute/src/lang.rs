@@ -2,7 +2,7 @@ use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Weak as WeakArc};
 use std::{env, unreachable};

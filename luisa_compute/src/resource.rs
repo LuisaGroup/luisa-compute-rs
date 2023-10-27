@@ -342,7 +342,7 @@ pub struct BufferView<T: Value> {
     pub(crate) offset: usize,
     /// length in #elements
     pub(crate) len: usize,
-    pub(crate) _marker: PhantomData<T>,
+    pub(crate) _marker: PhantomData<fn() -> T>,
 }
 impl<T: Value> BufferView<T> {
     #[inline]
@@ -1057,7 +1057,7 @@ pub struct Tex2dView<T: IoTexel> {
     pub(crate) format: PixelFormat,
     pub(crate) handle: Weak<TextureHandle>,
     pub(crate) level: u32,
-    pub(crate) marker: PhantomData<T>,
+    pub(crate) marker: PhantomData<fn() -> T>,
 }
 #[derive(Clone)]
 pub struct Tex3dView<T: IoTexel> {
@@ -1072,7 +1072,7 @@ pub struct Tex3dView<T: IoTexel> {
     pub(crate) format: PixelFormat,
     pub(crate) handle: Weak<TextureHandle>,
     pub(crate) level: u32,
-    pub(crate) marker: PhantomData<T>,
+    pub(crate) marker: PhantomData<fn() -> T>,
 }
 impl<T: IoTexel> Tex2d<T> {
     pub fn handle(&self) -> api::Texture {

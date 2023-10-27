@@ -29,13 +29,13 @@ jobs:
         sudo apt-get -y install gcc-11 g++-11 build-essential ninja-build git file libopencv-dev uuid-dev libglfw3-dev libxinerama-dev libxcursor-dev libxi-dev
         wget https://apt.llvm.org/llvm.sh
         chmod +x llvm.sh
-        sudo ./llvm.sh 14
+        sudo ./llvm.sh 15
     # - name: "Setup CUDA"
     #   uses: Jimver/cuda-toolkit@v0.2.8
     #   with:
     #     linux-local-args: '["--toolkit"]'
     - name: "Run Tests"
       run: |
-        RUST_BACKTRACE=full CC=clang-14 CXX=clang++-14 cargo test --verbose -- --nocapture
+        RUST_BACKTRACE=full CC=clang-15 CXX=clang++-54 cargo test --verbose -- --nocapture
 #     - name: "Run CUDA Tests"
 #       run: CC=clang-14 CXX=clang++-14 LUISA_TEST_DEVICE=cuda cargo test --features cuda --verbose --release 

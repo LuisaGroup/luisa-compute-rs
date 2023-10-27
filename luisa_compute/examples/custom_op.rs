@@ -3,6 +3,13 @@ use std::env::current_exe;
 use luisa::lang::external::CpuFn;
 use luisa::prelude::*;
 use luisa_compute as luisa;
+
+#[derive(Clone, Copy, Value, IoTexel, Debug)]
+#[repr(transparent)]
+struct Foo {
+    x: u32,
+}
+
 #[derive(Clone, Copy, Value, Debug)]
 #[repr(C)]
 #[value_new(pub)]

@@ -3,6 +3,14 @@ use syn::__private::quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 
+/// Derives the `IoTexel` trait for a `#[repr(transparent)]` struct and a `Value` impl.
+#[proc_macro_derive(IoTexel)]
+pub fn derive_iotexel(item: TokenStream) -> TokenStream {
+    let item: syn::Item = syn::parse(item).unwrap();
+    let compiler = luisa_compute_derive_impl::Compiler;
+    compiler.derive_iotexel(&item).into()
+}
+
 #[proc_macro_derive(Value, attributes(value_new))]
 pub fn derive_value(item: TokenStream) -> TokenStream {
     let item: syn::Item = syn::parse(item).unwrap();

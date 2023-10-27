@@ -1414,7 +1414,7 @@ fn is_nan() {
         &track!(|| {
             let tid = dispatch_id().x;
             let x = x.read(tid) / 0.0 - x.read(tid) / 0.0;
-            cpu_dbg!(x);
+            // cpu_dbg!(x);
             lc_assert!(!x.is_finite());
             lc_assert!(x.is_nan());
             lc_assert!(!x.is_infinite());

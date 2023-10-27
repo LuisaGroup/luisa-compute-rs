@@ -36,6 +36,6 @@ jobs:
     #     linux-local-args: '["--toolkit"]'
     - name: "Run Tests"
       run: |
-        RUST_BACKTRACE=full CC=clang-15 CXX=clang++-54 cargo test --verbose -- --nocapture
+        RUST_BACKTRACE=full CC=clang-15 CXX=clang++-14 cargo test --verbose -- --nocapture
 #     - name: "Run CUDA Tests"
 #       run: CC=clang-14 CXX=clang++-14 LUISA_TEST_DEVICE=cuda cargo test --features cuda --verbose --release 

@@ -255,7 +255,7 @@ impl Device {
     }
 
     /// Imports an external buffer of `count` elements of type `T`.
-    pub unsafe fn create_buffer_from_external_memory<T: Value>(
+    pub unsafe fn import_external_buffer<T: Value>(
         &self,
         data: *mut T,
         count: usize,

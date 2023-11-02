@@ -255,11 +255,7 @@ impl Device {
     }
 
     /// Imports an external buffer of `count` elements of type `T`.
-    pub unsafe fn import_external_buffer<T: Value>(
-        &self,
-        data: *mut T,
-        count: usize,
-    ) -> Buffer<T> {
+    pub unsafe fn import_external_buffer<T: Value>(&self, data: *mut T, count: usize) -> Buffer<T> {
         self._create_buffer(data as *mut c_void, count)
     }
     pub fn create_buffer_from_slice<T: Value>(&self, data: &[T]) -> Buffer<T> {

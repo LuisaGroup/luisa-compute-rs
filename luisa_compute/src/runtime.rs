@@ -1,4 +1,4 @@
-use std::any::Any;
+use std::any::{Any, TypeId};
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::env;
@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Weak};
 
+use libc::c_void;
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
 use parking_lot::{Condvar, Mutex, RawMutex, RwLock};
 
@@ -177,31 +178,9 @@ impl Device {
     }
 
     /// Creates an **unintialized** buffer of `len` bytes.
+    /// Alias of [`Device::create_buffer::<u8>`].
     pub fn create_byte_buffer(&self, len: usize) -> Buffer<u8> {
-        let name = self.name();
-        if name == "dx" {
-            assert!(
-                len < u32::MAX as usize,
-                "numer of bytes must be less than u32::MAX on dx"
-            );
-        }
-        let buffer = self.inner.create_buffer(&Type::void(), len);
-        let handle = Arc::new(BufferHandle {
-            device: self.clone(),
-            handle: api::Buffer(buffer.resource.handle),
-            native_handle: buffer.resource.native_handle,
-        });
-        let buffer = Buffer {
-            handle: handle.clone(),
-            full_view: BufferView {
-                device: self.clone(),
-                handle: Arc::downgrade(&handle),
-                offset: 0,
-                len,
-                _marker: PhantomData,
-            },
-        };
-        buffer
+        self.create_buffer(len)
     }
 
     /// Creates an **unintialized** buffer of `count` elements of type `T` in SOA layout.
@@ -233,6 +212,9 @@ impl Device {
 
     /// Creates an **unintialized** buffer of `count` elements of type `T`.
     pub fn create_buffer<T: Value>(&self, count: usize) -> Buffer<T> {
+        self._create_buffer(std::ptr::null_mut(), count)
+    }
+    fn _create_buffer<T: Value>(&self, ext_mem: *mut c_void, count: usize) -> Buffer<T> {
         let name = self.name();
         if name == "dx" {
             assert!(
@@ -248,7 +230,12 @@ impl Device {
             std::mem::size_of::<T>() > 0,
             "size of T must be greater than 0"
         );
-        let buffer = self.inner.create_buffer(&T::type_(), count);
+        let ty = if TypeId::of::<T>() == TypeId::of::<u8>() {
+            Type::void()
+        } else {
+            <T as TypeOf>::type_()
+        };
+        let buffer = self.inner.create_buffer(&ty, count, ext_mem);
         let handle = Arc::new(BufferHandle {
             device: self.clone(),
             handle: api::Buffer(buffer.resource.handle),
@@ -265,6 +252,11 @@ impl Device {
             },
         };
         buffer
+    }
+
+    /// Imports an external buffer of `count` elements of type `T`.
+    pub unsafe fn import_external_buffer<T: Value>(&self, data: *mut T, count: usize) -> Buffer<T> {
+        self._create_buffer(data as *mut c_void, count)
     }
     pub fn create_buffer_from_slice<T: Value>(&self, data: &[T]) -> Buffer<T> {
         let buffer = self.create_buffer(data.len());

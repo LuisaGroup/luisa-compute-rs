@@ -1,7 +1,6 @@
 use std::env::current_exe;
 
 use luisa::prelude::*;
-use luisa::printer::*;
 
 use luisa_compute as luisa;
 
@@ -20,21 +19,18 @@ fn main() {
     } else {
         "cpu"
     });
-    let printer = Printer::new(&device, 65536);
     let kernel = Kernel::<fn()>::new(
         &device,
         &track!(|| {
             let id = dispatch_id().xy();
             if id.x == id.y {
-                lc_info!(printer, "id = {:?}", id);
+                device_log!("id = {}", id);
             } else {
-                lc_info!(printer, "not equal!, id = [{} {}]", id.x, id.y);
+                device_log!("not equal!, id = [{} {}]", id.x, id.y);
             }
         }),
     );
     device.default_stream().with_scope(|s| {
-        s.reset_printer(&printer);
         s.submit([kernel.dispatch_async([4, 4, 1])]);
-        s.print(&printer);
     });
 }

@@ -189,7 +189,7 @@ impl ResourceTracker {
         let mut strong_refs = vec![];
         for r in self.weak_refs.iter() {
             strong_refs.push(r.upgrade().unwrap_or_else(|| {
-                panic!("Bad weak ref. Kernel captured resources might be dropped.")
+                panic!("Bad weak ref. Resources might be dropped.")
             }));
         }
         strong_refs.extend(self.strong_refs.iter().cloned());

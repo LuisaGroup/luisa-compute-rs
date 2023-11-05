@@ -99,11 +99,203 @@ impl Drop for DeviceHandle {
         }
     }
 }
+pub mod extension {
+    use super::*;
+    use api::denoiser_ext::{DenoiserInput, Feature, Image};
+    pub use api::denoiser_ext::{ImageColorSpace, ImageFormat, PrefilterMode};
+    pub struct DenosierInputBuilder {
+        inner: DenoiserInput,
+        inputs: Vec<Image>,
+        features: Vec<Feature>,
+        outputs: Vec<Image>,
+        rt: ResourceTracker,
+        names: Vec<CString>,
+    }
+    impl DenosierInputBuilder {
+        pub fn new(width: u32, height: u32) -> Self {
+            Self {
+                inner: DenoiserInput {
+                    inputs: std::ptr::null_mut(),
+                    inputs_count: 0,
+                    outputs: std::ptr::null_mut(),
+                    features: std::ptr::null_mut(),
+                    features_count: 0,
+                    prefilter_mode: PrefilterMode::None,
+                    noisy_features: false,
+                    width,
+                    height,
+                },
+                inputs: Vec::new(),
+                features: Vec::new(),
+                outputs: Vec::new(),
+                rt: ResourceTracker::new(),
+                names: Vec::new(),
+            }
+        }
 
+        fn buffer_to_image<T: Value>(
+            &mut self,
+            buffer: &BufferView<T>,
+            format: ImageFormat,
+            color_space: ImageColorSpace,
+            input_scale: Option<f32>,
+        ) -> Image {
+            assert!(
+                format.size() <= std::mem::size_of::<T>(),
+                "format size must be less than or equal to the size of T"
+            );
+            assert!((self.inner.width as usize) * (self.inner.height as usize) == buffer.len);
+            let image = Image {
+                format,
+                buffer_handle: buffer.handle().0,
+                device_ptr: buffer.native_handle(),
+                offset: buffer.offset * std::mem::size_of::<T>() as usize,
+                pixel_stride: std::mem::size_of::<T>() as usize,
+                row_stride: self.inner.width as usize * std::mem::size_of::<T>() as usize,
+                size_bytes: buffer.len * std::mem::size_of::<T>() as usize,
+                color_space: color_space,
+                input_scale: input_scale.unwrap_or(1.0),
+            };
+            self.rt.add_weak(buffer.handle.clone());
+            image
+        }
+        /// Add an (input, output) image pair to the denoiser input.
+        /// The denoiser holds a weak reference to the buffers.
+        pub fn push_image<T: Value, U: Value>(
+            &mut self,
+            input: &BufferView<T>,
+            output: &BufferView<U>,
+            format: ImageFormat,
+            color_space: ImageColorSpace,
+            input_scale: Option<f32>,
+        ) -> &mut Self {
+            let img = self.buffer_to_image(input, format, color_space, input_scale);
+            self.inputs.push(img);
+            let img = self.buffer_to_image(output, format, color_space, input_scale);
+            self.outputs.push(img);
+            self
+        }
+        /// Add a feature image to the denoiser input.
+        /// The denoiser holds a weak reference to the buffer.
+        pub fn set_feature_image<S: AsRef<str>, T: Value>(
+            &mut self,
+            name: S,
+            image: &BufferView<T>,
+            format: ImageFormat,
+            color_space: ImageColorSpace,
+        ) -> &mut Self {
+            let name = CString::new(name.as_ref()).unwrap();
+            self.names.push(name);
+            let img = self.buffer_to_image(image, format, color_space, None);
+            self.features.push(Feature {
+                name: self.names.last().unwrap().as_ptr(),
+                name_len: self.names.last().unwrap().as_bytes().len(),
+                image: img,
+            });
+            self
+        }
+        pub fn prefilter_mode(&mut self, mode: PrefilterMode) -> &mut Self {
+            self.inner.prefilter_mode = mode;
+            self
+        }
+        /// set to false **only** if feature images are **noise-free**.
+        pub fn noisy_features(&mut self, noisy_features: bool) -> &mut Self {
+            self.inner.noisy_features = noisy_features;
+            self
+        }
+    }
+    /// Denoiser extension
+    pub struct DenoiserExt {
+        pub(crate) device: Device,
+        pub(crate) inner: api::DenoiserExt,
+    }
+    pub struct Denoiser {
+        api: api::DenoiserExt,
+        inner: *mut api::denoiser_ext::Denoiser,
+        rt: Option<ResourceTracker>,
+        device: Device,
+        stream: Arc<StreamHandle>,
+    }
+    impl DenoiserExt {
+        /// Create a denoiser instance that executes on the given stream.
+        pub fn create(&self, stream: &Stream) -> Denoiser {
+            unsafe {
+                Denoiser {
+                    api: self.inner,
+                    inner: (self.inner.create)(&self.inner, stream.handle().0),
+                    rt: None,
+                    device: self.device.clone(),
+                    stream: stream.handle.clone(),
+                }
+            }
+        }
+    }
+    impl Denoiser {
+        pub fn input_builder(width: u32, height: u32) -> DenosierInputBuilder {
+            DenosierInputBuilder::new(width, height)
+        }
+        /// Initialize the denoiser with the given input.
+        /// Blocks if the denoiser is still running.
+        pub fn init(&mut self, mut input: DenosierInputBuilder) {
+            unsafe {
+                let inner = &mut input.inner;
+                inner.inputs = input.inputs.as_ptr();
+                inner.inputs_count = input.inputs.len();
+                inner.features = input.features.as_ptr();
+                inner.features_count = input.features.len();
+                inner.outputs = input.outputs.as_ptr();
+                (self.api.init)(&self.api, self.inner, &input.inner);
+            }
+            self.rt = Some(input.rt);
+        }
+        pub fn execute(&self, async_: bool) {
+            let rt = if let Some(rt) = &self.rt {
+                Some(rt.upgrade())
+            } else {
+                None
+            };
+            unsafe { (self.api.execute)(&self.api, self.inner, async_) }
+            if !async_ {
+                let stream = Stream {
+                    device: self.device.clone(),
+                    handle: self.stream.clone(),
+                };
+                let scope = stream.scope();
+                scope.submit_with_callback([], move || {
+                    drop(rt);
+                });
+            }
+        }
+    }
+    impl Drop for Denoiser {
+        fn drop(&mut self) {
+            unsafe { (self.api.destroy)(&mut self.api, self.inner) }
+        }
+    }
+}
+pub use extension::DenoiserExt;
+pub trait DeviceExtensions {
+    /// Gets the denoiser extension if available.
+    fn denoiser_ext(&self) -> Option<DenoiserExt>;
+}
+impl DeviceExtensions for Device {
+    fn denoiser_ext(&self) -> Option<DenoiserExt> {
+        let ext = self.inner.denoiser_ext();
+        if ext.valid() {
+            Some(DenoiserExt {
+                inner: ext,
+                device: self.clone(),
+            })
+        } else {
+            None
+        }
+    }
+}
 impl Device {
     pub fn query(&self, name: &str) -> Option<String> {
         self.inner.query(name)
     }
+
     pub fn name(&self) -> String {
         self.query("device_name").unwrap_or("unknown".to_string())
     }

@@ -342,6 +342,7 @@ pub struct BufferView<T: Value> {
     pub(crate) offset: usize,
     /// length in #elements
     pub(crate) len: usize,
+    pub(crate) total_size_bytes: usize,
     pub(crate) _marker: PhantomData<fn() -> T>,
 }
 impl<T: Value> BufferView<T> {
@@ -357,6 +358,7 @@ impl<T: Value> BufferView<T> {
             handle: self.handle.clone(),
             offset: self.offset,
             len: self.len * std::mem::size_of::<T>() / std::mem::size_of::<U>(),
+            total_size_bytes: self.total_size_bytes,
             _marker: PhantomData,
         }
     }
@@ -482,6 +484,7 @@ impl<T: Value> BufferView<T> {
             handle: self.handle.clone(),
             offset: lower,
             len: upper - lower,
+            total_size_bytes: self.total_size_bytes,
             _marker: PhantomData,
         }
     }

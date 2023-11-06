@@ -101,20 +101,20 @@ impl Drop for DeviceHandle {
 }
 pub mod extension {
     use super::*;
-    use api::denoiser_ext::{DenoiserInput, Feature, Image};
+    use api::denoiser_ext::{Feature, Image};
     pub use api::denoiser_ext::{ImageColorSpace, ImageFormat, PrefilterMode};
-    pub struct DenosierInputBuilder {
-        inner: DenoiserInput,
+    pub struct DenoiserInput {
+        inner: api::denoiser_ext::DenoiserInput,
         inputs: Vec<Image>,
         features: Vec<Feature>,
         outputs: Vec<Image>,
         rt: ResourceTracker,
         names: Vec<CString>,
     }
-    impl DenosierInputBuilder {
+    impl DenoiserInput {
         pub fn new(width: u32, height: u32) -> Self {
             Self {
-                inner: DenoiserInput {
+                inner: api::denoiser_ext::DenoiserInput {
                     inputs: std::ptr::null_mut(),
                     inputs_count: 0,
                     outputs: std::ptr::null_mut(),
@@ -161,7 +161,7 @@ pub mod extension {
         }
         /// Add an (input, output) image pair to the denoiser input.
         /// The denoiser holds a weak reference to the buffers.
-        pub fn push_image<T: Value, U: Value>(
+        pub fn push_noisy_image<T: Value, U: Value>(
             &mut self,
             input: &BufferView<T>,
             output: &BufferView<U>,
@@ -177,7 +177,7 @@ pub mod extension {
         }
         /// Add a feature image to the denoiser input.
         /// The denoiser holds a weak reference to the buffer.
-        pub fn set_feature_image<S: AsRef<str>, T: Value>(
+        pub fn push_feature_image<S: AsRef<str>, T: Value>(
             &mut self,
             name: S,
             image: &BufferView<T>,
@@ -231,12 +231,9 @@ pub mod extension {
         }
     }
     impl Denoiser {
-        pub fn input_builder(width: u32, height: u32) -> DenosierInputBuilder {
-            DenosierInputBuilder::new(width, height)
-        }
         /// Initialize the denoiser with the given input.
         /// Blocks if the denoiser is still running.
-        pub fn init(&mut self, mut input: DenosierInputBuilder) {
+        pub fn init(&mut self, mut input: DenoiserInput) {
             unsafe {
                 let inner = &mut input.inner;
                 inner.inputs = input.inputs.as_ptr();
@@ -440,6 +437,7 @@ impl Device {
                 handle: Arc::downgrade(&handle),
                 offset: 0,
                 len: count,
+                total_size_bytes: buffer.total_size_bytes,
                 _marker: PhantomData,
             },
         };

@@ -1,5 +1,5 @@
 use image::Rgb;
-use luisa::runtime::extension::Denoiser;
+use luisa::runtime::extension::DenoiserInput;
 use luisa::runtime::DeviceExtensions;
 use luisa_compute_api_types::denoiser_ext::{ImageColorSpace, ImageFormat, PrefilterMode};
 use luisa_compute_api_types::StreamTag;
@@ -494,21 +494,21 @@ fn run_pt(device: Device) {
         .unwrap_or_else(|| panic!("denoiser not available on current device"));
     let mut denoiser = ext.create(&device.default_stream());
     {
-        let mut inputs = Denoiser::input_builder(img_w, img_h);
-        inputs.push_image(
+        let mut inputs = DenoiserInput::new(img_w, img_h);
+        inputs.push_noisy_image(
             &color_buf.view(..),
             &output_buf.view(..),
             ImageFormat::Float3,
             ImageColorSpace::Hdr,
             None,
         );
-        inputs.set_feature_image(
+        inputs.push_feature_image(
             "albedo",
             &albedo_buf.view(..),
             ImageFormat::Float3,
             ImageColorSpace::Hdr,
         );
-        inputs.set_feature_image(
+        inputs.push_feature_image(
             "normal",
             &normal_buf.view(..),
             ImageFormat::Float3,

@@ -102,7 +102,7 @@ impl Drop for DeviceHandle {
 pub mod extension {
     use super::*;
     use api::denoiser_ext::{Feature, Image};
-    pub use api::denoiser_ext::{ImageColorSpace, ImageFormat, PrefilterMode};
+    pub use api::denoiser_ext::{ImageColorSpace, ImageFormat, PrefilterMode, FilterQuality};
     pub struct DenoiserInput {
         inner: api::denoiser_ext::DenoiserInput,
         inputs: Vec<Image>,
@@ -121,6 +121,7 @@ pub mod extension {
                     features: std::ptr::null_mut(),
                     features_count: 0,
                     prefilter_mode: PrefilterMode::None,
+                    filter_quality: FilterQuality::Default,
                     noisy_features: false,
                     width,
                     height,
@@ -196,6 +197,10 @@ pub mod extension {
         }
         pub fn prefilter_mode(&mut self, mode: PrefilterMode) -> &mut Self {
             self.inner.prefilter_mode = mode;
+            self
+        }
+        pub fn filter_quality(&mut self, quality: FilterQuality) -> &mut Self {
+            self.inner.filter_quality = quality;
             self
         }
         /// set to false **only** if feature images are **noise-free**.

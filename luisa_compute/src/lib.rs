@@ -44,7 +44,8 @@ pub mod prelude {
         Stream, Swapchain,
     };
     pub use crate::{
-        cpu_dbg, if_, lc_assert, lc_comment_lineno, lc_unreachable, loop_, while_, Context,
+        cpu_dbg, device_log, if_, lc_assert, lc_comment_lineno, lc_unreachable, loop_, while_,
+        Context,
     };
 
     pub use luisa_compute_derive::*;
@@ -187,7 +188,9 @@ impl ResourceTracker {
     pub fn upgrade(&self) -> Self {
         let mut strong_refs = vec![];
         for r in self.weak_refs.iter() {
-            strong_refs.push(r.upgrade().unwrap_or_else(|| panic!("Bad weak ref. Kernel captured resources might be dropped.")));
+            strong_refs.push(r.upgrade().unwrap_or_else(|| {
+                panic!("Bad weak ref. Resources might be dropped.")
+            }));
         }
         strong_refs.extend(self.strong_refs.iter().cloned());
         Self {

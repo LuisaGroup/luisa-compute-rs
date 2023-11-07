@@ -1,12 +1,12 @@
+use std::ffi::CString;
+
 use crate::internal_prelude::*;
-
-use super::types::core::Primitive;
-
-pub struct DebugFormatter {
+/// TODO: support custom print format
+pub struct DevicePrintFormatter {
     pub(crate) fmt: String,
     pub(crate) args: Vec<NodeRef>,
 }
-impl DebugFormatter {
+impl DevicePrintFormatter {
     pub fn new() -> Self {
         Self {
             fmt: String::new(),
@@ -14,42 +14,44 @@ impl DebugFormatter {
         }
     }
     pub fn push_str(&mut self, s: &str) {
-        assert!(
-            s.find("{}").is_none(),
-            "DebugFormatter::push_str cannot contain {{}}"
-        );
         self.fmt.push_str(s);
     }
-    pub fn push_arg(&mut self, node: NodeRef) {
-        assert!(
-            node.type_().is_primitive(),
-            "DebugFormatter::push_arg must be primitive"
-        );
-        self.fmt.push_str("{}");
-        self.args.push(node);
+    pub fn push_arg(&mut self, node: SafeNodeRef) {
+        self.args.push(node.get());
+    }
+    pub fn print(self) {
+        let Self { fmt, args } = self;
+        __current_scope(|b| {
+            b.print(
+                CBoxedSlice::new(CString::new(fmt).unwrap().into_bytes_with_nul()),
+                &args,
+            );
+        })
     }
 }
-pub trait DebugPrintValue: Value {
-    fn fmt_args(e: Expr<Self>, fmt: &mut DebugFormatter);
+pub trait DevicePrint {
+    fn fmt(&self, fmt: &mut DevicePrintFormatter);
 }
 
-impl<T: DebugPrintValue + Primitive> DebugPrintValue for T {
-    fn fmt_args(e: Expr<Self>, fmt: &mut DebugFormatter) {
-        fmt.push_arg(e.node().get());
+impl<T: Value> DevicePrint for Expr<T> {
+    fn fmt(&self, fmt: &mut DevicePrintFormatter) {
+        fmt.push_arg(self.node());
+    }
+}
+impl<T: Value> DevicePrint for Var<T> {
+    fn fmt(&self, fmt: &mut DevicePrintFormatter) {
+        fmt.push_arg(self.node());
     }
 }
 
-pub trait DebugPrint {
-    fn fmt_args(&self, fmt: &mut DebugFormatter);
-}
-
-impl<T: DebugPrintValue> DebugPrint for Expr<T> {
-    fn fmt_args(&self, fmt: &mut DebugFormatter) {
-        T::fmt_args(*self, fmt);
-    }
-}
-impl<T: DebugPrintValue> DebugPrint for Var<T> {
-    fn fmt_args(&self, fmt: &mut DebugFormatter) {
-        T::fmt_args(self.load(), fmt);
-    }
+#[macro_export]
+macro_rules! device_log {
+    ($fmt:literal, $($arg:expr),*) => {{
+        let mut fmt = $crate::lang::print::DevicePrintFormatter::new();
+        fmt.push_str($fmt);
+        $(
+            $crate::lang::print::DevicePrint::fmt(&$arg, &mut fmt);
+        )*
+        fmt.print();
+    }};
 }

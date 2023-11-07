@@ -49,6 +49,7 @@ fn cmake_build() -> PathBuf {
     set_from_env!("METAL", "LUISA_COMPUTE_ENABLE_METAL");
     set_from_env!("PYTHON", "LUISA_COMPUTE_ENABLE_PYTHON");
     set_from_env!("GUI", "LUISA_COMPUTE_ENABLE_GUI");
+    set_from_env!("OIDN", "LUISA_COMPUTE_DOWNLOAD_OIDN");
     config.define(
         "LUISA_COMPUTE_CHECK_BACKEND_DEPENDENCIES",
         if cfg!(feature = "strict") {
@@ -60,7 +61,6 @@ fn cmake_build() -> PathBuf {
     config.define("LUISA_COMPUTE_BUILD_TESTS", "OFF");
     config.define("LUISA_COMPUTE_ENABLE_DSL", "OFF");
     config.define("LUISA_COMPUTE_ENABLE_RUST", "ON");
-    config.define("LUISA_COMPUTE_COMPILED_BY_RUST", "ON");
     println!("cargo:rerun-if-env-changed=PROFILE");
     // set compiler based on env
     println!("cargo:rerun-if-env-changed=CC");

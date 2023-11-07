@@ -342,9 +342,26 @@ pub struct BufferView<T: Value> {
     pub(crate) offset: usize,
     /// length in #elements
     pub(crate) len: usize,
+    pub(crate) total_size_bytes: usize,
     pub(crate) _marker: PhantomData<fn() -> T>,
 }
 impl<T: Value> BufferView<T> {
+    /// reinterpret the buffer as a different type
+    /// must satisfy `std::mem::size_of::<T>() * self.len() % std::mem::size_of::<U>() == 0`
+    pub unsafe fn transmute<U: Value>(&self) -> BufferView<U> {
+        assert_eq!(
+            std::mem::size_of::<T>() * self.len() % std::mem::size_of::<U>(),
+            0
+        );
+        BufferView {
+            device: self.device.clone(),
+            handle: self.handle.clone(),
+            offset: self.offset,
+            len: self.len * std::mem::size_of::<T>() / std::mem::size_of::<U>(),
+            total_size_bytes: self.total_size_bytes,
+            _marker: PhantomData,
+        }
+    }
     #[inline]
     pub fn var(&self) -> BufferVar<T> {
         BufferVar::new(self)
@@ -467,6 +484,7 @@ impl<T: Value> BufferView<T> {
             handle: self.handle.clone(),
             offset: lower,
             len: upper - lower,
+            total_size_bytes: self.total_size_bytes,
             _marker: PhantomData,
         }
     }
@@ -973,7 +991,7 @@ impl<T: IoTexel> Tex2d<T> {
         let mips = h.levels;
         let device = &h.device;
         let copy = device.create_tex2d::<T>(storage, width, height, mips);
-        s.submit((0..mips).map(|level| self.view(level).copy_to_texture_async(copy.view(level))));
+        s.submit((0..mips).map(|level| self.view(level).copy_to_texture_async(&copy.view(level))));
         copy
     }
 
@@ -1022,7 +1040,7 @@ impl<T: IoTexel> Tex3d<T> {
         let mips = h.levels;
         let device = &h.device;
         let copy = device.create_tex3d::<T>(storage, width, height, depth, mips);
-        s.submit((0..mips).map(|level| self.view(level).copy_to_texture_async(copy.view(level))));
+        s.submit((0..mips).map(|level| self.view(level).copy_to_texture_async(&copy.view(level))));
         copy
     }
 
@@ -1185,7 +1203,7 @@ macro_rules! impl_tex_view {
             }
             pub fn copy_from_buffer_async<U: StorageTexel<T> + Value>(
                 &self,
-                buffer_view: BufferView<U>,
+                buffer_view: &BufferView<U>,
             ) -> Command<'static, 'static> {
                 let mut rt = ResourceTracker::new();
                 rt.add(self._handle());
@@ -1206,13 +1224,13 @@ macro_rules! impl_tex_view {
                     callback: None,
                 }
             }
-            pub fn copy_from_buffer<U: StorageTexel<T> + Value>(&self, buffer_view: BufferView<U>) {
+            pub fn copy_from_buffer<U: StorageTexel<T> + Value>(&self, buffer_view: &BufferView<U>) {
                 submit_default_stream_and_sync(
                     &self.device,
                     [self.copy_from_buffer_async(buffer_view)],
                 );
             }
-            pub fn copy_to_texture_async(&self, other: $name<T>) -> Command<'static, 'static> {
+            pub fn copy_to_texture_async(&self, other: &$name<T>) -> Command<'static, 'static> {
                 let mut rt = ResourceTracker::new();
                 rt.add(self._handle());
                 rt.add(other._handle());
@@ -1233,7 +1251,7 @@ macro_rules! impl_tex_view {
                     callback: None,
                 }
             }
-            pub fn copy_to_texture(&self, other: $name<T>) {
+            pub fn copy_to_texture(&self, other: &$name<T>) {
                 submit_default_stream_and_sync(&self.device, [self.copy_to_texture_async(other)]);
             }
         }

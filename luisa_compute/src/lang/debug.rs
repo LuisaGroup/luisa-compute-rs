@@ -1,5 +1,5 @@
-use std::ffi::CString;
 use std::fmt::Debug;
+use std::{env, ffi::CString};
 
 use crate::internal_prelude::*;
 
@@ -138,9 +138,19 @@ pub fn __assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, c
     });
 }
 
+/// Insert a comment to the generated source code.
+/// *Note*: this is only effective when LUISA_DUMP_SOURCE is set to 1
 pub fn comment(msg: &str) {
     if !recording_started() {
         return;
+    }
+    match env::var("LUISA_DUMP_SOURCE") {
+        Ok(s) => {
+            if s != "1" {
+                return;
+            }
+        }
+        Err(_) => return,
     }
     __current_scope(|b| {
         b.comment(CBoxedSlice::new(
@@ -164,13 +174,7 @@ macro_rules! lc_comment_lineno {
         ))
     };
     ($msg:literal, $e:expr) => {
-        $crate::lang::debug::with_lineno(
-            $msg,
-            file!(),
-            line!(),
-            column!(),
-            || $e,
-        )
+        $crate::lang::debug::with_lineno($msg, file!(), line!(), column!(), || $e)
     };
 }
 

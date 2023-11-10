@@ -40,7 +40,7 @@ impl<T: Value> DevicePrint for Expr<T> {
 }
 impl<T: Value> DevicePrint for Var<T> {
     fn fmt(&self, fmt: &mut DevicePrintFormatter) {
-        fmt.push_arg(self.node());
+        DevicePrint::fmt(&self.load(), fmt);
     }
 }
 

@@ -543,16 +543,15 @@ fn make_safe_node(node: NodeRef) -> SafeNodeRef {
 /// check if the node belongs to the current kernel/callable
 /// if not, capture the node recursively
 fn process_potential_capture(node: SafeNodeRef) -> SafeNodeRef {
-    if node.node.is_user_data() {
-        return node;
-    }
-
     with_recorder(|r| {
         let cur_kernel_id = r.kernel_id;
         assert_eq!(
             cur_kernel_id, node.kernel_id,
             "Referencing node from another kernel!"
         );
+        if node.node.is_user_data() {
+            return node;
+        }
         if r.inaccessible.borrow().contains(&node.node) {
             panic!(
                 r#"Detected using node outside of its scope. It is possible that you use `RefCell` or `Cell` to store an `Expr<T>` or `Var<T>` 

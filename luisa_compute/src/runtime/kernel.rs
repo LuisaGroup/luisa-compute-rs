@@ -533,6 +533,12 @@ pub struct KernelBuildOptions {
     pub async_compile: bool,
     pub enable_cache: bool,
     pub enable_fast_math: bool,
+    /// maximum number of registers used by the compiled kernel
+    /// has no effect on CPU backend
+    /// set to 0 to use default value
+    pub max_registers: u32,
+    /// measure time spent during compilation
+    pub time_trace: bool,
     pub name: Option<String>,
 }
 
@@ -548,6 +554,8 @@ impl Default for KernelBuildOptions {
             async_compile: false,
             enable_cache: true,
             enable_fast_math: true,
+            max_registers: 0,
+            time_trace: false,
             name: None,
         }
     }

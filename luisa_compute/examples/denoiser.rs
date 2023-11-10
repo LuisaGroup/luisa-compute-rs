@@ -32,13 +32,10 @@ fn main() {
     } else {
         "cpu"
     });
-    #[cfg(not(feature = "oidn"))]
-    {
+    if cfg!(not(feature = "oidn")) {
         eprintln!("Please enable oidn feature to run this example");
         exit(1);
-    }
-    #[cfg(feature = "oidn")]
-    {
+    } else {
         run_pt(device);
     }
 }

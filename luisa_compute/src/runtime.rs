@@ -727,6 +727,8 @@ impl Device {
             enable_cache: options.enable_cache,
             enable_fast_math: options.enable_fast_math,
             enable_debug_info: options.enable_debug_info,
+            time_trace: options.time_trace,
+            max_registers: options.max_registers,
             compile_only: false,
             name: name.as_ptr(),
         };

@@ -259,7 +259,7 @@ pub fn __new_user_node<T: UserNodeData>(data: T) -> SafeNodeRef {
     SafeNodeRef {
         recorder: std::ptr::null_mut(),
         node,
-        kernel_id: usize::MAX,
+        kernel_id: RECORDER.with_borrow(|r| r.as_ref().unwrap().borrow().kernel_id),
     }
 }
 macro_rules! impl_aggregate_for_tuple {

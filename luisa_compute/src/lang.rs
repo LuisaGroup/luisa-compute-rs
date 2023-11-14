@@ -259,7 +259,7 @@ pub fn __new_user_node<T: UserNodeData>(data: T) -> SafeNodeRef {
     SafeNodeRef {
         recorder: std::ptr::null_mut(),
         node,
-        kernel_id: usize::MAX,
+        kernel_id: RECORDER.with_borrow(|r| r.as_ref().unwrap().borrow().kernel_id),
     }
 }
 macro_rules! impl_aggregate_for_tuple {
@@ -543,16 +543,15 @@ fn make_safe_node(node: NodeRef) -> SafeNodeRef {
 /// check if the node belongs to the current kernel/callable
 /// if not, capture the node recursively
 fn process_potential_capture(node: SafeNodeRef) -> SafeNodeRef {
-    if node.node.is_user_data() {
-        return node;
-    }
-
     with_recorder(|r| {
         let cur_kernel_id = r.kernel_id;
         assert_eq!(
             cur_kernel_id, node.kernel_id,
             "Referencing node from another kernel!"
         );
+        if node.node.is_user_data() {
+            return node;
+        }
         if r.inaccessible.borrow().contains(&node.node) {
             panic!(
                 r#"Detected using node outside of its scope. It is possible that you use `RefCell` or `Cell` to store an `Expr<T>` or `Var<T>` 

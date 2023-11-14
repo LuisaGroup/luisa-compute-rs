@@ -286,7 +286,7 @@ pub struct Buffer<T: Value> {
 impl<T: Value> BufferView<T> {
     pub fn copy_async<'a>(&self, s: &'a Scope<'a>) -> Buffer<T> {
         let copy = self.device.create_buffer(self.len);
-        s.submit([self.copy_to_buffer_async(copy.view(..))]);
+        s.submit([self.copy_to_buffer_async(&copy)]);
         copy
     }
     pub fn copy(&self) -> Buffer<T> {
@@ -443,7 +443,7 @@ impl<T: Value> BufferView<T> {
     pub fn fill(&self, value: T) {
         self.fill_fn(|_| value);
     }
-    pub fn copy_to_buffer_async(&self, dst: BufferView<T>) -> Command<'static, 'static> {
+    pub fn copy_to_buffer_async(&self, dst: &BufferView<T>) -> Command<'static, 'static> {
         assert_eq!(self.len, dst.len);
         let mut rt = ResourceTracker::new();
         rt.add(self._handle());
@@ -461,7 +461,7 @@ impl<T: Value> BufferView<T> {
             callback: None,
         }
     }
-    pub fn copy_to_buffer(&self, dst: BufferView<T>) {
+    pub fn copy_to_buffer(&self, dst: &BufferView<T>) {
         submit_default_stream_and_sync(&self.device, [self.copy_to_buffer_async(dst)]);
     }
     pub fn view<S: RangeBounds<usize>>(&self, range: S) -> BufferView<T> {

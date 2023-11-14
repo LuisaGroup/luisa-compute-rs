@@ -102,7 +102,7 @@ impl Drop for DeviceHandle {
 pub mod extension {
     use super::*;
     use api::denoiser_ext::{Feature, Image};
-    pub use api::denoiser_ext::{ImageColorSpace, ImageFormat, PrefilterMode, FilterQuality};
+    pub use api::denoiser_ext::{FilterQuality, ImageColorSpace, ImageFormat, PrefilterMode};
     pub struct DenoiserInput {
         inner: api::denoiser_ext::DenoiserInput,
         inputs: Vec<Image>,
@@ -410,16 +410,6 @@ impl Device {
     }
     fn _create_buffer<T: Value>(&self, ext_mem: *mut c_void, count: usize) -> Buffer<T> {
         let name = self.name();
-        if name == "dx" {
-            assert!(
-                std::mem::align_of::<T>() >= 4,
-                "T must be aligned to 4 bytes on dx"
-            );
-            assert!(
-                count < u32::MAX as usize,
-                "count must be less than u32::MAX on dx"
-            );
-        }
         assert!(
             std::mem::size_of::<T>() > 0,
             "size of T must be greater than 0"
@@ -427,6 +417,16 @@ impl Device {
         let ty = if TypeId::of::<T>() == TypeId::of::<u8>() {
             Type::void()
         } else {
+            if name == "dx" {
+                assert!(
+                    std::mem::align_of::<T>() >= 4,
+                    "T must be aligned to 4 bytes on dx"
+                );
+                assert!(
+                    count < u32::MAX as usize,
+                    "count must be less than u32::MAX on dx"
+                );
+            }
             <T as TypeOf>::type_()
         };
         let buffer = self.inner.create_buffer(&ty, count, ext_mem);

@@ -123,7 +123,6 @@ fn main() {
     let rt_kernel = Kernel::<fn()>::new(
         &device,
         &track!(|| {
-            let accel = accel.var();
             let px = dispatch_id().xy();
             let xy = px.as_float2() / Float2::expr(img_w as f32, img_h as f32);
             let xy = 2.0 * xy - 1.0;

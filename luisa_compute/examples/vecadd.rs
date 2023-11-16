@@ -31,8 +31,8 @@ fn main() {
         },
         &|buf_z| {
             // z is pass by arg
-            let buf_x = x.var(); // x and y are captured
-            let buf_y = y.var();
+            let buf_x = &x; // x and y are captured
+            let buf_y = &y;
             let tid = dispatch_id().x;
             let x = buf_x.read(tid);
             let y = buf_y.read(tid);

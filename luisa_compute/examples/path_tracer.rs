@@ -360,11 +360,8 @@ fn main() {
                         break;
                     }
 
-                    let vertex_buffer = vertex_heap.var().buffer::<[f32; 3]>(hit.inst_id);
-                    let triangle = index_heap
-                        .var()
-                        .buffer::<Index>(hit.inst_id)
-                        .read(hit.prim_id);
+                    let vertex_buffer = vertex_heap.buffer::<[f32; 3]>(hit.inst_id);
+                    let triangle = index_heap.buffer::<Index>(hit.inst_id).read(hit.prim_id);
 
                     let p0: Expr<Float3> = vertex_buffer.read(triangle[0]).into();
                     let p1: Expr<Float3> = vertex_buffer.read(triangle[1]).into();

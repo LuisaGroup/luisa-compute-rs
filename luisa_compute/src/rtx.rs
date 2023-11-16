@@ -698,3 +698,4 @@ impl AccelVar {
         }
     }
 }
+impl_resource_deref_to_var!(Accel, AccelVar);

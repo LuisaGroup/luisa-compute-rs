@@ -309,6 +309,7 @@ pub(crate) struct FnRecorder {
     pub(crate) building_kernel: bool,
     pub(crate) pools: CArc<ModulePools>,
     pub(crate) arena: Bump,
+    pub(crate) dtors: Vec<(*mut u8, fn(*mut u8))>,
     pub(crate) callable_ret_type: Option<CArc<Type>>,
     pub(crate) const_builder: IrBuilder,
     pub(crate) index_const_pool: IndexMap<i32, NodeRef>,
@@ -426,6 +427,7 @@ impl FnRecorder {
             kernel_id,
             parent,
             index_const_pool: IndexMap::new(),
+            dtors: vec![],
             const_builder: IrBuilder::new(pools.clone()),
             rt: ResourceTracker::new(),
         }
@@ -528,6 +530,13 @@ impl FnRecorder {
             check_arg_alias(&captured);
         }
         arg
+    }
+}
+impl Drop for FnRecorder {
+    fn drop(&mut self) {
+        for (ptr, dtor) in self.dtors.drain(..) {
+            dtor(ptr);
+        }
     }
 }
 thread_local! {

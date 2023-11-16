@@ -345,6 +345,48 @@ pub struct BufferView<T: Value> {
     pub(crate) total_size_bytes: usize,
     pub(crate) _marker: PhantomData<fn() -> T>,
 }
+#[macro_export]
+macro_rules! impl_resource_deref_to_var {
+    ($r:ident, $v:ident [T: $tr:ident]) => {
+        impl<T: $tr> std::ops::Deref for $r<T> {
+            type Target = $v<T>;
+            fn deref(&self) -> &Self::Target {
+                let v = self.var();
+                with_recorder(|r| {
+                    let v = r.arena.alloc(v);
+                    r.dtors.push((v as *mut _ as *mut u8, |v| unsafe {
+                        std::ptr::drop_in_place(v as *mut $v<T>)
+                    }));
+                    unsafe { std::mem::transmute(v) }
+                })
+            }
+        }
+        
+    };
+    ($r:ident, $v:ident) => {
+        impl std::ops::Deref for $r {
+            type Target = $v;
+            fn deref(&self) -> &Self::Target {
+                let v = self.var();
+                with_recorder(|r| {
+                    let v = r.arena.alloc(v);
+                    r.dtors.push((v as *mut _ as *mut u8, |v| unsafe {
+                        std::ptr::drop_in_place(v as *mut $v)
+                    }));
+                    unsafe { std::mem::transmute(v) }
+                })
+            }
+        }
+        
+    };
+}
+impl_resource_deref_to_var!(BufferView, BufferVar [T: Value]);
+impl_resource_deref_to_var!(Tex2dView, Tex2dVar [T: IoTexel]);
+impl_resource_deref_to_var!(Tex3dView, Tex3dVar [T: IoTexel]);
+impl_resource_deref_to_var!(Tex2d, Tex2dVar [T: IoTexel]);
+impl_resource_deref_to_var!(Tex3d, Tex3dVar [T: IoTexel]);
+impl_resource_deref_to_var!(BindlessArray, BindlessArrayVar);
+
 impl<T: Value> BufferView<T> {
     /// reinterpret the buffer as a different type
     /// must satisfy `std::mem::size_of::<T>() * self.len() % std::mem::size_of::<U>() == 0`
@@ -1224,7 +1266,10 @@ macro_rules! impl_tex_view {
                     callback: None,
                 }
             }
-            pub fn copy_from_buffer<U: StorageTexel<T> + Value>(&self, buffer_view: &BufferView<U>) {
+            pub fn copy_from_buffer<U: StorageTexel<T> + Value>(
+                &self,
+                buffer_view: &BufferView<U>,
+            ) {
                 submit_default_stream_and_sync(
                     &self.device,
                     [self.copy_from_buffer_async(buffer_view)],
@@ -1319,12 +1364,12 @@ impl<T: IoTexel> Tex2d<T> {
     pub fn format(&self) -> PixelFormat {
         self.handle.format
     }
-    pub fn read(&self, uv: impl AsExpr<Value = Uint2>) -> Expr<T> {
-        self.var().read(uv)
-    }
-    pub fn write(&self, uv: impl AsExpr<Value = Uint2>, v: impl AsExpr<Value = T>) {
-        self.var().write(uv, v)
-    }
+    // pub fn read(&self, uv: impl AsExpr<Value = Uint2>) -> Expr<T> {
+    //     self.var().read(uv)
+    // }
+    // pub fn write(&self, uv: impl AsExpr<Value = Uint2>, v: impl AsExpr<Value = T>) {
+    //     self.var().write(uv, v)
+    // }
 }
 impl<T: IoTexel> Tex3d<T> {
     pub fn view(&self, level: u32) -> Tex3dView<T> {
@@ -1345,12 +1390,12 @@ impl<T: IoTexel> Tex3d<T> {
     pub fn format(&self) -> PixelFormat {
         self.handle.format
     }
-    pub fn read(&self, uv: impl AsExpr<Value = Uint3>) -> Expr<T> {
-        self.var().read(uv)
-    }
-    pub fn write(&self, uv: impl AsExpr<Value = Uint3>, v: impl AsExpr<Value = T>) {
-        self.var().write(uv, v)
-    }
+    // pub fn read(&self, uv: impl AsExpr<Value = Uint3>) -> Expr<T> {
+    //     self.var().read(uv)
+    // }
+    // pub fn write(&self, uv: impl AsExpr<Value = Uint3>, v: impl AsExpr<Value = T>) {
+    //     self.var().write(uv, v)
+    // }
 }
 #[derive(Clone)]
 pub struct BufferVar<T: Value> {
@@ -1849,28 +1894,28 @@ impl<T: Value> ToNode for Buffer<T> {
         self.var().node()
     }
 }
-impl<T: Value> IndexRead for BufferView<T> {
-    type Element = T;
-    fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
-        self.var().read(i)
-    }
-}
-impl<T: Value> IndexWrite for BufferView<T> {
-    fn write<I: IntoIndex, V: AsExpr<Value = T>>(&self, i: I, v: V) {
-        self.var().write(i, v)
-    }
-}
-impl<T: Value> IndexRead for Buffer<T> {
-    type Element = T;
-    fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
-        self.var().read(i)
-    }
-}
-impl<T: Value> IndexWrite for Buffer<T> {
-    fn write<I: IntoIndex, V: AsExpr<Value = T>>(&self, i: I, v: V) {
-        self.var().write(i, v)
-    }
-}
+// impl<T: Value> IndexRead for BufferView<T> {
+//     type Element = T;
+//     fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
+//         self.var().read(i)
+//     }
+// }
+// impl<T: Value> IndexWrite for BufferView<T> {
+//     fn write<I: IntoIndex, V: AsExpr<Value = T>>(&self, i: I, v: V) {
+//         self.var().write(i, v)
+//     }
+// }
+// impl<T: Value> IndexRead for Buffer<T> {
+//     type Element = T;
+//     fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {
+//         self.var().read(i)
+//     }
+// }
+// impl<T: Value> IndexWrite for Buffer<T> {
+//     fn write<I: IntoIndex, V: AsExpr<Value = T>>(&self, i: I, v: V) {
+//         self.var().write(i, v)
+//     }
+// }
 impl<T: Value> IndexRead for BufferVar<T> {
     type Element = T;
     fn read<I: IntoIndex>(&self, i: I) -> Expr<T> {

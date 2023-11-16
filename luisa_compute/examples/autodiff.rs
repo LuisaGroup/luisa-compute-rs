@@ -33,8 +33,8 @@ fn main() {
         &device,
         &track!(|| {
             let tid = dispatch_id().x;
-            let buf_x = x.var();
-            let buf_y = y.var();
+            let buf_x = &x;
+            let buf_y = &y;
             let x = buf_x.read(tid);
             let y = buf_y.read(tid);
             let f = |x: Expr<f32>, y: Expr<f32>| {

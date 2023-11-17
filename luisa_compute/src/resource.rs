@@ -15,7 +15,7 @@ use crate::lang::types::AtomicRef;
 use crate::runtime::*;
 
 use api::{BufferDownloadCommand, BufferUploadCommand, INVALID_RESOURCE_HANDLE};
-use libc::c_void;
+use std::ffi::c_void;
 
 pub type ByteBuffer = Buffer<u8>;
 pub type ByteBufferView = BufferView<u8>;

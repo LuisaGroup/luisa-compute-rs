@@ -320,7 +320,7 @@ pub(crate) struct FnRecorder {
 pub(crate) type FnRecorderPtr = Rc<RefCell<FnRecorder>>;
 impl FnRecorder {
     pub(crate) fn add_required_curve_basis(&mut self, basis: CurveBasisSet) {
-        self.curve_bases.merge(basis);
+        self.curve_bases.insert(basis);
     }
     pub(crate) fn make_index_const(&mut self, idx: i32) -> NodeRef {
         if let Some(node) = self.index_const_pool.get(&idx) {

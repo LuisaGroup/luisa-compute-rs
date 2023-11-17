@@ -191,7 +191,7 @@ fn main() {
                 uvw
             } else {
                 if hit.procedural_hit() {
-                    let prim = hit.prim_id;
+                    let prim = hit.prim;
                     let sphere = spheres.var().read(prim);
                     let normal = (Expr::<Float3>::from(ray.orig)
                         + Expr::<Float3>::from(ray.dir) * hit.committed_ray_t

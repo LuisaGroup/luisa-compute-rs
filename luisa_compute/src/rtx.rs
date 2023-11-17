@@ -6,6 +6,7 @@ use crate::internal_prelude::*;
 
 use crate::runtime::*;
 use crate::{ResourceTracker, *};
+use luisa_compute_ir::ir::CurveBasisSet;
 use luisa_compute_ir::ir::{AccelBinding, Binding, Func, Instruction, IrBuilder, Node, Type};
 use parking_lot::RwLock;
 use std::ops::Deref;
@@ -360,14 +361,14 @@ pub struct ProceduralHit {
 
 #[repr(C)]
 #[derive(Clone, Copy, Value, Debug, Soa)]
-pub struct CommittedHit {
+pub struct SurfaceHit {
     pub inst_id: u32,
     pub prim_id: u32,
     pub bary: Float2,
     pub hit_type: u32,
     pub committed_ray_t: f32,
 }
-impl CommittedHitExpr {
+impl SurfaceHitExpr {
     pub fn miss(&self) -> Expr<bool> {
         self.hit_type.eq(HitType::Miss as u32)
     }
@@ -385,33 +386,32 @@ pub enum HitType {
     Triangle = 1,
     Procedural = 2,
 }
-
+#[tracked]
 pub fn offset_ray_origin(
     p: impl AsExpr<Value = Float3>,
     n: impl AsExpr<Value = Float3>,
 ) -> Expr<Float3> {
-    lazy_static! {
-        static ref F: Callable<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>> =
-            Callable::<fn(Expr<Float3>, Expr<Float3>) -> Expr<Float3>>::new_static(|p, n| {
-                const ORIGIN: f32 = 1.0f32 / 32.0f32;
-                const FLOAT_SCALE: f32 = 1.0f32 / 65536.0f32;
-                const INT_SCALE: f32 = 256.0f32;
-                track!(unsafe {
-                    let of_i = (INT_SCALE * n).as_int3();
-                    let p_i = p.bitcast::<Int3>() + p.lt(0.0f32).select(-of_i, of_i);
-                    (p.abs() < ORIGIN).select(p + FLOAT_SCALE * n, p_i.bitcast::<Float3>())
-                })
-            });
-    }
-    let p: Expr<Float3> = p.as_expr();
-    let n: Expr<Float3> = n.as_expr();
-    F.call(p, n)
+    let ret = Var::<Float3>::zeroed();
+    outline(|| {
+        let p: Expr<Float3> = p.as_expr();
+        let n: Expr<Float3> = n.as_expr();
+        let origin: f32 = 1.0f32 / 32.0f32;
+        let float_scale: f32 = 1.0f32 / 65536.0f32;
+        let int_scale: f32 = 256.0f32;
+        unsafe {
+            let of_i = (int_scale * n).as_int3();
+            let p_i = p.bitcast::<Int3>() + p.lt(0.0f32).select(-of_i, of_i);
+            *ret = (p.abs() < origin).select(p + float_scale * n, p_i.bitcast::<Float3>())
+        }
+    });
+    ret.load()
 }
 pub type Index = [u32; 3];
 
 #[repr(C)]
 #[repr(align(8))]
 #[derive(Clone, Copy, Value, Debug, Soa)]
+#[deprecated(note = "Use `SurfaceHit` instead")]
 pub struct Hit {
     pub inst_id: u32,
     pub prim_id: u32,
@@ -419,6 +419,7 @@ pub struct Hit {
     pub v: f32,
     pub t: f32,
 }
+pub type CommitedHit = SurfaceHit;
 
 #[cfg(test)]
 mod test {
@@ -427,12 +428,12 @@ mod test {
         use super::*;
         assert_eq!(std::mem::align_of::<Ray>(), 16);
         assert_eq!(std::mem::size_of::<Ray>(), 32);
-        assert_eq!(std::mem::size_of::<Hit>(), 24);
-        assert_eq!(std::mem::align_of::<Hit>(), 8);
+        assert_eq!(std::mem::size_of::<SurfaceHit>(), 24);
+        assert_eq!(std::mem::align_of::<SurfaceHit>(), 8);
         assert_eq!(std::mem::size_of::<Index>(), 12);
     }
 }
-
+#[deprecated]
 impl HitExpr {
     pub fn valid(&self) -> Expr<bool> {
         self.inst_id.ne(u32::MAX)
@@ -443,16 +444,19 @@ impl HitExpr {
 }
 
 #[derive(Clone, Copy)]
-pub struct TriangleCandidate {
+pub struct SurfaceCandidate {
     query: SafeNodeRef,
     hit: Expr<TriangleHit>,
 }
+#[deprecated(note = "Use `SurfaceCandidate` instead")]
+pub type TriangleCandidate = SurfaceCandidate;
+
 #[derive(Clone, Copy)]
 pub struct ProceduralCandidate {
     query: SafeNodeRef,
     hit: Expr<ProceduralHit>,
 }
-impl TriangleCandidate {
+impl SurfaceCandidate {
     pub fn commit(&self) {
         let query = self.query.get();
         __current_scope(|b| b.call(Func::RayQueryCommitTriangle, &[query], Type::void()));
@@ -469,7 +473,7 @@ impl TriangleCandidate {
         )
     }
 }
-impl Deref for TriangleCandidate {
+impl Deref for SurfaceCandidate {
     type Target = TriangleHitExpr;
     fn deref(&self) -> &Self::Target {
         &self.hit
@@ -504,8 +508,84 @@ pub struct RayQuery<T, P> {
     pub on_triangle_hit: T,
     pub on_procedural_hit: P,
 }
+#[derive(Clone, Copy)]
+pub struct AccelTraceOptions {
+    pub curve_bases: CurveBasisSet,
+    pub mask: Expr<u32>,
+}
+pub struct RayQueryBase<const TERMINATE_ON_FIRST: bool> {
+    query: SafeNodeRef,
+    on_surface_hit: Option<Pooled<BasicBlock>>,
+    on_procedural_hit: Option<Pooled<BasicBlock>>,
+}
+impl<const TERMINATE_ON_FIRST: bool> RayQueryBase<TERMINATE_ON_FIRST> {
+    pub fn on_surface_hit(mut self, f: impl Fn(SurfaceCandidate)) -> Self {
+        assert!(
+            self.on_surface_hit.is_none(),
+            "Surface hit already recorded"
+        );
+        with_recorder(|r| {
+            let pools = r.pools.clone();
+            let s = &mut r.scopes;
+            s.push(IrBuilder::new(pools));
+        });
+        let query = self.query.get();
+        let candidate = SurfaceCandidate {
+            query: self.query,
+            hit: FromNode::from_node(
+                __current_scope(|b| {
+                    b.call(
+                        Func::RayQueryTriangleCandidateHit,
+                        &[query],
+                        TriangleHit::type_(),
+                    )
+                })
+                .into(),
+            ),
+        };
+        (f)(candidate);
+        let on_surface_hit = __pop_scope();
+        Self {
+            on_surface_hit: Some(on_surface_hit),
+            ..self
+        }
+    }
+    pub fn on_procedural_hit(mut self, f: impl Fn(ProceduralCandidate)) -> Self {
+        assert!(
+            self.on_procedural_hit.is_none(),
+            "Procedural hit already recorded"
+        );
+        with_recorder(|r| {
+            let pools = r.pools.clone();
+            let s = &mut r.scopes;
+            s.push(IrBuilder::new(pools));
+        });
+        let query = self.query.get();
+        let procedural_candidate = ProceduralCandidate {
+            query: self.query,
+            hit: FromNode::from_node(
+                __current_scope(|b| {
+                    b.call(
+                        Func::RayQueryProceduralCandidateHit,
+                        &[query],
+                        ProceduralHit::type_(),
+                    )
+                })
+                .into(),
+            ),
+        };
+        (f)(procedural_candidate);
+        let on_procedural_hit = __pop_scope();
+        Self {
+            on_procedural_hit: Some(on_procedural_hit),
+            ..self
+        }
+    }
+    pub fn trace(self) -> Expr<CommitedHit> {
+        todo!()
+    }
+}
 impl AccelVar {
-    #[inline]
     pub fn instance_transform(&self, index: Expr<u32>) -> Expr<Mat4> {
         let index = index.node().get();
         let self_node = self.node.get();
@@ -521,7 +601,52 @@ impl AccelVar {
         )
     }
 
-    #[inline]
+    pub fn intersect(
+        &self,
+        ray: impl AsExpr<Value = Ray>,
+        options: AccelTraceOptions,
+    ) -> Expr<SurfaceHit> {
+        let ray = ray.as_expr().node().get();
+        let mask = options.mask.node().get();
+        let self_node = self.node.get();
+        with_recorder(|r| {
+            r.add_required_curve_basis(options.curve_bases);
+        });
+        FromNode::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::RayTracingTraceClosest,
+                    &[self_node, ray, mask],
+                    SurfaceHit::type_(),
+                )
+            })
+            .into(),
+        )
+    }
+    pub fn intersect_any(
+        &self,
+        ray: impl AsExpr<Value = Ray>,
+        options: AccelTraceOptions,
+    ) -> Expr<bool> {
+        let ray = ray.as_expr().node().get();
+        let mask = options.mask.node().get();
+        let self_node = self.node.get();
+        with_recorder(|r| {
+            r.add_required_curve_basis(options.curve_bases);
+        });
+        FromNode::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::RayTracingTraceAny,
+                    &[self_node, ray, mask],
+                    bool::type_(),
+                )
+            })
+            .into(),
+        )
+    }
+
+    #[deprecated(note = "Use `intersect` instead")]
     pub fn trace_closest_masked(
         &self,
         ray: impl AsExpr<Value = Ray>,
@@ -541,7 +666,8 @@ impl AccelVar {
             .into(),
         )
     }
-    #[inline]
+
+    #[deprecated(note = "Use `intersect_any` instead")]
     pub fn trace_any_masked(
         &self,
         ray: impl AsExpr<Value = Ray>,
@@ -561,50 +687,100 @@ impl AccelVar {
             .into(),
         )
     }
-    #[inline]
+    #[deprecated(note = "Use `intersect` instead")]
+    #[allow(deprecated)]
     pub fn trace_closest(&self, ray: impl AsExpr<Value = Ray>) -> Expr<Hit> {
         self.trace_closest_masked(ray, u32::MAX.expr())
     }
-    #[inline]
+    #[deprecated(note = "Use `intersect_any` instead")]
+    #[allow(deprecated)]
     pub fn trace_any(&self, ray: impl AsExpr<Value = Ray>) -> Expr<bool> {
         self.trace_any_masked(ray, u32::MAX.expr())
     }
-    #[inline]
+    fn make_rq<const TERMINATE_ON_FIRST: bool>(
+        &self,
+        ray: impl AsExpr<Value = Ray>,
+        options: AccelTraceOptions,
+    ) -> RayQueryBase<TERMINATE_ON_FIRST> {
+        let ray = ray.as_expr().node().get();
+        let mask = options.mask.node().get();
+        let self_node = self.node.get();
+        let query = __current_scope(|b| {
+            b.call(
+                if TERMINATE_ON_FIRST {
+                    Func::RayTracingQueryAny
+                } else {
+                    Func::RayTracingQueryAll
+                },
+                &[self_node, ray, mask],
+                Type::opaque(
+                    if TERMINATE_ON_FIRST {
+                        "LC_RayQueryAny"
+                    } else {
+                        "LC_RayQueryAll"
+                    }
+                    .into(),
+                ),
+            )
+        });
+        let recorder = with_recorder(|r| r as *const _);
+        RayQueryBase {
+            query: query.into(),
+            on_procedural_hit: None,
+            on_surface_hit: None,
+        }
+    }
+    pub fn traverse(
+        &self,
+        ray: impl AsExpr<Value = Ray>,
+        options: AccelTraceOptions,
+    ) -> RayQueryBase<false> {
+        self.make_rq(ray, options)
+    }
+    pub fn traverse_any(
+        &self,
+        ray: impl AsExpr<Value = Ray>,
+        options: AccelTraceOptions,
+    ) -> RayQueryBase<true> {
+        self.make_rq(ray, options)
+    }
+    #[deprecated(note = "Use `traverse` instead")]
     pub fn query_all<T, P>(
         &self,
         ray: impl AsExpr<Value = Ray>,
         mask: impl AsExpr<Value = u32>,
         ray_query: RayQuery<T, P>,
-    ) -> Expr<CommittedHit>
+    ) -> Expr<SurfaceHit>
     where
-        T: FnOnce(TriangleCandidate),
+        T: FnOnce(SurfaceCandidate),
         P: FnOnce(ProceduralCandidate),
     {
         self._query(false, ray, mask, ray_query)
     }
-    #[inline]
+
+    #[deprecated(note = "Use `traverse_any` instead")]
     pub fn query_any<T, P>(
         &self,
         ray: impl AsExpr<Value = Ray>,
         mask: impl AsExpr<Value = u32>,
         ray_query: RayQuery<T, P>,
-    ) -> Expr<CommittedHit>
+    ) -> Expr<SurfaceHit>
     where
-        T: FnOnce(TriangleCandidate),
+        T: FnOnce(SurfaceCandidate),
         P: FnOnce(ProceduralCandidate),
     {
         self._query(true, ray, mask, ray_query)
     }
-    #[inline]
+
     fn _query<T, P>(
         &self,
         terminate_on_first: bool,
         ray: impl AsExpr<Value = Ray>,
         mask: impl AsExpr<Value = u32>,
         ray_query: RayQuery<T, P>,
-    ) -> Expr<CommittedHit>
+    ) -> Expr<SurfaceHit>
     where
-        T: FnOnce(TriangleCandidate),
+        T: FnOnce(SurfaceCandidate),
         P: FnOnce(ProceduralCandidate),
     {
         let ray = ray.as_expr().node().get();
@@ -634,7 +810,7 @@ impl AccelVar {
             let s = &mut r.scopes;
             s.push(IrBuilder::new(pools));
         });
-        let triangle_candidate = TriangleCandidate {
+        let triangle_candidate = SurfaceCandidate {
             query: query.into(),
             hit: FromNode::from_node(
                 __current_scope(|b| {
@@ -672,7 +848,7 @@ impl AccelVar {
         FromNode::from_node(
             __current_scope(|b| {
                 b.ray_query(query, on_triangle_hit, on_procedural_hit, Type::void());
-                b.call(Func::RayQueryCommittedHit, &[query], CommittedHit::type_())
+                b.call(Func::RayQueryCommittedHit, &[query], SurfaceHit::type_())
             })
             .into(),
         )

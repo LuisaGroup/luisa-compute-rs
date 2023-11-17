@@ -5,7 +5,7 @@ use luisa::lang::types::vector::alias::*;
 use luisa::lang::types::vector::*;
 use luisa::prelude::*;
 use luisa::rtx::{
-    Aabb, AccelBuildRequest, AccelOption, ProceduralCandidate, Ray, RayQuery, TriangleCandidate,
+    Aabb, AccelBuildRequest, AccelOption, ProceduralCandidate, Ray, RayQuery, SurfaceCandidate,
 };
 use luisa_compute as luisa;
 use winit::event::{Event as WinitEvent, WindowEvent};
@@ -140,7 +140,7 @@ fn main() {
                 ray,
                 255,
                 RayQuery {
-                    on_triangle_hit: |candidate: TriangleCandidate| {
+                    on_triangle_hit: |candidate: SurfaceCandidate| {
                         let bary = candidate.bary;
                         let uvw = Float3::expr(1.0 - bary.x - bary.y, bary.x, bary.y);
                         let t = candidate.committed_ray_t;

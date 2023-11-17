@@ -11,6 +11,7 @@ use crate::internal_prelude::*;
 
 use bumpalo::Bump;
 use indexmap::IndexMap;
+use luisa_compute_ir::ir::CurveBasisSet;
 
 use crate::runtime::{RawCallable, WeakDevice};
 
@@ -314,9 +315,13 @@ pub(crate) struct FnRecorder {
     pub(crate) const_builder: IrBuilder,
     pub(crate) index_const_pool: IndexMap<i32, NodeRef>,
     pub(crate) rt: ResourceTracker,
+    pub(crate) curve_bases: CurveBasisSet,
 }
 pub(crate) type FnRecorderPtr = Rc<RefCell<FnRecorder>>;
 impl FnRecorder {
+    pub(crate) fn add_required_curve_basis(&mut self, basis: CurveBasisSet) {
+        self.curve_bases.merge(basis);
+    }
     pub(crate) fn make_index_const(&mut self, idx: i32) -> NodeRef {
         if let Some(node) = self.index_const_pool.get(&idx) {
             return *node;
@@ -412,6 +417,7 @@ impl FnRecorder {
                 .map(|p| p.borrow().inaccessible.clone())
                 .unwrap_or_else(|| Rc::new(RefCell::new(HashSet::new()))),
             scopes: vec![],
+            curve_bases: CurveBasisSet::empty(),
             captured_resources: IndexMap::new(),
             cpu_custom_ops: IndexMap::new(),
             callables: IndexMap::new(),
@@ -561,6 +567,7 @@ fn process_potential_capture(node: SafeNodeRef) -> SafeNodeRef {
         if node.node.is_user_data() {
             return node;
         }
+       
         if r.inaccessible.borrow().contains(&node.node) {
             panic!(
                 r#"Detected using node outside of its scope. It is possible that you use `RefCell` or `Cell` to store an `Expr<T>` or `Var<T>` 
@@ -572,6 +579,10 @@ Please define a `Var<T>` in the parent scope and assign to it instead!"#
         // defined in same callable, no need to capture
         if ptr == node.recorder {
             return node;
+        }
+        let ty = node.node.type_();
+        if ty.is_opaque("LC_RayQueryAny") || ty.is_opaque("LC_RayQueryAll") {
+            panic!("RayQuery cannot be captured!");
         }
         r.map_captured_vars(node)
     })

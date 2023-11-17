@@ -11,7 +11,7 @@ use winit::event_loop::EventLoop;
 use luisa::prelude::*;
 use luisa::rtx::{
     offset_ray_origin, Accel, AccelBuildRequest, AccelOption, AccelVar, Index, Ray, RayComps,
-    RayQuery, TriangleCandidate,
+    RayQuery, SurfaceCandidate,
 };
 use luisa_compute as luisa;
 
@@ -359,7 +359,7 @@ fn main() {
                 let light_area = light_u.cross(light_v).length();
                 let light_normal = light_u.cross(light_v).normalize();
 
-                let filter = |c: &TriangleCandidate| {
+                let filter = |c: &SurfaceCandidate| {
                     let valid = true.var();
                     if c.inst == 5u32 {
                         *valid = (c.bary.y * 6.0f32).fract() < 0.6f32;
@@ -377,7 +377,7 @@ fn main() {
                         ray,
                         255,
                         RayQuery {
-                            on_triangle_hit: |c: TriangleCandidate| {
+                            on_triangle_hit: |c: SurfaceCandidate| {
                                 if filter(&c) {
                                     c.commit();
                                 }
@@ -440,7 +440,7 @@ fn main() {
                             shadow_ray,
                             255,
                             RayQuery {
-                                on_triangle_hit: |c: TriangleCandidate| {
+                                on_triangle_hit: |c: SurfaceCandidate| {
                                     if_!(filter(&c), {
                                         c.commit();
                                     });

@@ -244,7 +244,7 @@ pub type ByteBufferVar = BufferVar<u8>;
 //     }
 // }
 impl BufferVar<u8> {
-    pub unsafe fn read_as<T: Value>(&self, index_bytes: impl IntoIndex) -> Expr<T> {
+    pub fn read_as<T: Value>(&self, index_bytes: impl IntoIndex) -> Expr<T> {
         let i = index_bytes.to_u64();
         let self_node = self.node.get();
         let i = i.node().get();
@@ -268,7 +268,7 @@ impl BufferVar<u8> {
             .into(),
         )
     }
-    pub unsafe fn write_as<T: Value>(
+    pub fn write_as<T: Value>(
         &self,
         index_bytes: impl IntoIndex,
         value: impl AsExpr<Value = T>,

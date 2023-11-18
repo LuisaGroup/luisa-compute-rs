@@ -522,11 +522,10 @@ pub fn offset_ray_origin(
         let origin: f32 = 1.0f32 / 32.0f32;
         let float_scale: f32 = 1.0f32 / 65536.0f32;
         let int_scale: f32 = 256.0f32;
-        unsafe {
-            let of_i = (int_scale * n).as_int3();
-            let p_i = p.bitcast::<Int3>() + p.lt(0.0f32).select(-of_i, of_i);
-            *ret = (p.abs() < origin).select(p + float_scale * n, p_i.bitcast::<Float3>())
-        }
+
+        let of_i = (int_scale * n).as_int3();
+        let p_i = p.bitcast::<Int3>() + p.lt(0.0f32).select(-of_i, of_i);
+        *ret = (p.abs() < origin).select(p + float_scale * n, p_i.bitcast::<Float3>())
     });
     ret.load()
 }

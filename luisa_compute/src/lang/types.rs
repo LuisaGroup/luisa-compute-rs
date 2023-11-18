@@ -307,7 +307,7 @@ impl<T: Value> Expr<T> {
             }
         })
     }
-    pub unsafe fn bitcast<S: Value>(self) -> Expr<S> {
+    pub fn bitcast<S: Value>(self) -> Expr<S> {
         assert_eq!(std::mem::size_of::<T>(), std::mem::size_of::<S>());
         let ty = S::type_();
         let node = self.node().get();

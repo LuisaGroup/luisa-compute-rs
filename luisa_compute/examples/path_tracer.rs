@@ -10,7 +10,7 @@ use luisa::lang::types::vector::alias::*;
 use luisa::lang::types::vector::*;
 use luisa::prelude::*;
 use luisa::rtx::{
-    offset_ray_origin, Accel, AccelBuildRequest, AccelOption, AccelVar, Index, Ray, RayComps, AccelTraceOptions,
+    offset_ray_origin, Accel, AccelBuildRequest, AccelOption, AccelVar, Index, Ray, RayComps, AccelTraceOptions, TriangleInterpolate,
 };
 use luisa_compute as luisa;
 
@@ -371,8 +371,7 @@ fn main() {
                     let p1: Expr<Float3> = vertex_buffer.read(triangle[1]).into();
                     let p2: Expr<Float3> = vertex_buffer.read(triangle[2]).into();
 
-                    let bary = hit.triangle_barycentric_coord();
-                    let p = p0 * (1.0f32 - bary.x - bary.y) + p1 * bary.x + p2 * bary.y;
+                    let p = hit.interpolate(p0, p1, p2);
                     let n = (p1 - p0).cross(p2 - p0).normalize();
 
                     let origin: Expr<Float3> = (**ray.orig).into();

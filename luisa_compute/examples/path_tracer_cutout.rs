@@ -2,6 +2,7 @@ use image::Rgb;
 use luisa::lang::types::vector::alias::*;
 use luisa::lang::types::vector::Mat4;
 use luisa::rtx::AccelTraceOptions;
+use luisa::rtx::TriangleInterpolate;
 use luisa_compute_api_types::StreamTag;
 use rand::Rng;
 use std::env::current_exe;
@@ -398,8 +399,7 @@ fn main() {
                     let p2: Expr<Float3> = vertex_buffer.read(triangle[2]).into();
 
                     let m = accel.instance_transform(hit.inst);
-                    let p =
-                        p0 * (1.0f32 - hit.bary.x - hit.bary.y) + p1 * hit.bary.x + p2 * hit.bary.y;
+                    let p = hit.interpolate(p0, p1, p2);
                     let p = (m * Float4::expr(p.x, p.y, p.z, 1.0f32)).xyz();
                     let n = (p1 - p0).cross(p2 - p0);
                     let n = (m * Float4::expr(n.x, n.y, n.z, 0.0f32)).xyz().normalize();

@@ -10,11 +10,12 @@ use luisa_compute_ir::ir::CurveBasisSet;
 use luisa_compute_ir::ir::{AccelBinding, Binding, Func, Instruction, IrBuilder, Node, Type};
 use parking_lot::RwLock;
 use std::ops::Deref;
-
+pub mod curve;
 pub use api::{
     AccelBuildModificationFlags, AccelBuildRequest, AccelOption, AccelUsageHint, MeshType,
     PixelFormat, PixelStorage,
 };
+pub use curve::*;
 use luisa_compute_api_types as api;
 
 pub(crate) struct AccelHandle {
@@ -343,6 +344,15 @@ pub struct Aabb {
     pub max: [f32; 3],
 }
 
+/// Represents a hit on a triangle or a curve
+/// Use [`Expr<SurfaceHit>::is_curve`] to check if it's a curve or a triangle
+///
+/// Use [`Expr<SurfaceHit>::curve_parameter`] or [`Expr<SurfaceHit>::triangle_barycentric_coord`] to access the hit data
+///
+/// For triangles, use [`TriangleInterpolate::interpolate`] to interpolate vertex attributes
+///
+/// For curves, see [`CurveEvaluator`] trait and its impls [`PiecewiseLinearCurve`],
+///  [`BezierCurve`], [`CubicBSplineCurve`], [`CatmullRomCurve`] for more information
 #[repr(C)]
 #[derive(Clone, Copy, Value, Debug, Soa)]
 pub struct SurfaceHit {
@@ -355,6 +365,108 @@ pub struct SurfaceHit {
     pub committed_ray_t: f32,
 }
 
+pub trait TriangleInterpolate<V: Value> {
+    fn interpolate(
+        &self,
+        v0: impl AsExpr<Value = V>,
+        v1: impl AsExpr<Value = V>,
+        v2: impl AsExpr<Value = V>,
+    ) -> Expr<V>;
+}
+impl TriangleInterpolate<f32> for Expr<Float2> {
+    #[tracked]
+    fn interpolate(
+        &self,
+        v0: impl AsExpr<Value = f32>,
+        v1: impl AsExpr<Value = f32>,
+        v2: impl AsExpr<Value = f32>,
+    ) -> Expr<f32> {
+        (1.0 - self.x - self.y) * v0.as_expr() + self.x * v1.as_expr() + self.y * v2.as_expr()
+    }
+}
+impl TriangleInterpolate<Float2> for Expr<Float2> {
+    #[tracked]
+    fn interpolate(
+        &self,
+        v0: impl AsExpr<Value = Float2>,
+        v1: impl AsExpr<Value = Float2>,
+        v2: impl AsExpr<Value = Float2>,
+    ) -> Expr<Float2> {
+        (1.0 - self.x - self.y) * v0.as_expr() + self.x * v1.as_expr() + self.y * v2.as_expr()
+    }
+}
+impl TriangleInterpolate<Float3> for Expr<Float2> {
+    #[tracked]
+    fn interpolate(
+        &self,
+        v0: impl AsExpr<Value = Float3>,
+        v1: impl AsExpr<Value = Float3>,
+        v2: impl AsExpr<Value = Float3>,
+    ) -> Expr<Float3> {
+        (1.0 - self.x - self.y) * v0.as_expr() + self.x * v1.as_expr() + self.y * v2.as_expr()
+    }
+}
+impl TriangleInterpolate<Float4> for Expr<Float2> {
+    #[tracked]
+    fn interpolate(
+        &self,
+        v0: impl AsExpr<Value = Float4>,
+        v1: impl AsExpr<Value = Float4>,
+        v2: impl AsExpr<Value = Float4>,
+    ) -> Expr<Float4> {
+        (1.0 - self.x - self.y) * v0.as_expr() + self.x * v1.as_expr() + self.y * v2.as_expr()
+    }
+}
+macro_rules! impl_triangle_interp {
+    ($t:ty) => {
+        impl TriangleInterpolate<f32> for Expr<$t> {
+            #[tracked]
+            fn interpolate(
+                &self,
+                v0: impl AsExpr<Value = f32>,
+                v1: impl AsExpr<Value = f32>,
+                v2: impl AsExpr<Value = f32>,
+            ) -> Expr<f32> {
+                self.bary.interpolate(v0, v1, v2)
+            }
+        }
+        impl TriangleInterpolate<Float2> for Expr<$t> {
+            #[tracked]
+            fn interpolate(
+                &self,
+                v0: impl AsExpr<Value = Float2>,
+                v1: impl AsExpr<Value = Float2>,
+                v2: impl AsExpr<Value = Float2>,
+            ) -> Expr<Float2> {
+                self.bary.interpolate(v0, v1, v2)
+            }
+        }
+        impl TriangleInterpolate<Float3> for Expr<$t> {
+            #[tracked]
+            fn interpolate(
+                &self,
+                v0: impl AsExpr<Value = Float3>,
+                v1: impl AsExpr<Value = Float3>,
+                v2: impl AsExpr<Value = Float3>,
+            ) -> Expr<Float3> {
+                self.bary.interpolate(v0, v1, v2)
+            }
+        }
+        impl TriangleInterpolate<Float4> for Expr<$t> {
+            #[tracked]
+            fn interpolate(
+                &self,
+                v0: impl AsExpr<Value = Float4>,
+                v1: impl AsExpr<Value = Float4>,
+                v2: impl AsExpr<Value = Float4>,
+            ) -> Expr<Float4> {
+                self.bary.interpolate(v0, v1, v2)
+            }
+        }
+    };
+}
+impl_triangle_interp!(SurfaceHit);
+impl_triangle_interp!(CommittedHit);
 #[repr(C)]
 #[derive(Clone, Copy, Value, Debug, Soa)]
 pub struct ProceduralHit {
@@ -390,6 +502,7 @@ impl CommittedHitExpr {
         self.bary
     }
 }
+
 #[derive(Clone, Copy)]
 #[repr(u32)]
 pub enum HitType {

@@ -567,7 +567,7 @@ fn process_potential_capture(node: SafeNodeRef) -> SafeNodeRef {
         if node.node.is_user_data() {
             return node;
         }
-       
+
         if r.inaccessible.borrow().contains(&node.node) {
             panic!(
                 r#"Detected using node outside of its scope. It is possible that you use `RefCell` or `Cell` to store an `Expr<T>` or `Var<T>` 
@@ -917,12 +917,10 @@ where
 }
 
 pub(crate) fn need_runtime_check() -> bool {
-    cfg!(debug_assertions)
-        || match env::var("LUISA_DEBUG") {
-            Ok(s) => s == "full" || s == "1",
-            Err(_) => false,
-        }
-        || debug::__env_need_backtrace()
+    (match env::var("LUISA_DEBUG") {
+        Ok(s) => s == "full" || s == "1",
+        Err(_) => cfg!(debug_assertions),
+    }) || debug::__env_need_backtrace()
 }
 fn try_eval_const_index(index: NodeRef) -> Option<usize> {
     let inst = &index.get().instruction;

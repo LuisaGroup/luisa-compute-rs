@@ -44,7 +44,7 @@ impl IndexRead for PrimitiveSoaProxy<bool> {
     type Element = bool;
     #[tracked]
     fn read<I: crate::lang::index::IntoIndex>(&self, i: I) -> Expr<Self::Element> {
-        let v = unsafe {
+        let v = {
             self.data.read_as::<u32>(
                 self.global_offset * self.count * 4
                     + (self.view_start + i.to_u64()) * std::mem::size_of::<u32>() as u64,
@@ -62,13 +62,12 @@ impl IndexWrite for PrimitiveSoaProxy<bool> {
     ) {
         let i = i.to_u64();
         let v = value.as_expr();
-        unsafe {
-            self.data.write_as::<u32>(
-                self.global_offset * self.count * 4
-                    + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
-                select(v, 1u32.expr(), 0u32.expr()),
-            );
-        }
+
+        self.data.write_as::<u32>(
+            self.global_offset * self.count * 4
+                + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
+            select(v, 1u32.expr(), 0u32.expr()),
+        );
     }
 }
 macro_rules! impl_prim_soa_16 {
@@ -82,14 +81,12 @@ macro_rules! impl_prim_soa_16 {
                     lc_assert!(i.lt(self.view_count));
                 }
 
-                unsafe {
-                    let v = self.data.read_as::<u32>(
-                        self.global_offset * self.count * 4
-                            + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
-                    );
-                    let v = (v & 0xffff).as_u16();
-                    v.bitcast::<$T>()
-                }
+                let v = self.data.read_as::<u32>(
+                    self.global_offset * self.count * 4
+                        + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
+                );
+                let v = (v & 0xffff).as_u16();
+                v.bitcast::<$T>()
             }
         }
         impl IndexWrite for PrimitiveSoaProxy<$T> {
@@ -104,15 +101,14 @@ macro_rules! impl_prim_soa_16 {
                 if need_runtime_check() {
                     lc_assert!(i.lt(self.view_count));
                 }
-                unsafe {
-                    let v = v.bitcast::<u16>();
-                    let v = v.as_u32();
-                    self.data.write_as::<u32>(
-                        self.global_offset * self.count * 4
-                            + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
-                        v,
-                    );
-                }
+
+                let v = v.bitcast::<u16>();
+                let v = v.as_u32();
+                self.data.write_as::<u32>(
+                    self.global_offset * self.count * 4
+                        + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
+                    v,
+                );
             }
         }
     };
@@ -128,14 +124,12 @@ macro_rules! impl_prim_soa_8 {
                     lc_assert!(i.lt(self.view_count));
                 }
 
-                unsafe {
-                    let v = self.data.read_as::<u32>(
-                        self.global_offset * self.count * 4
-                            + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
-                    );
-                    let v = (v & 0xff).as_u8();
-                    v.bitcast::<$T>()
-                }
+                let v = self.data.read_as::<u32>(
+                    self.global_offset * self.count * 4
+                        + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
+                );
+                let v = (v & 0xff).as_u8();
+                v.bitcast::<$T>()
             }
         }
         impl IndexWrite for PrimitiveSoaProxy<$T> {
@@ -150,15 +144,14 @@ macro_rules! impl_prim_soa_8 {
                 if need_runtime_check() {
                     lc_assert!(i.lt(self.view_count));
                 }
-                unsafe {
-                    let v = v.bitcast::<u8>();
-                    let v = v.as_u32();
-                    self.data.write_as::<u32>(
-                        self.global_offset * self.count * 4
-                            + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
-                        v,
-                    );
-                }
+
+                let v = v.bitcast::<u8>();
+                let v = v.as_u32();
+                self.data.write_as::<u32>(
+                    self.global_offset * self.count * 4
+                        + (self.view_start + i) * std::mem::size_of::<u32>() as u64,
+                    v,
+                );
             }
         }
     };

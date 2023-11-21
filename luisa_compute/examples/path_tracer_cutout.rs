@@ -1,6 +1,8 @@
 use image::Rgb;
 use luisa::lang::types::vector::alias::*;
 use luisa::lang::types::vector::Mat4;
+use luisa::rtx::AccelTraceOptions;
+use luisa::rtx::TriangleInterpolate;
 use luisa_compute_api_types::StreamTag;
 use rand::Rng;
 use std::env::current_exe;
@@ -11,7 +13,7 @@ use winit::event_loop::EventLoop;
 use luisa::prelude::*;
 use luisa::rtx::{
     offset_ray_origin, Accel, AccelBuildRequest, AccelOption, AccelVar, Index, Ray, RayComps,
-    RayQuery, TriangleCandidate,
+    RayQuery, SurfaceCandidate,
 };
 use luisa_compute as luisa;
 
@@ -359,7 +361,7 @@ fn main() {
                 let light_area = light_u.cross(light_v).length();
                 let light_normal = light_u.cross(light_v).normalize();
 
-                let filter = |c: &TriangleCandidate| {
+                let filter = |c: &SurfaceCandidate| {
                     let valid = true.var();
                     if c.inst == 5u32 {
                         *valid = (c.bary.y * 6.0f32).fract() < 0.6f32;
@@ -372,37 +374,32 @@ fn main() {
 
                 let depth = Var::<u32>::zeroed();
                 while depth < 10 {
-                    // let hit = accel.trace_closest(ray);
-                    let hit = accel.query_all(
-                        ray,
-                        255,
-                        RayQuery {
-                            on_triangle_hit: |c: TriangleCandidate| {
-                                if filter(&c) {
-                                    c.commit();
-                                }
-                            },
-                            on_procedural_hit: |_c| {},
-                        },
-                    );
+                    let trace_options = AccelTraceOptions {
+                        mask: 0xff.expr(),
+                        ..Default::default()
+                    };
+                    let hit = accel
+                        .traverse(ray, trace_options)
+                        .on_surface_hit(|c: SurfaceCandidate| {
+                            if filter(&c) {
+                                c.commit();
+                            }
+                        })
+                        .trace();
 
                     if hit.miss() {
                         break;
                     }
 
-                    let vertex_buffer = vertex_heap.var().buffer::<[f32; 3]>(hit.inst_id);
-                    let triangle = index_heap
-                        .var()
-                        .buffer::<Index>(hit.inst_id)
-                        .read(hit.prim_id);
+                    let vertex_buffer = vertex_heap.var().buffer::<[f32; 3]>(hit.inst);
+                    let triangle = index_heap.var().buffer::<Index>(hit.inst).read(hit.prim);
 
                     let p0: Expr<Float3> = vertex_buffer.read(triangle[0]).into();
                     let p1: Expr<Float3> = vertex_buffer.read(triangle[1]).into();
                     let p2: Expr<Float3> = vertex_buffer.read(triangle[2]).into();
 
-                    let m = accel.instance_transform(hit.inst_id);
-                    let p =
-                        p0 * (1.0f32 - hit.bary.x - hit.bary.y) + p1 * hit.bary.x + p2 * hit.bary.y;
+                    let m = accel.instance_transform(hit.inst);
+                    let p = hit.interpolate(p0, p1, p2);
                     let p = (m * Float4::expr(p.x, p.y, p.z, 1.0f32)).xyz();
                     let n = (p1 - p0).cross(p2 - p0);
                     let n = (m * Float4::expr(n.x, n.y, n.z, 0.0f32)).xyz().normalize();
@@ -414,9 +411,9 @@ fn main() {
                         break;
                     }
                     let pp = offset_ray_origin(p, n);
-                    let albedo = cbox_materials.read(hit.inst_id);
+                    let albedo = cbox_materials.read(hit.inst);
                     // hit light
-                    if hit.inst_id == 7u32 {
+                    if hit.inst == 7u32 {
                         if depth == 0u32 {
                             radiance.store(radiance + light_emission);
                         } else {
@@ -436,18 +433,14 @@ fn main() {
                         let wi_light = (pp_light - pp).normalize();
                         let shadow_ray =
                             make_ray(offset_ray_origin(pp, n), wi_light, 0.0f32.expr(), d_light);
-                        let occluded = accel.query_any(
-                            shadow_ray,
-                            255,
-                            RayQuery {
-                                on_triangle_hit: |c: TriangleCandidate| {
-                                    if_!(filter(&c), {
-                                        c.commit();
-                                    });
-                                },
-                                on_procedural_hit: |_c| {},
-                            },
-                        );
+                        let occluded = accel
+                            .traverse_any(shadow_ray, trace_options)
+                            .on_surface_hit(|c: SurfaceCandidate| {
+                                if filter(&c) {
+                                    c.commit();
+                                }
+                            })
+                            .trace();
                         let occluded = !occluded.miss();
                         let cos_wi_light = wi_light.dot(n);
                         let cos_light = -light_normal.dot(wi_light);

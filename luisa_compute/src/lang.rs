@@ -11,6 +11,7 @@ use crate::internal_prelude::*;
 
 use bumpalo::Bump;
 use indexmap::IndexMap;
+use luisa_compute_ir::ir::CurveBasisSet;
 
 use crate::runtime::{RawCallable, WeakDevice};
 
@@ -309,13 +310,18 @@ pub(crate) struct FnRecorder {
     pub(crate) building_kernel: bool,
     pub(crate) pools: CArc<ModulePools>,
     pub(crate) arena: Bump,
+    pub(crate) dtors: Vec<(*mut u8, fn(*mut u8))>,
     pub(crate) callable_ret_type: Option<CArc<Type>>,
     pub(crate) const_builder: IrBuilder,
     pub(crate) index_const_pool: IndexMap<i32, NodeRef>,
     pub(crate) rt: ResourceTracker,
+    pub(crate) curve_bases: CurveBasisSet,
 }
 pub(crate) type FnRecorderPtr = Rc<RefCell<FnRecorder>>;
 impl FnRecorder {
+    pub(crate) fn add_required_curve_basis(&mut self, basis: CurveBasisSet) {
+        self.curve_bases.insert(basis);
+    }
     pub(crate) fn make_index_const(&mut self, idx: i32) -> NodeRef {
         if let Some(node) = self.index_const_pool.get(&idx) {
             return *node;
@@ -411,6 +417,7 @@ impl FnRecorder {
                 .map(|p| p.borrow().inaccessible.clone())
                 .unwrap_or_else(|| Rc::new(RefCell::new(HashSet::new()))),
             scopes: vec![],
+            curve_bases: CurveBasisSet::empty(),
             captured_resources: IndexMap::new(),
             cpu_custom_ops: IndexMap::new(),
             callables: IndexMap::new(),
@@ -426,6 +433,7 @@ impl FnRecorder {
             kernel_id,
             parent,
             index_const_pool: IndexMap::new(),
+            dtors: vec![],
             const_builder: IrBuilder::new(pools.clone()),
             rt: ResourceTracker::new(),
         }
@@ -530,6 +538,13 @@ impl FnRecorder {
         arg
     }
 }
+impl Drop for FnRecorder {
+    fn drop(&mut self) {
+        for (ptr, dtor) in self.dtors.drain(..) {
+            dtor(ptr);
+        }
+    }
+}
 thread_local! {
     pub(crate) static RECORDER: RefCell<Option<FnRecorderPtr>> = RefCell::new(None);
 }
@@ -552,6 +567,7 @@ fn process_potential_capture(node: SafeNodeRef) -> SafeNodeRef {
         if node.node.is_user_data() {
             return node;
         }
+
         if r.inaccessible.borrow().contains(&node.node) {
             panic!(
                 r#"Detected using node outside of its scope. It is possible that you use `RefCell` or `Cell` to store an `Expr<T>` or `Var<T>` 
@@ -563,6 +579,10 @@ Please define a `Var<T>` in the parent scope and assign to it instead!"#
         // defined in same callable, no need to capture
         if ptr == node.recorder {
             return node;
+        }
+        let ty = node.node.type_();
+        if ty.is_opaque("LC_RayQueryAny") || ty.is_opaque("LC_RayQueryAll") {
+            panic!("RayQuery cannot be captured!");
         }
         r.map_captured_vars(node)
     })
@@ -897,12 +917,10 @@ where
 }
 
 pub(crate) fn need_runtime_check() -> bool {
-    cfg!(debug_assertions)
-        || match env::var("LUISA_DEBUG") {
-            Ok(s) => s == "full" || s == "1",
-            Err(_) => false,
-        }
-        || debug::__env_need_backtrace()
+    (match env::var("LUISA_DEBUG") {
+        Ok(s) => s == "full" || s == "1",
+        Err(_) => cfg!(debug_assertions),
+    }) || debug::__env_need_backtrace()
 }
 fn try_eval_const_index(index: NodeRef) -> Option<usize> {
     let inst = &index.get().instruction;

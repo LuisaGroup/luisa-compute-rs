@@ -379,6 +379,7 @@ impl KernelBuilder {
                 cpu_custom_ops_set.insert(CArc::as_ptr(op) as u64);
             }
             for c in &callables {
+                r.add_required_curve_basis(c.0.module.curve_basis_set);
                 for capture in c.0.captures.as_ref() {
                     if !captured_set.contains(capture) {
                         captured_set.insert(*capture);
@@ -428,6 +429,7 @@ impl KernelBuilder {
             let entry = const_block;
             r.add_block_to_inaccessible(&entry);
             let ir_module = Module {
+                curve_basis_set: r.curve_bases,
                 entry,
                 kind: ModuleKind::Kernel,
                 pools: r.pools.clone(),
@@ -487,6 +489,7 @@ impl KernelBuilder {
             let entry = const_block;
             assert!(r.captured_vars.is_empty());
             let ir_module = Module {
+                curve_basis_set: r.curve_bases,
                 entry,
                 kind: ModuleKind::Kernel,
                 pools: r.pools.clone(),

@@ -307,7 +307,7 @@ impl<T: Value> Expr<T> {
             }
         })
     }
-    pub unsafe fn bitcast<S: Value>(self) -> Expr<S> {
+    pub fn bitcast<S: Value>(self) -> Expr<S> {
         assert_eq!(std::mem::size_of::<T>(), std::mem::size_of::<S>());
         let ty = S::type_();
         let node = self.node().get();
@@ -336,6 +336,10 @@ impl<T: Value> Var<T> {
         let self_node = self.node().get();
         let node = __current_scope(|b| b.call(Func::Load, &[self_node], T::type_()));
         Expr::<T>::from_node(node.into())
+    }
+    /// Converts this `Var` into an `Expr` by loading
+    pub fn expr(self) -> Expr<T> {
+        self.load()
     }
     pub fn store(&self, value: impl AsExpr<Value = T>) {
         crate::lang::_store(self, &value.as_expr());

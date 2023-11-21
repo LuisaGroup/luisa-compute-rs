@@ -26,8 +26,8 @@ fn main() {
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
     let kernel = Kernel::<fn(Buffer<f32>)>::new(&device, &|buf_z| {
         // z is pass by arg
-        let buf_x = x.var(); // x and y are captured
-        let buf_y = y.var();
+        let buf_x = &x; // x and y are captured
+        let buf_y = &y;
         let tid = dispatch_id().x;
         let x = buf_x.read(tid + 123);
         let y = buf_y.read(tid);

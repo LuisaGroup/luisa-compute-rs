@@ -5,7 +5,7 @@ use luisa::lang::types::vector::alias::*;
 use luisa::lang::types::vector::*;
 use luisa::prelude::*;
 use luisa::rtx::{
-    Aabb, AccelBuildRequest, AccelOption, ProceduralCandidate, Ray, RayQuery, TriangleCandidate,
+    Aabb, AccelBuildRequest, AccelOption, ProceduralCandidate, Ray, RayQuery, SurfaceCandidate,
 };
 use luisa_compute as luisa;
 use winit::event::{Event as WinitEvent, WindowEvent};
@@ -123,7 +123,6 @@ fn main() {
     let rt_kernel = Kernel::<fn()>::new(
         &device,
         &track!(|| {
-            let accel = accel.var();
             let px = dispatch_id().xy();
             let xy = px.as_float2() / Float2::expr(img_w as f32, img_h as f32);
             let xy = 2.0 * xy - 1.0;
@@ -141,7 +140,7 @@ fn main() {
                 ray,
                 255,
                 RayQuery {
-                    on_triangle_hit: |candidate: TriangleCandidate| {
+                    on_triangle_hit: |candidate: SurfaceCandidate| {
                         let bary = candidate.bary;
                         let uvw = Float3::expr(1.0 - bary.x - bary.y, bary.x, bary.y);
                         let t = candidate.committed_ray_t;
@@ -192,7 +191,7 @@ fn main() {
                 uvw
             } else {
                 if hit.procedural_hit() {
-                    let prim = hit.prim_id;
+                    let prim = hit.prim;
                     let sphere = spheres.var().read(prim);
                     let normal = (Expr::<Float3>::from(ray.orig)
                         + Expr::<Float3>::from(ray.dir) * hit.committed_ray_t

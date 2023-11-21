@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Weak};
 
-use libc::c_void;
+use std::ffi::c_void;
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
 use parking_lot::{Condvar, Mutex, RawMutex, RwLock};
 

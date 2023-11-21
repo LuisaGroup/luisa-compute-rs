@@ -61,14 +61,14 @@ fn nested_callable_capture_by_value() {
     let x = device.create_buffer::<f32>(1024);
     let y = device.create_buffer::<f32>(1024);
     let z = device.create_buffer::<f32>(1024);
-    
+
     x.view(..).fill_fn(|i| i as f32);
     y.view(..).fill_fn(|i| 1000.0 * i as f32);
     let kernel = Kernel::<fn(Buffer<f32>)>::new(
         &device,
         &track!(|buf_z| {
-            let buf_x = x.var();
-            let buf_y = y.var();
+            let buf_x = &x;
+            let buf_y = &y;
             let tid = dispatch_id().x;
             let x = buf_x.read(tid);
             let y = buf_y.read(tid);
@@ -142,8 +142,8 @@ fn nested_callable_capture_by_ref() {
     let kernel = Kernel::<fn(Buffer<f32>)>::new(
         &device,
         &track!(|buf_z| {
-            let buf_x = x.var();
-            let buf_y = y.var();
+            let buf_x = &x;
+            let buf_y = &y;
             let tid = dispatch_id().x;
             let x = buf_x.read(tid);
             let y = buf_y.read(tid);
@@ -169,8 +169,8 @@ fn nested_callable_outline_twice() {
     let kernel = Kernel::<fn(Buffer<f32>)>::new(
         &device,
         &track!(|buf_z| {
-            let buf_x = x.var();
-            let buf_y = y.var();
+            let buf_x = &x;
+            let buf_y = &y;
             let tid = dispatch_id().x;
             let x = buf_x.read(tid);
             let y = buf_y.read(tid);
@@ -211,8 +211,8 @@ fn nested_callable_capture_gep() {
     let kernel = Kernel::<fn(Buffer<f32>)>::new(
         &device,
         &track!(|buf_z| {
-            let buf_x = x.var();
-            let buf_y = y.var();
+            let buf_x = &x;
+            let buf_y = &y;
             let tid = dispatch_id().x;
             let a = Var::<A>::zeroed();
             outline(|| {
@@ -251,8 +251,8 @@ fn nested_callable_capture_buffer() {
             let tid = dispatch_id().x;
             let z = 0.0f32.var();
             outline(|| {
-                let buf_x = x.var();
-                let buf_y = y.var();
+                let buf_x = &x;
+                let buf_y = &y;
                 let x = buf_x.read(tid);
                 let y = buf_y.read(tid);
                 *z = x + y;
@@ -512,9 +512,9 @@ fn callable_capture() {
     let kernel = Kernel::<fn()>::new(
         &device,
         &track!(|| {
-            let buf_x = x.var();
-            let buf_y = y.var();
-            let buf_w = w.var();
+            let buf_x = &x;
+            let buf_y = &y;
+            let buf_w = &w;
             let tid = dispatch_id().x;
             let x = buf_x.read(tid);
             let y = buf_y.read(tid);
@@ -579,8 +579,8 @@ fn bool_op() {
         &device,
         &track!(|| {
             let tid = dispatch_id().x;
-            let x = x.var().read(tid);
-            let y = y.var().read(tid);
+            let x = x.read(tid);
+            let y = y.read(tid);
             let and = and.var();
             let or = or.var();
             let xor = xor.var();
@@ -626,8 +626,8 @@ fn bvec_op() {
         &device,
         &track!(|| {
             let tid = dispatch_id().x;
-            let x = x.var().read(tid);
-            let y = y.var().read(tid);
+            let x = x.read(tid);
+            let y = y.read(tid);
             let and = and.var();
             let or = or.var();
             let xor = xor.var();
@@ -667,7 +667,7 @@ fn test_var_replace() {
         &device,
         &track!(|| {
             let tid = dispatch_id().x;
-            let x = xs.var().read(tid).var();
+            let x = xs.read(tid).var();
             *x = Int4::expr(1, 2, 3, 4);
             let y = **x;
             *x.y = 10;
@@ -1242,7 +1242,7 @@ fn byte_buffer() {
     let i3 = push!(f32, 1f32);
     Kernel::<fn()>::new(
         &device,
-        &track!(|| unsafe {
+        &track!(|| {
             let buf = buf.var();
             let i0 = i0 as u64;
             let i1 = i1 as u64;
@@ -1672,11 +1672,11 @@ fn buffer_size() {
     out.fill(2);
     device
         .create_kernel::<fn()>(&track!(|| {
-            lc_assert!((x.len() as u64).eq(x.var().len_expr()));
-            lc_assert!((x.len() as u32).eq(x.var().len_expr().cast_u32()));
+            lc_assert!((x.len() as u64).eq(x.len_expr()));
+            lc_assert!((x.len() as u32).eq(x.len_expr().cast_u32()));
             let tid = dispatch_id().x;
             if tid == 0 {
-                out.write(0, x.var().len_expr_u32());
+                out.write(0, x.len_expr_u32());
             }
         }))
         .dispatch([1024, 1, 1]);
@@ -1690,7 +1690,6 @@ fn drop_buffer_before_kernel() {
     let x = device.create_buffer::<f32>(1024);
     let k = device.create_kernel::<fn()>(track!(&|| {
         let tid = dispatch_id().x;
-        let x = x.var();
         x.write(tid, tid.as_f32());
     }));
     std::mem::drop(x);
@@ -1704,7 +1703,6 @@ fn drop_buffer_before_callable() {
     let k = device.create_kernel::<fn()>(track!(&|| {
         let tid = dispatch_id().x;
         outline(|| {
-            let x = x.var();
             x.write(tid, tid.as_f32());
         })
     }));

@@ -6,7 +6,7 @@ use luisa::lang::types::vector::*;
 use luisa::lang::types::*;
 
 use luisa::prelude::*;
-use luisa::rtx::{AccelBuildRequest, AccelOption, Ray};
+use luisa::rtx::{AccelBuildRequest, AccelOption, AccelTraceOptions, Ray};
 use luisa_compute as luisa;
 use winit::event::{Event as WinitEvent, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -54,11 +54,17 @@ fn main() {
             Expr::<[f32; 3]>::from(d),
             1e9,
         );
-        let hit = accel.trace_closest(ray);
+        let hit = accel.intersect(
+            ray,
+            AccelTraceOptions {
+                mask: 0xff.expr(),
+                ..Default::default()
+            },
+        );
         let img = img.view(0).var();
         let color = select(
             hit.valid(),
-            Float3::expr(hit.u, hit.v, 1.0),
+            hit.triangle_barycentric_coord().extend(1.0),
             Float3::expr(0.0, 0.0, 0.0),
         );
         img.write(px, Float4::expr(color.x, color.y, color.z, 1.0));

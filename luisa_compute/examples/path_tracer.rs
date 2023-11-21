@@ -10,7 +10,7 @@ use luisa::lang::types::vector::alias::*;
 use luisa::lang::types::vector::*;
 use luisa::prelude::*;
 use luisa::rtx::{
-    offset_ray_origin, Accel, AccelBuildRequest, AccelOption, AccelVar, Index, Ray, RayComps,
+    offset_ray_origin, Accel, AccelBuildRequest, AccelOption, AccelVar, Index, Ray, RayComps, AccelTraceOptions, TriangleInterpolate,
 };
 use luisa_compute as luisa;
 
@@ -354,23 +354,24 @@ fn main() {
 
                 let depth = Var::<u32>::zeroed();
                 while depth < 10u32 {
-                    let hit = accel.trace_closest(**ray);
+                    let trace_options = AccelTraceOptions {
+                        mask:0xff.expr(),
+                        ..Default::default()
+                    };
+                    let hit = accel.intersect(ray, trace_options);
 
                     if !hit.valid() {
                         break;
                     }
 
-                    let vertex_buffer = vertex_heap.var().buffer::<[f32; 3]>(hit.inst_id);
-                    let triangle = index_heap
-                        .var()
-                        .buffer::<Index>(hit.inst_id)
-                        .read(hit.prim_id);
+                    let vertex_buffer = vertex_heap.buffer::<[f32; 3]>(hit.inst);
+                    let triangle = index_heap.buffer::<Index>(hit.inst).read(hit.prim);
 
                     let p0: Expr<Float3> = vertex_buffer.read(triangle[0]).into();
                     let p1: Expr<Float3> = vertex_buffer.read(triangle[1]).into();
                     let p2: Expr<Float3> = vertex_buffer.read(triangle[2]).into();
 
-                    let p = p0 * (1.0f32 - hit.u - hit.v) + p1 * hit.u + p2 * hit.v;
+                    let p = hit.interpolate(p0, p1, p2);
                     let n = (p1 - p0).cross(p2 - p0).normalize();
 
                     let origin: Expr<Float3> = (**ray.orig).into();
@@ -380,9 +381,9 @@ fn main() {
                         break;
                     }
                     let pp = offset_ray_origin(p, n);
-                    let albedo = cbox_materials.read(hit.inst_id);
+                    let albedo = cbox_materials.read(hit.inst);
                     // hit light
-                    if hit.inst_id == 7u32 {
+                    if hit.inst == 7u32 {
                         if depth == 0u32 {
                             radiance.store(radiance + light_emission);
                         } else {
@@ -402,7 +403,7 @@ fn main() {
                         let wi_light = (pp_light - pp).normalize();
                         let shadow_ray =
                             make_ray(offset_ray_origin(pp, n), wi_light, 0.0f32.expr(), d_light);
-                        let occluded = accel.trace_any(shadow_ray);
+                        let occluded = accel.intersect_any(shadow_ray, trace_options);
                         let cos_wi_light = wi_light.dot(n);
                         let cos_light = -light_normal.dot(wi_light);
 

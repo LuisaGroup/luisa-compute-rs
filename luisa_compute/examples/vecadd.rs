@@ -44,19 +44,4 @@ fn main() {
     kernel.dispatch([1024, 1, 1], &z);
     let z_data = z.view(..).copy_to_vec();
     println!("{:?}", &z_data[0..16]);
-    {
-        let s = device.default_stream();
-        let t = std::time::Instant::now();
-        let times = 1000;
-        let s = s.scope();
-        for _ in 0..times {
-           
-            s.submit_with_callback([], ||{
-                std::hint::black_box(());
-            });
-            s.synchronize();
-        }
-        let elapsed = t.elapsed().as_micros();
-        println!("{} us", elapsed as f32 / times as f32);
-    }
 }

@@ -1,6 +1,7 @@
 use proc_macro2::TokenStream;
 use proc_macro_error::emit_error;
 use quote::{quote, quote_spanned};
+use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 use syn::visit_mut::*;
 use syn::*;
@@ -12,6 +13,7 @@ use syn::*;
 struct TraceVisitor {
     trait_path: TokenStream,
     flow_path: TokenStream,
+    debug_path: TokenStream,
     is_last_stmt: bool,
 }
 
@@ -68,7 +70,7 @@ impl VisitMut for TraceVisitor {
     fn visit_expr_mut(&mut self, node: &mut Expr) {
         let flow_path = &self.flow_path;
         let trait_path = &self.trait_path;
-        let debug_path = quote!(::luisa_compute::lang::debug);
+        let debug_path = &self.debug_path;
         let span = node.span();
 
         match node {
@@ -339,24 +341,88 @@ impl VisitMut for TraceVisitor {
         visit_expr_mut(self, node);
     }
 }
-
+#[allow(dead_code)]
+struct TrackInput {
+    crate_path: OptCratePath,
+    arrow: Option<Token![=>]>,
+    body: TokenStream,
+}
+impl Parse for TrackInput {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let crate_path: OptCratePath = input.parse()?;
+        let arrow = if crate_path.0.is_some() {
+            Some(input.parse()?)
+        } else {
+            None
+        };
+        let body = input.parse()?;
+        Ok(Self {
+            crate_path,
+            arrow,
+            body,
+        })
+    }
+}
 #[proc_macro]
 pub fn track(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = TokenStream::from(input);
-    let input = quote!({ #input });
+    let TrackInput {
+        crate_path, body, ..
+    } = parse_macro_input!(input as TrackInput);
+
+    let crate_path = if let Some(crate_path) = crate_path.0 {
+        let path = crate_path.path;
+        quote!(#path)
+    } else {
+        quote!(::luisa_compute)
+    };
+    let input = quote!({ #body });
     let input = proc_macro::TokenStream::from(input);
-    track_impl(parse_macro_input!(input as Expr)).into()
+    track_impl(parse_macro_input!(input as Expr), &crate_path).into()
 }
 
 // #[proc_macro]
 // pub fn escape(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 //     input
 // }
+#[allow(dead_code)]
+struct CratePath {
+    crate_: Token![crate],
+    eq: Token![=],
+    path: TokenStream,
+}
+impl Parse for CratePath {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let crate_ = input.parse()?;
+        let eq = input.parse()?;
+        let path: LitStr = input.parse()?;
+        let path = path.parse().unwrap();
+        Ok(Self { crate_, eq, path })
+    }
+}
+struct OptCratePath(Option<CratePath>);
+impl Parse for OptCratePath {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let crate_path = if input.peek(Token![crate]) {
+            Some(input.parse()?)
+        } else {
+            None
+        };
+        Ok(Self(crate_path))
+    }
+}
 #[proc_macro_attribute]
 pub fn tracked(
-    _attr: proc_macro::TokenStream,
+    attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
+    let crate_path = syn::parse_macro_input!(attr as OptCratePath);
+    let crate_path = if let Some(crate_path) = crate_path.0 {
+        let path = crate_path.path;
+        quote!(#path)
+    } else {
+        quote!(::luisa_compute)
+    };
+
     let item = syn::parse_macro_input!(item as ItemFn);
     let body = &item.block;
     let body_span = body.span();
@@ -365,7 +431,7 @@ pub fn tracked(
         ReturnType::Type(_, ty) => quote_spanned! {body_span=> #ty },
     };
     let body = proc_macro::TokenStream::from(quote!({ #body }));
-    let body = track_impl(parse_macro_input!(body as Expr));
+    let body = track_impl(parse_macro_input!(body as Expr), &crate_path);
     let body = quote_spanned! {body_span=>
         {
             let __fn_name = {
@@ -376,12 +442,12 @@ pub fn tracked(
                 let name = type_name_of(f);
                 name.strip_suffix("::f").unwrap()
             };
-            ::luisa_compute::lang::debug::comment(&format!("begin fn {} at {}:{}:{}", __fn_name, file!(), line!(), column!()));
+            #crate_path::lang::debug::comment(&format!("begin fn {} at {}:{}:{}", __fn_name, file!(), line!(), column!()));
             #[allow(clippy::let_unit_value)]
             let __ret: #ret_type = #body;
             #[allow(unreachable_code)]
             {
-                ::luisa_compute::lang::debug::comment(&format!("end fn {} at {}:{}:{}", __fn_name, file!(), line!(), column!()));
+                #crate_path::lang::debug::comment(&format!("end fn {} at {}:{}:{}", __fn_name, file!(), line!(), column!()));
                 __ret
             }
         }
@@ -392,11 +458,12 @@ pub fn tracked(
     quote_spanned!(item.span()=> #(#attrs)* #vis #sig { #body }).into()
 }
 
-fn track_impl(mut ast: Expr) -> TokenStream {
+fn track_impl(mut ast: Expr, crate_path: &TokenStream) -> TokenStream {
     (TraceVisitor {
         is_last_stmt: false,
-        flow_path: quote!(::luisa_compute::lang::control_flow),
-        trait_path: quote!(::luisa_compute::lang::ops),
+        flow_path: quote!(#crate_path::lang::control_flow),
+        trait_path: quote!(#crate_path::lang::ops),
+        debug_path: quote!(#crate_path::lang::debug),
     })
     .visit_expr_mut(&mut ast);
 

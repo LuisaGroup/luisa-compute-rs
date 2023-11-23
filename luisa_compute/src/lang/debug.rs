@@ -28,8 +28,14 @@ macro_rules! lc_assert {
     ($arg:expr) => {
         $crate::lang::debug::__assert($arg, stringify!($arg), file!(), line!(), column!())
     };
+    (crate=[$path:tt], $arg:expr) => {
+        $path::lang::debug::__assert($arg, stringify!($arg), file!(), line!(), column!())
+    };
     ($arg:expr, $msg:expr) => {
         $crate::lang::debug::__assert($arg, $msg, file!(), line!(), column!())
+    };
+    (crate=[$path:tt], $arg:expr, $msg:expr) => {
+        $path::lang::debug::__assert($arg, $msg, file!(), line!(), column!())
     };
 }
 pub fn __cpu_dbg<V: Value + Debug>(arg: Expr<V>, file: &'static str, line: u32) {
@@ -173,8 +179,20 @@ macro_rules! lc_comment_lineno {
             column!()
         ))
     };
+    (crate=[$path:tt], $msg:literal) => {
+        $path::lang::debug::comment(&format!(
+            "`{}` at {}:{}:{}",
+            $msg,
+            file!(),
+            line!(),
+            column!()
+        ))
+    };
     ($msg:literal, $e:expr) => {
         $crate::lang::debug::with_lineno($msg, file!(), line!(), column!(), || $e)
+    };
+    (crate=[$path:tt], $msg:literal, $e:expr) => {
+        $path::lang::debug::with_lineno($msg, file!(), line!(), column!(), || $e)
     };
 }
 

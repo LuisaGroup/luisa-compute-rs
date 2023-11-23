@@ -1,9 +1,9 @@
 use luisa::prelude::*;
 use luisa_compute as luisa;
 use std::env::current_exe;
-#[tracked]
+
 fn main() {
-    luisa::init_logger();
+    luisa::init_logger_verbose();
     let args: Vec<String> = std::env::args().collect();
     assert!(
         args.len() <= 2,
@@ -29,7 +29,7 @@ fn main() {
             name: Some("vecadd".into()),
             ..Default::default()
         },
-        &|buf_z| {
+        &track!(|buf_z| {
             // z is pass by arg
             let buf_x = &x; // x and y are captured
             let buf_y = &y;
@@ -39,7 +39,7 @@ fn main() {
             let vx = 2.0_f32.var(); // create a local mutable variable
             *vx += x; // store to vx
             buf_z.write(tid, vx + y);
-        },
+        }),
     );
     kernel.dispatch([1024, 1, 1], &z);
     let z_data = z.view(..).copy_to_vec();

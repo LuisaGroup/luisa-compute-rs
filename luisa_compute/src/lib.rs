@@ -8,6 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 pub mod lang;
+#[deprecated(note = "use device_log! instead for builtin kernel printing")]
 pub mod printer;
 pub mod resource;
 pub mod rtx;
@@ -188,9 +189,10 @@ impl ResourceTracker {
     pub fn upgrade(&self) -> Self {
         let mut strong_refs = vec![];
         for r in self.weak_refs.iter() {
-            strong_refs.push(r.upgrade().unwrap_or_else(|| {
-                panic!("Bad weak ref. Resources might be dropped.")
-            }));
+            strong_refs.push(
+                r.upgrade()
+                    .unwrap_or_else(|| panic!("Bad weak ref. Resources might be dropped.")),
+            );
         }
         strong_refs.extend(self.strong_refs.iter().cloned());
         Self {

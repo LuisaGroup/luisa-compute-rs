@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
 use proc_macro2::{Ident, TokenStream, TokenTree};
 use quote::{quote, quote_spanned};
+use syn::ext::IdentExt;
 use syn::parse::Parse;
 use syn::spanned::Spanned;
 use syn::{Attribute, Item, ItemEnum, ItemStruct, Token, Visibility};
@@ -29,16 +32,100 @@ impl Parse for ValueNewOrdering {
     }
 }
 
-pub struct Compiler;
+pub struct Compiler {
+    crate_path: TokenStream,
+}
 impl Compiler {
+    pub fn new() -> Self {
+        Self {
+            crate_path: quote!(::luisa_compute),
+        }
+    }
     fn lang_path(&self) -> TokenStream {
-        quote!(::luisa_compute::lang)
+        let crate_path = &self.crate_path;
+        quote!(#crate_path::lang)
     }
     fn runtime_path(&self) -> TokenStream {
-        quote!(::luisa_compute::runtime)
+        let crate_path = &self.crate_path;
+        quote!(#crate_path::runtime)
     }
     fn resource_path(&self) -> TokenStream {
-        quote!(::luisa_compute::resource)
+        let crate_path = &self.crate_path;
+        quote!(#crate_path::resource)
+    }
+    fn parse_luisa_attributes(
+        &self,
+        attribtes: &Vec<Attribute>,
+    ) -> HashMap<String, Option<TokenStream>> {
+        // checks for luisa attribute
+
+        struct AttrAssign {
+            ident: Ident,
+            #[allow(dead_code)]
+            eq: Option<Token![=]>,
+            string: Option<syn::LitStr>,
+        }
+
+        impl Parse for AttrAssign {
+            fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+                let ident = input.call(Ident::parse_any)?;
+                let eq: Option<Token![=]> = input.parse()?;
+                if eq.is_none() {
+                    return Ok(Self {
+                        ident,
+                        eq,
+                        string: None,
+                    });
+                }
+                let string = input.parse()?;
+                Ok(Self {
+                    ident,
+                    eq,
+                    string: Some(string),
+                })
+            }
+        }
+
+        struct VecAttrAssign(Vec<AttrAssign>);
+        impl Parse for VecAttrAssign {
+            fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+                let mut vec = vec![];
+                while !input.is_empty() {
+                    let attr = input.parse()?;
+                    vec.push(attr);
+                    if !input.is_empty() {
+                        let _ = input.parse::<Option<Token![,]>>()?;
+                    }
+                }
+                Ok(Self(vec))
+            }
+        }
+
+        let mut map = HashMap::new();
+        for attr in attribtes {
+            let meta = &attr.meta;
+            match meta {
+                syn::Meta::List(list) => {
+                    let path = &list.path;
+                    if path.is_ident("luisa") {
+                        let attr_assigns = syn::parse2::<VecAttrAssign>(list.tokens.clone())
+                            .expect("invalid luisa attribute");
+                        for attr_assign in attr_assigns.0 {
+                            let ident = attr_assign.ident.to_string();
+                            let value = if let Some(string) = attr_assign.string {
+                                let string: TokenStream = string.value().parse().unwrap();
+                                Some(quote!(#string))
+                            } else {
+                                None
+                            };
+                            map.insert(ident, value);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        map
     }
     fn value_attributes(&self, attribtes: &Vec<Attribute>) -> Option<ValueNewOrdering> {
         let mut has_repr_c = false;
@@ -78,7 +165,16 @@ impl Compiler {
         }
         ordering
     }
-    pub fn derive_kernel_arg(&self, struct_: &ItemStruct) -> TokenStream {
+    fn set_crate_path_from_attrs(&mut self, attrs: &HashMap<String, Option<TokenStream>>) {
+        if let Some(crate_path) = attrs.get("crate") {
+            if let Some(crate_path) = crate_path {
+                self.crate_path = crate_path.clone();
+            }
+        }
+    }
+    pub fn derive_kernel_arg(&mut self, struct_: &ItemStruct) -> TokenStream {
+        let attrs = self.parse_luisa_attributes(&struct_.attrs);
+        self.set_crate_path_from_attrs(&attrs);
         let runtime_path = self.runtime_path();
         let span = struct_.span();
         let name = &struct_.ident;
@@ -136,9 +232,12 @@ impl Compiler {
             }
         )
     }
-    pub fn derive_soa(&self, struct_: &ItemStruct) -> TokenStream {
+    pub fn derive_soa(&mut self, struct_: &ItemStruct) -> TokenStream {
+        let attrs = self.parse_luisa_attributes(&struct_.attrs);
+        self.set_crate_path_from_attrs(&attrs);
         let span = struct_.span();
         let lang_path = self.lang_path();
+        let crate_path = &self.crate_path;
         let generics = &struct_.generics;
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
         let name = &struct_.ident;
@@ -161,7 +260,7 @@ impl Compiler {
 
                 #[allow(unused_assignments)]
                 fn from_soa_storage(
-                    ___storage: ::luisa_compute::resource::ByteBufferVar,
+                    ___storage: #crate_path::resource::ByteBufferVar,
                     ___meta: Expr<#lang_path::soa::SoaMetadata>,
                     ___global_offset: usize,
                 ) -> Self {
@@ -205,13 +304,15 @@ impl Compiler {
             }
         )
     }
-    pub fn derive_iotexel(&self, item: &Item) -> TokenStream {
+    pub fn derive_iotexel(&mut self, item: &Item) -> TokenStream {
         match item {
             Item::Struct(struct_) => self.derive_iotexel_for_struct(struct_),
             _ => todo!(),
         }
     }
-    pub fn derive_iotexel_for_struct(&self, struct_: &ItemStruct) -> TokenStream {
+    pub fn derive_iotexel_for_struct(&mut self, struct_: &ItemStruct) -> TokenStream {
+        let attrs = self.parse_luisa_attributes(&struct_.attrs);
+        self.set_crate_path_from_attrs(&attrs);
         let span = struct_.span();
         let resource_path = self.resource_path();
         let lang_path = self.lang_path();
@@ -262,14 +363,16 @@ impl Compiler {
             }
         }
     }
-    pub fn derive_value(&self, item: &Item) -> TokenStream {
+    pub fn derive_value(&mut self, item: &Item) -> TokenStream {
         match item {
             Item::Struct(struct_) => self.derive_value_for_struct(struct_),
             Item::Enum(enum_) => self.derive_value_for_enum(enum_),
             _ => todo!(),
         }
     }
-    pub fn derive_value_for_enum(&self, enum_: &ItemEnum) -> TokenStream {
+    pub fn derive_value_for_enum(&mut self, enum_: &ItemEnum) -> TokenStream {
+        let attrs = self.parse_luisa_attributes(&enum_.attrs);
+        self.set_crate_path_from_attrs(&attrs);
         let repr = enum_
             .attrs
             .iter()
@@ -289,6 +392,7 @@ impl Compiler {
             })
             .expect("Enum must have repr attribute.");
         let span = enum_.span();
+        let crate_path = &self.crate_path;
         let lang_path = self.lang_path();
         let name = &enum_.ident;
         let expr_proxy_name = syn::Ident::new(&format!("{}Expr", name), name.span());
@@ -317,9 +421,9 @@ impl Compiler {
                 }
             }
 
-            ::luisa_compute::impl_simple_expr_proxy!(#expr_proxy_name for #name);
-            ::luisa_compute::impl_simple_var_proxy!(#var_proxy_name for #name);
-            ::luisa_compute::impl_simple_atomic_ref_proxy!(#atomic_ref_proxy_name for #name);
+            #crate_path::impl_simple_expr_proxy!(#expr_proxy_name for #name);
+            #crate_path::impl_simple_var_proxy!(#var_proxy_name for #name);
+            #crate_path::impl_simple_atomic_ref_proxy!(#atomic_ref_proxy_name for #name);
 
             impl #expr_proxy_name {
                 pub fn #as_repr(&self) -> #lang_path::types::Expr<#repr> {
@@ -344,7 +448,9 @@ impl Compiler {
             }
         }
     }
-    pub fn derive_value_for_struct(&self, struct_: &ItemStruct) -> TokenStream {
+    pub fn derive_value_for_struct(&mut self, struct_: &ItemStruct) -> TokenStream {
+        let attrs = self.parse_luisa_attributes(&struct_.attrs);
+        self.set_crate_path_from_attrs(&attrs);
         let ordering = self.value_attributes(&struct_.attrs);
         let span = struct_.span();
         let lang_path = self.lang_path();
@@ -604,7 +710,9 @@ impl Compiler {
             #new_expr
         }
     }
-    pub fn derive_aggregate_for_struct(&self, struct_: &ItemStruct) -> TokenStream {
+    pub fn derive_aggregate_for_struct(&mut self, struct_: &ItemStruct) -> TokenStream {
+        let attrs = self.parse_luisa_attributes(&struct_.attrs);
+        self.set_crate_path_from_attrs(&attrs);
         let span = struct_.span();
         let lang_path = self.lang_path();
         let name = &struct_.ident;
@@ -625,7 +733,9 @@ impl Compiler {
             }
         )
     }
-    pub fn derive_aggregate_for_enum(&self, enum_: &ItemEnum) -> TokenStream {
+    pub fn derive_aggregate_for_enum(&mut self, enum_: &ItemEnum) -> TokenStream {
+        let attrs = self.parse_luisa_attributes(&enum_.attrs);
+        self.set_crate_path_from_attrs(&attrs);
         let span = enum_.span();
         let lang_path = self.lang_path();
         let name = &enum_.ident;
@@ -720,7 +830,7 @@ impl Compiler {
             }
         }
     }
-    pub fn derive_aggregate(&self, item: &Item) -> TokenStream {
+    pub fn derive_aggregate(&mut self, item: &Item) -> TokenStream {
         match item {
             Item::Struct(struct_) => self.derive_aggregate_for_struct(struct_),
             Item::Enum(enum_) => self.derive_aggregate_for_enum(enum_),

@@ -11,7 +11,3 @@ quote = "1.0"
 proc-macro2 = "1"
 prettyplease = "0.2.4"
 
-[[bin]]
-name="derive-debug"
-path="src/bin/derive-debug.rs"
-

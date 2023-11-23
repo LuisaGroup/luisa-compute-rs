@@ -4,38 +4,38 @@ use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 
 /// Derives the `IoTexel` trait for a `#[repr(transparent)]` struct and a `Value` impl.
-#[proc_macro_derive(IoTexel)]
+#[proc_macro_derive(IoTexel, attributes(luisa))]
 pub fn derive_iotexel(item: TokenStream) -> TokenStream {
     let item: syn::Item = syn::parse(item).unwrap();
-    let compiler = luisa_compute_derive_impl::Compiler;
+    let mut compiler = luisa_compute_derive_impl::Compiler::new();
     compiler.derive_iotexel(&item).into()
 }
 
-#[proc_macro_derive(Value, attributes(value_new))]
+#[proc_macro_derive(Value, attributes(luisa, value_new))]
 pub fn derive_value(item: TokenStream) -> TokenStream {
     let item: syn::Item = syn::parse(item).unwrap();
-    let compiler = luisa_compute_derive_impl::Compiler;
+    let mut compiler = luisa_compute_derive_impl::Compiler::new();
     compiler.derive_value(&item).into()
 }
 
-#[proc_macro_derive(Soa)]
+#[proc_macro_derive(Soa, attributes(luisa))]
 pub fn derive_soa(item: TokenStream) -> TokenStream {
     let item: syn::ItemStruct = syn::parse(item).unwrap();
-    let compiler = luisa_compute_derive_impl::Compiler;
+    let mut compiler = luisa_compute_derive_impl::Compiler::new();
     compiler.derive_soa(&item).into()
 }
 
 #[proc_macro_derive(BindGroup, attributes(luisa))]
 pub fn derive_kernel_arg(item: TokenStream) -> TokenStream {
     let item: syn::ItemStruct = syn::parse(item).unwrap();
-    let compiler = luisa_compute_derive_impl::Compiler;
+    let mut compiler = luisa_compute_derive_impl::Compiler::new();
     compiler.derive_kernel_arg(&item).into()
 }
 
-#[proc_macro_derive(Aggregate)]
+#[proc_macro_derive(Aggregate, attributes(luisa))]
 pub fn derive_aggregate(item: TokenStream) -> TokenStream {
     let item: syn::Item = syn::parse(item).unwrap();
-    let compiler = luisa_compute_derive_impl::Compiler;
+    let mut compiler = luisa_compute_derive_impl::Compiler::new();
     compiler.derive_aggregate(&item).into()
 }
 

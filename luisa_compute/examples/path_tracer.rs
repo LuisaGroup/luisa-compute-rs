@@ -16,6 +16,7 @@ use luisa_compute as luisa;
 
 #[derive(Value, Clone, Copy)]
 #[repr(C)]
+#[luisa(crate = "luisa")]
 #[value_new(pub)]
 pub struct Onb {
     tangent: Float3,
@@ -249,7 +250,7 @@ fn main() {
     // use create_kernel_async to compile multiple kernels in parallel
     let path_tracer = Kernel::<fn(Tex2d<Float4>, Tex2d<u32>, Accel, Uint2)>::new_async(
         &device,
-        &track!(|image: Tex2dVar<Float4>,
+        &track!(crate="luisa" => |image: Tex2dVar<Float4>,
                  seed_image: Tex2dVar<u32>,
                  accel: AccelVar,
                  resolution: Expr<Uint2>| {

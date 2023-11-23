@@ -47,10 +47,13 @@ impl<T: Value> DevicePrint for Var<T> {
 #[macro_export]
 macro_rules! device_log {
     ($fmt:literal, $($arg:expr),*) => {{
-        let mut fmt = $crate::lang::print::DevicePrintFormatter::new();
+        device_log!(crate=[$crate], $fmt, $($arg),*)
+    }};
+    (crate=[$path:tt], $fmt:literal, $($arg:expr),*) => {{
+        let mut fmt = $path::lang::print::DevicePrintFormatter::new();
         fmt.push_str($fmt);
         $(
-            $crate::lang::print::DevicePrint::fmt(&$arg, &mut fmt);
+            $path::lang::print::DevicePrint::fmt(&$arg, &mut fmt);
         )*
         fmt.print();
     }};

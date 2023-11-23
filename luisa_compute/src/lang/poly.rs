@@ -41,16 +41,16 @@ pub trait PolymorphicImpl<T: ?Sized + 'static>: Value {
 
 #[macro_export]
 macro_rules! impl_polymorphic {
-    ($trait_:ident, $ty:ty) => {
-        impl luisa_compute::lang::poly::PolymorphicImpl<dyn $trait_> for $ty {
+    (crate=[$path:tt], $trait_:ident, $ty:ty) => {
+        impl $path::lang::poly::PolymorphicImpl<dyn $trait_> for $ty {
             fn new_poly_array<K>(
-                buffer: &luisa_compute::resource::BufferView<Self>,
+                buffer: &$path::resource::BufferView<Self>,
                 tag: i32,
                 key: K,
                 owned: Box<dyn std::any::Any>,
-            ) -> luisa_compute::lang::poly::PolyArray<K, dyn $trait_> {
+            ) -> $path::lang::poly::PolyArray<K, dyn $trait_> {
                 let buffer = buffer.view(..);
-                luisa_compute::lang::poly::PolyArray::new(
+                $path::lang::poly::PolyArray::new(
                     tag,
                     key,
                     Box::new(move |_, index| {
@@ -60,6 +60,9 @@ macro_rules! impl_polymorphic {
                 )
             }
         }
+    };
+    ($trait_:ident, $ty:ty) => {
+        impl_polymorphic!(crate=[$crate], $trait_, $ty);
     };
 }
 struct PolyVec<K, T: ?Sized + 'static> {

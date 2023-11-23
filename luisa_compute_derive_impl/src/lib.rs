@@ -237,6 +237,7 @@ impl Compiler {
         self.set_crate_path_from_attrs(&attrs);
         let span = struct_.span();
         let lang_path = self.lang_path();
+        let crate_path = &self.crate_path;
         let generics = &struct_.generics;
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
         let name = &struct_.ident;
@@ -259,7 +260,7 @@ impl Compiler {
 
                 #[allow(unused_assignments)]
                 fn from_soa_storage(
-                    ___storage: ::luisa_compute::resource::ByteBufferVar,
+                    ___storage: #crate_path::resource::ByteBufferVar,
                     ___meta: Expr<#lang_path::soa::SoaMetadata>,
                     ___global_offset: usize,
                 ) -> Self {
@@ -391,6 +392,7 @@ impl Compiler {
             })
             .expect("Enum must have repr attribute.");
         let span = enum_.span();
+        let crate_path = &self.crate_path;
         let lang_path = self.lang_path();
         let name = &enum_.ident;
         let expr_proxy_name = syn::Ident::new(&format!("{}Expr", name), name.span());
@@ -419,9 +421,9 @@ impl Compiler {
                 }
             }
 
-            ::luisa_compute::impl_simple_expr_proxy!(#expr_proxy_name for #name);
-            ::luisa_compute::impl_simple_var_proxy!(#var_proxy_name for #name);
-            ::luisa_compute::impl_simple_atomic_ref_proxy!(#atomic_ref_proxy_name for #name);
+            #crate_path::impl_simple_expr_proxy!(#expr_proxy_name for #name);
+            #crate_path::impl_simple_var_proxy!(#var_proxy_name for #name);
+            #crate_path::impl_simple_atomic_ref_proxy!(#atomic_ref_proxy_name for #name);
 
             impl #expr_proxy_name {
                 pub fn #as_repr(&self) -> #lang_path::types::Expr<#repr> {

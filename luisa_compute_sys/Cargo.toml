@@ -6,12 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-luisa_compute_api_types = {path = "LuisaCompute/src/rust/luisa_compute_api_types"}
-luisa_compute_backend =  {path = "LuisaCompute/src/rust/luisa_compute_backend"}
-luisa_compute_ir = {path = "../luisa_compute_sys/LuisaCompute/src/rust/luisa_compute_ir"}
-libc = "0.2"
-lazy_static = "1.4"
-parking_lot = "0.12.1"
+
 
 [build-dependencies]
 cmake = "0.1.48"
@@ -27,6 +22,3 @@ metal = []
 dx = []
 oidn = []
 
-
-[lib]
-crate-type = ["dylib"]

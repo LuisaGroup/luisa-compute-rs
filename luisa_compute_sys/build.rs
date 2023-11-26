@@ -189,4 +189,15 @@ fn copy_dlls(out_dir: &PathBuf) {
 fn main() {
     let out_dir = cmake_build();
     copy_dlls(&out_dir);
+
+    #[cfg(target_os = "linux")]
+    {
+        println!("rerun-if-changed=./llvm_dummy_orc");
+        let out = cmake::Config::new("./llvm_dummy_orc")
+            .build_target("dummy_orc_eh")
+            .build();
+        dbg!(&out);
+        println!("cargo:rustc-link-lib=dylib=dummy_orc_eh");
+        println!("cargo:rustc-link-search=native={}/build", out.display());
+    }
 }

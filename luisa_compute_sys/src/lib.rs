@@ -1,4 +1,4 @@
-use std::{ffi::c_char, ptr::null};
+use std::ffi::c_char;
 // union CWrapperFunctionResultDataUnion {
 //     char *ValuePtr;
 //     char Value[sizeof(ValuePtr)];
@@ -21,28 +21,8 @@ pub struct CWrapperFunctionResult {
     pub Size: usize,
 }
 
-#[no_mangle]
-#[inline(never)]
-pub unsafe extern "C" fn llvm_orc_registerEHFrameSectionWrapper(
-    _data: *const c_char,
-    _size: u64,
-) -> CWrapperFunctionResult {
-    let result = CWrapperFunctionResult {
-        Data: CWrapperFunctionResultDataUnion { ValuePtr: null() },
-        Size: 0,
-    };
-    result
-}
+extern "C" {
+    pub fn llvm_orc_registerEHFrameSectionWrapper(_data: *const c_char, _size: u64);
 
-#[no_mangle]
-#[inline(never)]
-pub unsafe extern "C" fn llvm_orc_deregisterEHFrameSectionWrapper(
-    _data: *const c_char,
-    _size: u64,
-) -> CWrapperFunctionResult {
-    let result = CWrapperFunctionResult {
-        Data: CWrapperFunctionResultDataUnion { ValuePtr: null() },
-        Size: 0,
-    };
-    result
+    pub fn llvm_orc_deregisterEHFrameSectionWrapper(_data: *const c_char, _size: u64);
 }

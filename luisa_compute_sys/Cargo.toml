@@ -27,3 +27,6 @@ metal = []
 dx = []
 oidn = []
 
+
+[lib]
+crate-type = ["dylib"]

@@ -104,6 +104,7 @@ pub fn init_logger() {
         .format_timestamp_secs()
         .init();
 }
+
 pub fn init_logger_verbose() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug"))
         .format_timestamp_secs()
@@ -113,6 +114,48 @@ lazy_static! {
     static ref CTX_CACHE: Mutex<HashMap<String, Weak<backend::Context>>> =
         Mutex::new(HashMap::new());
 }
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub enum DeviceType {
+    Cpu,
+    Cuda,
+    Dx,
+    Metal,
+    Remote,
+}
+
+pub trait IntoDeviceName {
+    fn into_device_name(self) -> String;
+}
+
+impl IntoDeviceName for DeviceType {
+    fn into_device_name(self) -> String {
+        match self {
+            DeviceType::Cpu => "cpu".to_string(),
+            DeviceType::Cuda => "cuda".to_string(),
+            DeviceType::Dx => "dx".to_string(),
+            DeviceType::Metal => "metal".to_string(),
+            DeviceType::Remote => "remote".to_string(),
+        }
+    }
+}
+
+impl IntoDeviceName for String {
+    fn into_device_name(self) -> String {
+        self
+    }
+}
+
+impl<'a> IntoDeviceName for &'a str {
+    fn into_device_name(self) -> String {
+        self.to_string()
+    }
+}
+impl<'a> IntoDeviceName for &'a String {
+    fn into_device_name(self) -> String {
+        (*self).clone()
+    }
+}
+
 impl Context {
     /// path to libluisa-*
     /// if the current_exe() is in the same directory as libluisa-*, then
@@ -146,11 +189,17 @@ impl Context {
     pub fn create_cpu_device(&self) -> Device {
         self.create_device("cpu")
     }
-    pub fn create_device(&self, device: &str) -> Device {
+
+    /// create a device with the given name
+    ///
+    /// name can be "cpu", "cuda", "dx", "metal", "remote"
+    ///
+    /// Alternatively, you can use [`DeviceType`] to specify the device
+    pub fn create_device<D: IntoDeviceName>(&self, device: D) -> Device {
         self.create_device_with_config(device, serde_json::json!({}))
     }
-    pub fn create_device_with_config(&self, device: &str, config: serde_json::Value) -> Device {
-        let backend = self.inner.create_device(device, config);
+    pub fn create_device_with_config<D: IntoDeviceName>(&self, device: D, config: serde_json::Value) -> Device {
+        let backend = self.inner.create_device(&device.into_device_name(), config);
         let default_stream = backend.create_stream(api::StreamTag::Graphics);
         Device {
             inner: Arc::new_cyclic(|weak| DeviceHandle {

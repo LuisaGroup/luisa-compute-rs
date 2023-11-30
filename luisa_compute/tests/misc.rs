@@ -1321,7 +1321,7 @@ fn bindless_byte_buffer() {
     let i3 = push!(f32, 1f32);
     Kernel::<fn(ByteBuffer)>::new(
         &device,
-        &track!(|out: ByteBufferVar| unsafe {
+        &track!(|out: ByteBufferVar| {
             let heap = heap.var();
             let buf = heap.byte_address_buffer(0u32);
             let i0 = i0 as u64;

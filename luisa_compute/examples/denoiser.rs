@@ -6,7 +6,7 @@ use luisa_compute_api_types::StreamTag;
 use rand::Rng;
 use std::time::Instant;
 use winit::event::{Event as WinitEvent, WindowEvent};
-use winit::event_loop::EventLoop;
+use winit::event_loop::{ControlFlow, EventLoop};
 
 use luisa::lang::types::vector::alias::*;
 use luisa::lang::types::vector::*;
@@ -555,7 +555,7 @@ fn run_pt(device: Device) {
             .collect::<Vec<_>>();
         seed_img.view(0).copy_from(&seed_buffer);
     }
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::new().unwrap();
     let window = winit::window::WindowBuilder::new()
         .with_title("Luisa Compute Rust - Ray Tracing")
         .with_inner_size(winit::dpi::LogicalSize::new(img_w, img_h))
@@ -572,72 +572,77 @@ fn run_pt(device: Device) {
         3,
     );
     let display_img = device.create_tex2d::<Float4>(swapchain.pixel_storage(), img_w, img_h, 1);
-    event_loop.run(move |event, _, control_flow| {
-        control_flow.set_poll();
-        match event {
-            WinitEvent::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                window_id,
-            } if window_id == window.id() => {
-                // FIXME: support half4 pixel storage
-                let mut img_buffer = vec![[0u8; 4]; (img_w * img_h) as usize];
-                {
-                    let scope = device.default_stream().scope();
-                    scope.submit([display_img.view(0).copy_to_async(&mut img_buffer)]);
+    event_loop.set_control_flow(ControlFlow::Poll);
+    event_loop
+        .run(move |event, elwt| {
+            match event {
+                WinitEvent::WindowEvent {
+                    event: WindowEvent::CloseRequested,
+                    window_id,
+                } if window_id == window.id() => {
+                    // FIXME: support half4 pixel storage
+                    let mut img_buffer = vec![[0u8; 4]; (img_w * img_h) as usize];
+                    {
+                        let scope = device.default_stream().scope();
+                        scope.submit([display_img.view(0).copy_to_async(&mut img_buffer)]);
+                    }
+                    {
+                        let img = image::RgbImage::from_fn(img_w, img_h, |x, y| {
+                            let i = x + y * img_w;
+                            let px = img_buffer[i as usize];
+                            Rgb([px[0], px[1], px[2]])
+                        });
+                        img.save("cbox.png").unwrap();
+                    }
+                    elwt.exit();
                 }
-                {
-                    let img = image::RgbImage::from_fn(img_w, img_h, |x, y| {
-                        let i = x + y * img_w;
-                        let px = img_buffer[i as usize];
-                        Rgb([px[0], px[1], px[2]])
-                    });
-                    img.save("cbox.png").unwrap();
+                WinitEvent::AboutToWait => {
+                    window.request_redraw();
                 }
-                control_flow.set_exit();
-            }
-            WinitEvent::MainEventsCleared => {
-                window.request_redraw();
-            }
-            WinitEvent::RedrawRequested(_) => {
-                let tic = Instant::now();
-                {
-                    let scope = device.default_stream().scope();
-                    scope.present(&swapchain, &display_img);
-                    scope.submit([
-                        path_tracer.dispatch_async(
-                            [img_w, img_h, 1],
-                            &acc_img,
-                            &albedo_img,
-                            &normal_img,
-                            &seed_img,
-                            &accel,
-                            &Uint2::new(img_w, img_h),
-                        ),
-                        acc_to_hdr.dispatch_async([img_w, img_h, 1], &acc_img, &hdr_img),
-                        hdr_img.view(0).copy_to_buffer_async(&color_buf.view(..)),
-                        albedo_img
-                            .view(0)
-                            .copy_to_buffer_async(&albedo_buf.view(..)),
-                        normal_img
-                            .view(0)
-                            .copy_to_buffer_async(&normal_buf.view(..)),
-                    ]);
-                    denoiser.execute(true);
-                    scope.submit([
-                        hdr_img.view(0).copy_from_buffer_async(&output_buf.view(..)),
-                        display.dispatch_async([img_w, img_h, 1], &hdr_img, &display_img),
-                    ]);
+                WinitEvent::WindowEvent {
+                    event: WindowEvent::RedrawRequested,
+                    window_id,
+                } if window_id == window.id() => {
+                    let tic = Instant::now();
+                    {
+                        let scope = device.default_stream().scope();
+                        scope.present(&swapchain, &display_img);
+                        scope.submit([
+                            path_tracer.dispatch_async(
+                                [img_w, img_h, 1],
+                                &acc_img,
+                                &albedo_img,
+                                &normal_img,
+                                &seed_img,
+                                &accel,
+                                &Uint2::new(img_w, img_h),
+                            ),
+                            acc_to_hdr.dispatch_async([img_w, img_h, 1], &acc_img, &hdr_img),
+                            hdr_img.view(0).copy_to_buffer_async(&color_buf.view(..)),
+                            albedo_img
+                                .view(0)
+                                .copy_to_buffer_async(&albedo_buf.view(..)),
+                            normal_img
+                                .view(0)
+                                .copy_to_buffer_async(&normal_buf.view(..)),
+                        ]);
+                        denoiser.execute(true);
+                        scope.submit([
+                            hdr_img.view(0).copy_from_buffer_async(&output_buf.view(..)),
+                            display.dispatch_async([img_w, img_h, 1], &hdr_img, &display_img),
+                        ]);
+                    }
+                    let toc = Instant::now();
+                    let elapsed = (toc - tic).as_secs_f32();
+                    log::info!(
+                        "time: {}ms {}ms/spp",
+                        elapsed * 1e3,
+                        elapsed * 1e3 / SPP_PER_DISPATCH as f32
+                    );
+                    window.request_redraw();
                 }
-                let toc = Instant::now();
-                let elapsed = (toc - tic).as_secs_f32();
-                log::info!(
-                    "time: {}ms {}ms/spp",
-                    elapsed * 1e3,
-                    elapsed * 1e3 / SPP_PER_DISPATCH as f32
-                );
-                window.request_redraw();
+                _ => (),
             }
-            _ => (),
-        }
-    });
+        })
+        .unwrap();
 }

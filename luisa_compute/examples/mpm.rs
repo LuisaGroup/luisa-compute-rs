@@ -63,7 +63,7 @@ fn main() {
     let grid_v = device.create_buffer::<f32>(N_GRID * N_GRID * 2);
     let grid_m = device.create_buffer::<f32>(N_GRID * N_GRID);
 
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::new().unwrap();
     let window = winit::window::WindowBuilder::new()
         .with_title("Luisa Compute Rust - MPM")
         .with_inner_size(winit::dpi::LogicalSize::new(RESOLUTION, RESOLUTION))
@@ -94,14 +94,14 @@ fn main() {
 
     let clear_grid = Kernel::<fn()>::new(&device, &|| {
         let idx = index(dispatch_id().xy());
-        grid_v.var().write(idx * 2, 0.0f32);
-        grid_v.var().write(idx * 2 + 1, 0.0f32);
-        grid_m.var().write(idx, 0.0f32);
+        grid_v.write(idx * 2, 0.0f32);
+        grid_v.write(idx * 2 + 1, 0.0f32);
+        grid_m.write(idx, 0.0f32);
     });
 
     let point_to_grid = Kernel::<fn()>::new(&device, &|| {
         let p = dispatch_id().x;
-        let xp = x.var().read(p) / DX;
+        let xp = x.read(p) / DX;
         let base = (xp - 0.5f32).cast_i32();
         let fx = xp - base.cast_f32();
 
@@ -110,10 +110,9 @@ fn main() {
             0.75f32 - (fx - 1.0f32) * (fx - 1.0f32),
             0.5f32 * (fx - 0.5f32) * (fx - 0.5f32),
         ];
-        let stress = -4.0f32 * DT * E * P_VOL * (J.var().read(p) - 1.0f32) / (DX * DX);
-        let affine =
-            Mat2::diag_expr(Float2::expr(stress, stress)) + P_MASS as f32 * C.var().read(p);
-        let vp = v.var().read(p);
+        let stress = -4.0f32 * DT * E * P_VOL * (J.read(p) - 1.0f32) / (DX * DX);
+        let affine = Mat2::diag_expr(Float2::expr(stress, stress)) + P_MASS as f32 * C.read(p);
+        let vp = v.read(p);
         for_unrolled(0..9usize, |ii| {
             let (i, j) = (ii % 3, ii / 3);
             let offset = Int2::expr(i as i32, j as i32);
@@ -132,10 +131,10 @@ fn main() {
         let i = index(coord);
         let v = Var::<Float2>::zeroed();
         v.store(Float2::expr(
-            grid_v.var().read(i * 2u32),
-            grid_v.var().read(i * 2u32 + 1u32),
+            grid_v.read(i * 2u32),
+            grid_v.read(i * 2u32 + 1u32),
         ));
-        let m = grid_m.var().read(i);
+        let m = grid_m.read(i);
 
         v.store(select(m > 0.0f32, v.load() / m, v.load()));
         let vx = v.load().x;
@@ -150,13 +149,13 @@ fn main() {
             0.0f32.expr(),
             vy,
         );
-        grid_v.var().write(i * 2, vx);
-        grid_v.var().write(i * 2 + 1, vy);
+        grid_v.write(i * 2, vx);
+        grid_v.write(i * 2 + 1, vy);
     });
 
     let grid_to_point = Kernel::<fn()>::new(&device, &|| {
         let p = dispatch_id().x;
-        let xp = x.var().read(p) / DX;
+        let xp = x.read(p) / DX;
         let base = (xp - 0.5f32).cast_i32();
         let fx = xp - base.cast_f32();
 
@@ -176,23 +175,20 @@ fn main() {
             let dpos = (offset.cast_f32() - fx) * DX.expr();
             let weight = w[i].x * w[j].y;
             let idx = index((base + offset).cast_u32());
-            let g_v = Float2::expr(
-                grid_v.var().read(idx * 2u32),
-                grid_v.var().read(idx * 2u32 + 1u32),
-            );
+            let g_v = Float2::expr(grid_v.read(idx * 2u32), grid_v.read(idx * 2u32 + 1u32));
             new_v.store(new_v.load() + weight * g_v);
             new_C.store(new_C.load() + 4.0f32 * weight * g_v.outer_product(dpos) / (DX * DX));
         });
 
-        v.var().write(p, new_v);
-        x.var().write(p, x.var().read(p) + new_v.load() * DT);
+        v.write(p, new_v);
+        x.write(p, x.read(p) + new_v.load() * DT);
         J.var()
-            .write(p, J.var().read(p) * (1.0f32 + DT * trace(new_C.load())));
-        C.var().write(p, new_C);
+            .write(p, J.read(p) * (1.0f32 + DT * trace(new_C.load())));
+        C.write(p, new_C);
     });
 
     let clear_display = Kernel::<fn()>::new(&device, &|| {
-        display.var().write(
+        display.write(
             dispatch_id().xy(),
             Float4::expr(0.1f32, 0.2f32, 0.3f32, 1.0f32),
         );
@@ -201,13 +197,13 @@ fn main() {
         let p = dispatch_id().x;
         for i in -1..=1 {
             for j in -1..=1 {
-                let pos = (x.var().read(p) * RESOLUTION as f32).cast_i32() + Int2::expr(i, j);
+                let pos = (x.read(p) * RESOLUTION as f32).cast_i32() + Int2::expr(i, j);
                 if pos.x >= (0i32)
                     && pos.x < (RESOLUTION as i32)
                     && pos.y >= (0i32)
                     && pos.y < (RESOLUTION as i32)
                 {
-                    display.var().write(
+                    display.write(
                         Uint2::expr(pos.x.cast_u32(), RESOLUTION - 1u32 - pos.y.cast_u32()),
                         Float4::expr(0.4f32, 0.6f32, 0.6f32, 1.0f32),
                     );
@@ -216,19 +212,22 @@ fn main() {
         }
     });
     escape!({
-        event_loop.run(move |event, _, control_flow| {
-            control_flow.set_poll();
+        event_loop.set_control_flow(ControlFlow::Poll);
+        event_loop.run(move |event, elwt| {
             match event {
                 Event::WindowEvent {
                     event: WindowEvent::CloseRequested,
                     window_id,
                 } if window_id == window.id() => {
-                    *control_flow = ControlFlow::Exit;
+                    elwt.exit();
                 }
-                Event::MainEventsCleared => {
+                Event::AboutToWait => {
                     window.request_redraw();
                 }
-                Event::RedrawRequested(_) => {
+                Event::WindowEvent {
+                    event: WindowEvent::RedrawRequested,
+                    window_id,
+                } if window_id == window.id() => {
                     let tic = Instant::now();
                     {
                         let scope = device.default_stream().scope();
@@ -263,6 +262,6 @@ fn main() {
                 }
                 _ => (),
             }
-        });
+        }).unwrap();
     });
 }

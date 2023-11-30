@@ -30,7 +30,7 @@ fn main() {
         "cpu"
     });
 
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::new().unwrap();
     let window = winit::window::WindowBuilder::new()
         .with_title("Luisa Compute Rust - Fluid")
         .with_inner_size(winit::dpi::LogicalSize::new(N_GRID, N_GRID))
@@ -225,7 +225,6 @@ fn main() {
         }),
     );
 
-
     let clear_pressure = Kernel::<fn()>::new_async(&device, &|| {
         let idx = index(dispatch_id().xy());
         p0.var().write(idx, 0.0f32);
@@ -244,20 +243,22 @@ fn main() {
             );
         }),
     );
-
-    event_loop.run(move |event, _, control_flow| {
-        control_flow.set_poll();
+    event_loop.set_control_flow(ControlFlow::Poll);
+    event_loop.run(move |event, elwt| {
         match event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 window_id,
             } if window_id == window.id() => {
-                *control_flow = ControlFlow::Exit;
+                elwt.exit();
             }
-            Event::MainEventsCleared => {
+            Event::AboutToWait => {
                 window.request_redraw();
             }
-            Event::RedrawRequested(_) => {
+            Event::WindowEvent {
+                event: WindowEvent::RedrawRequested,
+                window_id,
+            } if window_id == window.id() => {
                 let tic = Instant::now();
                 {
                     let scope = device.default_stream().scope();
@@ -330,5 +331,5 @@ fn main() {
             }
             _ => (),
         }
-    });
+    }).unwrap();
 }

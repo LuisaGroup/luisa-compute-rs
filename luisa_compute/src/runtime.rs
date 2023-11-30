@@ -9,11 +9,11 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Weak};
 
-use std::ffi::c_void;
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
 use parking_lot::{Condvar, Mutex, RawMutex, RwLock};
+use std::ffi::c_void;
 
-use raw_window_handle::HasRawWindowHandle;
+use raw_window_handle::HasWindowHandle;
 use winit::window::Window;
 
 use crate::internal_prelude::*;
@@ -40,10 +40,12 @@ pub use kernel::*;
 pub struct Device {
     pub(crate) inner: Arc<DeviceHandle>,
 }
+
 #[derive(Clone)]
 pub struct WeakDevice {
     pub(crate) inner: Weak<DeviceHandle>,
 }
+
 impl WeakDevice {
     pub fn new(device: &Device) -> Self {
         Self {
@@ -54,6 +56,7 @@ impl WeakDevice {
         self.inner.upgrade().map(|inner| Device { inner })
     }
 }
+
 impl Hash for Device {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         let ptr = Arc::as_ptr(&self.inner);
@@ -99,10 +102,12 @@ impl Drop for DeviceHandle {
         }
     }
 }
+
 pub mod extension {
     use super::*;
     use api::denoiser_ext::{Feature, Image};
     pub use api::denoiser_ext::{FilterQuality, ImageColorSpace, ImageFormat, PrefilterMode};
+
     pub struct DenoiserInput {
         inner: api::denoiser_ext::DenoiserInput,
         inputs: Vec<Image>,
@@ -111,6 +116,7 @@ pub mod extension {
         rt: ResourceTracker,
         names: Vec<CString>,
     }
+
     impl DenoiserInput {
         pub fn new(width: u32, height: u32) -> Self {
             Self {
@@ -145,7 +151,10 @@ pub mod extension {
                 format.size() <= std::mem::size_of::<T>(),
                 "format size must be less than or equal to the size of T"
             );
-            assert!((self.inner.width as usize) * (self.inner.height as usize) == buffer.len);
+            assert_eq!(
+                (self.inner.width as usize) * (self.inner.height as usize),
+                buffer.len
+            );
             let image = Image {
                 format,
                 buffer_handle: buffer.handle().0,
@@ -209,11 +218,13 @@ pub mod extension {
             self
         }
     }
+
     /// Denoiser extension
     pub struct DenoiserExt {
         pub(crate) device: Device,
         pub(crate) inner: api::DenoiserExt,
     }
+
     pub struct Denoiser {
         api: api::DenoiserExt,
         inner: *mut api::denoiser_ext::Denoiser,
@@ -221,6 +232,7 @@ pub mod extension {
         device: Device,
         stream: Arc<StreamHandle>,
     }
+
     impl DenoiserExt {
         /// Create a denoiser instance that executes on the given stream.
         pub fn create(&self, stream: &Stream) -> Denoiser {
@@ -235,6 +247,7 @@ pub mod extension {
             }
         }
     }
+
     impl Denoiser {
         /// Initialize the denoiser with the given input.
         /// Blocks if the denoiser is still running.
@@ -269,17 +282,21 @@ pub mod extension {
             }
         }
     }
+
     impl Drop for Denoiser {
         fn drop(&mut self) {
             unsafe { (self.api.destroy)(&mut self.api, self.inner) }
         }
     }
 }
+
 pub use extension::DenoiserExt;
+
 pub trait DeviceExtensions {
     /// Gets the denoiser extension if available.
     fn denoiser_ext(&self) -> Option<DenoiserExt>;
 }
+
 impl DeviceExtensions for Device {
     fn denoiser_ext(&self) -> Option<DenoiserExt> {
         let ext = self.inner.denoiser_ext();
@@ -293,6 +310,7 @@ impl DeviceExtensions for Device {
         }
     }
 }
+
 impl Device {
     pub fn query(&self, name: &str) -> Option<String> {
         self.inner.query(name)
@@ -311,20 +329,20 @@ impl Device {
         vsync: bool,
         back_buffer_size: u32,
     ) -> Swapchain {
-        let handle = window.raw_window_handle();
+        let handle = window.window_handle().unwrap().as_raw();
         let window_handle = match handle {
-            raw_window_handle::RawWindowHandle::UiKit(h) => h.ui_window as u64,
-            raw_window_handle::RawWindowHandle::AppKit(h) => h.ns_window as u64,
+            raw_window_handle::RawWindowHandle::UiKit(h) => h.ui_view.as_ptr() as u64,
+            raw_window_handle::RawWindowHandle::AppKit(h) => h.ns_view.as_ptr() as u64,
             raw_window_handle::RawWindowHandle::Orbital(_) => todo!(),
             raw_window_handle::RawWindowHandle::Xlib(h) => h.window as u64,
-            raw_window_handle::RawWindowHandle::Xcb(h) => h.window as u64,
+            raw_window_handle::RawWindowHandle::Xcb(h) => h.window.get() as u64,
             raw_window_handle::RawWindowHandle::Wayland(_h) => {
                 panic!("Wayland not supported, use X11 instead")
             }
             raw_window_handle::RawWindowHandle::Drm(_) => todo!(),
             raw_window_handle::RawWindowHandle::Gbm(_) => todo!(),
-            raw_window_handle::RawWindowHandle::Win32(h) => h.hwnd as u64,
-            raw_window_handle::RawWindowHandle::WinRt(h) => h.core_window as u64,
+            raw_window_handle::RawWindowHandle::Win32(h) => h.hwnd.get() as u64,
+            raw_window_handle::RawWindowHandle::WinRt(h) => h.core_window.as_ptr() as u64,
             raw_window_handle::RawWindowHandle::Web(_) => todo!(),
             raw_window_handle::RawWindowHandle::AndroidNdk(_) => todo!(),
             raw_window_handle::RawWindowHandle::Haiku(_) => todo!(),
@@ -754,6 +772,7 @@ impl Device {
         }
     }
 }
+
 pub(crate) enum StreamHandle {
     Default {
         device: Weak<DeviceHandle>,
@@ -766,7 +785,9 @@ pub(crate) enum StreamHandle {
         native_handle: *mut std::ffi::c_void,
     },
 }
+
 unsafe impl Send for StreamHandle {}
+
 unsafe impl Sync for StreamHandle {}
 
 pub(crate) struct SwapchainHandle {
@@ -845,7 +866,9 @@ pub(crate) struct EventHandle {
     handle: api::Event,
     native_handle: *mut std::ffi::c_void,
 }
+
 unsafe impl Send for EventHandle {}
+
 unsafe impl Sync for EventHandle {}
 
 impl Drop for EventHandle {
@@ -870,6 +893,7 @@ pub struct Stream {
 }
 
 unsafe impl Send for Stream {}
+
 unsafe impl Sync for Stream {}
 
 impl StreamHandle {
@@ -1008,11 +1032,10 @@ impl<'a> Scope<'a> {
                         cb();
                         callback();
                     });
-                    return self;
                 } else {
                     self.submit_impl(commands, callback);
-                    return self;
                 }
+                return self;
             } else {
                 self.submit_impl(commands, cb.unwrap());
             }
@@ -1047,11 +1070,13 @@ impl<'a> Scope<'a> {
         self
     }
 }
+
 impl Scope<'static> {
     pub fn detach(self) {
         self.synchronized.set(true);
     }
 }
+
 impl<'a> Drop for Scope<'a> {
     fn drop(&mut self) {
         if !self.synchronized.get() {
@@ -1179,12 +1204,14 @@ pub struct RawKernel {
     pub(crate) resource_tracker: ResourceTracker,
     pub(crate) module: CArc<KernelModule>,
 }
+
 impl Drop for RawKernel {
     fn drop(&mut self) {
         let shader = self.unwrap();
         self.device.inner.destroy_shader(shader);
     }
 }
+
 pub struct CallableArgEncoder {
     pub(crate) args: Vec<NodeRef>,
 }
@@ -1317,18 +1344,21 @@ impl<T: Value> KernelArg for Buffer<T> {
         encoder.buffer(self);
     }
 }
+
 impl<T: SoaValue> KernelArg for SoaBuffer<T> {
     type Parameter = SoaBufferVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.soa_buffer(self);
     }
 }
+
 impl<'a, T: SoaValue> KernelArg for SoaBufferView<'a, T> {
     type Parameter = SoaBufferVar<T>;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         encoder.soa_buffer_view(self);
     }
 }
+
 // impl KernelArg for ByteBuffer {
 //     type Parameter = ByteBufferVar;
 //     fn encode(&self, encoder: &mut KernelArgEncoder) {
@@ -1471,16 +1501,19 @@ pub struct Callable<S: CallableSignature> {
     pub(crate) inner: RawCallable,
     pub(crate) _marker: PhantomData<S>,
 }
+
 pub(crate) struct DynCallableInner<S: CallableSignature> {
     builder: Box<dyn Fn(std::rc::Rc<dyn Any>, &mut KernelBuilder) -> Callable<S>>,
     callables: Vec<Callable<S>>,
 }
+
 pub struct DynCallable<S: CallableSignature> {
     #[allow(dead_code)]
     pub(crate) inner: RefCell<DynCallableInner<S>>,
     pub(crate) device: Device,
     pub(crate) init_once: bool,
 }
+
 impl<S: CallableSignature> DynCallable<S> {
     pub(crate) fn _new(
         device: Device,
@@ -1554,8 +1587,11 @@ impl<S: CallableSignature> DynCallable<S> {
         ))
     }
 }
+
 unsafe impl Send for RawCallable {}
+
 unsafe impl Sync for RawCallable {}
+
 pub struct RawCallable {
     #[allow(dead_code)]
     pub(crate) device: Option<Device>,
@@ -1564,17 +1600,19 @@ pub struct RawCallable {
     pub(crate) resource_tracker: ResourceTracker,
     pub(crate) captured_args: Vec<NodeRef>,
 }
+
 impl RawCallable {
     pub(crate) fn check_on_same_device(&self) {
         with_recorder(|r| {
             if let Some(device) = &self.device {
                 if let Some((a, b)) = r.check_on_same_device(device) {
-                    panic!("Callable created on a different device than the one it is called on: {:?} vs {:?}", a,b);
+                    panic!("Callable created on a different device than the one it is called on: {:?} vs {:?}", a, b);
                 }
             }
         });
     }
 }
+
 pub struct RawKernelDef {
     #[allow(dead_code)]
     pub(crate) device: Option<Device>,
@@ -1635,8 +1673,11 @@ pub struct Kernel<T: KernelSignature> {
     pub(crate) inner: Arc<RawKernel>,
     pub(crate) _marker: PhantomData<T>,
 }
+
 unsafe impl<T: KernelSignature> Send for Kernel<T> {}
+
 unsafe impl<T: KernelSignature> Sync for Kernel<T> {}
+
 impl<T: KernelSignature> Kernel<T> {
     pub fn cache_dir(&self) -> Option<PathBuf> {
         let handle = self.inner.unwrap();
@@ -1678,12 +1719,15 @@ impl<T: Value> AsKernelArg for Buffer<T> {
 impl<'a, T: Value> AsKernelArg for BufferView<T> {
     type Output = Buffer<T>;
 }
+
 impl<T: SoaValue> AsKernelArg for SoaBuffer<T> {
     type Output = SoaBuffer<T>;
 }
+
 impl<'a, T: SoaValue> AsKernelArg for SoaBufferView<'a, T> {
     type Output = SoaBuffer<T>;
 }
+
 impl<'a, T: IoTexel> AsKernelArg for Tex2dView<T> {
     type Output = Tex2d<T>;
 }

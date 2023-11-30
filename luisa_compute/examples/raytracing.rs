@@ -69,7 +69,7 @@ fn main() {
         );
         img.write(px, Float4::expr(color.x, color.y, color.z, 1.0));
     });
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::new().unwrap();
     let window = winit::window::WindowBuilder::new()
         .with_title("Luisa Compute Rust - Ray Tracing")
         .with_inner_size(winit::dpi::LogicalSize::new(img_w, img_h))
@@ -100,21 +100,23 @@ fn main() {
         });
         img.save("triangle.png").unwrap();
     }
-    event_loop.run(move |event, _, control_flow| {
-        control_flow.set_wait();
-        match event {
+    event_loop
+        .run(move |event, elwt| match event {
             WinitEvent::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 window_id,
-            } if window_id == window.id() => escape!(*control_flow = ControlFlow::Exit),
-            WinitEvent::MainEventsCleared => {
+            } if window_id == window.id() => elwt.exit(),
+            WinitEvent::AboutToWait => {
                 window.request_redraw();
             }
-            WinitEvent::RedrawRequested(_) => {
+            WinitEvent::WindowEvent {
+                event: WindowEvent::RedrawRequested,
+                window_id,
+            } if window_id == window.id() => {
                 let scope = device.default_stream().scope();
                 scope.present(&swapchain, &img);
             }
             _ => (),
-        }
-    });
+        })
+        .unwrap();
 }

@@ -268,11 +268,7 @@ impl BufferVar<u8> {
             .into(),
         )
     }
-    pub fn write_as<T: Value>(
-        &self,
-        index_bytes: impl IntoIndex,
-        value: impl AsExpr<Value = T>,
-    ) {
+    pub fn write_as<T: Value>(&self, index_bytes: impl IntoIndex, value: impl AsExpr<Value = T>) {
         let i = index_bytes.to_u64().node().get();
         let value = value.as_expr().node().get();
         let self_node = self.node.get();
@@ -361,7 +357,6 @@ macro_rules! impl_resource_deref_to_var {
                 })
             }
         }
-        
     };
     ($r:ident, $v:ident) => {
         impl std::ops::Deref for $r {
@@ -377,7 +372,6 @@ macro_rules! impl_resource_deref_to_var {
                 })
             }
         }
-        
     };
 }
 impl_resource_deref_to_var!(BufferView, BufferVar [T: Value]);
@@ -1513,7 +1507,7 @@ impl ToNode for BindlessByteBufferVar {
     }
 }
 impl BindlessByteBufferVar {
-    pub unsafe fn read_as<T: Value>(&self, index_bytes: impl IntoIndex) -> Expr<T> {
+    pub fn read_as<T: Value>(&self, index_bytes: impl IntoIndex) -> Expr<T> {
         let i = index_bytes.to_u64().node().get();
         let array = self.array.get();
         let buffer_index = self.buffer_index.node().get();

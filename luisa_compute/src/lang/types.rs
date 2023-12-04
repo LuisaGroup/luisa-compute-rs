@@ -317,6 +317,12 @@ impl<T: Value> Expr<T> {
     pub fn _type_tag(&self) -> TypeTag<T> {
         TypeTag(PhantomData)
     }
+    /// Address of this `Expr`, only available in some backends.
+    pub fn address(&self) -> Expr<u64> {
+        let self_node = self.node().get();
+        let node = __current_scope(|b| b.call(Func::AddressOf, &[self_node], u64::type_()));
+        Expr::<u64>::from_node(node.into())
+    }
 }
 
 impl<T: Value> Var<T> {
@@ -343,6 +349,12 @@ impl<T: Value> Var<T> {
     }
     pub fn store(&self, value: impl AsExpr<Value = T>) {
         crate::lang::_store(self, &value.as_expr());
+    }
+    /// Address of this `Var`, only available in some backends.
+    pub fn address(&self) -> Expr<u64> {
+        let self_node = self.node().get();
+        let node = __current_scope(|b| b.call(Func::AddressOf, &[self_node], u64::type_()));
+        Expr::<u64>::from_node(node.into())
     }
 }
 impl<T: Value> AtomicRef<T> {

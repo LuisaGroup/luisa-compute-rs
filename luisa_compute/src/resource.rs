@@ -1398,6 +1398,14 @@ pub struct BufferVar<T: Value> {
     pub(crate) handle: Option<Arc<BufferHandle>>,
     pub(crate) node: SafeNodeRef,
 }
+impl<T: Value> BufferVar<T> {
+    pub fn device_address(&self) -> Expr<u64> {
+        let buf = self.node().get();
+        Expr::from_node(
+            __current_scope(|b| b.call(Func::BufferAddress, &[buf], u64::type_())).into(),
+        )
+    }
+}
 impl<T: Value> ToNode for BufferVar<T> {
     fn node(&self) -> SafeNodeRef {
         self.node
@@ -1421,6 +1429,22 @@ pub struct BindlessBufferVar<T> {
 impl<T: Value> ToNode for BindlessBufferVar<T> {
     fn node(&self) -> SafeNodeRef {
         self.array
+    }
+}
+impl<T: Value> BindlessBufferVar<T> {
+    pub fn device_address(&self) -> Expr<u64> {
+        let array = self.array.get();
+        let buffer_index = self.buffer_index.node().get();
+        Expr::from_node(
+            __current_scope(|b| {
+                b.call(
+                    Func::BindlessBufferAddress,
+                    &[array, buffer_index],
+                    u64::type_(),
+                )
+            })
+            .into(),
+        )
     }
 }
 

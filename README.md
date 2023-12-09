@@ -357,7 +357,7 @@ let v = MyVec2::new_expr(1.0fi32, 2.0f32);
 We prvoide a powerful `Polymorphic<DevirtualizationKey, dyn Trait>` construct as in the C++ DSL. See examples for more detail
 ```rust
 trait Area {
-    fn area(&self) -> Float32;
+    fn area(&self) -> Expr<f32>;
 }
 #[derive(Value, Clone, Copy)]
 #[repr(C)]
@@ -365,7 +365,7 @@ pub struct Circle {
     radius: f32,
 }
 impl Area for CircleExpr {
-    fn area(&self) -> Float32 {
+    fn area(&self) -> Expr<f32> {
         PI * self.radius * self.radius
     }
 }
@@ -415,7 +415,7 @@ let my_add = CpuFn::new(|args: &mut MyAddArgs| {
     args.result = args.x + args.y;
 });
 
-let args = MyAddArgsExpr::new(x, y, Float32::zero());
+let args = MyAddArgsExpr::new(x, y, 0.0.expr());
 let result = my_add.call(args);
 ```
 

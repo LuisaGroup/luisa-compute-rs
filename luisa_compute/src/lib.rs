@@ -163,6 +163,7 @@ impl Context {
         // Thank you, llvm.
         #[cfg(target_os = "linux")]
         unsafe {
+            use std::ptr::null;
             luisa_compute_sys::llvm_orc_deregisterEHFrameSectionWrapper(null(), 0);
             luisa_compute_sys::llvm_orc_registerEHFrameSectionWrapper(null(), 0);
         }

@@ -5,7 +5,6 @@ extern crate self as luisa_compute;
 use std::any::Any;
 use std::backtrace::Backtrace;
 use std::path::Path;
-use std::ptr::null;
 use std::sync::Arc;
 
 pub mod lang;

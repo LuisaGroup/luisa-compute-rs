@@ -543,6 +543,11 @@ pub struct KernelBuildOptions {
     /// measure time spent during compilation
     pub time_trace: bool,
     pub name: Option<String>,
+    ///  Include code written in the native shading language.
+    ///  If provided, backend will include this string into the generated
+    ///   shader code. This field is useful for interoperation with external callables.
+    /// see also  [`ExternalCallable`]
+    pub native_include: Option<String>,
 }
 
 impl Default for KernelBuildOptions {
@@ -560,6 +565,7 @@ impl Default for KernelBuildOptions {
             max_registers: 0,
             time_trace: false,
             name: None,
+            native_include: None,
         }
     }
 }
@@ -574,6 +580,7 @@ pub trait StaticCallableBuildFn<S: CallableSignature>: CallableBuildFn<S> {}
 pub unsafe trait CallableRet {
     fn _return(&self) -> CArc<Type>;
     fn _from_return(node: NodeRef) -> Self;
+    fn _return_type() -> CArc<Type>;
 }
 
 unsafe impl CallableRet for () {
@@ -581,6 +588,9 @@ unsafe impl CallableRet for () {
         Type::void()
     }
     fn _from_return(_: NodeRef) -> Self {}
+    fn _return_type() -> CArc<Type> {
+        Type::void()
+    }
 }
 
 unsafe impl<V: Value> CallableRet for Expr<V> {
@@ -593,6 +603,9 @@ unsafe impl<V: Value> CallableRet for Expr<V> {
     }
     fn _from_return(node: NodeRef) -> Self {
         Self::from_node(node.into())
+    }
+    fn _return_type() -> CArc<Type> {
+        V::type_()
     }
 }
 

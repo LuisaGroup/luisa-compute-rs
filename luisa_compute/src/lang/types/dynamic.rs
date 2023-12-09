@@ -121,6 +121,9 @@ unsafe impl CallableRet for DynExpr {
     fn _from_return(node: NodeRef) -> Self {
         Self::from_node(node.into())
     }
+    fn _return_type() -> CArc<Type> {
+        panic!("should not be called")
+    }
 }
 
 impl Aggregate for DynVar {

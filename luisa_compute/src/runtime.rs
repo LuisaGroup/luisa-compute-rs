@@ -741,6 +741,8 @@ impl Device {
     ) -> Kernel<S> {
         let name = options.name.unwrap_or("".to_string());
         let name = Arc::new(CString::new(name).unwrap());
+        let native_include = options.native_include.unwrap_or("".to_string());
+        let native_include = Arc::new(CString::new(native_include).unwrap());
         let shader_options = api::ShaderOption {
             enable_cache: options.enable_cache,
             enable_fast_math: options.enable_fast_math,
@@ -749,6 +751,7 @@ impl Device {
             max_registers: options.max_registers,
             compile_only: false,
             name: name.as_ptr(),
+            native_include: native_include.as_ptr(),
         };
         let module = k.inner.module.clone();
         let artifact = if options.async_compile {
@@ -757,6 +760,7 @@ impl Device {
                 module.clone(),
                 shader_options,
                 name,
+                native_include,
             ))
         } else {
             ShaderArtifact::Sync(self.inner.create_shader(&module, &shader_options))
@@ -1164,6 +1168,8 @@ pub(crate) struct AsyncShaderArtifact {
     // strange naming, huh?
     #[allow(dead_code)]
     name: Arc<CString>,
+    #[allow(dead_code)]
+    native_include: Arc<CString>,
 }
 
 pub(crate) enum ShaderArtifact {
@@ -1177,9 +1183,14 @@ impl AsyncShaderArtifact {
         kernel: CArc<KernelModule>,
         options: api::ShaderOption,
         name: Arc<CString>,
+        native_include: Arc<CString>,
     ) -> Arc<(Mutex<AsyncShaderArtifact>, Condvar)> {
         let artifact = Arc::new((
-            Mutex::new(AsyncShaderArtifact { shader: None, name }),
+            Mutex::new(AsyncShaderArtifact {
+                shader: None,
+                name,
+                native_include,
+            }),
             Condvar::new(),
         ));
         {
@@ -1496,6 +1507,21 @@ impl RawKernel {
     }
 }
 
+/// A callable written in native shader language.
+pub struct ExternalCallable<S: CallableSignature> {
+    pub(crate) name: CBoxedSlice<u8>,
+    pub(crate) _marker: PhantomData<S>,
+}
+impl<S: CallableSignature> ExternalCallable<S> {
+    pub fn new(name: impl Into<String>) -> Self {
+        let name: String = name.into();
+        Self {
+            name: CBoxedSlice::new(name.into_bytes()),
+            _marker: PhantomData,
+        }
+    }
+}
+
 pub struct Callable<S: CallableSignature> {
     #[allow(dead_code)]
     pub(crate) inner: RawCallable,
@@ -1775,6 +1801,21 @@ macro_rules! impl_call_for_callable {
                 let mut encoder = CallableArgEncoder::new();
                 $($Ts.encode(&mut encoder);)*
                 self.call_impl(std::rc::Rc::new(($($Ts,)*)), &encoder.args)
+            }
+        }
+        impl <R:CallableRet+'static, $($Ts: CallableParameter),*> ExternalCallable<fn($($Ts,)*)->R> {
+            #[allow(non_snake_case)]
+            #[allow(unused_mut)]
+            pub fn call(&self, $($Ts:$Ts),*) -> R {
+                let mut encoder = CallableArgEncoder::new();
+                $($Ts.encode(&mut encoder);)*
+                CallableRet::_from_return(__current_scope(|b| {
+                    b.call(
+                        Func::External(self.name.clone()),
+                        &encoder.args,
+                        R::_return_type(),
+                    )
+                }))
             }
         }
    };

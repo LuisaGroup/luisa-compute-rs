@@ -987,7 +987,15 @@ impl<'a> Scope<'a> {
         callback: F,
     ) {
         self.synchronized.set(false);
-        let api_commands = commands.iter().map(|c| c.inner).collect::<Vec<_>>();
+        let api_commands = commands
+            .iter()
+            .map(|c| c.inner)
+            .filter(|c| match c {
+                // filters zero-size dispatches
+                api::Command::ShaderDispatch(c) => c.dispatch_size.iter().all(|&s| s > 0),
+                _ => true,
+            })
+            .collect::<Vec<_>>();
         let ctx = CommandCallbackCtx {
             commands,
             f: callback,

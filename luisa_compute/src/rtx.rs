@@ -570,7 +570,7 @@ impl SurfaceHitExpr {
         self.inst.ne(u32::MAX)
     }
     pub fn miss(&self) -> Expr<bool> {
-        self.prim.eq(u32::MAX)
+        self.inst.eq(u32::MAX)
     }
     pub fn is_curve(&self) -> Expr<bool> {
         self.bary.y.lt(0.0)

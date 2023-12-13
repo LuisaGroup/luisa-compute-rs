@@ -71,8 +71,13 @@ pub fn __env_need_backtrace() -> bool {
         Err(_) => false,
     }
 }
-
+#[doc(hidden)]
 pub fn __unreachable(file: &str, line: u32, col: u32) {
+    __unreachable_typed(Type::void(), file, line, col);
+}
+
+#[doc(hidden)]
+pub fn __unreachable_typed(ty: CArc<Type>, file: &str, line: u32, col: u32) -> NodeRef {
     let path = std::path::Path::new(file);
     let pretty_filename: String;
     if path.exists() {
@@ -102,9 +107,9 @@ pub fn __unreachable(file: &str, line: u32, col: u32) {
                 CString::new(msg).unwrap().into_bytes_with_nul(),
             )),
             &[],
-            Type::void(),
-        );
-    });
+            ty,
+        )
+    })
 }
 
 pub fn __assert(cond: impl Into<Expr<bool>>, msg: &str, file: &str, line: u32, col: u32) {

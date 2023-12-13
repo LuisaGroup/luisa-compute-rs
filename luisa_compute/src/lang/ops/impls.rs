@@ -417,6 +417,14 @@ impl<R: Aggregate> SelectMaybeExpr<R> for Expr<bool> {
     }
 }
 
+impl<R: Aggregate> SelectMaybeExpr<R> for Var<bool> {
+    fn if_then_else(self, on: impl Fn() -> R, off: impl Fn() -> R) -> R {
+        crate::lang::control_flow::if_then_else(**self, on, off)
+    }
+    fn select(self, on: R, off: R) -> R {
+        crate::lang::control_flow::select(**self, on, off)
+    }
+}
 impl ActivateMaybeExpr for bool {
     fn activate(self, then: impl Fn()) {
         if self {
@@ -427,6 +435,12 @@ impl ActivateMaybeExpr for bool {
 impl ActivateMaybeExpr for Expr<bool> {
     fn activate(self, then: impl Fn()) {
         crate::lang::control_flow::if_then_else(self, then, || {})
+    }
+}
+
+impl ActivateMaybeExpr for Var<bool> {
+    fn activate(self, then: impl Fn()) {
+        crate::lang::control_flow::if_then_else(self.load(), then, || {})
     }
 }
 

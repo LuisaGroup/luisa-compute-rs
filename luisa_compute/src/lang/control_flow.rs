@@ -3,6 +3,8 @@ use std::ffi::CString;
 use crate::internal_prelude::*;
 use ir::SwitchCase;
 
+use super::debug::__unreachable_typed;
+
 /**
  * If you want rustfmt to format your code, use if_!(cond, { .. }, { .. })
  * or if_!(cond, { .. }, else, {...}) instead of if_!(cond, { .. }, else
@@ -426,14 +428,20 @@ impl<R: Aggregate> SwitchBuilder<R> {
                 s.push(IrBuilder::new(pools));
             });
             for i in 0..phi_count {
-                let msg = CString::new("unreachable code in switch statement!").unwrap();
-                let default_node = __current_scope(|b| {
-                    b.call(
-                        Func::Unreachable(CBoxedSlice::from(msg)),
-                        &[],
-                        case_phis[0][i].type_().clone(),
-                    )
-                });
+                // let msg = CString::new("unreachable code in switch statement!").unwrap();
+                // let default_node = __current_scope(|b| {
+                //     b.call(
+                //         Func::Unreachable(CBoxedSlice::from(msg)),
+                //         &[],
+                //         case_phis[0][i].type_().clone(),
+                //     )
+                // });
+                let default_node = __unreachable_typed(
+                    case_phis[0][i].type_().clone(),
+                    file!(),
+                    line!(),
+                    column!(),
+                );
                 default_nodes.push(default_node);
             }
             __pop_scope()

@@ -493,7 +493,11 @@ impl CommittedHitExpr {
     }
     #[tracked]
     pub fn procedural_hit(&self) -> Expr<bool> {
-        self.hit_type.eq(HitType::Procedural as u32) & self.bary.y.lt(0.0)
+        self.hit_type.eq(HitType::Procedural as u32) & self.bary.y.ge(0.0)
+    }
+    #[tracked]
+    pub fn curve_hit(&self) -> Expr<bool> {
+        self.hit_type.eq(HitType::Surface as u32) & self.bary.y.lt(0.0)
     }
     pub fn curve_parameter(&self) -> Expr<f32> {
         self.bary.x

@@ -41,21 +41,6 @@ impl<T: Value> Shared<T> {
             _ => unreachable!(),
         }
     }
-    pub fn write<I: IntoIndex, V: Into<Expr<T>>>(&self, i: I, value: V) {
-        let i = i.to_u64();
-        let value = value.into();
-
-        if need_runtime_check() {
-            check_index_lt_usize(i, self.len());
-        }
-        let i = i.node().get();
-        let value = value.node().get();
-        let self_node = self.node.get();
-        __current_scope(|b| {
-            let gep = b.call(Func::GetElementPtr, &[self_node, i], T::type_());
-            b.update(gep, value);
-        });
-    }
     pub fn load(&self) -> VLArrayExpr<T> {
         let self_node = self.node.get();
         VLArrayExpr::from_node(
@@ -67,6 +52,43 @@ impl<T: Value> Shared<T> {
         let value = value.node().get();
         __current_scope(|b| {
             b.update(self_node, value);
+        });
+    }
+}
+impl<T: Value> IndexRead for Shared<T> {
+    type Element = T;
+    fn read<I: IntoIndex>(&self, i: I) -> Expr<Self::Element> {
+        let i = i.to_u64();
+
+        if need_runtime_check() {
+            check_index_lt_usize(i, self.len());
+        }
+        let i = i.node().get();
+        let self_node = self.node.get();
+        Expr::from_node(
+            __current_scope(|b| {
+                let gep = b.call(Func::GetElementPtr, &[self_node, i], T::type_());
+                b.load(gep)
+            })
+            .into(),
+        )
+    }
+}
+
+impl<T: Value> IndexWrite for Shared<T> {
+    fn write<I: IntoIndex, V: AsExpr<Value = Self::Element>>(&self, i: I, value: V) {
+        let i = i.to_u64();
+        let value = value.as_expr();
+
+        if need_runtime_check() {
+            check_index_lt_usize(i, self.len());
+        }
+        let i = i.node().get();
+        let value = value.node().get();
+        let self_node = self.node.get();
+        __current_scope(|b| {
+            let gep = b.call(Func::GetElementPtr, &[self_node, i], T::type_());
+            b.update(gep, value);
         });
     }
 }

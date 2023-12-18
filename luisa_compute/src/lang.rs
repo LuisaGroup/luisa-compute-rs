@@ -309,7 +309,7 @@ pub(crate) struct FnRecorder {
     pub(crate) block_size: Option<[u32; 3]>,
     pub(crate) building_kernel: bool,
     pub(crate) pools: CArc<ModulePools>,
-    pub(crate) arena: Bump,
+    pub(crate) arena: Rc<Bump>,
     pub(crate) dtors: Vec<(*mut u8, fn(*mut u8))>,
     pub(crate) callable_ret_type: Option<CArc<Type>>,
     pub(crate) const_builder: IrBuilder,
@@ -427,7 +427,9 @@ impl FnRecorder {
             device: None,
             block_size: None,
             pools: pools.clone(),
-            arena: Bump::new(),
+            arena: parent.as_ref()
+                .map(|p| p.borrow().arena.clone())
+                .unwrap_or_else(|| Rc::new(Bump::new())),
             building_kernel: false,
             callable_ret_type: None,
             kernel_id,

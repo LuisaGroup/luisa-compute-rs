@@ -184,11 +184,12 @@ pub fn set_block_size(size: [u32; 3]) {
     });
 }
 
-pub fn block_size() -> Expr<Uint3> {
-    with_recorder(|r| {
-        let s = r.block_size.unwrap_or_else(|| panic!("Block size not set"));
-        Uint3::new(s[0], s[1], s[2]).expr()
-    })
+pub fn block_size() -> [u32; 3] {
+    with_recorder(|r| r.block_size.unwrap_or_else(|| panic!("Block size not set")))
+}
+pub fn block_size_expr() -> Expr<Uint3> {
+    let sz = block_size();
+    Uint3::expr(sz[0], sz[1], sz[2])
 }
 
 pub unsafe fn bitcast<From: Value, To: Value>(expr: Expr<From>) -> Expr<To> {

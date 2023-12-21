@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use luisa::lang::types::array::VLArrayVar;
 use luisa::lang::types::dynamic::*;
-use luisa::lang::types::vector::alias::*;
+use luisa::lang::types::vector::{alias::*, Mat2};
 use luisa::prelude::*;
 use luisa_compute as luisa;
 use luisa_compute_api_types::StreamTag;
@@ -1461,6 +1461,7 @@ pub struct Foo {
     i: u32,
     v: Float2,
     a: [i32; 4],
+    m: Mat2,
 }
 #[derive(Clone, Copy, Debug, Value, Soa, PartialEq)]
 #[repr(C)]
@@ -1483,6 +1484,7 @@ fn soa() {
             i: rng.gen(),
             v: Float2::new(rng.gen(), rng.gen()),
             a: [rng.gen(), rng.gen(), rng.gen(), rng.gen()],
+            m: Mat2::from_column_array(&[[rng.gen(), rng.gen()], [rng.gen(), rng.gen()]]),
         },
     });
     let bars_soa = device.create_soa_buffer::<Bar>(1024);
@@ -1505,6 +1507,7 @@ fn soa_view() {
             i: rng.gen(),
             v: Float2::new(rng.gen(), rng.gen()),
             a: [rng.gen(), rng.gen(), rng.gen(), rng.gen()],
+            m: Mat2::from_column_array(&[[rng.gen(), rng.gen()], [rng.gen(), rng.gen()]]),
         },
     });
     let bars_soa = device.create_soa_buffer::<Bar>(2048);
@@ -1531,16 +1534,19 @@ fn atomic() {
         i: rng.gen(),
         v: Float2::new(rng.gen(), rng.gen()),
         a: [rng.gen(), rng.gen(), rng.gen(), rng.gen()],
+        m: Mat2::from_column_array(&[[rng.gen(), rng.gen()], [rng.gen(), rng.gen()]]),
     });
     let foo_max_init = Foo {
         i: u32::MIN,
         v: Float2::new(f32::MIN, f32::MIN),
         a: [i32::MIN; 4],
+        m: Mat2::from_column_array(&[[f32::MIN; 2]; 2]),
     };
     let foo_min_init = Foo {
         i: u32::MAX,
         v: Float2::new(f32::MAX, f32::MAX),
         a: [i32::MAX; 4],
+        m: Mat2::from_column_array(&[[f32::MAX; 2]; 2]),
     };
     let foo_max = device.create_buffer_from_slice(&[foo_max_init]);
     let foo_min = device.create_buffer_from_slice(&[foo_min_init]);
@@ -1558,12 +1564,21 @@ fn atomic() {
             for i in 0..4u32 {
                 foo_max.a[i].fetch_max(foo.a[i]);
             }
+            foo_max.m.x.x.fetch_max(foo.m.x.x);
+            foo_max.m.x.y.fetch_max(foo.m.x.y);
+            foo_max.m.y.x.fetch_max(foo.m.y.x);
+            foo_max.m.y.y.fetch_max(foo.m.y.y);
+
             foo_min.i.fetch_min(foo.i);
             foo_min.v.x.fetch_min(foo.v.x);
             foo_min.v.y.fetch_min(foo.v.y);
             for i in 0..4u32 {
                 foo_min.a[i].fetch_min(foo.a[i]);
             }
+            foo_min.m.x.x.fetch_min(foo.m.x.x);
+            foo_min.m.x.y.fetch_min(foo.m.x.y);
+            foo_min.m.y.x.fetch_min(foo.m.y.x);
+            foo_min.m.y.y.fetch_min(foo.m.y.y);
         }),
     );
     kernel.dispatch([foos.len() as u32, 1, 1]);
@@ -1579,12 +1594,21 @@ fn atomic() {
         for i in 0..4 {
             expected_foo_max.a[i] = expected_foo_max.a[i].max(foo.a[i]);
         }
+        expected_foo_max.m.cols[0].x = expected_foo_max.m.cols[0].x.max(foo.m.cols[0].x);
+        expected_foo_max.m.cols[0].y = expected_foo_max.m.cols[0].y.max(foo.m.cols[0].y);
+        expected_foo_max.m.cols[1].x = expected_foo_max.m.cols[1].x.max(foo.m.cols[1].x);
+        expected_foo_max.m.cols[1].y = expected_foo_max.m.cols[1].y.max(foo.m.cols[1].y);
+
         expected_foo_min.i = expected_foo_min.i.min(foo.i);
         expected_foo_min.v.x = expected_foo_min.v.x.min(foo.v.x);
         expected_foo_min.v.y = expected_foo_min.v.y.min(foo.v.y);
         for i in 0..4 {
             expected_foo_min.a[i] = expected_foo_min.a[i].min(foo.a[i]);
         }
+        expected_foo_min.m.cols[0].x = expected_foo_min.m.cols[0].x.min(foo.m.cols[0].x);
+        expected_foo_min.m.cols[0].y = expected_foo_min.m.cols[0].y.min(foo.m.cols[0].y);
+        expected_foo_min.m.cols[1].x = expected_foo_min.m.cols[1].x.min(foo.m.cols[1].x);
+        expected_foo_min.m.cols[1].y = expected_foo_min.m.cols[1].y.min(foo.m.cols[1].y);
     }
     assert_eq!(foo_max, expected_foo_max);
     assert_eq!(foo_min, expected_foo_min);

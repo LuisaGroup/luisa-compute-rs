@@ -457,17 +457,172 @@ where
     }
 }
 
-impl_simple_expr_proxy!(SquareMatrixExpr2 for SquareMatrix<2>);
-impl_simple_var_proxy!(SquareMatrixVar2 for SquareMatrix<2>);
-impl_simple_atomic_ref_proxy!(SquareMatrixAtomicRef2 for SquareMatrix<2>);
+macro_rules! matrix_proxies {
+    ($N:literal [ $($real_c:ident),* ] [ $($c:ident),* ]: $ExprName:ident, $VarName:ident, $AtomicName:ident, $SoaName:ident) => {
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        pub struct $ExprName {
+            self_: Expr<SquareMatrix<$N>>,
+            $(pub $c: Expr<Vector<f32, $N>>),*
+        }
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        pub struct $VarName {
+            self_: Var<SquareMatrix<$N>>,
+            $(pub $c: Var<Vector<f32, $N>>),*
+        }
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        pub struct $AtomicName {
+            self_: AtomicRef<SquareMatrix<$N>>,
+            $(pub $c: AtomicRef<Vector<f32, $N>>),*
+        }
 
-impl_simple_expr_proxy!(SquareMatrixExpr3 for SquareMatrix<3>);
-impl_simple_var_proxy!(SquareMatrixVar3 for SquareMatrix<3>);
-impl_simple_atomic_ref_proxy!(SquareMatrixAtomicRef3 for SquareMatrix<3>);
+        #[repr(C)]
+        #[derive(Clone)]
+        pub struct $SoaName {
+            $(pub $c: <Vector<f32, $N> as SoaValue>::SoaBuffer),*
+        }
 
-impl_simple_expr_proxy!(SquareMatrixExpr4 for SquareMatrix<4>);
-impl_simple_var_proxy!(SquareMatrixVar4 for SquareMatrix<4>);
-impl_simple_atomic_ref_proxy!(SquareMatrixAtomicRef4 for SquareMatrix<4>);
+        impl SoaValue for SquareMatrix<$N> {
+            type SoaBuffer = $SoaName;
+        }
+        impl SoaBufferProxy for $SoaName {
+            type Value = SquareMatrix<$N>;
+            #[allow(unused_assignments)]
+            fn from_soa_storage(
+                storage: ByteBufferVar,
+                meta: Expr<SoaMetadata>,
+                global_offset: usize,
+            ) -> Self {
+                let s = <<Vector<f32,$N> as SoaValue>::SoaBuffer as SoaBufferProxy>::num_buffers();
+                let mut i = 0;
+                $(
+                    let $c = <Vector<f32,$N> as SoaValue>::SoaBuffer::from_soa_storage(
+                        storage.clone(),
+                        meta.clone(),
+                        global_offset + i * s,
+                    );
+                    i += 1;
+                    if i >= $N { i = 0; }
+                )*
+                Self{
+                    $($c),*
+                }
+            }
+            fn num_buffers() -> usize {
+                <<Vector::<f32,$N> as SoaValue>::SoaBuffer as SoaBufferProxy>::num_buffers() * $N
+            }
+        }
+        impl IndexRead for $SoaName {
+            type Element = SquareMatrix<$N>;
+            fn read<I: crate::lang::index::IntoIndex>(&self, i: I) -> Expr<Self::Element> {
+                let i = i.to_u64();
+                $(
+                    let $real_c = self.$real_c.read(i);
+                )*
+                SquareMatrix::<$N>::from_elems_expr([$($real_c),*])
+            }
+        }
+        impl IndexWrite for $SoaName {
+            #[allow(unused_assignments)]
+            fn write<I: crate::lang::index::IntoIndex, V: AsExpr<Value = Self::Element>>(
+                &self,
+                i: I,
+                value: V,
+            ) {
+                let i = i.to_u64();
+                let v = value.as_expr();
+                let mut comp = 0;
+                $(
+                    {
+                        let el = Expr::<Vector<f32, $N>>::from_node(__extract::<Vector<f32, $N>>(v.node(), comp));
+                        self.$real_c.write(i, el);
+                        comp += 1;
+                    }
+                )*
+            }
+        }
+
+        impl ExprProxy for $ExprName {
+            type Value = SquareMatrix<$N>;
+            #[allow(unused_assignments)]
+            fn from_expr(e:Expr<Self::Value>) -> Self {
+                let data: [Expr<Vector<f32, $N>>;$N] = std::array::from_fn(|i| {
+                    FromNode::from_node(__extract::<Vector<f32, $N>>(e.node(), i))
+                });
+                let mut i = 0;
+                $(
+                    let $c = data[i].clone();
+                    i += 1;
+                    if i >= $N { i = 0; }
+                )*
+                Self{
+                    self_: e,
+                    $($c),*
+                }
+            }
+            fn as_expr_from_proxy(&self)->&Expr<Self::Value> {
+                &self.self_
+            }
+        }
+        impl Deref for $VarName{
+            type Target = Expr<SquareMatrix<$N>>;
+            fn deref(&self) -> &Self::Target {
+                _deref_proxy(self)
+            }
+        }
+        impl AtomicRefProxy for $AtomicName {
+            type Value = SquareMatrix<$N>;
+            #[allow(unused_assignments)]
+            fn from_atomic_ref(e:AtomicRef<Self::Value>) -> Self {
+                let data: [AtomicRef<Vector<f32, $N>>;$N] = std::array::from_fn(|i| {
+                    FromNode::from_node(__extract::<Vector<f32, $N>>(e.node(), i))
+                });
+                let mut i = 0;
+                $(
+                    let $c = data[i].clone();
+                    i += 1;
+                    if i >= $N { i = 0; }
+                )*
+                Self{
+                    self_: e,
+                    $($c),*
+                }
+            }
+            fn as_atomic_ref_from_proxy(&self)->&AtomicRef<Self::Value> {
+                &self.self_
+            }
+        }
+
+        impl VarProxy for $VarName {
+            type Value = SquareMatrix<$N>;
+            #[allow(unused_assignments)]
+            fn from_var(e:Var<Self::Value>) -> Self {
+                let data: [Var<Vector<f32, $N>>;$N] = std::array::from_fn(|i| {
+                    FromNode::from_node(__extract::<Vector<f32, $N>>(e.node(), i))
+                });
+                let mut i = 0;
+                $(
+                    let $c = data[i].clone();
+                    i += 1;
+                    if i >= $N { i = 0; }
+                )*
+                Self{
+                    self_: e,
+                    $($c),*
+                }
+            }
+            fn as_var_from_proxy(&self)->&Var<Self::Value> {
+                &self.self_
+            }
+        }
+    }
+}
+
+matrix_proxies!(2 [x, y] [x, y]: SquareMatrixExpr2, SquareMatrixVar2, SquareMatrixAtomicRef2, SquareMatrixSoaProxy2);
+matrix_proxies!(3 [x, y, z] [x, y, z]: SquareMatrixExpr3, SquareMatrixVar3, SquareMatrixAtomicRef3, SquareMatrixSoaProxy3);
+matrix_proxies!(4 [x, y, z, w] [x, y, z, w]: SquareMatrixExpr4, SquareMatrixVar4, SquareMatrixAtomicRef4, SquareMatrixSoaProxy4);
 
 impl Value for SquareMatrix<2> {
     type Expr = SquareMatrixExpr2;

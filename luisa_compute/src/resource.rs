@@ -1358,6 +1358,9 @@ impl<T: IoTexel> Tex2d<T> {
     pub fn format(&self) -> PixelFormat {
         self.handle.format
     }
+    pub fn storage(&self) -> PixelStorage {
+        self.handle.storage
+    }
     // pub fn read(&self, uv: impl AsExpr<Value = Uint2>) -> Expr<T> {
     //     self.var().read(uv)
     // }
@@ -1383,6 +1386,9 @@ impl<T: IoTexel> Tex3d<T> {
     }
     pub fn format(&self) -> PixelFormat {
         self.handle.format
+    }
+    pub fn storage(&self) -> PixelStorage {
+        self.handle.storage
     }
     // pub fn read(&self, uv: impl AsExpr<Value = Uint3>) -> Expr<T> {
     //     self.var().read(uv)

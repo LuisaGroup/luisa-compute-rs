@@ -956,7 +956,59 @@ fn autodiff_if_phi() {
         }
     }
 }
-
+#[test]
+fn autodiff_if_phi_outer_no_else() {
+    let device = get_device();
+    let x: Buffer<f32> = device.create_buffer(1024);
+    let y: Buffer<f32> = device.create_buffer(1024);
+    let dx: Buffer<f32> = device.create_buffer(1024);
+    let dy: Buffer<f32> = device.create_buffer(1024);
+    let mut rng = rand::thread_rng();
+    x.view(..).fill_fn(|_| rng.gen());
+    y.view(..).fill_fn(|_| rng.gen());
+    let kernel = Kernel::<fn()>::new(
+        &device,
+        &track!(|| {
+            let buf_x = x.var();
+            let buf_y = y.var();
+            let buf_dx = dx.var();
+            let buf_dy = dy.var();
+            let tid = dispatch_id().x;
+            let x = buf_x.read(tid);
+            let y = buf_y.read(tid);
+            let z = 0.0f32.var();
+            if true.expr() {
+                autodiff(|| {
+                    requires_grad(x);
+                    requires_grad(y);
+                    if x > y {
+                        let tmp = 0.0f32.var();
+                        *tmp = x * 4.0;
+                        *z = tmp;
+                    };
+                    backward(**z);
+                    buf_dx.write(tid, gradient(x));
+                    buf_dy.write(tid, gradient(y));
+                });
+            }
+        }),
+    );
+    kernel.dispatch([1024, 1, 1]);
+    let dx = dx.view(..).copy_to_vec();
+    let dy = dy.view(..).copy_to_vec();
+    let x = x.view(..).copy_to_vec();
+    let y = y.view(..).copy_to_vec();
+    let cache_dir = kernel.cache_dir();
+    for i in 0..1024 {
+        if x[i] > y[i] {
+            assert_eq!(dx[i], 4.0, "{} cache_dir: {:?}", dx[i], cache_dir);
+            assert_eq!(dy[i], 0.0, "{} cache_dir: {:?}", dy[i], cache_dir);
+        } else {
+            assert_eq!(dx[i], 0.0, "{} cache_dir: {:?}", dx[i], cache_dir);
+            assert_eq!(dy[i], 0.0, "{} cache_dir: {:?}", dy[i], cache_dir);
+        }
+    }
+}
 #[test]
 fn autodiff_if_phi2() {
     let device = get_device();

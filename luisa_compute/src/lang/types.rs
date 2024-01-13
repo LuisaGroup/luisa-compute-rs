@@ -47,6 +47,9 @@ pub trait Value: Copy + TypeOf + 'static {
     fn var_zeroed() -> Var<Self> {
         Var::<Self>::from_node(__current_scope(|b| b.local_zero_init(Self::type_())).into())
     }
+    fn expr_zeroed() -> Expr<Self> {
+        Self::var_zeroed().load()
+    }
 }
 
 pub trait SoaValue: Value {

@@ -1,7 +1,6 @@
 # luisa-compute-rs
 Rust frontend to LuisaCompute and more! Unified API and embedded DSL for high performance computing on stream architectures. 
 
-*Warning:* while the project is already usable, it is not stable and **breaking changes** can happend at any time without notification.
 
 To see the use of `luisa-compute-rs` in a high performance offline rendering system, checkout [our research renderer](https://github.com/shiinamiyuki/akari_render)
 ## Table of Contents

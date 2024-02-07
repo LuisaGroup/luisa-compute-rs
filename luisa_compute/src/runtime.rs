@@ -517,7 +517,7 @@ impl Device {
         let format = T::pixel_format(storage);
         let texture = self
             .inner
-            .create_texture(format, 2, width, height, 1, mips, true);
+            .create_texture(format, 2, width, height, 1, mips, true, false);
         let handle = Arc::new(TextureHandle {
             device: self.clone(),
             handle: api::Texture(texture.handle),
@@ -560,7 +560,7 @@ impl Device {
         let format = T::pixel_format(storage);
         let texture = self
             .inner
-            .create_texture(format, 3, width, height, depth, mips, true);
+            .create_texture(format, 3, width, height, depth, mips, true, false);
         let handle = Arc::new(TextureHandle {
             device: self.clone(),
             handle: api::Texture(texture.handle),

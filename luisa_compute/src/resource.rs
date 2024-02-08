@@ -901,6 +901,13 @@ macro_rules! impl_io_texel {
         }
     };
 }
+impl_io_texel!(
+    bool,
+    f32,
+    Float4,
+    |x: Expr<Float4>| x.x.ne(0.0f32.expr()),
+    |x: Expr<bool>| { Float4::splat_expr(x.select(1.0f32.expr(), 0.0f32.expr())) }
+);
 impl_io_texel!(f32, f32, Float4, |x: Expr<Float4>| x.x, |x| {
     Float4::splat_expr(x)
 });
@@ -909,6 +916,10 @@ impl_io_texel!(Float2, f32, Float4, |x: Expr<Float4>| x.xy(), |x: Expr<
 >| {
     Float4::expr(x.x, x.y, 0.0, 0.0)
 });
+impl_io_texel!(Float3, f32, Float4, |x: Expr<Float4>| x.xyz(), |x: Expr<
+    Float3,
+>| x
+    .extend(0.0));
 impl_io_texel!(Float4, f32, Float4, |x: Expr<Float4>| x, |x: Expr<
     Float4,
 >| x);

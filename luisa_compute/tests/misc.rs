@@ -922,7 +922,7 @@ fn array_read_write() {
             let arr = Var::<[i32; 4]>::zeroed();
             let i = i32::var_zeroed();
             while i < 4 {
-                arr.write(i.as_u32(), tid.as_i32() + i);
+                *arr[i.cast_u32()] = tid.as_i32() + i;
                 *i += 1;
             }
             buf_x.write(tid, arr);

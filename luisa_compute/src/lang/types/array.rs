@@ -93,6 +93,22 @@ impl<T: Value, const N: usize, X: IntoIndex> Index<X> for ArrayExpr<T, N> {
         ._ref()
     }
 }
+
+impl<T: Value, const N: usize, X: IntoIndex> Index<X> for ArrayVar<T, N> {
+    type Output = Var<T>;
+    fn index(&self, i: X) -> &Self::Output {
+        let i = i.to_u64();
+
+        // TODO: Add need_runtime_check()?
+        if need_runtime_check() {
+            check_index_lt_usize(i, N);
+        }
+        let i = i.node().get();
+        let self_node = self.0.node().get();
+        Var::<T>::from_node(__current_scope(|b| b.gep_chained(self_node, &[i], T::type_())).into())
+            ._ref()
+    }
+}
 impl<T: Value, const N: usize, X: IntoIndex> Index<X> for ArrayAtomicRef<T, N> {
     type Output = AtomicRef<T>;
     fn index(&self, i: X) -> &Self::Output {

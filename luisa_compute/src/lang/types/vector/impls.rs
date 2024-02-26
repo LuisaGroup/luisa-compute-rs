@@ -1,6 +1,6 @@
 use super::*;
 use crate::lang::index::IntoIndex;
-use std::ops::Index;
+use std::ops::{Index, Neg};
 
 impl<T: VectorAlign<N>, const N: usize> From<[T; N]> for Vector<T, N> {
     fn from(elements: [T; N]) -> Self {
@@ -114,6 +114,98 @@ macro_rules! impl_sized {
 impl_sized!(Vec2(2), VectorExprProxy2, VectorVarProxy2: x, y);
 impl_sized!(Vec3(3), VectorExprProxy3, VectorVarProxy3: x, y, z);
 impl_sized!(Vec4(4), VectorExprProxy4, VectorVarProxy4: x, y, z, w);
+
+pub trait ZeroOne {
+    fn zero() -> Self;
+    fn one() -> Self;
+}
+impl ZeroOne for bool {
+    fn zero() -> Self {
+        false
+    }
+    fn one() -> Self {
+        true
+    }
+}
+macro_rules! zero_one {
+    ($($t:ty),*) => {
+        $(
+            impl ZeroOne for $t {
+                fn zero() -> Self {
+                    0
+                }
+                fn one() -> Self {
+                    1
+                }
+            }
+        )*
+    }
+}
+zero_one!(u8, u16, u32, u64, i8, i16, i32, i64);
+impl ZeroOne for f16 {
+    fn zero() -> Self {
+        f16::ZERO
+    }
+    fn one() -> Self {
+        f16::ONE
+    }
+}
+impl ZeroOne for f32 {
+    fn zero() -> Self {
+        0.0
+    }
+    fn one() -> Self {
+        1.0
+    }
+}
+impl ZeroOne for f64 {
+    fn zero() -> Self {
+        0.0
+    }
+    fn one() -> Self {
+        1.0
+    }
+}
+
+impl<T: ZeroOne + VectorAlign<2>> Vector<T, 2> {
+    pub fn x() -> Self {
+        Self::new(T::one(), T::zero())
+    }
+    pub fn y() -> Self {
+        Self::new(T::zero(), T::one())
+    }
+}
+impl<T: ZeroOne + VectorAlign<3>> Vector<T, 3> {
+    pub fn x() -> Self {
+        Self::new(T::one(), T::zero(), T::zero())
+    }
+    pub fn y() -> Self {
+        Self::new(T::zero(), T::one(), T::zero())
+    }
+    pub fn z() -> Self {
+        Self::new(T::zero(), T::zero(), T::one())
+    }
+}
+impl<T: ZeroOne + VectorAlign<4>> Vector<T, 4> {
+    pub fn x() -> Self {
+        Self::new(T::one(), T::zero(), T::zero(), T::zero())
+    }
+    pub fn y() -> Self {
+        Self::new(T::zero(), T::one(), T::zero(), T::zero())
+    }
+    pub fn z() -> Self {
+        Self::new(T::zero(), T::zero(), T::one(), T::zero())
+    }
+    pub fn w() -> Self {
+        Self::new(T::zero(), T::zero(), T::zero(), T::one())
+    }
+}
+impl<T: Neg<Output = T> + VectorAlign<N>, const N: usize> Neg for Vector<T, N> {
+    type Output = Self;
+    fn neg(self) -> Self {
+        Self::from(self.elements.map(|x| -x))
+    }
+}
 
 pub trait VectorExprProxy {
     const N: usize;

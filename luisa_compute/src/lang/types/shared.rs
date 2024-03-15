@@ -9,24 +9,25 @@ pub struct Shared<T: Value> {
 }
 impl<T: Value> Shared<T> {
     pub fn new(length: usize) -> Self {
+        let shared = with_recorder(|r| {
+            let shared = new_node(
+                &r.pools,
+                Node::new(
+                    CArc::new(Instruction::Shared),
+                    ir::context::register_type(Type::Array(ArrayType {
+                        element: T::type_(),
+                        length,
+                    })),
+                ),
+            )
+            .into();
+
+            r.shared.push(shared);
+            shared
+        });
         Self {
             marker: PhantomData,
-            node: with_recorder(|r| {
-                let shared = new_node(
-                    &r.pools,
-                    Node::new(
-                        CArc::new(Instruction::Shared),
-                        ir::context::register_type(Type::Array(ArrayType {
-                            element: T::type_(),
-                            length,
-                        })),
-                    ),
-                )
-                .into();
-
-                r.shared.push(shared);
-                shared.into()
-            }),
+            node: shared.into(),
         }
     }
     pub fn len_expr(&self) -> Expr<u64> {

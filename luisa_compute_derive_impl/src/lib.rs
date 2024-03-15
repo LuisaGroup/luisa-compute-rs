@@ -395,6 +395,7 @@ impl Compiler {
         let crate_path = &self.crate_path;
         let lang_path = self.lang_path();
         let name = &enum_.ident;
+        let vis = &enum_.vis;
         let expr_proxy_name = syn::Ident::new(&format!("{}Expr", name), name.span());
         let var_proxy_name = syn::Ident::new(&format!("{}Var", name), name.span());
         let atomic_ref_proxy_name = syn::Ident::new(&format!("{}AtomicRef", name), name.span());
@@ -426,21 +427,21 @@ impl Compiler {
             #crate_path::impl_simple_atomic_ref_proxy!(#atomic_ref_proxy_name for #name);
 
             impl #expr_proxy_name {
-                pub fn #as_repr(&self) -> #lang_path::types::Expr<#repr> {
+                #vis fn #as_repr(&self) -> #lang_path::types::Expr<#repr> {
                     use #lang_path::ToNode;
                     use #lang_path::types::ExprProxy;
                     #lang_path::FromNode::from_node(self.as_expr_from_proxy().node())
                 }
             }
             impl #var_proxy_name {
-                pub fn #as_repr(&self) -> #lang_path::types::Var<#repr> {
+                #vis fn #as_repr(&self) -> #lang_path::types::Var<#repr> {
                     use #lang_path::ToNode;
                     use #lang_path::types::VarProxy;
                     #lang_path::FromNode::from_node(self.as_var_from_proxy().node())
                 }
             }
             impl #atomic_ref_proxy_name {
-                pub fn #as_repr(&self) -> #lang_path::types::AtomicRef<#repr> {
+                #vis fn #as_repr(&self) -> #lang_path::types::AtomicRef<#repr> {
                     use #lang_path::ToNode;
                     use #lang_path::types::AtomicRefProxy;
                     #lang_path::FromNode::from_node(self.as_atomic_ref_from_proxy().node())

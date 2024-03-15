@@ -286,6 +286,7 @@ where
         Expr::<T>::_mul_add(self, S::lift_self(mul), S::lift_other(add))
     }
 }
+
 impl<T, S> FloatCopySignExpr<S> for T
 where
     T: SpreadOps<S>,

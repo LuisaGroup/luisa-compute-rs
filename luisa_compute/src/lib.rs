@@ -198,7 +198,11 @@ impl Context {
     pub fn create_device<D: IntoDeviceName>(&self, device: D) -> Device {
         self.create_device_with_config(device, serde_json::json!({}))
     }
-    pub fn create_device_with_config<D: IntoDeviceName>(&self, device: D, config: serde_json::Value) -> Device {
+    pub fn create_device_with_config<D: IntoDeviceName>(
+        &self,
+        device: D,
+        config: serde_json::Value,
+    ) -> Device {
         let backend = self.inner.create_device(&device.into_device_name(), config);
         let default_stream = backend.create_stream(api::StreamTag::Graphics);
         Device {

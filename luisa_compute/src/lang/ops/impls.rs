@@ -236,6 +236,16 @@ where
     fn sin_cos(&self) -> (Self, Self) {
         (self.sin(), self.cos())
     }
+    fn signum(&self) -> Self {
+        let self_node = self.node().get();
+        <Self as FromNode>::from_node(
+            __current_scope(|b| {
+                let one = b.const_(Const::One(<X as TypeOf>::type_()));
+                b.call(Func::Copysign, &[one, self_node], <X as TypeOf>::type_())
+            })
+            .into(),
+        )
+    }
 }
 impl<const N: usize, X: Floating> NormExpr for Expr<Vector<X, N>>
 where

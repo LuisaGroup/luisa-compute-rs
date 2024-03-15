@@ -244,6 +244,7 @@ pub trait FloatExpr: Sized {
     fn cube(&self) -> Self;
     fn recip(&self) -> Self;
     fn sin_cos(&self) -> (Self, Self);
+    fn signum(&self) -> Self;
 }
 
 pub trait ReduceExpr: Sized {

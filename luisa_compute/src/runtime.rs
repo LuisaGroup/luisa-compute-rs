@@ -312,12 +312,17 @@ impl DeviceExtensions for Device {
 }
 
 impl Device {
+    #[inline]
     pub fn query(&self, name: &str) -> Option<String> {
         self.inner.query(name)
     }
 
     pub fn name(&self) -> String {
         self.query("device_name").unwrap_or("unknown".to_string())
+    }
+    #[inline]
+    pub fn native_handle(&self) -> *mut std::ffi::c_void {
+        self.inner.native_handle()
     }
     pub fn create_swapchain(
         &self,

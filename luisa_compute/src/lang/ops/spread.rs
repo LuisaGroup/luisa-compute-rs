@@ -247,8 +247,8 @@ where
 
 impl<T: Value, S, U> ClampExpr<S, U> for Expr<T>
 where
-    S: SpreadOps<T, Join = T>,
-    U: SpreadOps<T, Join = T>,
+    S: SpreadOps<Expr<T>, Join = T>,
+    U: SpreadOps<Expr<T>, Join = T>,
     Expr<T>: ClampThis,
 {
     type Output = Expr<T>;

@@ -1740,6 +1740,9 @@ impl<T: KernelSignature> Kernel<T> {
     pub fn raw(&self) -> &RawKernel {
         &self.inner
     }
+    pub fn wait_for_compile(&self) {
+        self.inner.unwrap();
+    }
 }
 
 // A trait signifying that this argument can be used in place of an argument of type `Self::T`.

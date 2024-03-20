@@ -221,6 +221,17 @@ where
     }
 }
 
+impl<T, S> RemEuclidExpr<S> for T
+where
+    T: SpreadOps<S>,
+    Expr<T::Join>: RemEuclidThis,
+{
+    type Output = <Expr<T::Join> as RemEuclidThis>::Output;
+    fn rem_euclid(self, other: S) -> Self::Output {
+        Expr::<T::Join>::_rem_euclid(Self::lift_self(self), Self::lift_other(other))
+    }
+}
+
 pub fn min<T, S>(x: T, y: S) -> <T as MinMaxExpr<S>>::Output
 where
     T: MinMaxExpr<S>,
@@ -236,12 +247,13 @@ where
 
 impl<T: Value, S, U> ClampExpr<S, U> for Expr<T>
 where
-    S: SpreadOps<U, Join = T>,
+    S: SpreadOps<T, Join = T>,
+    U: SpreadOps<T, Join = T>,
     Expr<T>: ClampThis,
 {
     type Output = Expr<T>;
     fn clamp(self, min: S, max: U) -> Self::Output {
-        Expr::<T>::_clamp(self, S::lift_self(min), S::lift_other(max))
+        Expr::<T>::_clamp(self, S::lift_self(min), U::lift_self(max))
     }
 }
 impl<T, S> EqExpr<S> for T

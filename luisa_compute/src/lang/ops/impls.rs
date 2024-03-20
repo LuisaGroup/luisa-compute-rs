@@ -67,10 +67,20 @@ macro_rules! impl_simple_binop {
 }
 
 impl_ops_trait!([X: Linear] MinMaxExpr[MinMaxThis] for Expr<X> where [X::Scalar: Numeric] {
-    type Output = Expr<X::WithScalar<X::Scalar>>;
+    type Output = Expr<X>;
 
     fn max_[_max_](self, other) { Func::Max.call2(self, other) }
     fn min_[_min_](self, other) { Func::Min.call2(self, other) }
+});
+
+impl_ops_trait!([X: Linear] RemEuclidExpr[RemEuclidThis] for Expr<X> where [X::Scalar: Numeric] {
+    type Output = Expr<X>;
+
+    fn rem_euclid[_rem_euclid](self, other) {
+        track! {
+            ((self % other) + other) % other
+        }
+    }
 });
 
 impl_ops_trait!([X: Linear] ClampExpr[ClampThis] for Expr<X> where [X::Scalar: Numeric] {

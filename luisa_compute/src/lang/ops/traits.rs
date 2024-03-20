@@ -170,6 +170,12 @@ ops_trait!(MinMaxExpr<T>[MinMaxThis] {
     fn min_[_min_](self, other: T);
 });
 
+ops_trait!(RemEuclidExpr<T>[RemEuclidThis] {
+    type Output;
+
+    fn rem_euclid[_rem_euclid](self, other: T);
+});
+
 ops_trait!(ClampExpr<A, B>[ClampThis] {
     fn clamp[_clamp](self, min: A, max: B);
 });

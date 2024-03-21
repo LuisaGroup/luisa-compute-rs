@@ -31,8 +31,8 @@ pub mod prelude {
         FloatExpr, FloatLerpExpr, FloatLogExpr, FloatMulAddExpr, FloatPowfExpr, FloatPowiExpr,
         FloatSmoothStepExpr, FloatStepExpr, IntExpr, LazyBoolMaybeExpr, LoopMaybeExpr, MatExpr,
         MinMaxExpr, MulAssignExpr, MulExpr, NormExpr, OuterProductExpr, ReduceExpr, RemAssignExpr,
-        RemExpr, SelectMaybeExpr, ShlAssignExpr, ShlExpr, ShrAssignExpr, ShrExpr, SubAssignExpr,
-        SubExpr,
+        RemEuclidExpr, RemExpr, SelectMaybeExpr, ShlAssignExpr, ShlExpr, ShrAssignExpr, ShrExpr,
+        SubAssignExpr, SubExpr,
     };
     pub use crate::lang::types::vector::swizzle::*;
     pub use crate::lang::types::vector::VectorExprProxy;
@@ -63,7 +63,8 @@ mod internal_prelude {
     };
     pub(crate) use crate::lang::ops::Linear;
     pub(crate) use crate::lang::types::vector::alias::*;
-    pub(crate) use crate::lang::types::{vector::*, SoaBufferProxy};
+    pub(crate) use crate::lang::types::vector::*;
+    pub(crate) use crate::lang::types::SoaBufferProxy;
     #[allow(unused_imports)]
     pub(crate) use crate::lang::{
         check_index_lt_usize, ir, CallFuncTrait, FnRecorder, SafeNodeRef, __compose, __extract,

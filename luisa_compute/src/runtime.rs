@@ -13,7 +13,7 @@ use parking_lot::lock_api::RawMutex as RawMutexTrait;
 use parking_lot::{Condvar, Mutex, RawMutex, RwLock};
 use std::ffi::c_void;
 
-use raw_window_handle::HasWindowHandle;
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::window::Window;
 
 use crate::internal_prelude::*;
@@ -334,15 +334,14 @@ impl Device {
         vsync: bool,
         back_buffer_size: u32,
     ) -> Swapchain {
-        let handle = window.window_handle().unwrap().as_raw();
-        let window_handle = match handle {
+        let window_handle = match window.window_handle().unwrap().as_raw() {
             raw_window_handle::RawWindowHandle::UiKit(h) => h.ui_view.as_ptr() as u64,
             raw_window_handle::RawWindowHandle::AppKit(h) => h.ns_view.as_ptr() as u64,
             raw_window_handle::RawWindowHandle::Orbital(_) => todo!(),
             raw_window_handle::RawWindowHandle::Xlib(h) => h.window as u64,
             raw_window_handle::RawWindowHandle::Xcb(h) => h.window.get() as u64,
-            raw_window_handle::RawWindowHandle::Wayland(_h) => {
-                panic!("Wayland not supported, use X11 instead")
+            raw_window_handle::RawWindowHandle::Wayland(h) => {
+                h.surface.as_ptr() as u64
             }
             raw_window_handle::RawWindowHandle::Drm(_) => todo!(),
             raw_window_handle::RawWindowHandle::Gbm(_) => todo!(),
@@ -353,7 +352,19 @@ impl Device {
             raw_window_handle::RawWindowHandle::Haiku(_) => todo!(),
             _ => todo!(),
         };
+        let display_handle = match window.display_handle().unwrap().as_raw() {
+            raw_window_handle::RawDisplayHandle::Xcb(h) => {
+                h.connection.map(|c| c.as_ptr() as u64).unwrap_or(0)
+            }
+            raw_window_handle::RawDisplayHandle::Xlib(h) => {
+                h.display.map(|d| d.as_ptr() as u64).unwrap_or(0)
+            }
+            raw_window_handle::RawDisplayHandle::Wayland(h) => h.display.as_ptr() as u64,
+            raw_window_handle::RawDisplayHandle::Windows(h) => 0u64,
+            _ => todo!(),
+        };
         self.create_swapchain_raw_handle(
+            display_handle,
             window_handle,
             stream,
             width,
@@ -365,6 +376,7 @@ impl Device {
     }
     pub fn create_swapchain_raw_handle(
         &self,
+        display_handle: u64,
         window_handle: u64,
         stream: &Stream,
         width: u32,
@@ -374,13 +386,17 @@ impl Device {
         back_buffer_size: u32,
     ) -> Swapchain {
         let swapchain = self.inner.create_swapchain(
-            window_handle,
+            &api::SwapchainOption {
+                display: display_handle,
+                window: window_handle,
+
+                width,
+                height,
+                wants_hdr: allow_hdr,
+                wants_vsync: vsync,
+                back_buffer_count: back_buffer_size,
+            },
             stream.handle(),
-            width,
-            height,
-            allow_hdr,
-            vsync,
-            back_buffer_size,
         );
         let swapchain = Swapchain {
             device: self.clone(),

@@ -213,6 +213,8 @@ simple_binop_trait!(ShrExpr[ShrThis, Shr => ShrMaybeExpr]: shr[_shr, shr => __sh
 pub trait IntExpr {
     fn rotate_right(&self, n: Expr<u32>) -> Self;
     fn rotate_left(&self, n: Expr<u32>) -> Self;
+    fn trailing_zeros(&self) -> Expr<u32>;
+    fn leading_zeros(&self) -> Expr<u32>;
 }
 
 pub trait FloatExpr: Sized {

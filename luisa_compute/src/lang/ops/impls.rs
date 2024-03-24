@@ -170,6 +170,12 @@ where
     fn rotate_right(&self, n: Expr<u32>) -> Self {
         Func::RotLeft.call2(self.clone(), n)
     }
+    fn trailing_zeros(&self) -> Expr<u32> {
+        Func::Ctz.call(self.clone())
+    }
+    fn leading_zeros(&self) -> Expr<u32> {
+        Func::Clz.call(self.clone())
+    }
 }
 
 macro_rules! impl_simple_fns {

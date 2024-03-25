@@ -176,6 +176,9 @@ where
     fn leading_zeros(&self) -> Expr<u32> {
         Func::Clz.call(self.clone())
     }
+    fn count_ones(&self) -> Expr<u32> {
+        Func::PopCount.call(self.clone())
+    }
 }
 
 macro_rules! impl_simple_fns {

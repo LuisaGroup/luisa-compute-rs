@@ -426,10 +426,6 @@ pub fn tracked(
     let item = syn::parse_macro_input!(item as ItemFn);
     let body = &item.block;
     let body_span = body.span();
-    let ret_type = match &item.sig.output {
-        ReturnType::Default => quote_spanned! {body_span=> () },
-        ReturnType::Type(_, ty) => quote_spanned! {body_span=> #ty },
-    };
     let body = proc_macro::TokenStream::from(quote!({ #body }));
     let body = track_impl(parse_macro_input!(body as Expr), &crate_path);
     let body = quote_spanned! {body_span=>
@@ -444,7 +440,7 @@ pub fn tracked(
             };
             #crate_path::lang::debug::comment(&format!("begin fn {} at {}:{}:{}", __fn_name, file!(), line!(), column!()));
             #[allow(clippy::let_unit_value)]
-            let __ret: #ret_type = #body;
+            let __ret = #body;
             #[allow(unreachable_code)]
             {
                 #crate_path::lang::debug::comment(&format!("end fn {} at {}:{}:{}", __fn_name, file!(), line!(), column!()));

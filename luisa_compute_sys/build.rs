@@ -84,7 +84,13 @@ fn cmake_build() -> PathBuf {
 
     config.build()
 }
-fn is_path_dll(path: &PathBuf) -> bool {
+fn need_copy(path: &PathBuf) -> bool {
+    if let Some(f) = path.file_name() {
+        let f = f.to_str().unwrap();
+        if f == "luisa_nvtrc" || f == "luisa_nvrtc.exe" {
+            return true;
+        }
+    }
     let basic_check = path.extension().is_some()
         && (path.extension().unwrap() == "dll"
         || path.extension().unwrap() == "lib" // lib is also need on Windows for linking DLLs
@@ -113,7 +119,7 @@ fn copy_dlls(out_dir: &PathBuf) {
     for entry in std::fs::read_dir(out_dir).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
-        if is_path_dll(&path) {
+        if need_copy(&path) {
             // let target_dir = get_output_path();
             let comps: Vec<_> = path.components().collect();
             let copy_if_different = |src, dst| {

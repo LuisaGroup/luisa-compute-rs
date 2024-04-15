@@ -14,7 +14,7 @@ pub mod resource;
 pub mod rtx;
 pub mod runtime;
 
-pub use crate::lang::ops::{max, min};
+pub use crate::lang::ops::{lerp, max, min};
 
 pub mod prelude {
     pub use half::f16;

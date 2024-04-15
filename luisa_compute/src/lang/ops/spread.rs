@@ -245,6 +245,15 @@ where
     x.max_(y)
 }
 
+/// lerp(x, y, t) = x*(1-t) + y*t
+/// the parameter order is the same as in GLSL/HLSL
+pub fn lerp<A,B,T>(x: A, y: B, t: T) -> <A as FloatLerpExpr<B, T>>::Output
+where
+    A: FloatLerpExpr<B, T>,
+{
+    x.lerp(y, t)
+}
+
 impl<T: Value, S, U> ClampExpr<S, U> for Expr<T>
 where
     S: SpreadOps<Expr<T>, Join = T>,

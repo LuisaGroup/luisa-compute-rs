@@ -247,7 +247,7 @@ where
 
 /// lerp(x, y, t) = x*(1-t) + y*t
 /// the parameter order is the same as in GLSL/HLSL
-pub fn lerp<A,B,T>(x: A, y: B, t: T) -> <A as FloatLerpExpr<B, T>>::Output
+pub fn lerp<A, B, T>(x: A, y: B, t: T) -> <A as FloatLerpExpr<B, T>>::Output
 where
     A: FloatLerpExpr<B, T>,
 {

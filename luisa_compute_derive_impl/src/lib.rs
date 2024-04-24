@@ -545,7 +545,7 @@ impl Compiler {
                     #vis fn from_comps_expr(ctor: #ctor_proxy_name #ty_generics) -> #lang_path::types::Expr<#name #ty_generics> {
                         use #lang_path::*;
                         let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&ctor.#field_names.as_expr()).get() ),* ]);
-                        <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node.into())
+                        <#lang_path::types::Expr::<#name #ty_generics> as #lang_path::FromNode>::from_node(node.into())
                     }
                 }
             )
@@ -575,7 +575,7 @@ impl Compiler {
             #[allow(dead_code)]
             #vis struct #expr_proxy_name #generics #where_clause{
                 _marker: std::marker::PhantomData<(#marker_args)>,
-                self_: #lang_path::types::Expr<#name>,
+                self_: #lang_path::types::Expr<#name #ty_generics>,
                 #(#field_vis #field_names: #lang_path::types::Expr<#field_types>),*
 
             }
@@ -584,7 +584,7 @@ impl Compiler {
             #[allow(dead_code)]
             #vis struct #var_proxy_name #generics #where_clause{
                 _marker: std::marker::PhantomData<(#marker_args)>,
-                self_: #lang_path::types::Var<#name>,
+                self_: #lang_path::types::Var<#name #ty_generics>,
                 #(#field_vis #field_names: #lang_path::types::Var<#field_types>),*,
             }
             #[derive(Clone, Copy)]
@@ -592,7 +592,7 @@ impl Compiler {
             #[allow(dead_code)]
             #vis struct #atomic_ref_proxy_name #generics #where_clause{
                 _marker: std::marker::PhantomData<(#marker_args)>,
-                self_: #lang_path::types::AtomicRef<#name>,
+                self_: #lang_path::types::AtomicRef<#name  #ty_generics>,
                 #(#field_vis #field_names: #lang_path::types::AtomicRef<#field_types>),*,
             }
             #[allow(unused_parens)]
@@ -609,7 +609,7 @@ impl Compiler {
 
                     }
                 }
-                fn as_expr_from_proxy(&self) -> &#lang_path::types::Expr<#name> {
+                fn as_expr_from_proxy(&self) -> &#lang_path::types::Expr<#name #ty_generics> {
                     &self.self_
                 }
             }
@@ -626,7 +626,7 @@ impl Compiler {
                         #(#field_names),*
                     }
                 }
-                fn as_var_from_proxy(&self) -> &#lang_path::types::Var<#name> {
+                fn as_var_from_proxy(&self) -> &#lang_path::types::Var<#name  #ty_generics> {
                     &self.self_
                 }
             }
@@ -643,13 +643,13 @@ impl Compiler {
                         #(#field_names),*
                     }
                 }
-                fn as_atomic_ref_from_proxy(&self) -> &#lang_path::types::AtomicRef<#name> {
+                fn as_atomic_ref_from_proxy(&self) -> &#lang_path::types::AtomicRef<#name #ty_generics> {
                     &self.self_
                 }
             }
             #[allow(unused_parens)]
             impl #impl_generics std::ops::Deref for #var_proxy_name #ty_generics #where_clause {
-                type Target = #lang_path::types::Expr<#name> #ty_generics;
+                type Target = #lang_path::types::Expr<#name #ty_generics>;
                 fn deref(&self) -> &Self::Target {
                     #lang_path::types::_deref_proxy(self)
                 }
@@ -689,10 +689,10 @@ impl Compiler {
             quote_spanned! {
                 span =>
                 impl #impl_generics #name #ty_generics #where_clause {
-                    #vis fn new_expr(#(#field_names: impl #lang_path::types::AsExpr<Value = #field_types>),*) -> #lang_path::types::Expr::<#name> {
+                    #vis fn new_expr(#(#field_names: impl #lang_path::types::AsExpr<Value = #field_types>),*) -> #lang_path::types::Expr::<#name #ty_generics> {
                         use #lang_path::*;
                         let node = #lang_path::__compose::<#name #ty_generics>(&[ #( #lang_path::ToNode::node(&#field_names.as_expr()).get() ),* ]);
-                        <#lang_path::types::Expr::<#name> as #lang_path::FromNode>::from_node(node.into())
+                        <#lang_path::types::Expr::<#name #ty_generics> as #lang_path::FromNode>::from_node(node.into())
                     }
                 }
             }

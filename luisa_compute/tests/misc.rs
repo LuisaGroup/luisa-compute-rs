@@ -1472,6 +1472,14 @@ pub struct Bar {
     a: [i32; 4],
     f: Foo,
 }
+#[derive(Clone, Copy, Debug, Value)]
+#[repr(C)]
+pub struct Foo2<T: Value> {
+    i: T,
+    v: Float2,
+    a: [T; 4],
+    m: Mat2,
+}
 #[test]
 fn soa() {
     let device = get_device();

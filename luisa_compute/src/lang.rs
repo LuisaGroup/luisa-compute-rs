@@ -154,6 +154,23 @@ pub trait Aggregate: Sized {
     fn from_nodes<I: Iterator<Item = SafeNodeRef>>(iter: &mut I) -> Self;
 }
 
+impl<const N: usize, T: Aggregate> Aggregate for [T; N] {
+    fn to_nodes(&self, nodes: &mut Vec<SafeNodeRef>) {
+        for x in self {
+            x.to_nodes(nodes);
+        }
+    }
+    fn from_nodes<I: Iterator<Item = SafeNodeRef>>(iter: &mut I) -> Self {
+        unsafe {
+            let mut ret = std::mem::MaybeUninit::<[T; N]>::uninit();
+            for i in 0..N {
+                let x = T::from_nodes(iter);
+                ret.as_mut_ptr().cast::<T>().add(i).write(x);
+            }
+            ret.assume_init()
+        }
+    }
+}
 impl<T: Aggregate> Aggregate for Vec<T> {
     fn to_nodes(&self, nodes: &mut Vec<SafeNodeRef>) {
         let len_node = __new_user_node(nodes.len());
@@ -427,7 +444,8 @@ impl FnRecorder {
             device: None,
             block_size: None,
             pools: pools.clone(),
-            arena: parent.as_ref()
+            arena: parent
+                .as_ref()
                 .map(|p| p.borrow().arena.clone())
                 .unwrap_or_else(|| Rc::new(Bump::new())),
             building_kernel: false,

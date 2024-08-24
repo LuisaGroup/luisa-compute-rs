@@ -38,7 +38,7 @@ pub struct Compiler {
 impl Compiler {
     pub fn new() -> Self {
         Self {
-            crate_path: quote!(::luisa_compute),
+            crate_path: quote!(luisa_compute),
         }
     }
     fn lang_path(&self) -> TokenStream {

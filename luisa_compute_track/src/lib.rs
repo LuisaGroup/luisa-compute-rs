@@ -420,7 +420,7 @@ pub fn tracked(
         let path = crate_path.path;
         quote!(#path)
     } else {
-        quote!(::luisa_compute)
+        quote!(luisa_compute)
     };
 
     let item = syn::parse_macro_input!(item as ItemFn);

@@ -14,7 +14,6 @@ use parking_lot::{Condvar, Mutex, RawMutex, RwLock};
 use std::ffi::c_void;
 
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-use winit::window::Window;
 
 use crate::internal_prelude::*;
 use crate::lang::soa::{SoaBuffer, SoaBufferVar, SoaBufferView, SoaMetadata};
@@ -326,7 +325,7 @@ impl Device {
     }
     pub fn create_swapchain(
         &self,
-        window: &Window,
+        window: impl HasWindowHandle + HasDisplayHandle,
         stream: &Stream,
         width: u32,
         height: u32,
@@ -358,7 +357,7 @@ impl Device {
                 h.display.map(|d| d.as_ptr() as u64).unwrap_or(0)
             }
             raw_window_handle::RawDisplayHandle::Wayland(h) => h.display.as_ptr() as u64,
-            raw_window_handle::RawDisplayHandle::Windows(h) => 0u64,
+            raw_window_handle::RawDisplayHandle::Windows(_h) => 0u64,
             _ => todo!(),
         };
         self.create_swapchain_raw_handle(

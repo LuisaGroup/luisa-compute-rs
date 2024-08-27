@@ -50,7 +50,6 @@ fn cmake_build() -> PathBuf {
     set_from_env!("PYTHON", "LUISA_COMPUTE_ENABLE_PYTHON");
     set_from_env!("GUI", "LUISA_COMPUTE_ENABLE_GUI");
     set_from_env!("OIDN", "LUISA_COMPUTE_DOWNLOAD_OIDN");
-    set_from_env!("WAYLAND", "LUISA_COMPUTE_ENABLE_WAYLAND");
     config.define(
         "LUISA_COMPUTE_CHECK_BACKEND_DEPENDENCIES",
         if cfg!(feature = "strict") {
@@ -200,11 +199,10 @@ fn main() {
     {
         println!("rerun-if-changed=./llvm_dummy_orc");
         let out = cmake::Config::new("./llvm_dummy_orc")
-            .generator("Ninja")
             .build_target("dummy_orc_eh")
             .build();
         dbg!(&out);
-        println!("cargo:rustc-link-lib=static=dummy_orc_eh");
+        println!("cargo:rustc-link-lib=dylib=dummy_orc_eh");
         println!("cargo:rustc-link-search=native={}/build", out.display());
     }
 }

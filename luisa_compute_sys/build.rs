@@ -50,6 +50,7 @@ fn cmake_build() -> PathBuf {
     set_from_env!("PYTHON", "LUISA_COMPUTE_ENABLE_PYTHON");
     set_from_env!("GUI", "LUISA_COMPUTE_ENABLE_GUI");
     set_from_env!("OIDN", "LUISA_COMPUTE_DOWNLOAD_OIDN");
+    set_from_env!("WAYLAND", "LUISA_COMPUTE_ENABLE_WAYLAND");
     config.define(
         "LUISA_COMPUTE_CHECK_BACKEND_DEPENDENCIES",
         if cfg!(feature = "strict") {

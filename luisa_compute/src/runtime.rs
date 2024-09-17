@@ -358,6 +358,7 @@ impl Device {
             }
             raw_window_handle::RawDisplayHandle::Wayland(h) => h.display.as_ptr() as u64,
             raw_window_handle::RawDisplayHandle::Windows(_h) => 0u64,
+            raw_window_handle::RawDisplayHandle::AppKit(_h) => 0,
             _ => todo!(),
         };
         self.create_swapchain_raw_handle(

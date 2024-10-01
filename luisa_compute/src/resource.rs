@@ -292,12 +292,12 @@ impl<T: Value> BufferView<T> {
 }
 impl<T: Value + fmt::Debug> fmt::Debug for Buffer<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        struct DebugEllipsis;
-        impl fmt::Debug for DebugEllipsis {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("..")
-            }
-        }
+        // struct DebugEllipsis;
+        // impl fmt::Debug for DebugEllipsis {
+        //     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        //         f.write_str("..")
+        //     }
+        // }
 
         write!(f, "Buffer<{}>({})", std::any::type_name::<T>(), self.len())?;
         // if self.len() <= 16 || f.precision().is_some() {
@@ -902,6 +902,37 @@ macro_rules! impl_io_texel {
     };
 }
 impl_io_texel!(
+    f16,
+    f32,
+    Float4,
+    |a: Expr<Float4>| a.x.cast_f16(),
+    |x: Expr<f16>| { Float4::splat_expr(x.cast_f32()) }
+);
+impl_io_texel!(
+    Half2,
+    f32,
+    Float4,
+    |a: Expr<Float4>| a.xy().cast_f16(),
+    |x: Expr<Half2>| {
+        let x = x.cast_f32();
+        Float4::expr(x.x, x.y, 0.0, 0.0)
+    }
+);
+impl_io_texel!(
+    Half3,
+    f32,
+    Float4,
+    |a: Expr<Float4>| a.xyz().cast_f16(),
+    |x: Expr<Half3>| { x.cast_f32().extend(0.0) }
+);
+impl_io_texel!(
+    Half4,
+    f32,
+    Float4,
+    |a: Expr<Float4>| a.cast_f16(),
+    |x: Expr<Half4>| { x.cast_f32() }
+);
+impl_io_texel!(
     bool,
     f32,
     Float4,
@@ -945,6 +976,14 @@ impl_io_texel!(Uint2, u32, Uint4, |x: Expr<Uint4>| x.xy(), |x: Expr<
 });
 impl_io_texel!(Int2, i32, Int4, |x: Expr<Int4>| x.xy(), |x: Expr<Int2>| {
     Int4::expr(x.x, x.y, 0i32, 0i32)
+});
+impl_io_texel!(Uint3, u32, Uint4, |x: Expr<Uint4>| x.xyz(), |x: Expr<
+    Uint3,
+>| {
+    Uint4::expr(x.x, x.y, x.z, 0u32)
+});
+impl_io_texel!(Int3, i32, Int4, |x: Expr<Int4>| x.xyz(), |x: Expr<Int3>| {
+    Int4::expr(x.x, x.y, x.z, 0i32)
 });
 impl_io_texel!(Uint4, u32, Uint4, |x: Expr<Uint4>| x, |x| x);
 impl_io_texel!(Int4, i32, Int4, |x: Expr<Int4>| x, |x| x);

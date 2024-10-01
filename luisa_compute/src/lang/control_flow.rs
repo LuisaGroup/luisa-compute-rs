@@ -1,5 +1,3 @@
-use std::ffi::CString;
-
 use crate::internal_prelude::*;
 use ir::SwitchCase;
 

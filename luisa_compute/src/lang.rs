@@ -50,9 +50,6 @@ pub(crate) trait CallFuncTrait {
         y: Expr<S>,
         z: Expr<U>,
     ) -> Expr<V>;
-    fn call_void<T: Value>(self, x: Expr<T>);
-    fn call2_void<T: Value, S: Value>(self, x: Expr<T>, y: Expr<S>);
-    fn call3_void<T: Value, S: Value, U: Value>(self, x: Expr<T>, y: Expr<S>, z: Expr<U>);
 }
 impl CallFuncTrait for Func {
     fn call<T: Value, S: Value>(self, x: Expr<T>) -> Expr<S> {
@@ -81,27 +78,6 @@ impl CallFuncTrait for Func {
         Expr::<V>::from_node(make_safe_node(__current_scope(|b| {
             b.call(self, &[x, y, z], <V as TypeOf>::type_())
         })))
-    }
-    fn call_void<T: Value>(self, x: Expr<T>) {
-        let x = x.node().get();
-        __current_scope(|b| {
-            b.call(self, &[x], Type::void());
-        });
-    }
-    fn call2_void<T: Value, S: Value>(self, x: Expr<T>, y: Expr<S>) {
-        let x = x.node().get();
-        let y = y.node().get();
-        __current_scope(|b| {
-            b.call(self, &[x, y], Type::void());
-        });
-    }
-    fn call3_void<T: Value, S: Value, U: Value>(self, x: Expr<T>, y: Expr<S>, z: Expr<U>) {
-        let x = x.node().get();
-        let y = y.node().get();
-        let z = z.node().get();
-        __current_scope(|b| {
-            b.call(self, &[x, y, z], Type::void());
-        });
     }
 }
 

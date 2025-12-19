@@ -1296,8 +1296,8 @@ impl KernelArgEncoder {
         }
     }
     pub fn uniform<T: Value>(&mut self, value: T) {
+        let layout = std::alloc::Layout::new::<T>();
         let mut data_u8 = unsafe {
-            let layout = std::alloc::Layout::new::<T>();
             let ptr = std::alloc::alloc(layout);
             let slice = std::slice::from_raw_parts_mut(ptr as *mut u8, layout.size());
             Box::from_raw(slice)
@@ -1312,6 +1312,7 @@ impl KernelArgEncoder {
         self.args.push(api::Argument::Uniform(api::UniformArgument {
             data: data_u8.as_ptr(),
             size: data_u8.len(),
+            alignment: layout.align(),
         }));
         self.uniform_data.push(data_u8);
     }
